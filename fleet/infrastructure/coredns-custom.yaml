@@ -1,0 +1,16 @@
+# Forward .lofi DNS queries to the homelab DNS server (dnsmasq).
+# k3s CoreDNS imports /etc/coredns/custom/*.server for additional server blocks.
+# Applied manually once at cluster bring-up (flux can't fetch git without it),
+# then owned by the infrastructure Kustomization.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  lofi.server: |
+    lofi:53 {
+      errors
+      cache 30
+      forward . 10.0.0.2
+    }
