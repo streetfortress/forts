@@ -1,4 +1,4 @@
-# Shared base configuration for every homelab NixOS host.
+# Shared base configuration for every SFI NixOS host.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.
 { pkgs, ... }:
 

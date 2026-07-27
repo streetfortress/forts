@@ -1,4 +1,4 @@
-# Clone steven's dotfiles from the internal Gitea over the homelab network, so
+# Clone steven's dotfiles from the internal Gitea over the lab network, so
 # ~/.files exists at runtime. Home Manager builds the dotfiles themselves into
 # the Nix store at image-build time (home/steven.nix); this only provides the
 # working checkout that the `nix-rebuild` alias (--flake ~/.files/nixos) and the
@@ -29,7 +29,7 @@ in
 
     path = [ pkgs.git ];
     # git validates the gitea chain against the system bundle, which
-    # security.pki (modules/homelab-ca.nix) rebuilds to include the lab CA.
+    # security.pki (via k3s-server.nix) rebuilds to include the lab CA.
     environment.SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
 
     serviceConfig = {

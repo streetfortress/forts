@@ -1,4 +1,4 @@
-# Forward .lofi DNS queries to the homelab DNS server (dnsmasq).
+# Forward .lofi DNS queries to the lab DNS server (dnsmasq).
 # k3s CoreDNS imports /etc/coredns/custom/*.server for additional server blocks.
 # Applied manually once at cluster bring-up (flux can't fetch git without it),
 # then owned by the infrastructure Kustomization.

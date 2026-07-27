@@ -46,7 +46,7 @@
 
   networking.firewall.allowedTCPPorts = [ 6443 80 443 ];
 
-  # Trust the homelab step-ca root (ACME/TLS for *.lofi services).
+  # Trust the lab step-ca root (ACME/TLS for *.lofi services).
   security.pki.certificateFiles = [ ../certs/step-ca-root.pem ];
 
   # Node metrics

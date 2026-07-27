@@ -23,14 +23,14 @@
 # (flux-sops-age-key = the cluster's age key, flux-git-deploy-key = a
 # read-only gitea deploy key for this repo) and set:
 #
-#   homelab.flux-bootstrap = {
+#   sfi.flux-bootstrap = {
 #     enable = true;
 #     cluster = "luxor";   # → fleet/clusters/luxor
 #   };
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.homelab.flux-bootstrap;
+  cfg = config.sfi.flux-bootstrap;
 
   corednsManifest = ../../fleet/infrastructure/coredns-custom.yaml;
   fluxInstanceManifest =
@@ -39,7 +39,7 @@ let
   knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
 in
 {
-  options.homelab.flux-bootstrap = {
+  options.sfi.flux-bootstrap = {
     enable = lib.mkEnableOption "day-0 Flux bootstrap (flux-operator + FluxInstance)";
 
     cluster = lib.mkOption {
