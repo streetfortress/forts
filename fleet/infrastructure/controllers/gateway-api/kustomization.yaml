@@ -1,0 +1,9 @@
+# Gateway API CRDs, standard channel. Vendored because the traefik helm
+# chart stopped shipping them (v38+); crds.yaml is the unmodified
+# standard-install.yaml from the upstream release. To upgrade:
+#   curl -sL -o crds.yaml https://github.com/kubernetes-sigs/gateway-api/releases/download/<version>/standard-install.yaml
+# Current version: v1.6.1
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - crds.yaml

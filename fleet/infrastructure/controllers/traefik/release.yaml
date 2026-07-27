@@ -1,0 +1,72 @@
+# Traefik as the cluster's edge: DaemonSet with hostPorts 80/443, routing
+# via Gateway API only (no Ingress). Gateway API CRDs are vendored in
+# ../gateway-api (the chart stopped shipping them). The Gateway itself is
+# per-cluster (hostname listeners grow one service at a time) and lives in
+# fleet/apps/<cluster>/gateway/.
+# Chart defaults: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: traefik
+      version: 41.0.2 # app v3.7.6
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+        namespace: flux-system
+  values:
+    providers:
+      kubernetesGateway:
+        enabled: true
+      kubernetesIngress:
+        enabled: false
+
+    # Don't auto-create Gateway API resources — the Gateway is a per-cluster
+    # manifest in fleet/apps/<cluster>/gateway/.
+    gateway:
+      enabled: false
+
+    deployment:
+      kind: DaemonSet
+
+    ports:
+      web:
+        port: 8000
+        expose:
+          default: true
+        exposedPort: 80
+        hostPort: 80
+        protocol: TCP
+      websecure:
+        port: 8443
+        expose:
+          default: true
+        exposedPort: 443
+        hostPort: 443
+        protocol: TCP
+
+    service:
+      type: ClusterIP # hostPort handles external access
+
+    logs:
+      general:
+        level: INFO
+      access:
+        enabled: true
+
+    ingressRoute:
+      dashboard:
+        enabled: false
+
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 1000m

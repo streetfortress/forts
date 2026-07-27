@@ -16,7 +16,7 @@
 #
 # The coredns + FluxInstance manifests are NOT duplicated here: the flake's
 # source is the whole repo, so the module applies the very files flux later
-# owns (fleet/infrastructure/coredns-custom.yaml and
+# owns (fleet/infrastructure/configs/coredns-custom.yaml and
 # fleet/clusters/<cluster>/flux-system/flux-instance.yaml).
 #
 # Consumers declare the two extra host secrets in nixos/secrets/<host>.yaml
@@ -32,7 +32,7 @@
 let
   cfg = config.sfi.flux-bootstrap;
 
-  corednsManifest = ../../fleet/infrastructure/coredns-custom.yaml;
+  corednsManifest = ../../fleet/infrastructure/configs/coredns-custom.yaml;
   fluxInstanceManifest =
     ../../fleet + "/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
 
