@@ -51,7 +51,9 @@ spec:
         protocol: TCP
 
     service:
-      type: ClusterIP # hostPort handles external access
+      spec:
+        type: ClusterIP # hostPort handles external access; LoadBalancer would
+        # summon k3s's klipper svclb, which grabs node ports 80/443 first
 
     log:
       level: INFO
