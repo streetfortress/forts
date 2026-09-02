@@ -1,10 +1,12 @@
-# Shared base configuration for every SFI NixOS host.
+# Shared base configuration for every SFI NixOS host — interactive AND
+# production, so only genuinely user-agnostic settings belong here. steven's
+# account lives in modules/interactive.nix; production hosts get `deployer`
+# from modules/production.nix instead.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.
 { pkgs, ... }:
 
 {
-  # Nix
-  nix.settings.allowed-users = [ "steven" ];
+  # Nix (allowed-users is per-profile: interactive.nix / production.nix)
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nixpkgs.config.allowUnfree = true;
 
@@ -26,25 +28,6 @@
     LC_TIME = "en_US.UTF-8";
   };
 
-  # Enable ZSH system-wide (required for setting it as a user's default shell)
-  programs.zsh.enable = true;
-
-  # Primary user. Host modules extend extraGroups (e.g. docker, networkmanager).
-  users.users.steven = {
-    isNormalUser = true;
-    description = "Steven Fitzpatrick";
-    shell = pkgs.zsh;
-    extraGroups = [ "wheel" ];
-    openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBuuLb9A36fWGYZexMb2soTxpHFB0HVQTHqR8vihvFMD"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqO0N5rBif1+bFwnluWEmrkaoTAtqTrP/vONG6/fQKl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhrjrcm0Mb4gSMGM/GiWXvkZj3a2ej7/MOcw0Qujx+M"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFSfukFhjws+MpZu+qMqgVCoIitc43jGeqEnGMcF4ydQ"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEdgJK6LiKUZ+fQQZX28B1v82hCl1z4RxomJLn5pHiPH"
-    ];
-  };
 
   # OpenSSH: key-only auth, no root login.
   services.openssh = {
