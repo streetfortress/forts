@@ -58,7 +58,7 @@
   # The node exporter's openFirewall injects an iptables rule outside
   # allowedTCPPorts, so it must be switched off explicitly to scope 9100.
   networking.firewall.allowedTCPPorts = lib.mkForce [ 80 443 ];
-  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 ];
+  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 10255 ];
   services.prometheus.exporters.node.openFirewall = lib.mkForce false;
 
   # Closure trims: manuals and the default perl/rsync/strace set have no
