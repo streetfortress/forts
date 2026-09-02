@@ -7,6 +7,22 @@
 # wants the sqlite datastore instead can set `services.k3s.clusterInit = false;`.
 { config, lib, pkgs, ... }:
 
+let
+  # The API server's serving cert only carries the node's primary IP, the
+  # cluster service IP and loopback — not the wireguard address. Since
+  # `just fetch-kubeconfig` rewrites the server URL to the mesh IP, every
+  # kubectl call over the VPN would fail x509 verification without a SAN for
+  # it. Read from the same wireguard/peers.json the mesh module keys off, by
+  # hostname, so the two can't drift; hosts outside the mesh add nothing.
+  #
+  # On an ALREADY-RUNNING node, changing the SAN set needs the cached serving
+  # cert cleared as well — k3s keeps it in server/tls/dynamic-cert.json and
+  # mirrors it to the `k3s-serving` secret in kube-system; delete both and
+  # restart k3s if the old SANs survive the rebuild. Production hosts sidestep
+  # this: they are replaced as images, so they come up with the SAN baked in.
+  peers = (builtins.fromJSON (builtins.readFile ../../wireguard/peers.json)).peers;
+  meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
+in
 {
   # Cluster join token, consumed below. The host's secrets module points sops at
   # the file that carries it.
@@ -20,12 +36,12 @@
     extraFlags = [
       "--disable=traefik"
       "--kubelet-arg=read-only-port=10255"
-      # World-readable kubeconfig so `steven` can pull /etc/rancher/k3s/k3s.yaml
-      # over SSH without sudo (see `just fetch-kubeconfig`). These are single-
-      # purpose infra nodes; tighten to 0640 + a group once the locked-down
-      # deployer user lands.
+      # World-readable kubeconfig so the login user (`steven`, or `deployer`
+      # on production hosts) can pull /etc/rancher/k3s/k3s.yaml over SSH
+      # without sudo (see `just fetch-kubeconfig`). These are single-purpose
+      # infra nodes; tighten to 0640 + a shared group if that changes.
       "--write-kubeconfig-mode=0644"
-    ];
+    ] ++ lib.optional (meshIp != null) "--tls-san=${meshIp}";
   };
 
   # k3s hardcodes "default" as the cluster/context/user name in the kubeconfig
