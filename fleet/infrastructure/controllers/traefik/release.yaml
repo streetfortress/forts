@@ -34,6 +34,17 @@ spec:
     deployment:
       kind: DaemonSet
 
+    # The chart default (maxUnavailable 0, maxSurge 1) deadlocks a hostPort
+    # DaemonSet on a single node: the surge pod can never schedule while the
+    # old pod holds 80/443 ("didn't have free ports"). Kill-then-create is
+    # the only rollout a single-node hostPort setup can do; the seconds of
+    # edge downtime per upgrade are accepted.
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
+
     ports:
       web:
         port: 8000
