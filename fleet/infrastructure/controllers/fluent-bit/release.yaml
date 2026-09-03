@@ -1,0 +1,126 @@
+# Log shipping (#54): one fluent-bit DaemonSet per cluster — container logs
+# (CRI tail) AND host journald, with pod/namespace enrichment a host-level
+# agent can't do — pushing to the central Loki on luxor (#98) over the mesh.
+# Alloy was considered and dropped: heavier, Grafana-specific config
+# language.
+#
+# The .files/homelab/vms fluent-bit stack does NOT port literally: its Lua
+# script recovers container names from rootless-nerdctl paths (the
+# kubernetes filter gets them from the CRI tail path + API here), its
+# docker parser predates CRI log format, and the laurel audit pipeline
+# retires with the ubuntu hosts. What carries over is the shape: tail +
+# journald in, enrich, Loki out with a bounded label set.
+# Chart defaults: https://github.com/fluent/helm-charts/blob/main/charts/fluent-bit/values.yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: fluent-bit
+  namespace: monitoring
+spec:
+  interval: 1h
+  # For the ServiceMonitor kind on a fresh cluster.
+  dependsOn:
+    - name: prometheus-operator-crds
+  chart:
+    spec:
+      chart: fluent-bit
+      version: 0.58.1 # app 5.1.1
+      sourceRef:
+        kind: HelmRepository
+        name: fluent
+        namespace: flux-system
+  values:
+    config:
+      inputs: |
+        [INPUT]
+            Name tail
+            Path /var/log/containers/*.log
+            multiline.parser cri
+            Tag kube.*
+            DB /var/lib/fluent-bit/tail-containers.db
+            Mem_Buf_Limit 16MB
+            Skip_Long_Lines On
+
+        [INPUT]
+            Name systemd
+            Tag host.*
+            Path /var/log/journal
+            DB /var/lib/fluent-bit/systemd.db
+            Read_From_Tail On
+            Strip_Underscores On
+
+      filters: |
+        [FILTER]
+            Name kubernetes
+            Match kube.*
+            Merge_Log On
+            Keep_Log Off
+            K8S-Logging.Parser On
+            K8S-Logging.Exclude On
+
+      # Label set per #54, identical on every cluster: cluster, namespace,
+      # pod, container, host. Everything else (traefik's JSON access-log
+      # fields, journald metadata) stays in the log line — Merge_Log has
+      # already lifted JSON stdout into fields, so it's queryable without
+      # burning label cardinality.
+      #
+      # host comes from record accessors (kubernetes filter's host field /
+      # journald's HOSTNAME), NOT a ${NODE_NAME} env var: flux's post-build
+      # envsubst is STRICT, so any ${...} outside cluster-vars fails the
+      # whole layer (the #102 grafana-dashboards lesson). Bare $accessors
+      # pass through envsubst untouched.
+      outputs: |
+        [OUTPUT]
+            Name loki
+            Match kube.*
+            Host luxor.lofi
+            Port 31100
+            labels job=fluent-bit, cluster=${CLUSTER_NAME}, host=$kubernetes['host'], namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name']
+            auto_kubernetes_labels off
+            line_format json
+            Retry_Limit False
+
+        [OUTPUT]
+            Name loki
+            Match host.*
+            Host luxor.lofi
+            Port 31100
+            labels job=systemd, cluster=${CLUSTER_NAME}, host=$HOSTNAME
+            line_format json
+            Retry_Limit False
+
+    # k3s logs via CRI symlinks under /var/log; no docker dir to mount.
+    # /var/lib/fluent-bit persists the tail/journald cursors across restarts
+    # so logs aren't re-shipped from head.
+    daemonSetVolumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: etcmachineid
+        hostPath:
+          path: /etc/machine-id
+          type: File
+      - name: flb-state
+        hostPath:
+          path: /var/lib/fluent-bit
+          type: DirectoryOrCreate
+    daemonSetVolumeMounts:
+      - name: varlog
+        mountPath: /var/log
+        readOnly: true
+      - name: etcmachineid
+        mountPath: /etc/machine-id
+        readOnly: true
+      - name: flb-state
+        mountPath: /var/lib/fluent-bit
+
+    # Scraped by the edge Prometheus (#53) — serviceMonitorSelector {}.
+    serviceMonitor:
+      enabled: true
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 200Mi

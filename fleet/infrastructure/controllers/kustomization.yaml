@@ -8,3 +8,4 @@ resources:
   - cnpg
   - kube-state-metrics
   - prometheus-operator
+  - fluent-bit
