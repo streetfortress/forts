@@ -61,6 +61,13 @@
   networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 10255 ];
   services.prometheus.exporters.node.openFirewall = lib.mkForce false;
 
+  # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at
+  # the mesh address; pod traffic to the host's own wg0 IP ingresses on
+  # cni0, so 9100 must be open there too. The wg0 9100/10255 rows above are
+  # the soundship pull-model path — drop them once the edge stack is
+  # verified on production-test.
+  networking.firewall.interfaces."cni0".allowedTCPPorts = [ 9100 ];
+
   # Closure trims: manuals and the default perl/rsync/strace set have no
   # business on a node nobody develops on.
   documentation.enable = false;

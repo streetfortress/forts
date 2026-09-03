@@ -1,0 +1,53 @@
+# Alertmanager config for the edge stack, grouping/receiver settings carried
+# over from .files/homelab/services/monitoring/config/alertmanager.yaml.
+# Encrypted because the Discord webhook URL is a credential.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: alertmanager-edge
+    namespace: monitoring
+type: Opaque
+stringData:
+    alertmanager.yaml: ENC[AES256_GCM,data:/5WhIDzmuH1Yc/EaTQ+Kwc166TuxSwi4H5UPXYKZg0tB+GEzq+nwxuIDWCVszjc0/clTDuLNz8SauKPkeOtEUP4FWcFRpGe/rxjDPUc50TXJDyVrTBZ7PIaGCS0teLBslu02gt5PVtkCJzfHmpauI5dvO1j83ep5xIymMev5577VqpYYZTrCWZ+/U4POPD1WmTrv+IF7eh1cxkoOVv4mQE0DMjBQEF9FmuaVkfg0qhbRpW+zcbf9H5WlZ1AboWxGdRbyzafhFxb3ml514x+u+2jpIZXqzEauUancrK+x/yMWqlF0FtmKSMiYo5qm2+ltNcFCymjy2fqmhU4BSD5Gn3q9KXLRZs+NgV4RTGOJqPe9aG7rHiLpKzluHEMhuytaKHDM44caTelUTTNsVmKcn2NlxqCmezwtLZrOcx/Htcr7XlxiytaSAOiBYPlXhPv+qP82cf3XHThZDZRPj9Jf84ubYs+McNcOs6PatxCRdQ4TvSFHBDTYCnK9xj0WmzNMSiayXeQHVuvhnQF6IQ+bYjhrnQ==,iv:BzDfjCvfLlVfHoDtOWAw1aH0arHntzTlpym0/WcrW1s=,tag:Fp6Z8id+kkjxE5Lgy09rJg==,type:str]
+sops:
+    age:
+        - recipient: age1rgr7hqdjsu4y3m98z3yw7cfwf9w8q4xdvmrv4jc97na32svm5y2qtpsw9x
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQTDRSQ0ZCcnFObTd3bk9S
+            OXZEcnh6NTJqMGpscitZdWlUeGthbFdCbUU4CjRwdjllMFBmUjNobUxQaTR5ZmlC
+            WVJaSmRwKzR1d2J5OFRvRXVrNGp6OGMKLS0tIHJQZ3ZYeDNUTk80VFV5cjJOVEUr
+            YThyREg3L2Zaa1hJRGZWV1l6ZlM0NVEKSUVJDkGntobGsKxM/nbELmp5NOOsQUXr
+            dMcct8PSlIXWpnhnw3ONodhj4+A9DO5lckieY9B7wAfKLlf1ciTpnQ==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1qgcfuce56f3ds2a7qx6x5f5z3adevcha4u36kch0stpy2fgkqq5sf0luv0
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIRWJsdE5XMW15dWEwNFB4
+            T3pkenhsNDYxZ2hNTGNpWmFmK1RCcjFJOGh3CmpWQk9SRWJhU2lLZ1phUU1KazVn
+            dkU3RDVqTjRQOWZSM0VTaThNUDRzN2MKLS0tIFlVV09PWkpUdkdWMjV5RzFwQThs
+            a0tVdkpxVGROcktxNElnT3VKTElhdHcKcqZsEUIJXqAUZSuTjrYmy4IE+tvx7zfs
+            VezU2Rt/+mSrgr36umENP0lFNXUy6m2iQIUcZmuy23AC1GORr7mDHQ==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1p93yrknur3e7wfpryxmxvculu0lyksp9qsl2vjpx8qgf2pm08gfszz7529
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBuaEtHSytWdldrS3lTeUJU
+            TzZBcW9vS2hOQkZ0RGVpN3dmbUw5cm5lT0hRCmRHNFZxaUV6SlRqSzFhVFVQN3lx
+            empaRnBPYnFzb3M2VUYySFl1VzFVbkUKLS0tIE5GOVVlMXhja2dUWWxEbFhDMm9m
+            UDNtUmZkNmxuN1RTVjU2UU1NaTFvVDgKQC9aex3hG2hMWNFEf0rrl9vQnKk5Uci/
+            NV17Lxtdhgvs8+1ah76K/e5UjE3ibcN6qO6mPkW9gvTxxa5lVTL0/g==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age142ql9cxgxlu46785mctzj9s9g6y2fqwam4t4rp5svdw2lx6ztdkqyldj7u
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzazROK0Y4TGdneWNVNG9U
+            ZXZzck9ta0V0QkZrSld2d3hhNTZ1Z3RiVm5ZCk1oRk1JN3BXSDRxdjNYZmFHUllj
+            OGZ6aUtlV1I4SEFqcDMvd0kzbUF1TVUKLS0tIFZXcDhyWk1KcVdzR1M4THgrcE1n
+            VTF5Q2cxVTVGMmlwS0UrQTRsZUJMSncKngd8XpVB4PAHm3MIZK+JxLn3LU0tl5J9
+            rrZN0l8E68c470x22O5rGDSKfCCJOBF4X95AjXhq05ELsw1URYN6Mg==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-09-03T03:19:54Z"
+    mac: ENC[AES256_GCM,data:tq+Kag1J8jdZglfazDBA0B2KoEqlpm7j6MXOHPomb21ztgoY+2hVRySulVsexk3qs7Q93+VcWJUMI91Hdidr9popfWhm9qVUc7u6/R3ZD2hEYEYdkf6DSUvmD7uPL0XkBdcYXPNdxS993+u6YfqT4J1yv5uGw/kx4RlVqpuXhWw=,iv:DqqOyrnTUI/sEIzoAIVGCNbwbgzrITEYEfPd9oLbIzg=,tag:efCMUzCdeiOBcugqTP9xbw==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

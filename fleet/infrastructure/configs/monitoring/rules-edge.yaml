@@ -1,0 +1,64 @@
+# Edge rule set (#53): "this cluster is unhealthy", nothing else. These must
+# evaluate and page locally with the mesh down. Cross-cluster rules and the
+# dead man's switch live ONLY on luxor's ThanosRuler
+# (fleet/apps/luxor/monitoring/rules-central.yaml) so nothing pages twice.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: edge-cluster-health
+  namespace: monitoring
+spec:
+  groups:
+    - name: cluster-health
+      rules:
+        - alert: TargetDown
+          expr: up == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.job }}/{{ $labels.instance }} scrape target down"
+
+        - alert: NodeMemoryPressure
+          expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} has <10% memory available"
+
+        - alert: NodeDiskFillingUp
+          expr: >-
+            node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} /
+            node_filesystem_size_bytes < 0.15
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} {{ $labels.mountpoint }} has <15% disk left"
+
+        - alert: KubePodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total[15m]) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} is crashlooping"
+
+        - alert: CNPGClusterDown
+          expr: cnpg_collector_up == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG cluster {{ $labels.cluster }} exporter reports down"
+
+        - alert: CertificateExpiringSoon
+          expr: >-
+            certmanager_certificate_expiration_timestamp_seconds - time()
+            < 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.name }} expires in under 14 days"

@@ -4,3 +4,4 @@ resources:
   - coredns-custom.yaml
   - gateway-class.yaml
   - cluster-issuer.yaml
+  - monitoring

@@ -1,0 +1,25 @@
+# Edge Alertmanager (#53): one replica, Discord. Pages even when the mesh
+# (and therefore luxor) is down — that's the whole point of the edge stack.
+# Config comes from the sops Secret alertmanager-edge (operator default:
+# secret named alertmanager-<name>, key alertmanager.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: edge
+  namespace: monitoring
+spec:
+  replicas: 1
+  retention: 120h
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 1Gi
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi

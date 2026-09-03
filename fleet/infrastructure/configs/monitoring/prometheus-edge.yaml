@@ -1,0 +1,100 @@
+# Edge Prometheus (#53): full mode — not Agent — because rule evaluation
+# must keep working on the edge when the mesh is down. Short local retention;
+# long-term storage is the remote_write stream into luxor's central
+# Prometheus (#98), which the Thanos sidecar uploads to rustfs.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-edge
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-edge
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, services, endpoints, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - nonResourceURLs: [/metrics, /metrics/cadvisor]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-edge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-edge
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-edge
+    namespace: monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: edge
+  namespace: monitoring
+spec:
+  replicas: 1
+  serviceAccountName: prometheus-edge
+  scrapeInterval: 15s
+  evaluationInterval: 60s
+
+  # The WAL dominates memory either way (why Agent mode buys nothing), so
+  # local retention is nearly free: 24h + a size cap under the PVC size.
+  retention: 24h
+  retentionSize: 8GB
+  walCompression: true
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
+
+  externalLabels:
+    cluster: ${CLUSTER_NAME}
+
+  # Central Prometheus on luxor (wireguard/peers.json), NodePort 30990 —
+  # fleet/apps/luxor/monitoring/mesh-services.yaml.
+  remoteWrite:
+    - url: http://luxor.lofi:30990/api/v1/write
+
+  # Edge Prometheus points ONLY at its local Alertmanager: Prometheus fans
+  # out to every configured AM, so adding a second target double-pages.
+  alerting:
+    alertmanagers:
+      - namespace: monitoring
+        name: alertmanager-operated
+        port: web
+
+  # Select monitors and rules everywhere, EXCEPT rules marked for the
+  # central/fleet-wide set — on luxor those belong to the ThanosRuler
+  # (fleet/apps/luxor/monitoring) and must not be evaluated twice.
+  serviceMonitorSelector: {}
+  serviceMonitorNamespaceSelector: {}
+  podMonitorSelector: {}
+  podMonitorNamespaceSelector: {}
+  ruleNamespaceSelector: {}
+  ruleSelector:
+    matchExpressions:
+      - key: monitoring.sfi/scope
+        operator: NotIn
+        values: [central]
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
