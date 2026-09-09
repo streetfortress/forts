@@ -56,6 +56,7 @@
 let
   cfg = config.sfi.auto-rebuild;
   repoUrl = "ssh://git@gitea.zen.lofi:30022/sfi/deployments";
+  flakeRef = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
   knownHostsFile = pkgs.writeText "auto-rebuild-known-hosts" cfg.gitKnownHosts;
 
   # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run.
@@ -117,15 +118,26 @@ in
 
     system.autoUpgrade = {
       enable = true;
-      flake = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
-      # Bypass the flake fetcher's cache so every run sees main's tip.
-      flags = [ "--refresh" ];
+      flake = flakeRef;
       dates = cfg.dates;
       randomizedDelaySec = cfg.randomizedDelaySec;
       allowReboot = false;
     };
 
     systemd.services.nixos-upgrade = {
+      # Upstream's script interpolates the flake ref UNQUOTED
+      # (`--flake ''${cfg.flake}` joined by toString, tasks/auto-upgrade.nix),
+      # so the `&` in ?ref=main&dir=nixos backgrounds a half command, turns
+      # `dir=nixos#<host>` into a bare env assignment, and executes
+      # `--upgrade` as a command — the unit fails on every run (caught live
+      # by sfi-rebuild-now + NixosUpgradeFailed on staging's first repave).
+      # The allowReboot=false branch upstream is this single line, so
+      # replace it wholesale with a properly escaped ref; --refresh bypasses
+      # the flake fetcher's cache so every run sees main's tip (upstream
+      # adds it too, but to the flags this override ignores).
+      script = lib.mkForce ''
+        ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh --flake ${lib.escapeShellArg flakeRef}
+      '';
       environment.GIT_SSH_COMMAND = lib.concatStringsSep " " [
         "${pkgs.openssh}/bin/ssh"
         "-i ${config.sops.secrets.flux-git-deploy-key.path}"
