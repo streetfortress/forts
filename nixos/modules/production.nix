@@ -31,6 +31,12 @@
   # from production by default instead of sneaking into the image.
   home-manager.users = lib.mkForce { };
 
+  # Servers run UTC (common.nix's America/Los_Angeles is the interactive-
+  # host leftover): journald, timer calendars (auto-rebuild's 00/6:30 now
+  # means 00:30/06:30/12:30/18:30 UTC), and dashboard timestamps stop
+  # needing a 7-hour mental offset.
+  time.timeZone = lib.mkForce "UTC";
+
   # The production operator account: SSH in over the mesh, watch the machinery,
   # pull a log. No wheel — writes go through git, not a shell (#90 adds the
   # read-only kubeconfig this account will use). Key set matches

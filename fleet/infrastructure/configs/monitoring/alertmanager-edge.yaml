@@ -8,6 +8,8 @@ metadata:
   name: edge
   namespace: monitoring
 spec:
+  # Notification links point at the mesh NodePort (#137), not the pod.
+  externalUrl: http://${MESH_IP}:30993
   replicas: 1
   retention: 120h
   storage:

@@ -75,6 +75,10 @@ spec:
                     ready: [status, conditions, "[type=Ready]", status]
                     suspended: [spec, suspend]
                     revision: [status, lastAppliedRevision]
+                    # lastApplied only advances on a fully healthy
+                    # reconcile; attempted vs applied is the flux drift
+                    # signal (mirrors the nixos attempted/applied pair).
+                    attempted_revision: [status, lastAttemptedRevision]
                     source_name: [spec, sourceRef, name]
             - groupVersionKind:
                 group: helm.toolkit.fluxcd.io

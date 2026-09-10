@@ -45,6 +45,30 @@ spec:
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.pod }} is crashlooping"
 
+        # Init containers restart under a separate KSM metric — the
+        # grafana init-chown crashloop (2026-09-10) was invisible to the
+        # rule above.
+        - alert: KubeInitContainerCrashLooping
+          expr: increase(kube_pod_init_container_status_restarts_total[15m]) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} init container {{ $labels.container }} is crashlooping"
+
+        # Flux CR status via the #135 KSM customResourceState wiring: a
+        # HelmRelease stalled on a rejected manifest, or a Kustomization
+        # pinned by a failing health check, sits at ready=False with no
+        # pod-level symptom this rule set would otherwise see. Suspended
+        # resources are deliberately not-ready; don't page on them.
+        - alert: FluxResourceNotReady
+          expr: gotk_resource_info{ready="False", suspended!="true"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.customresource_kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} not Ready for 15m"
+
         - alert: CNPGClusterDown
           expr: cnpg_collector_up == 0
           for: 5m
