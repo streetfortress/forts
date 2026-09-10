@@ -28,8 +28,8 @@
 #     commit rates a short timer degenerates into eval-per-commit ×3 VMs
 #     for mostly-nix-irrelevant changes. Immediacy comes from
 #     sfi-rebuild-now instead; quiet-period ticks are skipped free by the
-#     gate. Skips are systemd "condition" results: no failure, no journal
-#     noise, no Loki alert.
+#     gate. Skips are systemd "condition" results: one "gate: ...skipping"
+#     journal line, no failure state, no Loki alert.
 #   - Gating on last-attempted (not last-succeeded) rev means a failing
 #     commit gets exactly one try — no eval-crash loop across ticks — and
 #     the NixosUpgradeFailed alert fires once. The next push to main (or
@@ -62,21 +62,40 @@ let
   # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run.
   # Inherits the service's GIT_SSH_COMMAND and $STATE_DIRECTORY. Recording
   # the rev here (not after the switch) is what caps failing commits at
-  # one attempt each.
+  # one attempt each. Echoes land in the unit's journal (→ Loki) so gate
+  # decisions are visible next to the rebuild output they explain.
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
     remote=$(${pkgs.git}/bin/git ls-remote ${repoUrl} refs/heads/main | ${pkgs.coreutils}/bin/cut -f1)
-    if [ -z "$remote" ]; then exit 0; fi
+    if [ -z "$remote" ]; then
+      echo "gate: cannot read main's tip from ${repoUrl}; proceeding (a fetch failure will alert)"
+      exit 0
+    fi
     marker="$STATE_DIRECTORY/last-attempted-rev"
-    if [ -e "$marker" ] && [ "$remote" = "$(${pkgs.coreutils}/bin/cat "$marker")" ]; then
+    last=""
+    if [ -e "$marker" ]; then last=$(${pkgs.coreutils}/bin/cat "$marker"); fi
+    if [ "$remote" = "$last" ]; then
+      echo "gate: main unchanged at ''${remote:0:7}; skipping"
       exit 1
     fi
+    echo "gate: main at ''${remote:0:7} (last attempted: ''${last:-none}); rebuilding"
     printf '%s\n' "$remote" > "$marker"
     exit 0
   '';
 
+  # `--wait` makes the escape hatch synchronous: the operator's prompt
+  # blocks through eval+switch and the exit status reflects the unit's
+  # result (fire-and-forget `start` reported nothing, which read as
+  # success even when the unit failed).
   rebuildNow = pkgs.writeShellScriptBin "sfi-rebuild-now" ''
     ${pkgs.coreutils}/bin/rm -f /var/lib/sfi-auto-rebuild/last-attempted-rev
-    exec ${pkgs.systemd}/bin/systemctl start nixos-upgrade.service
+    echo "pulling main via nixos-upgrade.service (logs: {job=\"systemd\"} SYSTEMD_UNIT=\"nixos-upgrade.service\")..."
+    if ${pkgs.systemd}/bin/systemctl start --wait nixos-upgrade.service; then
+      echo "nixos-upgrade: succeeded"
+    else
+      rc=$?
+      echo "nixos-upgrade: FAILED (rc=$rc) — see the unit's logs"
+      exit "$rc"
+    fi
   '';
 in
 {
