@@ -62,3 +62,35 @@ spec:
             severity: warning
           annotations:
             summary: "Certificate {{ $labels.name }} expires in under 14 days"
+
+    # Mesh health (#121): metrics come from the wireguard-metrics timer on
+    # each host (nixos/modules/wireguard.nix) via the node_exporter
+    # textfile collector. Edge-local on purpose — a dead tunnel must page
+    # from whichever side still has a path out. Keepalive-gated so roaming
+    # clients (laptops, phones) going quiet never page; mesh peers all
+    # carry persistentKeepalive and handshake at least every ~2-3min, so
+    # >300s is drift/death, not jitter. The 2026-09-03 incident (luxor's
+    # stale peer set silently killing the production-test tunnel) would
+    # have fired this from production-test's side within minutes.
+    - name: mesh-health
+      rules:
+        - alert: WireGuardPeerSilent
+          expr: >-
+            (time() - node_wireguard_latest_handshake_seconds > 300)
+            and on (instance, peer) node_wireguard_peer_keepalive_seconds > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.instance }}: no WireGuard handshake from mesh peer {{ $labels.peer }} in >5m"
+
+        # A frozen textfile means the collector timer died, not the mesh —
+        # without this, WireGuardPeerSilent would keep evaluating stale
+        # handshake ages and eventually fire with fiction.
+        - alert: WireGuardMetricsStale
+          expr: time() - node_textfile_mtime_seconds{file="wireguard.prom"} > 900
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: wireguard.prom not updated for >15m — wireguard-metrics timer dead"
