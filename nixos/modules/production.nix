@@ -60,7 +60,10 @@
   # The node exporter's openFirewall injects an iptables rule outside
   # allowedTCPPorts, so it must be switched off explicitly to scope 9100.
   networking.firewall.allowedTCPPorts = lib.mkForce [ 80 443 ];
-  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 10255 ];
+  # 30909/30993: edge Prometheus/Alertmanager NodePorts (mesh-services-
+  # edge.yaml) — the wg0-only opening IS their access control; silences
+  # are set against 30993.
+  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 10255 30909 30993 ];
   services.prometheus.exporters.node.openFirewall = lib.mkForce false;
 
   # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at

@@ -8,3 +8,4 @@ resources:
   - podmonitors.yaml
   - node-exporter.yaml
   - rules-edge.yaml
+  - mesh-services-edge.yaml
