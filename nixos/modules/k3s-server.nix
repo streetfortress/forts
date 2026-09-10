@@ -70,4 +70,8 @@ in
     enable = true;
     openFirewall = true; # opens port 9100
   };
+
+  # Directory-size metrics for the host dashboard (#130); k3s-cluster
+  # inherits this via its k3s-server import, so every exporter host has it.
+  imports = [ ./disk-usage-metrics.nix ];
 }

@@ -56,6 +56,7 @@
 let
   cfg = config.sfi.auto-rebuild;
   repoUrl = "ssh://git@gitea.zen.lofi:30022/sfi/deployments";
+  textfileDir = "/var/lib/node-exporter-textfiles"; # textfile-metrics.nix
   flakeRef = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
   knownHostsFile = pkgs.writeText "auto-rebuild-known-hosts" cfg.gitKnownHosts;
 
@@ -79,7 +80,30 @@ let
     fi
     echo "gate: main at ''${remote:0:7} (last attempted: ''${last:-none}); rebuilding"
     printf '%s\n' "$remote" > "$marker"
+    tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-attempted.prom.XXXXXX)
+    printf 'node_nixos_attempted_revision_info{revision="%s"} 1\n' "$remote" > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+    ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-attempted.prom
     exit 0
+  '';
+
+  # Companion to the gate's attempted-rev metric: recorded only when the
+  # switch SUCCEEDS (postStart ≙ ExecStartPost, skipped on failure), so
+  # applied != attempted reads as "last run failed" and applied vs flux's
+  # gotk revision reads as nix/k8s drift — the #130 update-status row.
+  # A no-op switch still "applies" its rev: the config content was
+  # identical, so the rev is honestly what the host runs. Deliberately NOT
+  # system.configurationRevision: embedding the rev in the closure would
+  # churn a new generation on every commit, including fleet-only no-ops.
+  recordApplied = pkgs.writeShellScript "auto-rebuild-record-applied" ''
+    rev=$(${pkgs.coreutils}/bin/cat /var/lib/sfi-auto-rebuild/last-attempted-rev 2>/dev/null) || exit 0
+    tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-applied.prom.XXXXXX)
+    {
+      printf 'node_nixos_applied_revision_info{revision="%s"} 1\n' "$rev"
+      printf 'node_nixos_applied_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
+    } > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+    ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-applied.prom
   '';
 
   # `--wait` makes the escape hatch synchronous: the operator's prompt
@@ -87,7 +111,11 @@ let
   # result (fire-and-forget `start` reported nothing, which read as
   # success even when the unit failed).
   rebuildNow = pkgs.writeShellScriptBin "sfi-rebuild-now" ''
-    ${pkgs.coreutils}/bin/rm -f /var/lib/sfi-auto-rebuild/last-attempted-rev
+    marker=/var/lib/sfi-auto-rebuild/last-attempted-rev
+    if [ -e "$marker" ]; then
+      echo "cleared last-attempted marker ($(${pkgs.coreutils}/bin/cat "$marker")) — the gate will report 'none' and rebuild"
+      ${pkgs.coreutils}/bin/rm -f "$marker"
+    fi
     echo "pulling main via nixos-upgrade.service (logs: {job=\"systemd\"} SYSTEMD_UNIT=\"nixos-upgrade.service\")..."
     if ${pkgs.systemd}/bin/systemctl start --wait nixos-upgrade.service; then
       echo "nixos-upgrade: succeeded"
@@ -130,6 +158,8 @@ in
     };
   };
 
+  imports = [ ./textfile-metrics.nix ]; # nixos-{attempted,applied}.prom
+
   config = lib.mkIf cfg.enable {
     # Also declared by flux-bootstrap.nix on flux hosts; identical empty
     # definitions merge cleanly, and non-flux hosts get it from here.
@@ -166,6 +196,8 @@ in
       serviceConfig = {
         StateDirectory = "sfi-auto-rebuild"; # /var/lib/sfi-auto-rebuild
         ExecCondition = "${gate}";
+        # Only on ExecStart success — see recordApplied.
+        ExecStartPost = "${recordApplied}";
       };
     };
 

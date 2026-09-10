@@ -36,8 +36,6 @@ let
     allowedIPs = [ "${c.wg_vpn_ip}/32" ];
   };
 
-  textfileDir = "/var/lib/node-exporter-textfiles";
-
   # pubkey → name lookup for metric labels, from the same source of truth
   # as the peer config itself (mesh peers + roaming clients).
   peerNames = pkgs.writeText "wireguard-peer-names" (lib.concatStringsSep "\n"
@@ -74,10 +72,13 @@ let
         print "# TYPE node_wireguard_transmit_bytes_total counter"
         for (i = 1; i <= n; i++) printf "node_wireguard_transmit_bytes_total{interface=\"wg0\",peer=\"%s\"} %s\n", peer[i], tx[i]
       }' > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp" # mktemp gives 0600; the exporter is unprivileged
     ${pkgs.coreutils}/bin/mv "$tmp" "$STATE_DIRECTORY/wireguard.prom"
   '';
 in
 {
+  imports = [ ./textfile-metrics.nix ];
+
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
   networking.wg-quick.interfaces.wg0 = {
@@ -109,11 +110,4 @@ in
       OnUnitActiveSec = "30s";
     };
   };
-
-  # The exporter itself is enabled by the k3s modules; this only points its
-  # textfile collector at the directory the timer writes. Harmless on a
-  # host where the exporter is off.
-  services.prometheus.exporters.node.extraFlags = [
-    "--collector.textfile.directory=${textfileDir}"
-  ];
 }
