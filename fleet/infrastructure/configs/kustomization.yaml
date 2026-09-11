@@ -5,4 +5,5 @@ resources:
   - gateway-class.yaml
   - cluster-issuer.yaml
   - cluster-issuer-letsencrypt.yaml
+  - ops-readonly.yaml
   - monitoring

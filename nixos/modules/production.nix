@@ -42,6 +42,8 @@
   # read-only kubeconfig this account will use). Key set matches
   # interactive.nix for now; trim to the ops devices when vetting settles.
   users.users.deployer = {
+    # Read the ops-ro kubeconfig (ops-kubeconfig.nix, #90).
+    extraGroups = [ "kubeops" ];
     isNormalUser = true;
     description = "SFI production operator";
     shell = pkgs.bashInteractive;

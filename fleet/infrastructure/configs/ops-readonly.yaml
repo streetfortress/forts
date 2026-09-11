@@ -1,0 +1,76 @@
+# Read-only ops identity (#90): the everyday kubeconfig is view-shaped by
+# construction — anything write-shaped goes through git, and cluster-admin
+# is break-glass (README Key decisions).
+#
+# Scope: the built-in `view` ClusterRole already includes every CRD we
+# care about — flux, flux-operator, cert-manager and cnpg all ship view
+# roles labeled aggregate-to-view — plus pods/log. What it deliberately
+# lacks: Secrets (helm release state is inspected via HelmRelease status
+# / `flux` CLI, NOT a secret carve-out — "the RO config cannot read any
+# Secret" stays an absolute), and cluster-scoped objects, added narrowly
+# below (nodes, PVs, CRD listing, kubectl-top metrics).
+#
+# The long-lived token Secret is populated by kubernetes from the
+# annotation; nixos/modules/ops-kubeconfig.nix renders it into
+# /var/lib/sfi/kubeconfig-ro on each node for local use and
+# `just fetch-kubeconfig`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ops-ro
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ops-ro-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: ops-ro
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-ro-cluster-read
+rules:
+  # Cluster-scoped reads the namespaced-shaped `view` role does not carry.
+  - apiGroups: [""]
+    resources: [nodes, namespaces, persistentvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+  # kubectl top
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-ro-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: ops-ro
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-ro-cluster-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-ro-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: ops-ro
+    namespace: kube-system
