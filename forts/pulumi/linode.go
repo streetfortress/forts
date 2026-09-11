@@ -1,0 +1,219 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"github.com/pulumi/pulumi-linode/sdk/v4/go/linode"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
+)
+
+// linodePlanDiskMB looks up an instance type's total disk (MB) from the
+// public, unauthenticated types endpoint. See the comment at its call
+// site for why this isn't the provider's GetInstanceType invoke.
+func linodePlanDiskMB(instanceType string) (int, error) {
+	resp, err := http.Get("https://api.linode.com/v4/linode/types/" + url.PathEscape(instanceType))
+	if err != nil {
+		return 0, fmt.Errorf("looking up instance type %q: %w", instanceType, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("looking up instance type %q: %s", instanceType, resp.Status)
+	}
+	var out struct {
+		Disk int `json:"disk"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0, fmt.Errorf("decoding instance type %q: %w", instanceType, err)
+	}
+	if out.Disk <= swapMB {
+		return 0, fmt.Errorf("instance type %q reports %d MB disk — refusing to size root disk", instanceType, out.Disk)
+	}
+	return out.Disk, nil
+}
+
+// Linode realizes a host on Linode: boot an instance from the pre-seeded
+// bootstrap image, attach a default-deny firewall at creation, and point
+// DNS at it. The host comes up already holding its sops identity (the
+// scaffold/inject step baked the host key into the image) and
+// flux-bootstraps itself — no SSH in the provisioning path.
+//
+// The image itself is NOT a resource here. It is secret-bearing and
+// single-use by design (#42): `fort provision --image` uploads it, sets
+// `forts:imageId` on the stack, and deletes it (provider-side and local)
+// once the instance exists. The root disk carries ignoreChanges on
+// `image` — it is a birth input, not a managed property, so neither the
+// image's deletion nor a later rebuild ever diffs a running host.
+//
+// The instance is built the explicit way — empty instance + disks +
+// config profile — rather than instance-from-image, because the implicit
+// config profile Linode creates would boot their `linode/latest-64bit`
+// kernel and run Network Helper, both wrong for NixOS (#87's boot
+// quirks): the image owns GRUB and eth0 DHCP (upstream linode-config.nix
+// baked in at build), so the config profile must be grub2 + all helpers
+// off. Swap is a real /dev/sdb disk, matching the image's default
+// `swapDevices` expectation.
+type Linode struct{}
+
+const swapMB = 512
+
+func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host) error {
+	if host.Region == "" || host.InstanceType == "" {
+		return fmt.Errorf("host %q: linode requires region and instance_type in inventory", name)
+	}
+	if host.DNSZone != "" && host.DNSName == "" {
+		return fmt.Errorf("host %q: dns_zone without dns_name — an apex record must be asked for explicitly", name)
+	}
+
+	// Set by `fort provision --image` after uploading the injected
+	// artifact. It stays in Pulumi.<host>.yaml as committed provenance:
+	// the record of which image this host was born from.
+	imageID := config.Require(ctx, "forts:imageId")
+
+	// protect on production applies to the whole host surface, not just
+	// the instance: an un-gated firewall delete would strip provider-side
+	// filtering from a running host. `pulumi destroy` refuses until each
+	// resource is explicitly unprotected — the "gated manual delete".
+	// Inventory removal alone never reaches this state at all.
+	var opts []pulumi.ResourceOption
+	if host.Production {
+		opts = append(opts, pulumi.Protect(true))
+	}
+
+	// Default-deny + exactly the production profile's public surface:
+	// 80/443 and the WireGuard transport — IPv4 ONLY, by declaration:
+	// only A records are published, LE challenges over v4, wg rides v4,
+	// so open v6 inbounds would be surface serving nothing (#86: the
+	// firewall is exactly the served surface). Going dual-stack later is
+	// an in-place rule update + AAAA, no replacement. Outbound v6 stays
+	// allowed. SSH is absent on purpose — the mesh is the only admin
+	// plane.
+	anyV4 := pulumi.StringArray{pulumi.String("0.0.0.0/0")}
+	firewall, err := linode.NewFirewall(ctx, name+"-fw", &linode.FirewallArgs{
+		Label:          pulumi.Sprintf("%s-fw", name),
+		InboundPolicy:  pulumi.String("DROP"),
+		OutboundPolicy: pulumi.String("ACCEPT"),
+		Inbounds: linode.FirewallInboundArray{
+			&linode.FirewallInboundArgs{
+				Label:    pulumi.String("web"),
+				Action:   pulumi.String("ACCEPT"),
+				Protocol: pulumi.String("TCP"),
+				Ports:    pulumi.String("80,443"),
+				Ipv4s:    anyV4,
+			},
+			&linode.FirewallInboundArgs{
+				Label:    pulumi.String("wireguard"),
+				Action:   pulumi.String("ACCEPT"),
+				Protocol: pulumi.String("UDP"),
+				Ports:    pulumi.String("51820"),
+				Ipv4s:    anyV4,
+			},
+		},
+	}, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Root disk fills the plan minus swap; the image's ext4 autoResizes
+	// into it on first boot. Plan disk size comes from the PUBLIC types
+	// endpoint (no auth) rather than the linode.GetInstanceType invoke,
+	// which is broken in provider v4.39 both ways we tried it: the
+	// matching plugin rejects the invoke (SDK marshals computed attrs,
+	// framework says read-only: price/addons), and nixpkgs pulumi-bin's
+	// ambient v6 plugin mis-shapes the result (Disk=0). Revisit on the
+	// next provider major bump.
+	diskMB, err := linodePlanDiskMB(host.InstanceType)
+	if err != nil {
+		return err
+	}
+
+	instance, err := linode.NewInstance(ctx, name, &linode.InstanceArgs{
+		Label:          pulumi.String(name),
+		Region:         pulumi.String(host.Region),
+		Type:           pulumi.String(host.InstanceType),
+		FirewallId:     firewall.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput),
+		PrivateIp:      pulumi.Bool(false),
+		BackupsEnabled: pulumi.Bool(false), // backups are #47's job, not the provider's
+		// Empty shell: disks + boot config below own what runs on it.
+		Booted: pulumi.Bool(false),
+	}, opts...)
+	if err != nil {
+		return err
+	}
+	linodeID := instance.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput)
+
+	rootDisk, err := linode.NewInstanceDisk(ctx, name+"-root", &linode.InstanceDiskArgs{
+		Label:    pulumi.String("nixos"),
+		LinodeId: linodeID,
+		Size:     pulumi.Int(diskMB - swapMB),
+		Image:    pulumi.String(imageID),
+	}, append(opts, pulumi.IgnoreChanges([]string{"image"}))...)
+	if err != nil {
+		return err
+	}
+	swapDisk, err := linode.NewInstanceDisk(ctx, name+"-swap", &linode.InstanceDiskArgs{
+		Label:      pulumi.String("swap"),
+		LinodeId:   linodeID,
+		Size:       pulumi.Int(swapMB),
+		Filesystem: pulumi.String("swap"),
+	}, opts...)
+	if err != nil {
+		return err
+	}
+
+	diskID := func(d *linode.InstanceDisk) pulumi.IntPtrInput {
+		return d.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput)
+	}
+	_, err = linode.NewInstanceConfig(ctx, name+"-boot", &linode.InstanceConfigArgs{
+		LinodeId:   linodeID,
+		Label:      pulumi.String("nixos"),
+		Kernel:     pulumi.String("linode/grub2"),
+		RootDevice: pulumi.String("/dev/sda"),
+		Device: linode.InstanceConfigDeviceArray{
+			&linode.InstanceConfigDeviceArgs{DeviceName: pulumi.String("sda"), DiskId: diskID(rootDisk)},
+			&linode.InstanceConfigDeviceArgs{DeviceName: pulumi.String("sdb"), DiskId: diskID(swapDisk)},
+		},
+		Helpers: linode.InstanceConfigHelperArray{
+			&linode.InstanceConfigHelperArgs{
+				// Network Helper can't rewrite NixOS network config; the
+				// image handles eth0 DHCP itself. The rest assume a
+				// mutable distro filesystem.
+				Network:           pulumi.Bool(false),
+				Distro:            pulumi.Bool(false),
+				ModulesDep:        pulumi.Bool(false),
+				DevtmpfsAutomount: pulumi.Bool(false),
+				UpdatedbDisabled:  pulumi.Bool(true),
+			},
+		},
+		Booted: pulumi.Bool(true),
+	}, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Public DNS for the production hostname → the new instance (#87).
+	if host.DNSZone != "" {
+		domain, err := linode.LookupDomain(ctx, &linode.LookupDomainArgs{Domain: &host.DNSZone})
+		if err != nil {
+			return err
+		}
+		_, err = linode.NewDomainRecord(ctx, name+"-dns", &linode.DomainRecordArgs{
+			DomainId:   pulumi.Int(*domain.Id),
+			Name:       pulumi.String(host.DNSName),
+			RecordType: pulumi.String("A"),
+			Target:     instance.IpAddress,
+		}, opts...)
+		if err != nil {
+			return err
+		}
+	}
+
+	ctx.Export("ip", instance.IpAddress)
+	ctx.Export("mesh_ip", pulumi.String(host.WgVpnIP))
+	return nil
+}

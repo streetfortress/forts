@@ -1,16 +1,38 @@
-# Forward .lofi DNS queries to the lab DNS server (dnsmasq).
-# k3s CoreDNS imports /etc/coredns/custom/*.server for additional server blocks.
-# Applied manually once at cluster bring-up (flux can't fetch git without it),
-# then owned by the infrastructure Kustomization.
+# In-cluster DNS for lab names. k3s CoreDNS imports /etc/coredns/custom/
+# *.server for additional server blocks. Applied manually once at cluster
+# bring-up (flux can't fetch git without it), then owned by the
+# infrastructure Kustomization.
+#
+# .lofi forwards to the lab dnsmasq's MESH listener (soundship,
+# 10.1.0.1 — .files homelab/services/caddy/dnsmasq.conf listens on LAN
+# and mesh): uniformly reachable from every cluster node, cloud hosts
+# included (web3 has no LAN, so the old 10.0.0.2 target was unreachable
+# there). The forward egresses via the node's wg0, so dnsmasq's
+# localise-queries returns the mesh-subnet answer — a single A record,
+# killing the dual-A lottery that shipped zero fluent-bit logs in #119.
+#
+# gitea.zen.lofi is additionally pinned in a hosts block: flux and chart
+# pulls must keep resolving even when the dnsmasq is down — the mesh IP
+# is derived from wireguard/peers.json (zenbook), keep in sync.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: coredns-custom
   namespace: kube-system
 data:
+  zen-lofi.server: |
+    zen.lofi:53 {
+      errors
+      cache 30
+      hosts {
+        10.1.0.6 gitea.zen.lofi
+        fallthrough
+      }
+      forward . 10.1.0.1
+    }
   lofi.server: |
     lofi:53 {
       errors
       cache 30
-      forward . 10.0.0.2
+      forward . 10.1.0.1
     }
