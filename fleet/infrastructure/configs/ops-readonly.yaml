@@ -38,6 +38,11 @@ rules:
   - apiGroups: [""]
     resources: [nodes, namespaces, persistentvolumes]
     verbs: [get, list, watch]
+  # ClusterIssuers are cluster-scoped and outside cert-manager's
+  # aggregate-to-view role — first real-world RO gap (2026-09-11).
+  - apiGroups: [cert-manager.io]
+    resources: [clusterissuers]
+    verbs: [get, list, watch]
   - apiGroups: [apiextensions.k8s.io]
     resources: [customresourcedefinitions]
     verbs: [get, list, watch]
