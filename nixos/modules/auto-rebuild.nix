@@ -1,8 +1,9 @@
 # Pull-based OS updates (#93): a root-side timer watches main and runs
 # `nixos-rebuild switch --flake` when the host's config changes — flux for
 # the k8s layer, this loop for the nix layer. No interactive root, no new
-# SSH surface; deployer stays read-only on production hosts (one pinned
-# sudo carve-out below) and the no-SSH end-state stays viable.
+# SSH surface; deployer stays read-only on production hosts (the pinned
+# sudo carve-out comes from the ops framework, ops/ops-commands.nix) and
+# the no-SSH end-state stays viable.
 #
 # Motivating incident: luxor's running WireGuard peer set silently drifted
 # from wireguard/peers.json (production-test added, luxor never rebuilt),
@@ -27,25 +28,30 @@
 #     That's why the cadence is hours, not flux's minutes: at active-dev
 #     commit rates a short timer degenerates into eval-per-commit ×3 VMs
 #     for mostly-nix-irrelevant changes. Immediacy comes from
-#     sfi-rebuild-now instead; quiet-period ticks are skipped free by the
-#     gate. Skips are systemd "condition" results: one "gate: ...skipping"
-#     journal line, no failure state, no Loki alert.
+#     sfi-nixos-rebuild instead; quiet-period ticks are skipped free by
+#     the gate. Skips are systemd "condition" results: one "gate:
+#     ...skipping" journal line, no failure state, no Loki alert.
 #   - Gating on last-attempted (not last-succeeded) rev means a failing
 #     commit gets exactly one try — no eval-crash loop across ticks — and
 #     the NixosUpgradeFailed alert fires once. The next push to main (or
-#     `sfi-rebuild-now`) retries. If gitea is unreachable the gate lets the
-#     run proceed and fail loudly rather than skipping silently forever.
-#   - Escape hatch: `sudo sfi-rebuild-now` as deployer clears the
+#     `sfi-nixos-rebuild`) retries. If gitea is unreachable the gate lets
+#     the run proceed and fail loudly rather than skipping silently
+#     forever.
+#   - Escape hatch: `sudo sfi-nixos-rebuild` as deployer clears the
 #     attempted-rev marker and starts nixos-upgrade.service immediately —
-#     the moral equivalent of `flux reconcile --with-source`. The sudoers
-#     rule is NOPASSWD on exactly that store-linked script; the host still
-#     only ever pulls vetted main, so deployer gains no write path.
+#     the moral equivalent of `flux reconcile --with-source`. Declared via
+#     the ops framework (ops/ops-commands.nix), which generates the same
+#     pinned NOPASSWD sudoers rule this module used to carry directly; the
+#     host still only ever pulls vetted main, so deployer gains no write
+#     path. The old name, `sfi-rebuild-now`, survives as a deprecation
+#     shim (below) that execs the new verb.
 #   - Auth reuses the host's flux-git-deploy-key (read-only deploy key,
 #     already in every flux host's sops file) via GIT_SSH_COMMAND; the
 #     pinned gitea host key matches flux-bootstrap.nix.
 #   - allowReboot off: kernel/major bumps go through the repave path. This
 #     module is the hybrid's "patch" leg — routine changes land within the
-#     6h window, or immediately via sfi-rebuild-now; majors are deliberate.
+#     6h window, or immediately via sfi-nixos-rebuild; majors are
+#     deliberate.
 #   - A failed switch fails nixos-upgrade.service and stays on the old
 #     generation (atomic); the failure is visible in journald → Loki
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
@@ -106,25 +112,17 @@ let
     ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-applied.prom
   '';
 
-  # `--wait` makes the escape hatch synchronous: the operator's prompt
-  # blocks through eval+switch and the exit status reflects the unit's
-  # result (fire-and-forget `start` reported nothing, which read as
-  # success even when the unit failed).
-  rebuildNow = pkgs.writeShellScriptBin "sfi-rebuild-now" ''
-    marker=/var/lib/sfi-auto-rebuild/last-attempted-rev
-    if [ -e "$marker" ]; then
-      echo "cleared last-attempted marker ($(${pkgs.coreutils}/bin/cat "$marker")) — the gate will report 'none' and rebuild"
-      ${pkgs.coreutils}/bin/rm -f "$marker"
-    fi
-    echo "pulling main via nixos-upgrade.service (logs: {job=\"systemd\"} SYSTEMD_UNIT=\"nixos-upgrade.service\")..."
-    if ${pkgs.systemd}/bin/systemctl start --wait nixos-upgrade.service; then
-      echo "nixos-upgrade: succeeded"
-    else
-      rc=$?
-      echo "nixos-upgrade: FAILED (rc=$rc) — see the unit's logs"
-      exit "$rc"
-    fi
-  '';
+  # Old-name compatibility shim: muscle memory and existing runbooks say
+  # `sudo sfi-rebuild-now`; point them at the framework name and run it
+  # anyway. Gets its own pinned sudoers rule below so the old invocation
+  # keeps working for deployer.
+  rebuildNowShim = pkgs.writeShellApplication {
+    name = "sfi-rebuild-now";
+    text = ''
+      echo "sfi-rebuild-now is deprecated — use 'sudo sfi-nixos-rebuild' (running it for you)" >&2
+      exec /run/current-system/sw/bin/sfi-nixos-rebuild "$@"
+    '';
+  };
 in
 {
   options.sfi.auto-rebuild = {
@@ -136,8 +134,8 @@ in
       description = ''
         systemd calendar expression for the upgrade timer. Every 6h bounds
         drift at a workday, not a day, without eval-per-commit load (see
-        header); sfi-rebuild-now covers "I know a change is waiting". Real
-        production hosts can narrow this to a nightly window later.
+        header); sfi-nixos-rebuild covers "I know a change is waiting".
+        Real production hosts can narrow this to a nightly window later.
       '';
     };
 
@@ -158,7 +156,10 @@ in
     };
   };
 
-  imports = [ ./textfile-metrics.nix ]; # nixos-{attempted,applied}.prom
+  imports = [
+    ./textfile-metrics.nix # nixos-{attempted,applied}.prom
+    ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
+  ];
 
   config = lib.mkIf cfg.enable {
     # Also declared by flux-bootstrap.nix on flux hosts; identical empty
@@ -179,7 +180,8 @@ in
       # so the `&` in ?ref=main&dir=nixos backgrounds a half command, turns
       # `dir=nixos#<host>` into a bare env assignment, and executes
       # `--upgrade` as a command — the unit fails on every run (caught live
-      # by sfi-rebuild-now + NixosUpgradeFailed on staging's first repave).
+      # by the rebuild-now escape hatch + NixosUpgradeFailed on staging's
+      # first repave).
       # The allowReboot=false branch upstream is this single line, so
       # replace it wholesale with a properly escaped ref; --refresh bypasses
       # the flake fetcher's cache so every run sees main's tip (upstream
@@ -201,12 +203,37 @@ in
       };
     };
 
-    environment.systemPackages = [ rebuildNow ];
-
     # The escape hatch for production-profile hosts, where deployer has no
-    # wheel: run the same pull loop, now. Matched on the stable
-    # current-system path so the rule survives generation switches. On a
-    # host without a deployer account the rule simply never matches.
+    # wheel: run the same pull loop, now. The framework generates the
+    # PATH wrapper, the pinned NOPASSWD sudoers rule, and the sfi-ops
+    # index row. `--wait` makes it synchronous: the operator's prompt
+    # blocks through eval+switch and the exit status reflects the unit's
+    # result (fire-and-forget `start` reported nothing, which read as
+    # success even when the unit failed).
+    sfi.ops.commands.nixos-rebuild = {
+      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service";
+      script = ''
+        marker=/var/lib/sfi-auto-rebuild/last-attempted-rev
+        if [ -e "$marker" ]; then
+          echo "cleared last-attempted marker ($(${pkgs.coreutils}/bin/cat "$marker")) — the gate will report 'none' and rebuild"
+          ${pkgs.coreutils}/bin/rm -f "$marker"
+        fi
+        echo "pulling main via nixos-upgrade.service (logs: {job=\"systemd\"} SYSTEMD_UNIT=\"nixos-upgrade.service\")..."
+        if ${pkgs.systemd}/bin/systemctl start --wait nixos-upgrade.service; then
+          echo "nixos-upgrade: succeeded"
+        else
+          rc=$?
+          echo "nixos-upgrade: FAILED (rc=$rc) — see the unit's logs"
+          exit "$rc"
+        fi
+      '';
+    };
+
+    environment.systemPackages = [ rebuildNowShim ];
+
+    # Pinned rule for the deprecation shim, same pattern the framework
+    # generates for the real verb; drop once runbooks/muscle memory have
+    # moved to `sudo sfi-nixos-rebuild`.
     security.sudo.extraRules = [{
       users = [ "deployer" ];
       commands = [{

@@ -62,7 +62,7 @@
   };
 
   # Watch main; a changed host config lands within ~6h — or now, via
-  # `sudo sfi-rebuild-now` (#93).
+  # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
 {{ else }}
   # sfi.flux-bootstrap = {

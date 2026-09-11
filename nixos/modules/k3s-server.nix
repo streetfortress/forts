@@ -37,8 +37,10 @@ in
       "--disable=traefik"
       "--kubelet-arg=read-only-port=10255"
       # Admin kubeconfig is root-only (0600 default): daily ops use the
-      # read-only config rendered by ops-kubeconfig.nix (#90); touching
-      # k3s.yaml is the break-glass event.
+      # read-only config rendered by ops/ops-kubeconfig.nix (#90);
+      # curated interventions go through the `sudo sfi-*` verbs
+      # (ops/ops-commands.nix); touching k3s.yaml directly is the
+      # break-glass event.
     ] ++ lib.optional (meshIp != null) "--tls-san=${meshIp}";
   };
 
@@ -71,5 +73,12 @@ in
 
   # Directory-size metrics for the host dashboard (#130); k3s-cluster
   # inherits this via its k3s-server import, so every exporter host has it.
-  imports = [ ./disk-usage-metrics.nix ./ops-kubeconfig.nix ];
+  # ops/: the observe/nudge ladder — read-only kubeconfig, the sfi-* verb
+  # framework, and the flux verbs every k3s host should carry.
+  imports = [
+    ./disk-usage-metrics.nix
+    ./ops/ops-kubeconfig.nix
+    ./ops/ops-commands.nix
+    ./ops/flux.nix
+  ];
 }

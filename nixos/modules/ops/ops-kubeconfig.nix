@@ -2,7 +2,9 @@
 # (fleet/infrastructure/configs/ops-readonly.yaml) into
 # /var/lib/sfi/kubeconfig-ro — the everyday kubeconfig for humans, local
 # and fetched (`just fetch-kubeconfig`). The admin k3s.yaml is root-only
-# 0600; using it IS the break-glass event (README Key decisions).
+# 0600; using it directly IS the break-glass event (README Key
+# decisions). Between observe (this file) and full admin sits the curated
+# `sudo sfi-*` verb layer (ops-commands.nix in this directory).
 #
 # The rendered server URL is the mesh address (same peers.json read as
 # k3s-server.nix's --tls-san, so the two can't drift): the file works
@@ -10,7 +12,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  peers = (builtins.fromJSON (builtins.readFile ../../wireguard/peers.json)).peers;
+  peers = (builtins.fromJSON (builtins.readFile ../../../wireguard/peers.json)).peers;
   meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
   server = if meshIp != null then meshIp else "127.0.0.1";
 in

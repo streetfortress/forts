@@ -17,8 +17,9 @@
 #     wireguard.nix). Production hosts therefore MUST be mesh members —
 #     without wg0 there is no login path at all.
 #   - deployer is a plain user: no wheel, so no path to root from SSH (the
-#     one carve-out is auto-rebuild.nix's pinned NOPASSWD `sfi-rebuild-now`,
-#     which only re-runs the pull loop against vetted main). Root
+#     carve-outs are the pinned NOPASSWD `sfi-*` ops verbs from
+#     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
+#     the pull loop against vetted main; `sfi-ops` lists them). Root
 #     logins stay off (common.nix) and no account has a password, so
 #     interactive break-glass is deliberately absent: use the provider's
 #     rescue boot (or guestfish on the disk locally) — these boxes are
