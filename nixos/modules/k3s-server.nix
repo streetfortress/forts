@@ -80,5 +80,6 @@ in
     ./ops/ops-kubeconfig.nix
     ./ops/ops-commands.nix
     ./ops/flux.nix
+    ./ops/k8s-restart.nix
   ];
 }
