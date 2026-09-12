@@ -114,7 +114,7 @@ in
 
         # Same token flux's envsubst substitutes later from cluster-vars;
         # here the module option supplies it (no cluster-vars exist yet).
-        sed "s/''${GITEA_ADDR}/${cfg.giteaAddr}/" ${corednsManifest} \
+        sed 's/''${GITEA_ADDR}/'${cfg.giteaAddr}'/' ${corednsManifest} \
           | kubectl apply -f -
 
         kubectl create namespace flux-system --dry-run=client -o yaml \
