@@ -57,15 +57,20 @@ in
           cluster:
             server: https://${server}:6443
             certificate-authority-data: $ca
+      # The user entry is keyed by host, like the cluster and context: kubectl
+      # merges every file on KUBECONFIG by key name (first file wins), so a
+      # bare `ops-ro` in each fort's file sends one fort's token to every
+      # other fort — "Unauthorized" the moment a second fort is fetched
+      # (sfi-prod-439bf72 vs the drill fort, 2026-09-12).
       users:
-        - name: ops-ro
+        - name: ops-ro@${config.networking.hostName}
           user:
             token: $token
       contexts:
         - name: ${config.networking.hostName}
           context:
             cluster: ${config.networking.hostName}
-            user: ops-ro
+            user: ops-ro@${config.networking.hostName}
       current-context: ${config.networking.hostName}
       EOF
       chgrp kubeops /var/lib/sfi/.kubeconfig-ro.tmp
