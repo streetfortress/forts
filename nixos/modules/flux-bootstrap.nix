@@ -47,6 +47,18 @@ in
       description = "Cluster name; the FluxInstance at fleet/clusters/<cluster>/flux-system/ is applied.";
     };
 
+    giteaAddr = lib.mkOption {
+      type = lib.types.str;
+      default = "10.1.0.6";
+      description = ''
+        Address substituted for ''${GITEA_ADDR} in coredns-custom at the
+        day-0 apply (flux's post-build envsubst owns it afterwards, from
+        cluster-vars — keep the two in sync). Mesh 10.1.0.6 by default;
+        LAN forts set 10.0.0.6 (a new fort has no zenbook tunnel until
+        zenbook's peer set learns it).
+      '';
+    };
+
     operatorVersion = lib.mkOption {
       type = lib.types.str;
       default = "0.55.0";
@@ -100,7 +112,10 @@ in
         done
         kubectl get --raw=/readyz >/dev/null
 
-        kubectl apply -f ${corednsManifest}
+        # Same token flux's envsubst substitutes later from cluster-vars;
+        # here the module option supplies it (no cluster-vars exist yet).
+        sed "s/''${GITEA_ADDR}/${cfg.giteaAddr}/" ${corednsManifest} \
+          | kubectl apply -f -
 
         kubectl create namespace flux-system --dry-run=client -o yaml \
           | kubectl apply -f -
