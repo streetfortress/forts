@@ -1,13 +1,87 @@
-# Flux ops verbs (declared via ops-commands.nix). Both only nudge flux's
-# machinery — retrigger a reconcile, restart a controller — never edit
-# what any resource declares; desired state stays in git.
+# Flux ops verbs (declared via ops-commands.nix). Reconcile/restart only
+# nudge flux's machinery — retrigger a reconcile, restart a controller —
+# never edit what any resource declares; desired state stays in git.
+# Suspend/resume toggle spec.suspend on a Kustomization/HelmRelease: a
+# deliberate, sudo-logged pause of the reconcile loop that makes runbook
+# windows safe (sfi-k8s-scale refuses to scale an unsuspended workload).
+# Suspension is NOT auto-restored — sfi-flux-resume closes the window,
+# and the Fleet Overview flux table shows what's suspended meanwhile.
 #
-# Both use the admin kubeconfig internally: that narrow, sudo-logged use
+# All use the admin kubeconfig internally: that narrow, sudo-logged use
 # is exactly what the framework exists to permit. The flux CRDs arrive
 # with flux itself, so on a not-yet-bootstrapped cluster the verbs report
 # an empty/absent state rather than failing mysteriously.
 { pkgs, ... }:
 
+let
+  # suspend + resume share one script (they can't drift): only the value
+  # patched into spec.suspend and the labels differ.
+  mkSuspendScript = { verb, value, done }: ''
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+    usage() {
+      echo "usage: sudo sfi-flux-${verb} <name> [namespace]"
+    }
+
+    # type is our own literal, tagged per row — never derived from input.
+    list_all() {
+      for t in kustomizations helmreleases; do
+        kubectl get "$t" -A --no-headers \
+          -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,SUSPENDED:.spec.suspend' 2>/dev/null \
+          | while read -r ns name susp; do
+              printf '%s %s %s %s\n' "$t" "$ns" "$name" "$susp"
+            done
+      done
+    }
+
+    if [ "$#" -eq 0 ]; then
+      usage
+      echo "reconcilers (suspended=true rows are paused):"
+      list_all | while read -r t ns name susp; do
+        printf '  %-14s %-32s -n %-16s suspended=%s\n' "$t" "$name" "$ns" "$susp"
+      done
+      exit 0
+    fi
+
+    if [ "$#" -gt 2 ]; then
+      usage >&2
+      exit 64
+    fi
+
+    requested_name=$1
+    requested_ns=''${2-}
+
+    matched_type=""
+    matched_ns=""
+    matched_count=0
+    candidates=""
+    while read -r t ns name _; do
+      [ "$name" = "$requested_name" ] || continue
+      if [ -n "$requested_ns" ] && [ "$ns" != "$requested_ns" ]; then
+        continue
+      fi
+      matched_type=$t
+      matched_ns=$ns
+      matched_count=$((matched_count + 1))
+      candidates="$candidates  sudo sfi-flux-${verb} $name $ns   # $t"$'\n'
+    done < <(list_all)
+
+    if [ "$matched_count" -eq 0 ]; then
+      echo "error: no Kustomization/HelmRelease named '$requested_name' — run without args for the menu" >&2
+      exit 1
+    fi
+    if [ "$matched_count" -gt 1 ]; then
+      echo "error: '$requested_name' is ambiguous; pick one:" >&2
+      printf '%s' "$candidates" >&2
+      echo "(same name+namespace as both kinds needs the admin kubeconfig)" >&2
+      exit 1
+    fi
+
+    kubectl -n "$matched_ns" patch "$matched_type/$requested_name" \
+      --type=merge -p '{"spec":{"suspend":${value}}}'
+    echo "${done}: $matched_type/$requested_name -n $matched_ns"
+  '';
+in
 {
   imports = [ ./ops-commands.nix ];
 
@@ -69,6 +143,26 @@
         done
         echo "requestedAt=$stamp stamped; watch: kubectl get -n $ns ''${matches[0]}"
       '';
+    };
+
+    flux-suspend = {
+      description = "Pause reconciliation of a Kustomization/HelmRelease (spec.suspend=true): sfi-flux-suspend <name> [namespace]; no args lists reconcilers; pair with sfi-flux-resume";
+      runtimeInputs = [ pkgs.kubectl ];
+      script = mkSuspendScript {
+        verb = "suspend";
+        value = "true";
+        done = "suspended (reconcile paused — close the window with sfi-flux-resume)";
+      };
+    };
+
+    flux-resume = {
+      description = "Resume reconciliation of a suspended Kustomization/HelmRelease: sfi-flux-resume <name> [namespace]";
+      runtimeInputs = [ pkgs.kubectl ];
+      script = mkSuspendScript {
+        verb = "resume";
+        value = "false";
+        done = "resumed";
+      };
     };
 
     flux-restart = {
