@@ -16,6 +16,17 @@ spec:
     - port: http
       # KSM's own labels describe the objects it reports on; keep them.
       honorLabels: true
+      # And drop the scrape-target identity the operator stamps on every
+      # series (the KSM pod's own namespace/pod/service/endpoint/container):
+      # it says nothing about the reported object and, worse, lands
+      # namespace="kube-state-metrics" on metrics that have no namespace
+      # of their own (kube_node_*, the flux gotk_resource_info set, which
+      # carries the CR's namespace as exported_namespace by flux's KSM
+      # convention). Same labeldrop kube-prometheus applies. job/instance
+      # stay so `up` and TargetDown keep identifying the target.
+      relabelings:
+        - action: labeldrop
+          regex: (namespace|pod|service|endpoint|container)
 ---
 # Kubelet + cadvisor over the authenticated 10250 port, via the
 # operator-maintained kube-system/kubelet Service (kubeletService.name in
