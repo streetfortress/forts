@@ -39,12 +39,22 @@
   time.timeZone = lib.mkForce "UTC";
 
   # The production operator account: SSH in over the mesh, watch the machinery,
-  # pull a log. No wheel — writes go through git, not a shell (#90 adds the
+  # pull a log (journal read via the systemd-journal group). No wheel — writes go through git, not a shell (#90 adds the
   # read-only kubeconfig this account will use). Key set matches
   # interactive.nix for now; trim to the ops devices when vetting settles.
   users.users.deployer = {
-    # Read the ops-ro kubeconfig (ops-kubeconfig.nix, #90).
-    extraGroups = [ "kubeops" ];
+    extraGroups = [
+      # Read the ops-ro kubeconfig (ops-kubeconfig.nix, #90).
+      "kubeops"
+      # Read the whole system journal (#185). This is the OBSERVE rung
+      # for the host half of the machinery: day-0 units (flux-bootstrap,
+      # nixos-upgrade, k3s) fail before any kubeconfig can say why, and
+      # without journal access the only readable evidence is
+      # `systemctl show`'s exit code. Lish is no help — no account has a
+      # password by design. Read-only, no sudo path; the grant is a group
+      # membership, not a verb.
+      "systemd-journal"
+    ];
     isNormalUser = true;
     description = "SFI production operator";
     shell = pkgs.bashInteractive;

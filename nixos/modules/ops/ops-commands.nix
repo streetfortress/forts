@@ -1,8 +1,10 @@
 # SFI ops break-glass command framework.
 #
 # The intervention ladder on production-shaped hosts:
-#   1. OBSERVE  — the read-only kubeconfig (ops-kubeconfig.nix): look at
-#      anything, change nothing.
+#   1. OBSERVE  — the read-only kubeconfig (ops-kubeconfig.nix) plus the
+#      host journal (deployer is in systemd-journal, production.nix): look
+#      at anything, change nothing. Day-0 failures (flux-bootstrap before
+#      flux exists) are only diagnosable from this rung.
 #   2. NUDGE    — curated `sudo sfi-<component>-<action>` verbs declared
 #      through this module: each one is a narrow, audited escalation
 #      (sudo-logged per invocation) that may use root and the admin
