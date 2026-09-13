@@ -53,7 +53,9 @@
 #     6h window, or immediately via sfi-nixos-rebuild; majors are
 #     deliberate.
 #   - A failed switch fails nixos-upgrade.service and stays on the old
-#     generation (atomic); the failure is visible in journald → Loki
+#     generation (atomic) — and so does an unreachable gitea (gate exit
+#     255; nix would otherwise rebuild the cached clone and report
+#     success); the failure is visible in journald → Loki
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
 #     NixosUpgradeFailed rule in fleet/apps/luxor/monitoring/loki-rules.yaml
 #     alerts on it.
@@ -66,16 +68,25 @@ let
   flakeRef = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
   knownHostsFile = pkgs.writeText "auto-rebuild-known-hosts" cfg.gitKnownHosts;
 
-  # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run.
-  # Inherits the service's GIT_SSH_COMMAND and $STATE_DIRECTORY. Recording
-  # the rev here (not after the switch) is what caps failing commits at
-  # one attempt each. Echoes land in the unit's journal (→ Loki) so gate
-  # decisions are visible next to the rebuild output they explain.
+  # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run;
+  # exit 255 = the UNIT fails (systemd.service(5)). Inherits the service's
+  # GIT_SSH_COMMAND and $STATE_DIRECTORY. Recording the rev here (not
+  # after the switch) is what caps failing commits at one attempt each.
+  # Echoes land in the unit's journal (→ Loki) so gate decisions are
+  # visible next to the rebuild output they explain.
+  #
+  # An unreachable gitea is a unit FAILURE, not a pass-through: nix's git
+  # fetcher only warns ("could not update local clone …; continuing with
+  # the most recent version") and rebuilds the cached clone, so a host
+  # that cannot reach gitea would otherwise report a green "Finished NixOS
+  # Upgrade" forever while silently frozen — luxor did exactly that for
+  # 12h+ on 2026-09-13 (resolver stuck, gitea.zen.lofi NXDOMAIN). Exit 255
+  # trips NixosUpgradeFailed (loki-rules) the same as a failed switch.
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
     remote=$(${pkgs.git}/bin/git ls-remote ${repoUrl} refs/heads/main | ${pkgs.coreutils}/bin/cut -f1)
     if [ -z "$remote" ]; then
-      echo "gate: cannot read main's tip from ${repoUrl}; proceeding (a fetch failure will alert)"
-      exit 0
+      echo "gate: cannot read main's tip from ${repoUrl} — failing the unit (a rebuild from the cached clone would hide this)"
+      exit 255
     fi
     marker="$STATE_DIRECTORY/last-attempted-rev"
     last=""
