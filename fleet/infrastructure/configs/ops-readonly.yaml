@@ -2,13 +2,17 @@
 # construction — anything write-shaped goes through git, and cluster-admin
 # is break-glass (README Key decisions).
 #
-# Scope: the built-in `view` ClusterRole already includes every CRD we
-# care about — flux, flux-operator, cert-manager and cnpg all ship view
-# roles labeled aggregate-to-view — plus pods/log. What it deliberately
-# lacks: Secrets (helm release state is inspected via HelmRelease status
-# / `flux` CLI, NOT a secret carve-out — "the RO config cannot read any
-# Secret" stays an absolute), and cluster-scoped objects, added narrowly
-# below (nodes, PVs, CRD listing, kubectl-top metrics).
+# Scope: the built-in `view` ClusterRole carries pods/log and the CRDs
+# whose charts ship aggregate-to-view roles — flux, flux-operator,
+# cert-manager. The ones that DON'T are granted read explicitly below
+# (verified with `kubectl auth can-i` on sfi-fort-e33e2d5, 2026-09-13):
+# Gateway API (vendored CRDs, no roles at all), cnpg (the chart's
+# aggregation is off by default), traefik Middlewares, and the
+# prometheus-operator kinds. What it deliberately lacks: Secrets (helm
+# release state is inspected via HelmRelease status / `flux` CLI, NOT a
+# secret carve-out — "the RO config cannot read any Secret" stays an
+# absolute), and cluster-scoped objects, added narrowly below (nodes,
+# PVs, CRD listing, kubectl-top metrics).
 #
 # The long-lived token Secret is populated by kubernetes from the
 # annotation; nixos/modules/ops-kubeconfig.nix renders it into
@@ -53,6 +57,19 @@ rules:
   - apiGroups: [metrics.k8s.io]
     resources: [nodes, pods]
     verbs: [get, list]
+  # CRDs without an aggregate-to-view role (read-only, no Secrets).
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, httproutes, grpcroutes, referencegrants]
+    verbs: [get, list, watch]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters, databases, backups, scheduledbackups, poolers, publications, subscriptions, imagecatalogs, clusterimagecatalogs]
+    verbs: [get, list, watch]
+  - apiGroups: [traefik.io]
+    resources: [middlewares]
+    verbs: [get, list, watch]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [podmonitors, servicemonitors, probes, scrapeconfigs, prometheusrules, prometheuses, alertmanagers, alertmanagerconfigs]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
