@@ -93,58 +93,92 @@ in
     # the match — the operator's input selects from the menu, it is never
     # interpolated into a command.
     flux-reconcile = {
-      description = "Stamp reconcile.fluxcd.io/requestedAt on the named flux-system Kustomization (and same-named source); no arg lists them";
+      description = "Reconcile a flux object now: sfi-flux-reconcile <name> [namespace] — Kustomizations/sources in flux-system, HelmReleases anywhere (a stalled HelmRelease also gets its failure counters reset); no args lists them";
       runtimeInputs = [ pkgs.kubectl pkgs.coreutils ];
       script = ''
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        ns=flux-system
-
-        mapfile -t available < <(
-          kubectl get kustomizations,gitrepositories,ocirepositories \
-            -n "$ns" -o name 2>/dev/null
-        )
-
+        usage() {
+          echo "usage: sudo sfi-flux-reconcile <name> [namespace]"
+        }
+        # Rows are "<kind> <namespace> <name>", kind our own literal per query
+        # — never derived from input. Kustomizations and sources live in
+        # flux-system; HelmReleases live next to their workloads.
+        list_all() {
+          for t in kustomizations gitrepositories ocirepositories helmrepositories; do
+            kubectl get "$t" -n flux-system --no-headers -o custom-columns='NAME:.metadata.name' 2>/dev/null \
+              | while read -r name; do printf '%s %s %s\n' "$t" flux-system "$name"; done
+          done
+          kubectl get helmreleases -A --no-headers -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name' 2>/dev/null \
+            | while read -r ns name; do printf '%s %s %s\n' helmreleases "$ns" "$name"; done
+        }
         if [ "$#" -eq 0 ]; then
-          echo "usage: sudo sfi-flux-reconcile <name>"
-          echo "reconcilable objects in $ns:"
-          if [ "''${#available[@]}" -eq 0 ]; then
+          usage
+          echo "reconcilable objects:"
+          rows=$(list_all)
+          if [ -z "$rows" ]; then
             echo "  (none found — is flux bootstrapped on this host?)"
           else
-            printf '  %s\n' "''${available[@]}"
+            printf '%s\n' "$rows" | while read -r t ns name; do
+              printf '  %-18s %-32s -n %s\n' "$t" "$name" "$ns"
+            done
           fi
           exit 0
         fi
-
-        if [ "$#" -gt 1 ]; then
-          echo "error: exactly one name expected" >&2
+        if [ "$#" -gt 2 ]; then
+          usage >&2
           exit 64
         fi
-
-        requested=$1
+        requested_name=$1
+        requested_ns=''${2-}
         matches=()
-        for obj in "''${available[@]}"; do
-          if [ "''${obj##*/}" = "$requested" ]; then
-            matches+=("$obj")
+        candidates=""
+        while read -r t ns name; do
+          [ "$name" = "$requested_name" ] || continue
+          if [ -n "$requested_ns" ] && [ "$ns" != "$requested_ns" ]; then
+            continue
           fi
-        done
-
+          matches+=("$t $ns $name")
+          candidates="$candidates  sudo sfi-flux-reconcile $name $ns   # $t"$'\n'
+        done < <(list_all)
         if [ "''${#matches[@]}" -eq 0 ]; then
-          echo "error: '$requested' is not a Kustomization/GitRepository/OCIRepository in $ns" >&2
-          if [ "''${#available[@]}" -gt 0 ]; then
-            printf 'known: %s\n' "''${available[@]##*/}" | sort -u >&2
-          fi
+          echo "error: no flux object named '$requested_name' — run without args for the menu" >&2
           exit 1
         fi
-
-        stamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-        for obj in "''${matches[@]}"; do
-          kubectl annotate -n "$ns" "$obj" \
-            "reconcile.fluxcd.io/requestedAt=$stamp" --overwrite
+        # A name shared by a Kustomization and its same-named source (the
+        # apps/flux-system pairs) is meant to match both: they live in one
+        # namespace. A HelmRelease name that also exists in another
+        # namespace is the ambiguity to refuse.
+        namespaces=()
+        for m in "''${matches[@]}"; do
+          read -r _ ns _ <<<"$m"
+          namespaces+=("$ns")
         done
-        echo "requestedAt=$stamp stamped; watch: kubectl get -n $ns ''${matches[0]}"
+        if [ "$(printf '%s\n' "''${namespaces[@]}" | sort -u | wc -l)" -gt 1 ]; then
+          echo "error: '$requested_name' exists in more than one namespace; pick one:" >&2
+          printf '%s' "$candidates" >&2
+          exit 1
+        fi
+        stamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        for m in "''${matches[@]}"; do
+          read -r t ns name <<<"$m"
+          if [ "$t" = helmreleases ]; then
+            # `flux reconcile hr --reset`: resetAt clears the install/upgrade
+            # failure counters, without which a HelmRelease that exhausted
+            # its retries ignores requestedAt entirely (RetriesExceeded stays
+            # stalled — umami on staging, 28h, deployment long since healthy).
+            kubectl annotate -n "$ns" "helmrelease/$name" \
+              "reconcile.fluxcd.io/requestedAt=$stamp" \
+              "reconcile.fluxcd.io/resetAt=$stamp" --overwrite
+          else
+            kubectl annotate -n "$ns" "$t/$name" \
+              "reconcile.fluxcd.io/requestedAt=$stamp" --overwrite
+          fi
+          echo "requestedAt=$stamp stamped on $t/$name -n $ns"
+        done
+        read -r t ns name <<<"''${matches[0]}"
+        echo "watch: kubectl get -n $ns $t/$name"
       '';
     };
-
     flux-suspend = {
       description = "Pause reconciliation of a Kustomization/HelmRelease (spec.suspend=true): sfi-flux-suspend <name> [namespace]; no args lists reconcilers; pair with sfi-flux-resume";
       runtimeInputs = [ pkgs.kubectl ];
