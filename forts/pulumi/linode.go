@@ -211,6 +211,19 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 		if err != nil {
 			return err
 		}
+		// Per-fort service hostnames (umami.<host>.<zone> today; the
+		// fleet's <service>.<host> convention) resolve via one wildcard
+		// rather than a record per service — the gateway listener +
+		// Certificate are already keyed that way in fleet/apps/<host>.
+		_, err = linode.NewDomainRecord(ctx, name+"-dns-wildcard", &linode.DomainRecordArgs{
+			DomainId:   pulumi.Int(*domain.Id),
+			Name:       pulumi.String("*." + host.DNSName),
+			RecordType: pulumi.String("A"),
+			Target:     instance.IpAddress,
+		}, opts...)
+		if err != nil {
+			return err
+		}
 	}
 
 	ctx.Export("ip", instance.IpAddress)
