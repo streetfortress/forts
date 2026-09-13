@@ -77,9 +77,15 @@ sops-decrypted from `provisioning/secrets.yaml` by every cloud command.
 ## One-time setup
 
 ```
-pulumi login file://$(git rev-parse --show-toplevel)/forts/pulumi/state
 PULUMI_CONFIG_PASSPHRASE=... pulumi stack init web3 --secrets-provider passphrase
 ```
+
+`fort` commands pin `PULUMI_BACKEND_URL` to this checkout's
+`forts/pulumi/state`, so no `pulumi login` is needed for them — and a
+stale global login (e.g. from a worktree) cannot redirect where state is
+written. Running pulumi by hand still honours whatever `pulumi login`
+last recorded: prefer `fort preview` / `fort provision`, or export
+`PULUMI_BACKEND_URL` yourself.
 
 ## Status
 

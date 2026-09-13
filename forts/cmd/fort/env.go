@@ -24,6 +24,16 @@ func cloudEnv(root string, entry inventory.Host) error {
 	// version pinned by go.mod.
 	os.Setenv("PULUMI_IGNORE_AMBIENT_PLUGINS", "true")
 
+	// The state backend is THIS checkout's committed file:// dir, always.
+	// `pulumi login` records a global "current backend" in
+	// ~/.pulumi/credentials.json; a login run from a worktree leaves every
+	// later run — from any checkout — writing state into that worktree
+	// (2026-09-13: a `just provision` from the primary checkout landed its
+	// state in ~/worktrees/…/fort-wildcard-dns). PULUMI_BACKEND_URL takes
+	// precedence over the recorded login, so the one-time `pulumi login`
+	// in forts/README.md becomes unnecessary for fort commands.
+	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "forts", "pulumi", "state"))
+
 	if entry.Provider == "linode" && os.Getenv("LINODE_TOKEN") == "" {
 		v, err := secret(root, "linode-token")
 		if err != nil {
