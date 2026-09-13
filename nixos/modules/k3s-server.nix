@@ -76,6 +76,8 @@ in
   # ops/: the observe/nudge ladder — read-only kubeconfig, the sfi-* verb
   # framework, and the flux verbs every k3s host should carry.
   imports = [
+    # gitea.zen.lofi pin: /etc/hosts + the coredns-custom add-on (one fact).
+    ./lab-dns.nix
     ./disk-usage-metrics.nix
     ./ops/ops-kubeconfig.nix
     ./ops/ops-commands.nix

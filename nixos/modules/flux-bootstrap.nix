@@ -2,10 +2,9 @@
 # runs after k3s on every boot and converges the cluster to "flux syncing this
 # repo" with zero manual kubectl/helm steps:
 #
-#   1. wait for the k3s API
-#   2. apply the coredns .lofi forwarder (chicken-and-egg: source-controller
-#      can't resolve gitea.zen.lofi through cluster DNS without it; the
-#      infrastructure Kustomization adopts it once flux is syncing)
+#   1. wait for the k3s API (the coredns .lofi forwarder that source-
+#      controller needs to resolve gitea.zen.lofi is a k3s add-on rendered
+#      by lab-dns.nix, applied by k3s itself before this runs)
 #   3. flux-system namespace
 #   4. `sops-age` secret from the host's flux-sops-age-key (sops-nix)
 #   5. `flux-system` git-auth secret from flux-git-deploy-key (identity.pub is
@@ -14,10 +13,9 @@
 #      release — same name + namespace — and reconciles to its own pin after)
 #   7. apply the cluster's FluxInstance
 #
-# The coredns + FluxInstance manifests are NOT duplicated here: the flake's
-# source is the whole repo, so the module applies the very files flux later
-# owns (fleet/infrastructure/configs/coredns-custom.yaml and
-# fleet/clusters/<cluster>/flux-system/flux-instance.yaml).
+# The FluxInstance manifest is NOT duplicated here: the flake's source is
+# the whole repo, so the module applies the very file flux later owns
+# (fleet/clusters/<cluster>/flux-system/flux-instance.yaml).
 #
 # Consumers declare the two extra host secrets in nixos/secrets/<host>.yaml
 # (flux-sops-age-key = the cluster's age key, flux-git-deploy-key = a
@@ -32,7 +30,6 @@
 let
   cfg = config.sfi.flux-bootstrap;
 
-  corednsManifest = ../../fleet/infrastructure/configs/coredns-custom.yaml;
   fluxInstanceManifest =
     ../../fleet + "/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
 
@@ -45,18 +42,6 @@ in
     cluster = lib.mkOption {
       type = lib.types.str;
       description = "Cluster name; the FluxInstance at fleet/clusters/<cluster>/flux-system/ is applied.";
-    };
-
-    giteaAddr = lib.mkOption {
-      type = lib.types.str;
-      default = "10.1.0.6";
-      description = ''
-        Address substituted for ''${GITEA_ADDR} in coredns-custom at the
-        day-0 apply (flux's post-build envsubst owns it afterwards, from
-        cluster-vars — keep the two in sync). Mesh 10.1.0.6 by default;
-        LAN forts set 10.0.0.6 (a new fort has no zenbook tunnel until
-        zenbook's peer set learns it).
-      '';
     };
 
     operatorVersion = lib.mkOption {
@@ -111,11 +96,6 @@ in
           sleep 5
         done
         kubectl get --raw=/readyz >/dev/null
-
-        # Same token flux's envsubst substitutes later from cluster-vars;
-        # here the module option supplies it (no cluster-vars exist yet).
-        sed 's/''${GITEA_ADDR}/'${cfg.giteaAddr}'/' ${corednsManifest} \
-          | kubectl apply -f -
 
         kubectl create namespace flux-system --dry-run=client -o yaml \
           | kubectl apply -f -
