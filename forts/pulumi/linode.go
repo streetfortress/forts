@@ -141,7 +141,12 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 		BackupsEnabled: pulumi.Bool(false), // backups are #47's job, not the provider's
 		// Empty shell: disks + boot config below own what runs on it.
 		Booted: pulumi.Bool(false),
-	}, opts...)
+		// …and `booted` is therefore the InstanceConfig's to manage: a
+		// refresh reads the running host back as booted=true, and without
+		// this the next apply would "correct" it to false — which the
+		// provider implements as a shutdown (caught on the first
+		// `preview --refresh` after the fort went live, 2026-09-13).
+	}, append(opts, pulumi.IgnoreChanges([]string{"booted"}))...)
 	if err != nil {
 		return err
 	}
