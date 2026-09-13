@@ -26,7 +26,9 @@
 #     — changed since the last attempt. Most commits are fleet-layer
 #     manifests: those are recorded as attempted+applied at the new tip
 #     (the host honestly runs main@tip's nixos tree) and skipped without
-#     an eval. Only a closure-relevant commit buys the flake eval (~2.5s /
+#     an eval — "applied" is the rev the host has caught up to, not the
+#     rev it was built from; that is "effective" (below), which only a
+#     real switch advances. Only a closure-relevant commit buys the flake eval (~2.5s /
 #     0.8 GB on devbox; tens of seconds on the VMs) and a switch — the
 #     cost that used to justify an hours-long cadence. Merging a config
 #     change is the rollout; sfi-nixos-rebuild remains the "now" lever
@@ -135,23 +137,42 @@ let
     exit 0
   '';
 
-  # Companion to the gate's attempted-rev metric: recorded only when the
-  # switch SUCCEEDS (postStart ≙ ExecStartPost, skipped on failure), so
-  # applied != attempted reads as "last run failed" and applied vs flux's
-  # gotk revision reads as nix/k8s drift — the #130 update-status row.
-  # A no-op switch still "applies" its rev: the config content was
+  # Companion to the gate's attempted-rev metric: the rev the host has
+  # caught up to. Recorded when the switch SUCCEEDS (ExecStartPost is
+  # skipped on failure) AND by the gate's fleet-only skip, so applied !=
+  # attempted reads as "last run failed" and applied vs flux's gotk
+  # revision reads as nix/k8s drift — the #130 update-status row. A
+  # no-op switch still "applies" its rev: the config content was
   # identical, so the rev is honestly what the host runs. Deliberately NOT
   # system.configurationRevision: embedding the rev in the closure would
   # churn a new generation on every commit, including fleet-only no-ops.
+  # Carries no timestamp on purpose: with the minutely gate, applied
+  # advances on every merge to main, and a "time since" derived from it
+  # read as "this host just rebuilt" all day (host-fleet's stat sat at
+  # <15 min through 8–11 fleet-only merges/host/day) — see recordEffective.
   recordApplied = pkgs.writeShellScript "auto-rebuild-record-applied" ''
     rev=$(${pkgs.coreutils}/bin/cat /var/lib/sfi-auto-rebuild/last-attempted-rev 2>/dev/null) || exit 0
     tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-applied.prom.XXXXXX)
-    {
-      printf 'node_nixos_applied_revision_info{revision="%s"} 1\n' "$rev"
-      printf 'node_nixos_applied_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
-    } > "$tmp"
+    printf 'node_nixos_applied_revision_info{revision="%s"} 1\n' "$rev" > "$tmp"
     ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
     ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-applied.prom
+  '';
+
+  # The rev the running closure was actually built from, plus when the
+  # switch that built it finished: ONLY after a successful ExecStart, never
+  # from the gate. effective != applied is normal (fleet-only merges since
+  # the last closure-relevant one); effective's timestamp is the honest
+  # "time since this host last ran nixos-rebuild" — the soak-window stat
+  # on host-fleet keys on it.
+  recordEffective = pkgs.writeShellScript "auto-rebuild-record-effective" ''
+    rev=$(${pkgs.coreutils}/bin/cat /var/lib/sfi-auto-rebuild/last-attempted-rev 2>/dev/null) || exit 0
+    tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-effective.prom.XXXXXX)
+    {
+      printf 'node_nixos_effective_revision_info{revision="%s"} 1\n' "$rev"
+      printf 'node_nixos_effective_timestamp_seconds %s\n' "$(${pkgs.coreutils}/bin/date +%s)"
+    } > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+    ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-effective.prom
   '';
 
   # Old-name compatibility shim: muscle memory and existing runbooks say
@@ -196,7 +217,7 @@ in
   };
 
   imports = [
-    ./textfile-metrics.nix # nixos-{attempted,applied}.prom
+    ./textfile-metrics.nix # nixos-{attempted,applied,effective}.prom
     ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
   ];
 
@@ -240,8 +261,8 @@ in
       serviceConfig = {
         StateDirectory = "sfi-auto-rebuild"; # /var/lib/sfi-auto-rebuild
         ExecCondition = "${gate}";
-        # Only on ExecStart success — see recordApplied.
-        ExecStartPost = "${recordApplied}";
+        # Only on ExecStart success — see recordApplied / recordEffective.
+        ExecStartPost = [ "${recordApplied}" "${recordEffective}" ];
       };
     };
 
