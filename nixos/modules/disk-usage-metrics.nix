@@ -100,6 +100,14 @@ in
         { path = "/var/log"; depth = 1; }
         { path = "/var/lib"; depth = 1; }
         "/var/lib/rancher/k3s/storage" # total; children are the PVC metric
+        # The nix store grows with every auto-rebuild (each generation's
+        # closure stays until collected — that IS the rollback capability)
+        # and the fetcher's git cache keeps a copy of every fetched rev of
+        # the repo. Neither is collected automatically yet; sizing them is
+        # the input to deciding a nix.gc policy. Totals only: the store's
+        # children are ~10^4 hash-named dirs, not a useful series set.
+        "/nix/store"
+        "/root/.cache/nix"
       ];
       description = ''
         Directories to size hourly into node_directory_size_bytes. Plain
