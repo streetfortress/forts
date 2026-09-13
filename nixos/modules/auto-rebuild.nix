@@ -18,19 +18,19 @@
 #     verified by eval'ing a peers-derived attr from the git URL (#93's
 #     "wrinkle" checkbox). The bare nixosConfigurations entry is made
 #     switch-capable by qcow-runtime.nix in the flake's vmModules.
-#   - Every-6h timer + an ExecCondition gate (a single `git ls-remote`)
-#     that skips the run unless main's tip moved since the last ATTEMPT.
-#     The gate is SHA-granular, not path-granular: any commit to the
-#     monorepo — and most commits are fleet-layer manifests that don't
-#     change this host's closure — moves the tip and buys a full refetch +
-#     flake eval (~2.5s / 0.8 GB peak RSS on devbox; expect tens of
-#     seconds on the shared-hypervisor VMs) ending in a no-op switch.
-#     That's why the cadence is hours, not flux's minutes: at active-dev
-#     commit rates a short timer degenerates into eval-per-commit ×3 VMs
-#     for mostly-nix-irrelevant changes. Immediacy comes from
-#     sfi-nixos-rebuild instead; quiet-period ticks are skipped free by
-#     the gate. Skips are systemd "condition" results: one "gate:
-#     ...skipping" journal line, no failure state, no Loki alert.
+#   - Minutely timer (flux's cadence) + an ExecCondition gate that is
+#     PATH-granular: `git ls-remote` first (one round trip; unchanged tip
+#     = free skip, which is nearly every tick), then, when the tip moved,
+#     a shallow bare clone in the state dir answers whether the trees the
+#     host closure actually reads — nixos/, wireguard/, fleet/clusters/
+#     — changed since the last attempt. Most commits are fleet-layer
+#     manifests: those are recorded as attempted+applied at the new tip
+#     (the host honestly runs main@tip's nixos tree) and skipped without
+#     an eval. Only a closure-relevant commit buys the flake eval (~2.5s /
+#     0.8 GB on devbox; tens of seconds on the VMs) and a switch — the
+#     cost that used to justify an hours-long cadence. Merging a config
+#     change is the rollout; sfi-nixos-rebuild remains the "now" lever
+#     and the retry for a failed attempt.
 #   - Gating on last-attempted (not last-succeeded) rev means a failing
 #     commit gets exactly one try — no eval-crash loop across ticks — and
 #     the NixosUpgradeFailed alert fires once. The next push to main (or
@@ -49,9 +49,8 @@
 #     already in every flux host's sops file) via GIT_SSH_COMMAND; the
 #     pinned gitea host key matches flux-bootstrap.nix.
 #   - allowReboot off: kernel/major bumps go through the repave path. This
-#     module is the hybrid's "patch" leg — routine changes land within the
-#     6h window, or immediately via sfi-nixos-rebuild; majors are
-#     deliberate.
+#     module is the hybrid's "patch" leg — routine changes land within a
+#     minute or two of merging; majors are deliberate.
 #   - A failed switch fails nixos-upgrade.service and stays on the old
 #     generation (atomic) — and so does an unreachable gitea (gate exit
 #     255; nix would otherwise rebuild the cached clone and report
@@ -82,25 +81,57 @@ let
   # Upgrade" forever while silently frozen — luxor did exactly that for
   # 12h+ on 2026-09-13 (resolver stuck, gitea.zen.lofi NXDOMAIN). Exit 255
   # trips NixosUpgradeFailed (loki-rules) the same as a failed switch.
+  #
+  # Path granularity: the trees below are everything the host closure
+  # reads from the repo (the flake under nixos/, peers.json, and the
+  # cluster's flux-instance.yaml). A tip that leaves them untouched is a
+  # fleet-only commit: markers advance, no eval.
+  closureTrees = [ "nixos" "wireguard" "fleet/clusters" ];
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
-    remote=$(${pkgs.git}/bin/git ls-remote ${repoUrl} refs/heads/main | ${pkgs.coreutils}/bin/cut -f1)
+    git=${pkgs.git}/bin/git
+    remote=$($git ls-remote ${repoUrl} refs/heads/main | ${pkgs.coreutils}/bin/cut -f1)
     if [ -z "$remote" ]; then
       echo "gate: cannot read main's tip from ${repoUrl} — failing the unit (a rebuild from the cached clone would hide this)"
       exit 255
     fi
     marker="$STATE_DIRECTORY/last-attempted-rev"
+    tree_marker="$STATE_DIRECTORY/last-attempted-trees"
     last=""
     if [ -e "$marker" ]; then last=$(${pkgs.coreutils}/bin/cat "$marker"); fi
     if [ "$remote" = "$last" ]; then
       echo "gate: main unchanged at ''${remote:0:7}; skipping"
       exit 1
     fi
-    echo "gate: main at ''${remote:0:7} (last attempted: ''${last:-none}); rebuilding"
-    printf '%s\n' "$remote" > "$marker"
-    tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-attempted.prom.XXXXXX)
-    printf 'node_nixos_attempted_revision_info{revision="%s"} 1\n' "$remote" > "$tmp"
-    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
-    ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-attempted.prom
+
+    # Shallow bare mirror of main, just enough to read tree ids.
+    repo="$STATE_DIRECTORY/main.git"
+    if [ ! -d "$repo" ]; then
+      $git clone --quiet --bare --depth=1 --no-tags --branch main ${repoUrl} "$repo"
+    else
+      $git -C "$repo" fetch --quiet --depth=1 --no-tags origin +refs/heads/main:refs/heads/main
+    fi
+    trees=$($git -C "$repo" rev-parse ${lib.concatMapStringsSep " " (t: "\"$remote:${t}\"") closureTrees} \
+      | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -c1-16)
+    last_trees=""
+    if [ -e "$tree_marker" ]; then last_trees=$(${pkgs.coreutils}/bin/cat "$tree_marker"); fi
+
+    record_attempt() {
+      printf '%s\n' "$remote" > "$marker"
+      printf '%s\n' "$trees" > "$tree_marker"
+      tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-attempted.prom.XXXXXX)
+      printf 'node_nixos_attempted_revision_info{revision="%s"} 1\n' "$remote" > "$tmp"
+      ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+      ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-attempted.prom
+    }
+
+    if [ -n "$last" ] && [ "$trees" = "$last_trees" ]; then
+      echo "gate: main at ''${remote:0:7} leaves ${lib.concatStringsSep "/" closureTrees} untouched (fleet-only commit); recording as applied, no rebuild"
+      record_attempt
+      ${recordApplied}
+      exit 1
+    fi
+    echo "gate: main at ''${remote:0:7} (last attempted: ''${last:-none}); closure inputs changed — rebuilding"
+    record_attempt
     exit 0
   '';
 
@@ -141,22 +172,19 @@ in
 
     dates = lib.mkOption {
       type = lib.types.str;
-      default = "00/6:30"; # 00:30, 06:30, 12:30, 18:30
+      default = "minutely";
       description = ''
-        systemd calendar expression for the upgrade timer. Every 6h bounds
-        drift at a workday, not a day, without eval-per-commit load (see
-        header); sfi-nixos-rebuild covers "I know a change is waiting".
-        Real production hosts can narrow this to a nightly window later.
+        systemd.time(7) calendar for the watch timer. Minutely is flux's
+        cadence: the gate's ls-remote makes an unchanged tip a free skip,
+        and path granularity makes fleet-only commits a marker update —
+        only closure-relevant commits cost an eval + switch.
       '';
     };
 
     randomizedDelaySec = lib.mkOption {
       type = lib.types.str;
-      default = "10min";
-      description = ''
-        Timer jitter: staggers the fleet VMs' concurrent evals on the
-        shared hypervisor when a tick finds new commits.
-      '';
+      default = "15s";
+      description = "Jitter so the fleet's ticks (and their ls-remotes against gitea) don't line up.";
     };
 
     gitKnownHosts = lib.mkOption {
@@ -184,6 +212,9 @@ in
       randomizedDelaySec = cfg.randomizedDelaySec;
       allowReboot = false;
     };
+    # systemd's default 1-minute AccuracySec would coalesce a minutely
+    # timer into "sometime this minute"; tighten so the cadence is real.
+    systemd.timers.nixos-upgrade.timerConfig.AccuracySec = "5s";
 
     systemd.services.nixos-upgrade = {
       # Upstream's script interpolates the flake ref UNQUOTED
