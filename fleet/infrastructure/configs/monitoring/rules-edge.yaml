@@ -56,6 +56,24 @@ spec:
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.pod }} init container {{ $labels.container }} is crashlooping"
 
+        # A pod that never starts restarts nothing, so the two rules above
+        # are blind to it: rustfs-bucket-init sat in ImagePullBackOff for
+        # 28h (minio/mc left Docker Hub, 2026-09-13) with no alert. KSM's
+        # waiting-reason gauge covers the image-pull family — sparse since
+        # KSM v2: the series only exists while a container is waiting, so
+        # an absent metric is the healthy state, not a broken scrape. The
+        # `for` rides out a registry hiccup and a first pull of a big image.
+        - alert: KubePodImagePullFailing
+          expr: >-
+            max by (namespace, pod, container, reason) (
+              kube_pod_container_status_waiting_reason{reason=~"ImagePullBackOff|ErrImagePull|InvalidImageName"}
+            ) == 1
+          for: 20m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} cannot pull its image ({{ $labels.reason }}, container {{ $labels.container }})"
+
         # Flux CR status via the #135 KSM customResourceState wiring: a
         # HelmRelease stalled on a rejected manifest, or a Kustomization
         # pinned by a failing health check, sits at ready=False with no
