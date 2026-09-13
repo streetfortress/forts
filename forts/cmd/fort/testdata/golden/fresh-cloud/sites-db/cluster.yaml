@@ -41,7 +41,7 @@ spec:
   # recovers FROM v1 archives as v2.
   backup:
     barmanObjectStore:
-      destinationPath: s3://cnpg/sfi-prod-439bf72
+      destinationPath: s3://cnpg/cloud-fort
       endpointURL: http://10.1.0.5:30900
       serverName: sites-db-v1
       s3Credentials:

@@ -303,12 +303,15 @@ Two consequences to accept and record:
   `envFrom` reads at container start). CNPG reconciles `managed.roles`
   passwords live, so after the merge the database has the new password
   and the app pods still hold the old one until they restart — and the
-  ops kubeconfig is deliberately read-only, so nobody can `rollout
-  restart`. The fix is a controller: **Reloader** (stakater) fleet-wide
-  in `fleet/infrastructure/controllers`, and the chart guideline that
-  workloads carry `reloader.stakater.com/auto: "true"`. Seconds of
-  auth failures between the role update and the roll are the accepted
-  window; the HelmRelease's retry-forever posture absorbs it.
+  ops kubeconfig is deliberately read-only. The roll is the operator's
+  deliberate act via the break-glass on the node: `sudo sfi-k8s-restart
+  <deployment|statefulset> <name> <namespace>`, listed in the rotate
+  report per affected workload. No reload controller for now (decided
+  2026-09-13: one less thing in the 4 GB envelope, and a rotation is a
+  merge-then-act moment anyway); automating the roll on a
+  secret-rotation merge is a later step if it proves tedious. Seconds
+  of auth failures between the role update and the roll are the
+  accepted window; the HelmRelease's retry-forever posture absorbs it.
 - The seeder needs a **sops set** path for existing files (add missing
   keys, replace a named key). Valkey tenant registration and `--set`
   need it too, so it lands in PR 1 rather than with rotate.
@@ -331,10 +334,28 @@ Two consequences to accept and record:
 5. **Migrations tolerate a database that is not there yet.** Hook Job
    with a generous `backoffLimit`, or migrate-on-start; the fort's
    HelmRelease retries forever, so the race resolves itself.
-6. **Carry the Reloader annotation** on every workload that reads the
-   Secret.
-7. **Declare a metrics port** if you export any; the fort renders the
-   PodMonitor. Alert rules stay fort-side: they encode fleet policy.
+6. **App facts ship in the chart, fleet policy stays in the fort.** A
+   PodMonitor and the PrometheusRule bodies for the app's own metrics
+   are app knowledge (thresholds move with the code that emits them;
+   `promtool test rules` runs in the chart's CI) and belong beside the
+   templates, behind a `monitoring.enabled` value that defaults on for
+   SFI forts and off elsewhere. Rules carry semantic labels
+   (`severity`, `component`); *which* label pages whom, receivers,
+   silences, inhibitions and the cluster-level dead-man rules are fleet
+   policy and live in the fort's Alertmanager config, never in rule
+   bodies — one notification path (a backup tool that posts to Discord
+   on its own is the old-setup convenience this stack replaces). A
+   chart that ships its own PodMonitor omits the contract's `metrics`
+   block (the fort renders nothing). The CRDs those CRs need are a
+   capability the contract will name (`requires` grows a `capabilities:
+   [monitoring.coreos.com, ...]` list, checked by `fort status`), since
+   a chart cannot install on a cluster without them.
+   **Backups stay fort-ops** (decided 2026-09-13): the CNPG barman
+   archive is the sites-db template's, and a logical-backup CR
+   (databasus-operator) would live fort-side too — its Storage target is
+   fort posture (the `s3` provider's open credential model) — until
+   consistent patterns across apps justify contracting it, the way
+   monitoring rules already do.
 8. **Size for the 4 GB shape**: requests set, one replica default,
    nothing per-pod that belongs in valkey.
 9. **Versioning**: first-party apps pin chart version = appVersion (one
@@ -539,10 +560,20 @@ provider from template — a reviewed snapshot under
 `forts/cmd/fort/testdata/golden`, `UPDATE_GOLDEN=1` to regenerate). CI
 runs vet + tests (`checks.yaml`, `go` job).
 
-Not yet, in the order below: `fort seed` in Go (chart pull + overlay +
-`sops set`; the overlay merge is therefore not live either — today every
-fort-side file is the full form), the CI gate, `fort status`, `fort
-rotate`, s3, remote providers.
+`fort seed` (Go) executes the fort-side full form where one is
+committed, else derives it from the chart's contract at the pinned tag
+plus the fort-side overlay (`sources`, `secret.keys` overrides) and the
+fort's providers — so a chart-contract app needs no fort-side file at
+all. Dirs seed in dependency order derived from their `sops:` refs.
+Existing files are never rewritten: missing keys are added with `sops
+set`, `--set KEY` takes one value from stdin for an external key.
+Tests use a fake sops; the fleet-parity test checks every committed
+contract against its Secret's plaintext key names. The python seeder is
+superseded and stays only until the next fort is seeded with the Go one.
+
+Not yet, in the order below: the CI gate, `fort status`, `fort rotate`,
+s3, remote providers, overlay `provider` overrides (placement is by
+convention).
 
 ## Sequencing (one PR each, in this order)
 
@@ -552,15 +583,14 @@ rotate`, s3, remote providers.
    registration, golden test~~ (this PR).
 3. ~~**sites-db instance template** + `fort add` on a fort without one
    (sfi-website on a fresh fort as the second golden)~~.
-4. **`fort seed`** (Go port of `provisioning/seed-secrets.py`): reads
+4. ~~**`fort seed`** (Go port of `provisioning/seed-secrets.py`): reads
    the effective contract (chart pull + overlay), `sops set` mode for
-   existing files (add missing keys, `--set KEY`). The python seeder
-   retires when this reproduces the fleet's Secrets' key sets; the
-   fort-side file shrinks to the overlay.
+   existing files (add missing keys, `--set KEY`)~~. The python seeder
+   is deleted once a real fort has been seeded by the Go one.
 5. **CI gate**: contract ↔ Secret key names ↔ `wire` values; missing
    required keys fail production.
 6. **`fort status`** (local derivation; `--all` invariants).
-7. **`fort rotate`** + Reloader fleet-wide + the chart annotation.
+7. **`fort rotate`** (+ the break-glass roll in its report).
 8. **s3**: bucket + the per-app credential decision.
 9. **Remote providers** (`provider.fort`): mesh exposure of `-rw`
    Services, inventory-derived hosts.

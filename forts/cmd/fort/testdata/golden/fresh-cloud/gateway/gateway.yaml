@@ -1,4 +1,4 @@
-# sfi-prod-439bf72's edge Gateway, as `fort add` renders it on a fort's
+# cloud-fort's edge Gateway, as `fort add` renders it on a fort's
 # first http need: the http listener only (ACME http01 challenge routes
 # attach here). Each service's https listener arrives as a JSON6902
 # patch file beside this one (listener-<app>.yaml) plus its cert-manager

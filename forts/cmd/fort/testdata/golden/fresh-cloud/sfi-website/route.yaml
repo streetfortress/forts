@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-sfi-website
   hostnames:
-    - sfi-website.sfi-prod-439bf72.streetfortress.cloud
+    - sfi-website.cloud-fort.example.cloud
   rules:
     - backendRefs:
         - name: sfi-website-ui

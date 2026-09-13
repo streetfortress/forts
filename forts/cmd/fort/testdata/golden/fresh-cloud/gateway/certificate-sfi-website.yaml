@@ -1,5 +1,5 @@
 # Serving cert for the https-sfi-website listener; issued by Let's Encrypt
-# via the ACME http01 gateway solver. Gated on DNS: until sfi-website.sfi-prod-439bf72.streetfortress.cloud
+# via the ACME http01 gateway solver. Gated on DNS: until sfi-website.cloud-fort.example.cloud
 # points at this fort, cert-manager retries harmlessly and the listener
 # serves its self-signed placeholder.
 apiVersion: cert-manager.io/v1
@@ -10,7 +10,7 @@ metadata:
 spec:
   secretName: sfi-website-tls
   dnsNames:
-    - sfi-website.sfi-prod-439bf72.streetfortress.cloud
+    - sfi-website.cloud-fort.example.cloud
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt

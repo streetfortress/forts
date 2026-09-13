@@ -44,6 +44,8 @@ func main() {
 		err = preview(os.Args[2:])
 	case "add":
 		err = add(os.Args[2:])
+	case "seed":
+		err = seed(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -85,6 +87,17 @@ func usage() {
       New files + appended list entries only; prints the marked tree.
       --write lays it down for a PR, then seed the ◆ files. --follow-pr
       pins a PR's per-commit preview charts via a semver filter.
+
+  seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]
+      produce the fort's sops-encrypted Secrets from contracts: the
+      committed full-form secrets.contract.yaml where there is one, else
+      the chart's own contract (pulled at the pinned tag) + the fort's
+      overlay, resolved against the fort's providers by convention.
+      Dirs default to every contract/chart dir of the fort, in
+      dependency order. Existing files are never rewritten: missing keys
+      are added (sops set); --set KEY takes one value from stdin for an
+      external key. Prints the ◆ plan; --write seeds. No value is ever
+      printed.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.`)

@@ -235,9 +235,9 @@ func TestAddFreshCloudFort(t *testing.T) {
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	const fort = "sfi-prod-439bf72" // linode, dns_zone streetfortress.cloud
+	const fort = "cloud-fort" // testdata/inventory.yaml: linode, dns_zone example.cloud
 	tmp := t.TempDir()
-	copyFile(t, filepath.Join(repo, "provisioning/inventory.yaml"), filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyFile(t, "testdata/inventory.yaml", filepath.Join(tmp, "provisioning/inventory.yaml"))
 	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
 

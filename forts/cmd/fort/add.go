@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 
@@ -90,7 +89,6 @@ type plan struct {
 	root, fort, app string
 	resolved        string
 	actions         []action
-	seedDirs        []string
 	externals       []contract.Key
 }
 
@@ -107,7 +105,7 @@ type view struct {
 	Valkey                                        *vkTenant
 	ValuesYAML                                    string
 	Vars                                          []ctrVar
-	Keys                                          []ctrKey
+	Keys                                          []NamedSpec
 	GatewayPatchesComment, ValkeyPatchesComment   string
 	SitesDBPatchesComment, TenantContractEntry    string
 }
@@ -122,7 +120,6 @@ type vkTenant struct {
 	Key    string // the Secret key carrying this user's password
 }
 type ctrVar struct{ Name, Comment, File, Path string }
-type ctrKey struct{ Name, Spec string }
 
 const gatewayPatchesComment = `# One JSON6902 patch per service appends its https listener to the
 # Gateway (the design's one exception to "new files only": listeners
@@ -269,8 +266,8 @@ func planAdd(o addOpts) (*plan, error) {
 			v.Postgres = &pgTenant{Handle: r.Handle, Extensions: r.Instance.Extensions}
 			v.TenantContractEntry = tenantContractEntry(app)
 			dbDir := filepath.Join(apps, "sites-db")
-			outputs[key] = map[string]string{"host": "sites-db-rw.sites-db.svc.cluster.local", "port": "5432", "name": app, "user": app}
-			passwordVar[key] = ctrVar{r.Handle + "_password", "requires.postgres." + r.Handle + " → the sites-db tenant role (lockstep pair).", "../sites-db/secrets-" + app + ".sops.yaml", "stringData.password"}
+			b := conventionalBinding(r.Type, r.Handle, app, 0)
+			outputs[key], passwordVar[key] = b.outputs, b.passwordVar
 			tenant := func() {
 				p.add(action{path: filepath.Join(dbDir, "database-"+app+".yaml"), mark: '●', note: "Database CR" + extNote(r.Instance.Extensions), content: render("postgres/database.yaml.gotpl")})
 				p.add(action{path: filepath.Join(dbDir, "role-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/managed/roles/-", content: render("postgres/role.yaml.gotpl")})
@@ -289,7 +286,6 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
 				tenant()
 				rootAdds = append(rootAdds, "sites-db")
-				p.seedDirs = append(p.seedDirs, dbDir)
 			case exists(o.root, filepath.Join(dbDir, "database-"+app+".yaml")):
 				p.add(action{path: dbDir, mark: '○', note: "untouched — tenant `" + app + "` already registered"})
 			default:
@@ -308,7 +304,6 @@ func planAdd(o addOpts) (*plan, error) {
 					}})
 				p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '○', note: "+ secrets-" + app + ".sops.yaml (username literal, password generate)",
 					edit: func(s string) (string, error) { return appendBlock(s, tenantContractEntry(app)), nil }})
-				p.seedDirs = append(p.seedDirs, dbDir)
 			}
 		case "valkey":
 			if v.Valkey != nil {
@@ -321,8 +316,8 @@ func planAdd(o addOpts) (*plan, error) {
 				db = len(acls)
 			}
 			v.Valkey = &vkTenant{Handle: r.Handle, DB: db, Key: keyReferencing(c, r.Type, r.Handle)}
-			outputs[key] = map[string]string{"host": "valkey.valkey.svc.cluster.local", "port": "6379", "db": strconv.Itoa(db), "user": app}
-			passwordVar[key] = ctrVar{r.Handle + "_password", "requires.valkey." + r.Handle + " → the valkey-users ACL entry (lockstep pair).", "../valkey/secrets.sops.yaml", "stringData." + app}
+			b := conventionalBinding(r.Type, r.Handle, app, db)
+			outputs[key], passwordVar[key] = b.outputs, b.passwordVar
 			if exists(o.root, vkDir) {
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "kustomization.yaml"), mark: '○', note: "patches: + acl-" + app + ".yaml",
@@ -344,7 +339,6 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(vkDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
 				rootAdds = append(rootAdds, "valkey")
 			}
-			p.seedDirs = append(p.seedDirs, vkDir)
 		case "s3":
 			if r.Instance.Optional {
 				continue
@@ -361,29 +355,16 @@ func planAdd(o addOpts) (*plan, error) {
 	}
 
 	// --- the fort-side contract: chart keys with provider outputs
-	// resolved by convention.
-	for _, k := range c.Secret.Keys {
-		switch {
-		case k.Generate != "":
-			v.Keys = append(v.Keys, ctrKey{k.Name, "{generate: " + k.Generate + "}"})
-		case k.Template != "":
-			tplText, skip, err := rewriteTemplate(k, outputs, passwordVar, &v)
-			if err != nil {
-				return nil, err
-			}
-			if skip {
-				continue
-			}
-			v.Keys = append(v.Keys, ctrKey{k.Name, fmt.Sprintf("{template: %q}", tplText)})
-		case k.External != "":
-			spec := fmt.Sprintf("{external: %q", k.External)
-			if k.Optional {
-				spec += ", optional: true"
-			}
-			v.Keys = append(v.Keys, ctrKey{k.Name, spec + "}"})
-			p.externals = append(p.externals, k)
-		}
+	// resolved by convention (shared with fort seed's on-the-fly path).
+	providers := map[string]providerBinding{}
+	for key, out := range outputs {
+		providers[key] = providerBinding{outputs: out, passwordVar: passwordVar[key]}
 	}
+	vars, keys, externals, err := fullFormFromChart(c, providers)
+	if err != nil {
+		return nil, err
+	}
+	v.Vars, v.Keys, p.externals = vars, keys, externals
 	sort.Slice(v.Vars, func(i, j int) bool { return v.Vars[i].Name < v.Vars[j].Name })
 
 	// --- release values
@@ -443,7 +424,6 @@ func planAdd(o addOpts) (*plan, error) {
 	p.add(action{path: filepath.Join(appDir, "kustomization.yaml"), mark: '●', content: render("app/kustomization.yaml.gotpl")})
 	p.add(action{path: filepath.Join(appDir, "secrets.contract.yaml"), mark: '●', note: fmt.Sprintf("pre-`fort seed` full form, %d keys", len(v.Keys)), content: render("app/secrets.contract.yaml.gotpl")})
 	p.add(action{path: filepath.Join(appDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
-	p.seedDirs = append(p.seedDirs, appDir)
 
 	if createdGateway {
 		rootAdds = append([]string{"gateway"}, rootAdds...)
@@ -467,13 +447,14 @@ func planAdd(o addOpts) (*plan, error) {
 // become `${<handle>_password}` vars backed by a sops ref, non-secret
 // outputs are inlined. A key whose provider was skipped (--without) is
 // dropped if optional, an error otherwise.
-func rewriteTemplate(k contract.Key, outputs map[string]map[string]string, pw map[string]ctrVar, v *view) (string, bool, error) {
+func rewriteTemplate(k contract.Key, providers map[string]providerBinding, vars *[]ctrVar) (string, bool, error) {
 	var fail error
 	skip := false
 	out := outputRef.ReplaceAllStringFunc(k.Template, func(m string) string {
 		sub := outputRef.FindStringSubmatch(m)
 		key, field := sub[1]+"."+sub[2], sub[3]
-		if _, ok := outputs[key]; !ok {
+		b, ok := providers[key]
+		if !ok {
 			if k.Optional {
 				skip = true
 			} else {
@@ -483,16 +464,15 @@ func rewriteTemplate(k contract.Key, outputs map[string]map[string]string, pw ma
 		}
 		switch field {
 		case "password":
-			pv := pw[key]
-			if !hasVar(v.Vars, pv.Name) {
-				v.Vars = append(v.Vars, pv)
+			if !hasVar(*vars, b.passwordVar.Name) {
+				*vars = append(*vars, b.passwordVar)
 			}
-			return "${" + pv.Name + "}"
+			return "${" + b.passwordVar.Name + "}"
 		case "uri":
 			fail = fmt.Errorf("secret.keys.%s: the uri output is not implemented — compose it from host/port/name/user/password", k.Name)
 			return m
 		}
-		val, ok := outputs[key][field]
+		val, ok := b.outputs[field]
 		if !ok {
 			fail = fmt.Errorf("secret.keys.%s: %s has no output %s", k.Name, key, field)
 		}
@@ -608,7 +588,7 @@ func (p *plan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing written (add --write).")
 		return
 	}
-	fmt.Fprintf(w, "next: seed the ◆ files (providers first):\n  ./provisioning/seed-secrets.py %s\n", strings.Join(p.seedDirs, " "))
+	fmt.Fprintf(w, "next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
 	if len(p.externals) > 0 {
 		fmt.Fprintln(w, "external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):")
 		for _, k := range p.externals {

@@ -1,6 +1,6 @@
-fleet/apps/sfi-prod-439bf72/   (chart 0.3.0)
+fleet/apps/cloud-fort/   (chart 0.3.0)
 ● gateway/
-  ● certificate-sfi-website.yaml letsencrypt, sfi-website.sfi-prod-439bf72.streetfortress.cloud
+  ● certificate-sfi-website.yaml letsencrypt, sfi-website.cloud-fort.example.cloud
   ● gateway.yaml                 http listener only
   ● kustomization.yaml           patches: listener-sfi-website.yaml
   ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
@@ -11,7 +11,7 @@ fleet/apps/sfi-prod-439bf72/   (chart 0.3.0)
   ● namespace.yaml               
   ● release.yaml                 wire: postgres.db; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
-  ● route.yaml                   HTTPRoute sfi-website.sfi-prod-439bf72.streetfortress.cloud → sfi-website-ui:3000
+  ● route.yaml                   HTTPRoute sfi-website.cloud-fort.example.cloud → sfi-website-ui:3000
   ● secrets.contract.yaml        pre-`fort seed` full form, 3 keys
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
@@ -26,8 +26,8 @@ fleet/apps/sfi-prod-439bf72/   (chart 0.3.0)
   ◆ secrets-sfi-website.sops.yaml seeded
   ● secrets.contract.yaml        secrets-backup (luxor rustfs creds) + secrets-sfi-website
 
-next: seed the ◆ files (providers first):
-  ./provisioning/seed-secrets.py fleet/apps/sfi-prod-439bf72/sites-db fleet/apps/sfi-prod-439bf72/sfi-website
+next: seed the ◆ files (dependency order is derived):
+  fort seed cloud-fort --write
 external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):
   RESEND_API_KEY           Resend → API keys (re_) (optional)
 then: review, commit, PR — flux applies on merge.
