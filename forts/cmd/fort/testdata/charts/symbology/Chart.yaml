@@ -1,0 +1,7 @@
+# Test fixture: symbology's chart identity at the sfi/symbology#189
+# preview build the drill fort runs (the contract beside this file is
+# that PR's helm/symbology/secrets.contract.yaml, verbatim).
+apiVersion: v2
+name: symbology
+version: 0.0.0-pr.189.718.g762dfc0
+appVersion: "762dfc0"

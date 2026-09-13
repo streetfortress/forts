@@ -68,6 +68,9 @@ fort preview web3                   # read the diff first (day-2 edits);
                                     # --refresh = drift against the provider
 fort provision web3                 # later day-2 applies (firewall/DNS edits)
 just iac-drift                      # preview --refresh --expect-no-changes
+fort add web3 oci://…/symbology \
+    --version 0.1.5 [--write]       # render a chart's fort-side tree from
+                                    # its contract (CONTRACTS.md) → seed → PR
 ```
 
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
@@ -96,6 +99,8 @@ the next session's spike. The libvirt backend is a stub until it reaches
 create-nixos parity; lab VMs stay on `just create-nixos`. `fort
 scaffold` renders the host nix file today; the identity steps (host key
 → age → sops → wg peer → flux cluster-init) remain on the playbook
-until ported. The public-face extraction (github.com/streetfortress/forts)
+until ported. `fort add` renders a chart's workload tree from the
+contract the chart ships (CONTRACTS.md — status section there); seeding
+is still `provisioning/seed-secrets.py`. The public-face extraction (github.com/streetfortress/forts)
 splits the generic tool from repo-specific inventory/state — later, and
 a publish step.

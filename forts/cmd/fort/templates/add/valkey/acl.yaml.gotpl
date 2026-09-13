@@ -1,0 +1,8 @@
+# {{ .App }}'s ACL user on the shared valkey (everything except admin and
+# dangerous commands); its password is the `{{ .App }}` key of the
+# valkey-users secret, mirrored into {{ .SecretName }} as {{ .Valkey.Key }} —
+# rotate in lockstep.
+- op: add
+  path: /spec/values/auth/aclUsers/{{ .App }}
+  value:
+    permissions: "~* &* +@all -@admin -@dangerous"

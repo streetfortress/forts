@@ -1,0 +1,25 @@
+{{- if .Lab -}}
+# Serving cert for the https-{{ .App }} listener; issued by step-ca via the
+# ACME http01 gateway solver (challenge routes attach to the http listener).
+# Requires {{ .Hostname }} to resolve to this node in lab
+# DNS (dnsmasq on 10.0.0.2) — the ACME server dials the hostname back.
+# Until it does, cert-manager retries harmlessly and the listener serves
+# its self-signed placeholder.
+{{- else -}}
+# Serving cert for the https-{{ .App }} listener; issued by Let's Encrypt
+# via the ACME http01 gateway solver. Gated on DNS: until {{ .Hostname }}
+# points at this fort, cert-manager retries harmlessly and the listener
+# serves its self-signed placeholder.
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .App }}
+  namespace: traefik
+spec:
+  secretName: {{ .App }}-tls
+  dnsNames:
+    - {{ .Hostname }}
+  issuerRef:
+    kind: ClusterIssuer
+    name: {{ .Issuer }}
