@@ -109,6 +109,7 @@ type view struct {
 	Vars                                          []ctrVar
 	Keys                                          []ctrKey
 	GatewayPatchesComment, ValkeyPatchesComment   string
+	SitesDBPatchesComment, TenantContractEntry    string
 }
 
 type pgTenant struct {
@@ -188,6 +189,7 @@ func planAdd(o addOpts) (*plan, error) {
 		HTTP: c.HTTP, Metrics: c.Metrics,
 		GatewayPatchesComment: gatewayPatchesComment,
 		ValkeyPatchesComment:  valkeyPatchesComment,
+		SitesDBPatchesComment: sitesDBPatchesComment,
 	}
 	if v.Lab {
 		v.Issuer, v.Zone = "step-ca", "lofi"
@@ -265,17 +267,33 @@ func planAdd(o addOpts) (*plan, error) {
 				return nil, fmt.Errorf("one postgres instance per chart in v1 (got %s and %s)", v.Postgres.Handle, r.Handle)
 			}
 			v.Postgres = &pgTenant{Handle: r.Handle, Extensions: r.Instance.Extensions}
+			v.TenantContractEntry = tenantContractEntry(app)
 			dbDir := filepath.Join(apps, "sites-db")
-			if !exists(o.root, dbDir) {
-				return nil, fmt.Errorf("%s has no sites-db: the shared postgres instance template is not ported yet — create it by hand (fleet/apps/sfi-prod-439bf72/sites-db is the reference) and rerun", o.fort)
-			}
 			outputs[key] = map[string]string{"host": "sites-db-rw.sites-db.svc.cluster.local", "port": "5432", "name": app, "user": app}
 			passwordVar[key] = ctrVar{r.Handle + "_password", "requires.postgres." + r.Handle + " → the sites-db tenant role (lockstep pair).", "../sites-db/secrets-" + app + ".sops.yaml", "stringData.password"}
-			if exists(o.root, filepath.Join(dbDir, "database-"+app+".yaml")) {
-				p.add(action{path: dbDir, mark: '○', note: "untouched — tenant `" + app + "` already registered"})
-			} else {
+			tenant := func() {
 				p.add(action{path: filepath.Join(dbDir, "database-"+app+".yaml"), mark: '●', note: "Database CR" + extNote(r.Instance.Extensions), content: render("postgres/database.yaml.gotpl")})
 				p.add(action{path: filepath.Join(dbDir, "role-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/managed/roles/-", content: render("postgres/role.yaml.gotpl")})
+				p.add(action{path: filepath.Join(dbDir, "secrets-"+app+".sops.yaml"), mark: '◆', note: "seeded"})
+			}
+			switch {
+			case !exists(o.root, dbDir):
+				// Instance on first need: the greenfield template, with
+				// this tenant already registered in its kustomization
+				// and contract (the same shape a later append produces).
+				p.add(action{path: filepath.Join(dbDir, "namespace.yaml"), mark: '●', content: static("postgres/namespace.yaml")})
+				p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, barman archive to luxor's rustfs, roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+				p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
+				p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
+				p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-backup (luxor rustfs creds) + secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
+				p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
+				tenant()
+				rootAdds = append(rootAdds, "sites-db")
+				p.seedDirs = append(p.seedDirs, dbDir)
+			case exists(o.root, filepath.Join(dbDir, "database-"+app+".yaml")):
+				p.add(action{path: dbDir, mark: '○', note: "untouched — tenant `" + app + "` already registered"})
+			default:
+				tenant()
 				p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '○', note: "+ database-" + app + ".yaml, secrets-" + app + ".sops.yaml; patches: + role-" + app + ".yaml",
 					edit: func(s string) (string, error) {
 						s, err := appendListItem(s, "resources", "database-"+app+".yaml")
@@ -289,19 +307,7 @@ func planAdd(o addOpts) (*plan, error) {
 						return appendPatch(s, sitesDBPatchesComment, "role-"+app+".yaml", "postgresql.cnpg.io", "v1", "Cluster", "sites-db", "sites-db"), nil
 					}})
 				p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '○', note: "+ secrets-" + app + ".sops.yaml (username literal, password generate)",
-					edit: func(s string) (string, error) {
-						return appendBlock(s, fmt.Sprintf(`  secrets-%[1]s.sops.yaml:
-    metadata:
-      name: sites-db-%[1]s-credentials
-      namespace: sites-db
-      type: kubernetes.io/basic-auth
-    keys:
-      username: {literal: %[1]s}
-      # %[1]s's role password; the app env mirrors it (lockstep pair).
-      password: {generate: hex24}
-`, app)), nil
-					}})
-				p.add(action{path: filepath.Join(dbDir, "secrets-"+app+".sops.yaml"), mark: '◆', note: "seeded"})
+					edit: func(s string) (string, error) { return appendBlock(s, tenantContractEntry(app)), nil }})
 				p.seedDirs = append(p.seedDirs, dbDir)
 			}
 		case "valkey":
@@ -503,6 +509,22 @@ func rewriteTemplate(k contract.Key, outputs map[string]map[string]string, pw ma
 		}
 	}
 	return out, skip, nil
+}
+
+// tenantContractEntry is the provider-contract block for one tenant's
+// role secret — rendered into a new instance's contract and appended to
+// an existing one, so both paths leave the same file.
+func tenantContractEntry(app string) string {
+	return fmt.Sprintf(`  secrets-%[1]s.sops.yaml:
+    metadata:
+      name: sites-db-%[1]s-credentials
+      namespace: sites-db
+      type: kubernetes.io/basic-auth
+    keys:
+      username: {literal: %[1]s}
+      # %[1]s's role password; the app env mirrors it (lockstep pair).
+      password: {generate: hex24}
+`, app)
 }
 
 // keyReferencing names the Secret key whose template consumes the

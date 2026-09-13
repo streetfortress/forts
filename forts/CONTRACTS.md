@@ -522,8 +522,10 @@ human replaced `external` keys with sops refs. Implemented:
   parsing (`internal/contract`), `--chart-dir` for chart authors
 - the app dir; gateway from template on first http need, listener patch
   + certificate after; valkey from the cache template on first need, ACL
-  patch + contract key after; sites-db **tenant registration** (Database
-  CR, role patch, contract entry) — tenant present → untouched
+  patch + contract key after; **sites-db from the greenfield template on
+  first need** (barman archive to luxor's rustfs, roles only via
+  patches), tenant registration (Database CR, role patch, contract
+  entry) after — tenant present → untouched
 - the fort-side seeding contract in the python seeder's full form:
   provider passwords as `${<handle>_password}` vars backed by the
   conventional sops refs, non-secret outputs inlined, `external` keys
@@ -531,11 +533,16 @@ human replaced `external` keys with sops refs. Implemented:
 - the marked-tree report (CLAUDE.md), dry-run by default, `--write`
   never overwrites, appends are text-level so comments survive
 
-Not yet, in the order below: the sites-db instance template (a fort
-without one gets a pointed error), `fort seed` in Go (chart pull +
-overlay + `sops set`; the overlay merge is therefore not live either —
-today every fort-side file is the full form), the CI gate, `fort
-status`, `fort rotate`, s3, remote providers.
+Two goldens: the drill fort (lab path, providers pre-existing) and a
+fresh Linode fort for an sfi-website draft contract (cloud path, every
+provider from template — a reviewed snapshot under
+`forts/cmd/fort/testdata/golden`, `UPDATE_GOLDEN=1` to regenerate). CI
+runs vet + tests (`checks.yaml`, `go` job).
+
+Not yet, in the order below: `fort seed` in Go (chart pull + overlay +
+`sops set`; the overlay merge is therefore not live either — today every
+fort-side file is the full form), the CI gate, `fort status`, `fort
+rotate`, s3, remote providers.
 
 ## Sequencing (one PR each, in this order)
 
@@ -543,8 +550,8 @@ status`, `fort rotate`, s3, remote providers.
    umami's in-repo file still ports to the v1 schema and into the tarball.
 2. ~~**`fort add`**: app dir, gateway, valkey, sites-db tenant
    registration, golden test~~ (this PR).
-3. **sites-db instance template** + `fort add` on a fort without one
-   (sfi-website on a fresh fort as the second golden).
+3. ~~**sites-db instance template** + `fort add` on a fort without one
+   (sfi-website on a fresh fort as the second golden)~~.
 4. **`fort seed`** (Go port of `provisioning/seed-secrets.py`): reads
    the effective contract (chart pull + overlay), `sops set` mode for
    existing files (add missing keys, `--set KEY`). The python seeder

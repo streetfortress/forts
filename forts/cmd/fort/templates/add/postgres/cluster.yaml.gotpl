@@ -1,0 +1,79 @@
+# The fort's shared postgres — one CNPG instance, one database + login
+# role per tenant app (the Config B monolith shape: modest hardware >
+# per-app clusters). Rendered by `fort add` on the fort's first postgres
+# need; tenants register beside this file as database-<app>.yaml (the
+# Database CR) + role-<app>.yaml (a JSON6902 patch appending to
+# managed.roles below) + secrets-<app>.sops.yaml (the role's password,
+# mirrored into the app's env — lockstep pair on rotation). cluster.yaml
+# itself is never edited by the generator.
+#
+# Greenfield: no bootstrap block, so CNPG initdb's its default app/app
+# database and the tenants' Database CRs create theirs. A fort that is
+# born from a backup instead flips this to bootstrap.recovery by hand
+# (fleet/apps/sfi-fort-e33e2d5/sites-db/cluster.yaml is the worked
+# example); initdb/recovery only run at cluster CREATION, so that is a
+# repave, never a live edit.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: sites-db
+  namespace: sites-db
+spec:
+  instances: 1
+
+  # Small-SKU probe tolerance (staging #161): the instance manager's
+  # /healthz can exceed the 1s kubelet default on a busy 2-core node.
+  livenessProbeTimeout: 10
+  # The barman-capable operand (action-runner-image#12; upstream PG17+
+  # flavors dropped the barman-cloud binaries). Renovate tracks it.
+  imageName: gitea.zen.lofi/sfi/postgresql:18.4-5997d52
+
+  # Off: the admin path into a fort's database is a flux Job as
+  # superuser (sfi-prod's post-import rename is the precedent), never a
+  # console login.
+  enableSuperuserAccess: false
+
+  # Continuous archiving from day one, so the fort is born on the
+  # physical-restore path. Cloud fort caveat on record: base backups
+  # transit the WAN tunnel to luxor's rustfs; pointing cloud forts at B2
+  # directly is the #47-adjacent follow-up if the nightly cost bites.
+  # serverName is versioned for the restore cycle: a repave that
+  # recovers FROM v1 archives as v2.
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://cnpg/{{ .Fort }}
+      endpointURL: http://10.1.0.5:30900
+      serverName: sites-db-v1
+      s3Credentials:
+        accessKeyId:
+          name: sites-db-backup-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: sites-db-backup-credentials
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "7d"
+
+  monitoring:
+    enablePodMonitor: true
+
+  managed:
+    # Tenants append here via role-<app>.yaml patches — keep the empty
+    # list so a JSON6902 add to /spec/managed/roles/- has a target.
+    roles: []
+
+  storage:
+    # Nominal under local-path (no quota, no expansion) but honest: size
+    # it for the fort's tenants + import/staging headroom by hand.
+    size: 20Gi
+
+  resources:
+    # The 4 GB single-node envelope (staging Config B parity).
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 2Gi

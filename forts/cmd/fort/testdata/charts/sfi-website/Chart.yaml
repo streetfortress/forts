@@ -1,0 +1,8 @@
+# Test fixture: sfi-website's chart identity. The contract beside this
+# file is a DRAFT written for the fresh-cloud golden (the chart does not
+# ship one yet); it exercises a composed DATABASE_URL, a 3-deep wire
+# path, no metrics, and the cloud gateway path.
+apiVersion: v2
+name: sfi-website
+version: 0.3.0
+appVersion: "0.3.0"

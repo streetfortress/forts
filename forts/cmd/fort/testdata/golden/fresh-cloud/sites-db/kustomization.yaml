@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - cluster.yaml
+  - scheduled-backup.yaml
+  - database-sfi-website.yaml
+  # Seeded from secrets.contract.yaml (secrets-backup carries luxor's
+  # rustfs credentials for the barman archive path; secrets-<app> each
+  # tenant's role password); listed-but-absent = the pre-merge
+  # kustomize guard.
+  - secrets-backup.sops.yaml
+  - secrets-sfi-website.sops.yaml
+# Tenant registration: one JSON6902 patch per tenant appends its login
+# role to managed.roles (cluster.yaml carries the instance). fort add
+# adds a file + an entry here.
+patches:
+  - path: role-sfi-website.yaml
+    target:
+      group: postgresql.cnpg.io
+      version: v1
+      kind: Cluster
+      name: sites-db
+      namespace: sites-db

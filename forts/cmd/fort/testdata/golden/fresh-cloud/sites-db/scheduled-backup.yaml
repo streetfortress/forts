@@ -1,0 +1,17 @@
+# Nightly base backup (WAL streams continuously regardless). immediate:
+# fires on object CREATION — the object NAME is the retrigger knob
+# (rename => flux delete+create => immediate re-fires; drill-fort
+# lesson). Stagger the hour by hand across forts so rustfs ingest
+# doesn't stack (prod 04:00, the drill fort 03:00).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: sites-db-nightly
+  namespace: sites-db
+spec:
+  # Six-field cron (CNPG uses seconds).
+  schedule: "0 0 4 * * *"
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: sites-db

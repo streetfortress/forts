@@ -223,3 +223,90 @@ func yamlPath(t *testing.T, file, path string) any {
 	}
 	return cur
 }
+
+// Second golden: a chart on a FRESH cloud fort — nothing but the root
+// kustomization exists, so every provider and the gateway come from
+// template on the cloud path (letsencrypt, <app>.<fort>.<dns_zone>).
+// The expected tree is a reviewed snapshot under testdata/golden;
+// UPDATE_GOLDEN=1 rewrites it (then review the diff like any other
+// generated code).
+func TestAddFreshCloudFort(t *testing.T) {
+	repo, err := repoRootFrom(mustGetwd(t))
+	if err != nil {
+		t.Skip("not inside the deployments checkout")
+	}
+	const fort = "sfi-prod-439bf72" // linode, dns_zone streetfortress.cloud
+	tmp := t.TempDir()
+	copyFile(t, filepath.Join(repo, "provisioning/inventory.yaml"), filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
+	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
+
+	p, err := planAdd(addOpts{
+		root: tmp, fort: fort,
+		ref:      "oci://gitea.zen.lofi/sfi/sfi-website",
+		version:  "0.3.0",
+		chartDir: "testdata/charts/sfi-website",
+		without:  map[string]bool{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.apply(); err != nil {
+		t.Fatal(err)
+	}
+	var report strings.Builder
+	p.report(&report, true)
+
+	got := map[string]string{}
+	base := filepath.Join(tmp, "fleet/apps", fort)
+	filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			rel, _ := filepath.Rel(base, path)
+			got[rel] = readFile(t, path)
+		}
+		return nil
+	})
+	got["REPORT.txt"] = report.String()
+
+	golden := "testdata/golden/fresh-cloud"
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		os.RemoveAll(golden)
+		for rel, content := range got {
+			dst := filepath.Join(golden, rel)
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(dst, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Logf("golden rewritten: %s (%d files)", golden, len(got))
+		return
+	}
+	want := map[string]string{}
+	filepath.Walk(golden, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			rel, _ := filepath.Rel(golden, path)
+			want[rel] = readFile(t, path)
+		}
+		return nil
+	})
+	if len(want) == 0 {
+		t.Fatalf("no golden under %s — run with UPDATE_GOLDEN=1 and review", golden)
+	}
+	for rel, w := range want {
+		g, ok := got[rel]
+		if !ok {
+			t.Errorf("%s: in the golden, not generated", rel)
+			continue
+		}
+		if g != w {
+			t.Errorf("%s differs from the golden:\n--- golden\n%s\n--- generated\n%s", rel, w, g)
+		}
+	}
+	for rel := range got {
+		if _, ok := want[rel]; !ok {
+			t.Errorf("%s: generated, not in the golden (UPDATE_GOLDEN=1 to accept)", rel)
+		}
+	}
+}

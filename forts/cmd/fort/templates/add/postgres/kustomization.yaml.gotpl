@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - cluster.yaml
+  - scheduled-backup.yaml
+  - database-{{ .App }}.yaml
+  # Seeded from secrets.contract.yaml (secrets-backup carries luxor's
+  # rustfs credentials for the barman archive path; secrets-<app> each
+  # tenant's role password); listed-but-absent = the pre-merge
+  # kustomize guard.
+  - secrets-backup.sops.yaml
+  - secrets-{{ .App }}.sops.yaml
+{{ .SitesDBPatchesComment -}}
+patches:
+  - path: role-{{ .App }}.yaml
+    target:
+      group: postgresql.cnpg.io
+      version: v1
+      kind: Cluster
+      name: sites-db
+      namespace: sites-db

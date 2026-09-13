@@ -1,0 +1,7 @@
+# One shared namespace for the fort's postgres: a single CNPG cluster
+# that no app owns, so it gets its own namespace and the apps reach it
+# cross-namespace via the -rw Service.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sites-db

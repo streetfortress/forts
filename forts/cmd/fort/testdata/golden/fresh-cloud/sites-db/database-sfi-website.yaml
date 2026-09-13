@@ -1,0 +1,15 @@
+# sfi-website's database on the shared sites-db cluster — tenant registration
+# by `fort add` (requires.postgres.db): this CR keeps
+# owner + extensions reconciled; the role rides role-sfi-website.yaml and
+# its password secrets-sfi-website.sops.yaml (mirrored into the app's env —
+# lockstep pair on rotation).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: sfi-website
+  namespace: sites-db
+spec:
+  name: sfi-website
+  owner: sfi-website
+  cluster:
+    name: sites-db
