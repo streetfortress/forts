@@ -13,6 +13,7 @@
 //	                                    # (merge; build + inject the image)
 //	fort provision web3 --image <path>  # upload → pulumi up → delete image
 //	                                    # flux owns everything above it
+//	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
 //
 // Phase A parity is incremental: scaffold currently renders the host nix
 // file; the identity steps (host key → age recipient → sops rule →
@@ -37,6 +38,8 @@ func main() {
 		err = scaffold(os.Args[2:])
 	case "provision":
 		err = provision(os.Args[2:])
+	case "preview":
+		err = preview(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -61,5 +64,13 @@ func usage() {
       the preview). With --image, first upload the injected single-use
       bootstrap image and record it as the stack's forts:imageId; once the
       instance exists, delete the image provider-side and locally (#42).
-      Needs LINODE_TOKEN (upload) and the stack's PULUMI_CONFIG_PASSPHRASE.`)
+
+  preview <host> [--refresh] [--expect-no-changes]
+      the read-only half: 'pulumi preview -s <host> --diff'. --refresh
+      reconciles state with the provider first (drift, as 'just iac-drift'
+      does); --expect-no-changes turns any proposed change into a nonzero
+      exit.
+
+  Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
+  environment, else sops-decrypt them from provisioning/secrets.yaml.`)
 }

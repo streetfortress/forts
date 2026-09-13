@@ -52,37 +52,8 @@ func provision(args []string) error {
 	pulumiDir := filepath.Join(root, "forts", "pulumi")
 	ctx := context.Background()
 
-	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
-	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
-	// against v4-generated SDK code, which mis-shapes outputs (specs as
-	// list-of-one) and invoke results (Disk=0). Always use the plugin
-	// version pinned by go.mod.
-	os.Setenv("PULUMI_IGNORE_AMBIENT_PLUGINS", "true")
-
-	// LINODE_TOKEN from the env if set, else sops-decrypted from
-	// provisioning/secrets.yaml (same home as the gitea provisioning
-	// token — repo-driven, no per-machine env setup). Setenv so the
-	// exec'd pulumi (its linode provider reads the same variable) and
-	// linodego both inherit it; the value itself is never printed.
-	if entry.Provider == "linode" && os.Getenv("LINODE_TOKEN") == "" {
-		out, err := exec.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
-			"-d", "--extract", `["linode-token"]`,
-			filepath.Join(root, "provisioning/secrets.yaml")).Output()
-		if err != nil {
-			return fmt.Errorf("LINODE_TOKEN not set and no linode-token in provisioning/secrets.yaml — add it with: sops --config .sops.yaml set provisioning/secrets.yaml '[\"linode-token\"]' '\"<token>\"'")
-		}
-		os.Setenv("LINODE_TOKEN", strings.TrimSpace(string(out)))
-	}
-	// Same fallback for the stack passphrase (Pulumi.yaml: passphrase
-	// secrets provider, passphrase itself sops-managed).
-	if os.Getenv("PULUMI_CONFIG_PASSPHRASE") == "" {
-		out, err := exec.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
-			"-d", "--extract", `["pulumi-passphrase"]`,
-			filepath.Join(root, "provisioning/secrets.yaml")).Output()
-		if err != nil {
-			return fmt.Errorf("PULUMI_CONFIG_PASSPHRASE not set and no pulumi-passphrase in provisioning/secrets.yaml")
-		}
-		os.Setenv("PULUMI_CONFIG_PASSPHRASE", strings.TrimSpace(string(out)))
+	if err := cloudEnv(root, entry); err != nil {
+		return err
 	}
 
 	var client linodego.Client

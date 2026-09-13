@@ -64,12 +64,15 @@ fort scaffold web3                  # renders generated files → branch → PR
 fort provision web3 --image <path>  # upload → pulumi up (you confirm) →
                                     # image deleted both sides
                                     # flux bootstraps and owns everything above
+fort preview web3                   # read the diff first (day-2 edits);
+                                    # --refresh = drift against the provider
 fort provision web3                 # later day-2 applies (firewall/DNS edits)
 just iac-drift                      # preview --refresh --expect-no-changes
 ```
 
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
-`PULUMI_CONFIG_PASSPHRASE`.
+`PULUMI_CONFIG_PASSPHRASE` — taken from the environment when set, else
+sops-decrypted from `provisioning/secrets.yaml` by every cloud command.
 
 ## One-time setup
 
