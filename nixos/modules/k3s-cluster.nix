@@ -55,7 +55,7 @@ let
         matchConfig.MACAddress = mac;
         address = [ "${address}/24" ];
         gateway = [ "10.0.0.1" ];
-        dns = [ "10.0.0.2" ]; # lab dnsmasq only — see hosts/luxor: resolved sticks to a public fallback
+        dns = [ "10.0.0.2" "8.8.8.8" ];
         routes = [
           { Destination = "10.1.0.0/24"; Gateway = "10.0.0.6"; }
         ];
@@ -115,7 +115,7 @@ in
   }];
 
   networking.defaultGateway = "10.0.0.1";
-  networking.nameservers = [ "10.0.0.2" ]; # lab dnsmasq only (forwards upstream itself)
+  networking.nameservers = [ "10.0.0.2" "8.8.8.8" ];
 
   # Trust bridge and VM tap traffic
   networking.firewall.trustedInterfaces = [ "br0" ];
