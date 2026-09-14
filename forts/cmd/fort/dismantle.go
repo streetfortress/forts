@@ -15,8 +15,7 @@ import (
 	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
 )
 
-// dismantle is the inverse of `fort scaffold` + provisioning/preseed-
-// identity.sh: a pure repo mutation that removes exactly what they
+// dismantle is the inverse of `fort scaffold` + `fort mint`: a pure repo mutation that removes exactly what they
 // generated for a host and reports what it did not touch (#217). Git is
 // the record and the reviewed merge is the gate — the irreversible half
 // (`fort destroy`: pulumi, the deploy key) is only reachable once main
@@ -226,7 +225,7 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 // --- edits
 
 // removeMarkerBlock deletes the `# BEGIN ANSIBLE sops rule: <host>` …
-// `# END …` block preseed-identity / cluster-init wrote (inclusive).
+// `# END …` block fort mint (before it, preseed-identity / cluster-init) wrote (inclusive).
 func removeMarkerBlock(text, host string) (string, error) {
 	lines := strings.Split(text, "\n")
 	begin, end := -1, -1

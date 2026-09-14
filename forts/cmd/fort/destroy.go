@@ -104,7 +104,7 @@ func destroy(args []string) error {
 	}
 	os.Remove(filepath.Join(pulumiDir, "Pulumi."+host+".yaml"))
 
-	// 5. the deploy key preseed-identity registered — the one off-repo
+	// 5. the deploy key fort mint registered — the one off-repo
 	// identity; the flux age identity died with the sops rule.
 	if msg, err := revokeDeployKey(root, host); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
@@ -220,23 +220,32 @@ func linodePowerOff(ctx context.Context, host string) error {
 
 const giteaAPI = "https://gitea.zen.lofi/api/v1/repos/sfi/deployments"
 
-// revokeDeployKey deletes the read-only key preseed-identity registered
-// (title flux-<host>), through the same token and CA. Not found is not
-// an error: the key may never have existed (no flux cluster) or was
-// removed by hand.
-func revokeDeployKey(root, host string) (string, error) {
+// giteaClient is the deploy-key API as fort mint (register) and fort
+// destroy (revoke) reach it: the provisioning token, the lab CA.
+func giteaClient(root string) (*giteaDeployKeys, error) {
 	token, err := secret(root, "gitea-token")
 	if err != nil {
-		return "", fmt.Errorf("no gitea-token in provisioning/secrets.yaml: %w", err)
+		return nil, fmt.Errorf("no gitea-token in provisioning/secrets.yaml: %w", err)
 	}
 	ca, err := os.ReadFile(filepath.Join(root, "nixos/certs/step-ca-root.pem"))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(ca)
 	client := &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
-	return revokeDeployKeyAt(client, giteaAPI, token, host)
+	return &giteaDeployKeys{client: client, api: giteaAPI, token: token}, nil
+}
+
+// revokeDeployKey deletes the read-only key fort mint registered (title
+// flux-<host>). Not found is not an error: the key may never have
+// existed (no flux cluster) or was removed by hand.
+func revokeDeployKey(root, host string) (string, error) {
+	g, err := giteaClient(root)
+	if err != nil {
+		return "", err
+	}
+	return revokeDeployKeyAt(g.client, g.api, g.token, host)
 }
 
 func revokeDeployKeyAt(client *http.Client, api, token, host string) (string, error) {
@@ -263,6 +272,9 @@ func revokeDeployKeyAt(client *http.Client, api, token, host string) (string, er
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return "", err
 	}
+	// Every key under the title (a timed-out POST that gitea recorded
+	// anyway leaves duplicates; mint reports them).
+	var revoked []string
 	for _, k := range keys {
 		if k.Title != "flux-"+host {
 			continue
@@ -276,7 +288,10 @@ func revokeDeployKeyAt(client *http.Client, api, token, host string) (string, er
 		if del.StatusCode/100 != 2 {
 			return "", fmt.Errorf("deleting flux-%s (id %d): %s", host, k.ID, del.Status)
 		}
-		return fmt.Sprintf("revoked flux-%s (id %d)", host, k.ID), nil
+		revoked = append(revoked, fmt.Sprint(k.ID))
 	}
-	return "flux-" + host + " not registered (nothing to revoke)", nil
+	if len(revoked) == 0 {
+		return "flux-" + host + " not registered (nothing to revoke)", nil
+	}
+	return fmt.Sprintf("revoked flux-%s (id %s)", host, strings.Join(revoked, ", ")), nil
 }

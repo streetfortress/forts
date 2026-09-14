@@ -3,7 +3,7 @@
 Two steps, the reviewed merge between them (#217):
 
 1. **`fort dismantle <host> [--write]`** — the repo half, automated: the
-   inverse of `fort scaffold` + `preseed-identity.sh`. Removes the
+   inverse of `fort scaffold` + `fort mint`. Removes the
    inventory entry, `nixos/hosts/<host>`, `nixos/secrets/<host>.yaml`,
    both sops rule blocks and the shared-infrastructure recipient line(s)
    (then `sops updatekeys` on the files that lost it — the retired key
@@ -78,6 +78,6 @@ On the file backend it deletes the stack file, its and Pulumi.web3.yaml. The ima
 
 6. Off-repo cleanup. Two items outside pulumi:
 
-- The gitea deploy key, registered by preseed-identity as a read-only key titled flux-web3 on sfi/deployments. Delete it via the repo's deploy-key settings or the keys API.
+- The gitea deploy key, registered by fort mint (preseed-identity before it) as a read-only key titled flux-web3 on sfi/deployments. Delete it via the repo's deploy-key settings or the keys API.
 - The .files wireguard copy still lists web3 with its endpoint. That derived copy feeds the ubuntu mesh members, so remove the entry
   there and re-run the wireguard playbook.

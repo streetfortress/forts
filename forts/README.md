@@ -60,7 +60,8 @@ which keeps refresh and drift green after the image is gone.
 ```
 fort scaffold web3 --write          # host nix files (cloud shape) + the flux
                                     # cluster dir + apps root kustomization
-./provisioning/preseed-identity.sh web3   # keys, sops rules, deploy key, canary
+fort mint web3 --write              # identity: keys, sops rules, mesh peer,
+                                    # deploy key on gitea, canary (dry run first)
                                     # → branch → PR (merge — generated code is
                                     #  reviewed; build + inject the bootstrap image)
 fort provision web3 --image <path>  # linode: upload → pulumi up (you confirm)
@@ -81,7 +82,7 @@ fort seed web3 [--write]            # produce its sops Secrets (dependency
 fort check --all                    # the merge gate: Secrets vs contracts
                                     # (CI runs it; no age key needed)
 fort dismantle web3 [--write]       # retire: remove exactly what scaffold +
-                                    # preseed generated, report the residue → PR
+                                    # mint generated, report the residue → PR
 fort destroy web3                   # after that merge: power off, refresh,
                                     # unprotect, destroy, stack rm, deploy key;
                                     # stages the state removal → its own PR
@@ -153,8 +154,9 @@ create-nixos`. `fort
 scaffold` renders the host's generated surface (nix host dir in the lab
 or cloud shape, the flux cluster dir, the apps root kustomization; the
 flake discovers the image variant from the host dir's runtime import);
-the identity steps (host key → age → sops → wg peer → deploy key →
-canary) are `provisioning/preseed-identity.sh` until it becomes a verb. `fort add` renders a chart's workload tree from the
+`fort mint` is the identity step (host key → age → sops → wg peer →
+deploy key → canary; private halves in memory, then only in the host's
+sops file). `fort add` renders a chart's workload tree from the
 contract the chart ships and `fort seed` produces the Secrets
 (CONTRACTS.md — status section there). `fort dismantle` is the repo half
 of decommissioning (#217) and `fort destroy` the side-effects half, gated

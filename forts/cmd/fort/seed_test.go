@@ -91,6 +91,15 @@ func (f *fakeTool) Decrypt(path string) ([]byte, error) {
 	if s, ok := f.plain[path]; ok {
 		return []byte(s), nil
 	}
+	// The fake never encrypts, so a file this tool "encrypted" is still
+	// plaintext on disk — a re-run reads back what the first run wrote.
+	if raw, err := os.ReadFile(path); err == nil {
+		for _, e := range f.encrypted {
+			if e == path {
+				return raw, nil
+			}
+		}
+	}
 	return nil, os.ErrNotExist
 }
 func (f *fakeTool) EncryptInPlace(path string) error {
@@ -99,6 +108,14 @@ func (f *fakeTool) EncryptInPlace(path string) error {
 }
 func (f *fakeTool) Set(path, key, value string) error {
 	f.sets = append(f.sets, [3]string{path, key, value})
+	return nil
+}
+func (f *fakeTool) EncryptWith(config, path string) error {
+	f.encrypted = append(f.encrypted, path)
+	return nil
+}
+func (f *fakeTool) SetWith(config, path, jsonPath, value string) error {
+	f.sets = append(f.sets, [3]string{path, jsonPath, value})
 	return nil
 }
 func (f *fakeTool) GitAdd(path string) error { f.added = append(f.added, path); return nil }

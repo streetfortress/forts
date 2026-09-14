@@ -18,6 +18,11 @@ type secretsTool interface {
 	Set(path, key, value string) error
 	UpdateKeys(path string) error
 	GitAdd(path string) error
+	// The host-secrets shapes (fort mint): the same two operations under
+	// an explicit config — nixos/.sops.yaml for nixos/secrets/<host>.yaml,
+	// the fleet one for the canary — and a caller-supplied key path.
+	EncryptWith(config, path string) error
+	SetWith(config, path, jsonPath, value string) error
 }
 
 type sopsCLI struct{ root string }
@@ -34,7 +39,11 @@ func (s sopsCLI) Decrypt(path string) ([]byte, error) {
 // root, so the path-scoped rule for fleet/apps/<fort>/ picks the
 // fort's recipients (identity must be seeded — cluster-init's job).
 func (s sopsCLI) EncryptInPlace(path string) error {
-	cmd := exec.Command("sops", "--config", filepath.Join(s.root, ".sops.yaml"), "-e", "-i", path)
+	return s.EncryptWith(filepath.Join(s.root, ".sops.yaml"), path)
+}
+
+func (s sopsCLI) EncryptWith(config, path string) error {
+	cmd := exec.Command("sops", "--config", config, "-e", "-i", path)
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops -e %s: %s", path, lastLine(string(out)))
@@ -48,12 +57,15 @@ func (s sopsCLI) EncryptInPlace(path string) error {
 // duration on this single-operator machine; the alternative (decrypt,
 // edit, re-encrypt the whole file) churns every ciphertext in the diff.
 func (s sopsCLI) Set(path, key, value string) error {
+	return s.SetWith(filepath.Join(s.root, ".sops.yaml"), path, fmt.Sprintf(`["stringData"]["%s"]`, key), value)
+}
+
+func (s sopsCLI) SetWith(config, path, jsonPath, value string) error {
 	v, _ := json.Marshal(value)
-	cmd := exec.Command("sops", "--config", filepath.Join(s.root, ".sops.yaml"), "set", path,
-		fmt.Sprintf(`["stringData"]["%s"]`, key), string(v))
+	cmd := exec.Command("sops", "--config", config, "set", path, jsonPath, string(v))
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("sops set %s %s: %s", path, key, lastLine(string(out)))
+		return fmt.Errorf("sops set %s %s: %s", path, jsonPath, lastLine(string(out)))
 	}
 	return nil
 }

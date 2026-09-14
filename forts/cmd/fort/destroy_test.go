@@ -60,9 +60,9 @@ func TestRevokeDeployKey(t *testing.T) {
 		}
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/keys":
-			w.Write([]byte(`[{"id":7,"title":"flux-other"},{"id":9,"title":"flux-gone"}]`))
+			w.Write([]byte(`[{"id":7,"title":"flux-other"},{"id":9,"title":"flux-gone"},{"id":11,"title":"flux-gone"}]`))
 		case r.Method == "DELETE":
-			deleted = r.URL.Path
+			deleted += r.URL.Path
 			w.WriteHeader(204)
 		default:
 			w.WriteHeader(404)
@@ -70,7 +70,7 @@ func TestRevokeDeployKey(t *testing.T) {
 	}))
 	defer srv.Close()
 	msg, err := revokeDeployKeyAt(srv.Client(), srv.URL, "t", "gone")
-	if err != nil || deleted != "/keys/9" || !strings.Contains(msg, "revoked flux-gone (id 9)") {
+	if err != nil || deleted != "/keys/9/keys/11" || !strings.Contains(msg, "revoked flux-gone (id 9, 11)") {
 		t.Errorf("revoke: %q %v (deleted %q)", msg, err, deleted)
 	}
 	msg, err = revokeDeployKeyAt(srv.Client(), srv.URL, "t", "never")

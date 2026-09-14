@@ -20,6 +20,7 @@ type Host struct {
 	Memory       int      `yaml:"memory"`
 	DiskSize     string   `yaml:"disk_size"`
 	WgVpnIP      string   `yaml:"wg_vpn_ip"`
+	WgEndpointIP string   `yaml:"wg_endpoint_ip"` // optional: where other peers dial this one (fort mint → peers.json)
 	Production   bool     `yaml:"production"`
 	FluxCluster  bool     `yaml:"flux_cluster"`
 	LanPrefix    *int     `yaml:"lan_prefix"`

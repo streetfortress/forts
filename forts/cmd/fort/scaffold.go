@@ -53,7 +53,7 @@ type scaffoldFile struct {
 // generator with force-no semantics per file: inventory seeds the host
 // once, hand refinements live in the files and are never clobbered; a
 // re-run fills gaps only. The identity half (keys, sops rules, deploy
-// key, canary) is preseed-identity.sh, run after this.
+// key, canary) is `fort mint`, run after this.
 func scaffold(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort scaffold <host> [--write]")
@@ -102,7 +102,7 @@ func scaffold(args []string) error {
 		fmt.Println("\ndry run — nothing written (scaffold --write).")
 		return nil
 	}
-	fmt.Printf("\n%d file(s) written. next: ./provisioning/preseed-identity.sh %s (keys, sops rules, deploy key, canary),\n", written, host)
+	fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
 	switch {
 	case entry.Cloud():
 		fmt.Printf("then PR → merge → nix build ./nixos#%s-linode → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
@@ -196,7 +196,7 @@ func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 			struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.WgVpnIP},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
-			struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until preseed)"},
+			struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
 		)
 	}
 	var out []scaffoldFile

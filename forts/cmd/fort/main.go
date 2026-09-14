@@ -50,6 +50,8 @@ func main() {
 		err = add(os.Args[2:])
 	case "seed":
 		err = seed(os.Args[2:])
+	case "mint":
+		err = mint(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "dismantle":
@@ -76,7 +78,7 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  scaffold, add, seed, dismantle
+  author  scaffold, mint, add, seed, dismantle
   apply   provision, adopt, destroy
   read    check, preview
 
@@ -88,7 +90,20 @@ func usage() {
       cluster also fleet/clusters/<host>/ (6 files) and the apps root
       kustomization. Prints the marked tree; --write lays it down, never
       overwriting a file that exists (a re-run fills gaps) — inventory
-      seeds the host, you refine it in place. Then preseed-identity.sh.
+      seeds the host, you refine it in place. Then fort mint.
+
+  mint <host> [--write]
+      mint the host's identity: its ssh host key (which doubles as its
+      age identity), wireguard key + mesh peer, k3s token, and for a
+      flux cluster the cluster age key, the flux deploy key (registered
+      read-only on gitea — the one call outside the tree) and the sops
+      canary; the sops rules that make the host a recipient of its own
+      secrets. Private halves exist in memory and land only in
+      nixos/secrets/<host>.yaml, encrypted. A re-run restores what that
+      file holds and fills gaps only — rotation is deliberate, never a
+      side effect. Runs after scaffold --write, before add. Prints the
+      plan; --write mints, encrypts, registers, stages. fort dismantle is
+      the inverse.
 
   provision <host> [--image <path>]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
@@ -148,7 +163,7 @@ func usage() {
       nonzero on any error; annotates for CI when GITEA_ACTIONS is set.
 
   dismantle <host> [--write]
-      the inverse of scaffold + preseed-identity, as a repo mutation
+      the inverse of scaffold + mint, as a repo mutation
       staged for a PR (#217): removes the inventory entry, nixos/hosts/
       <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
       shared-infrastructure recipient (then sops updatekeys on the files
