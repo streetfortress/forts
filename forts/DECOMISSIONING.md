@@ -1,6 +1,29 @@
+# Decommissioning
+
+Two steps, the reviewed merge between them (#217):
+
+1. **`fort dismantle <host> [--write]`** — the repo half, automated: the
+   inverse of `fort scaffold` + `preseed-identity.sh`. Removes the
+   inventory entry, `nixos/hosts/<host>`, `nixos/secrets/<host>.yaml`,
+   both sops rule blocks and the shared-infrastructure recipient line(s)
+   (then `sops updatekeys` on the files that lost it — the retired key
+   keeps decrypting until that runs), the wireguard peer, the fleet
+   trees, the flake's `cloudHosts` entry; prints the **residue** (every
+   remaining mention, for the reviewer to triage in the same PR — #167
+   kept incident comments as provenance on purpose) and any cross-fort
+   sops refs into the host. Touches no pulumi state. Stage, triage,
+   commit, PR, merge.
+2. **`fort destroy <host>`** — the half with side effects outside git,
+   NOT automated yet: the manual runbook below (from web3, #222). Its
+   gates when it lands: host absent from `origin/main`'s inventory,
+   clean tree, stack exists; refresh first; `state unprotect --all`
+   immediately before `destroy` (never standalone); `stack rm`; revoke
+   the `flux-<host>` deploy key; commit the state removal as its own
+   PR; lab hosts dispatch to `provisioning/vms/delete.yaml` instead.
+
 # Manual Decomissioning with Pulumi
 
-The steps below exercise pulumi unprotect, destroy, and stack rm to decomission resources after their manifest cleanup [See pr #219 Retire web3 (definitions + manifest trees)](https://gitea.zen.lofi/sfi/deployments/pulls/219). The hope is to automate this process with the fort cli.
+The steps below exercise pulumi unprotect, destroy, and stack rm to decomission resources after their manifest cleanup [See pr #219 Retire web3 (definitions + manifest trees)](https://gitea.zen.lofi/sfi/deployments/pulls/219) — the half `fort dismantle` now does.
 
 ## Notes from web3 Decomissioning
 

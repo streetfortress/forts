@@ -84,6 +84,7 @@ type fakeTool struct {
 	encrypted []string
 	sets      [][3]string
 	added     []string
+	rekeyed   []string
 }
 
 func (f *fakeTool) Decrypt(path string) ([]byte, error) {
@@ -101,6 +102,10 @@ func (f *fakeTool) Set(path, key, value string) error {
 	return nil
 }
 func (f *fakeTool) GitAdd(path string) error { f.added = append(f.added, path); return nil }
+func (f *fakeTool) UpdateKeys(path string) error {
+	f.rekeyed = append(f.rekeyed, path)
+	return nil
+}
 
 func TestSeedFullForm(t *testing.T) {
 	const fort = "lab-fort" // testdata/inventory.yaml — no real fort involved

@@ -16,6 +16,7 @@ type secretsTool interface {
 	Decrypt(path string) ([]byte, error)
 	EncryptInPlace(path string) error
 	Set(path, key, value string) error
+	UpdateKeys(path string) error
 	GitAdd(path string) error
 }
 
@@ -57,8 +58,21 @@ func (s sopsCLI) Set(path, key, value string) error {
 	return nil
 }
 
+// UpdateKeys re-encrypts a file to the recipients its creation rule now
+// lists — removing a recipient from .sops.yaml alone changes nothing:
+// the departed key keeps decrypting until this runs (fort dismantle).
+func (s sopsCLI) UpdateKeys(path string) error {
+	cmd := exec.Command("sops", "--config", filepath.Join(s.root, ".sops.yaml"), "updatekeys", "-y", path)
+	cmd.Dir = s.root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("sops updatekeys %s: %s", path, lastLine(string(out)))
+	}
+	return nil
+}
+
+// GitAdd stages a path — additions, edits and deletions alike (-A).
 func (s sopsCLI) GitAdd(path string) error {
-	cmd := exec.Command("git", "add", path)
+	cmd := exec.Command("git", "add", "-A", "--", path)
 	cmd.Dir = s.root
 	return cmd.Run()
 }

@@ -48,6 +48,8 @@ func main() {
 		err = seed(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
+	case "dismantle":
+		err = dismantle(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -109,6 +111,18 @@ func usage() {
       in the HelmRelease. Charts are pulled at the pinned tag once per
       run. Strict on every fort (all are production-hardened); exits
       nonzero on any error; annotates for CI when GITEA_ACTIONS is set.
+
+  dismantle <host> [--write]
+      the inverse of scaffold + preseed-identity, as a repo mutation
+      staged for a PR (#217): removes the inventory entry, nixos/hosts/
+      <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
+      shared-infrastructure recipient (then sops updatekeys on the files
+      that lost it), the wireguard peer, fleet/clusters/<host> and
+      fleet/apps/<host>, the flake's cloudHosts entry — and prints the
+      residue: every remaining mention of the host for the reviewer to
+      triage in the same PR, and cross-fort sops refs into it. Touches
+      no pulumi state: fort destroy is the second, gated step after the
+      merge (forts/DECOMISSIONING.md until it lands).
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.`)
