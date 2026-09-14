@@ -38,10 +38,14 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "fleet/apps", fort, "sops-canary.yaml"))
 	copyTree(t, filepath.Join(golden, "sites-db"), filepath.Join(tmp, "fleet/apps", fort, "sites-db"))
 
+	// The fort followed #189's previews while the PR was open; since the
+	// merge it pins the release tag like every fort, and so does the
+	// replay (the chart fixture is still the #189 contract, unchanged
+	// through 0.1.9).
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,
 		ref:      "oci://gitea.zen.lofi/sfi/symbology",
-		followPR: "189",
+		version:  "0.1.9",
 		chartDir: "testdata/charts/symbology",
 		without:  map[string]bool{},
 	})
