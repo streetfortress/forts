@@ -60,6 +60,18 @@ spec:
         exposedPort: 443
         hostPort: 443
         protocol: TCP
+        http:
+          # Response compression for every https route on every cluster —
+          # edge posture, not an app fact (#226: 4x wire cut on symbology's
+          # company pages, knee unharmed, validated on staging). An
+          # entrypoint middleware applies to all routers on the entrypoint
+          # whatever provider made them, so Gateway API routes need no
+          # per-app Middleware + ExtensionRef (the shape #227 first used).
+          # The Middleware itself is the extraObjects entry below, so it
+          # lands in the same reconcile as this reference — a reference to
+          # a missing middleware disables every router on the entrypoint.
+          middlewares:
+            - traefik-compress@kubernetescrd
 
     service:
       spec:
@@ -86,3 +98,30 @@ spec:
       limits:
         memory: 1Gi
         cpu: 1000m
+
+    # The compress middleware the websecure entrypoint references (above).
+    # Shipped through the chart so the reference and the object are one
+    # helm release. gzip only: traefik 3's default set adds brotli + zstd,
+    # and the validated CPU trade (2 vCPU nodes at 90% on the knee) was
+    # gzip's. Restricted to text types so luxor's edge never re-compresses
+    # gitea's git packs or rustfs object downloads (already compressed —
+    # pure CPU waste); everything else passes through untouched. The 1 KiB
+    # minimum body is the default.
+    extraObjects:
+      - apiVersion: traefik.io/v1alpha1
+        kind: Middleware
+        metadata:
+          name: compress
+          namespace: traefik
+        spec:
+          compress:
+            encodings:
+              - gzip
+            includedContentTypes:
+              - text/html
+              - text/plain
+              - text/css
+              - text/javascript
+              - application/javascript
+              - application/json
+              - image/svg+xml
