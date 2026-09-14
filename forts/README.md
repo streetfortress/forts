@@ -63,9 +63,11 @@ fort scaffold web3 --write          # host nix files (cloud shape) + the flux
 ./provisioning/preseed-identity.sh web3   # keys, sops rules, deploy key, canary
                                     # → branch → PR (merge — generated code is
                                     #  reviewed; build + inject the bootstrap image)
-fort provision web3 --image <path>  # upload → pulumi up (you confirm) →
-                                    # image deleted both sides
-                                    # flux bootstraps and owns everything above
+fort provision web3 --image <path>  # linode: upload → pulumi up (you confirm)
+                                    # → image deleted both sides; libvirt: the
+                                    # qcow2 (grown to disk_size) streams into
+                                    # soundship's pool as the root disk, local
+                                    # copy deleted. flux owns everything above
 fort preview web3                   # read the diff first (day-2 edits);
                                     # --refresh = drift against the provider
 fort provision web3                 # later day-2 applies (firewall/DNS edits)
@@ -86,6 +88,43 @@ fort dismantle web3 [--write]       # retire: remove exactly what scaffold +
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
 `PULUMI_CONFIG_PASSPHRASE` — taken from the environment when set, else
 sops-decrypted from `provisioning/secrets.yaml` by every cloud command.
+The libvirt backend needs neither: `LIBVIRT_DEFAULT_URI` defaults to
+soundship over ssh with `~/.ssh/id_ed25519` in the URI (the provider
+carries its own ssh client — no `~/.ssh/config`, no agent unless asked),
+and `xsltproc` / `qemu-img` come from nixpkgs when the host has none.
+
+## The lab backend (`provider: libvirt`)
+
+The same surface `provisioning/vms/create-nixos.yaml`'s VM half defines,
+as resources: a qcow2 volume in soundship's `images` pool and a domain
+with the lab's fixed shape (host-passthrough, virtio disk, br0, serial +
+VNC, autostart). No firewall, no DNS — the LAN bridge and the lab
+dnsmasq are the hypervisor's. Three provider facts shaped it (all found
+on the probe, 2026-09-14): `size` is refused next to `source`, so the
+qcow2 is grown with `qemu-img resize` before upload (the playbook's
+order); a `<disk type='volume'>` never starts under Ubuntu's AppArmor
+helper, so the domain uses a file disk on the volume's path; and a file
+disk renders `driver type='raw'`, so an XSLT (the provider's escape
+hatch) sets qcow2. The uploaded volume IS the root disk: not consumed,
+`source` and `disks` ignored after birth — a different disk is a repave
+(`pulumi destroy` + provision), never an in-place change.
+
+```
+nix build ./nixos#lab1-qcow                          # KVM: devbox or soundship
+./provisioning/inject-host-key.sh lab1 result/nixos.qcow2
+fort provision lab1 --image ~/.cache/forts/lab1-nixos.qcow2
+```
+
+Hosts without `provider` are untouched. A playbook-era VM joins without
+a repave: set `provider: libvirt` on its entry and run `fort adopt
+<host>` — the live domain and volume are imported (read-only against
+the hypervisor), the program is previewed against them, and only live
+properties (autostart, which the playbook never set) are allowed to
+change; anything replace-forcing refuses. Birth-time shape (disk,
+consoles, graphics, the driver XSLT, the provider's defaults) is ignored
+after creation for exactly this reason — a different shape is a repave.
+`fort destroy` for a lab host is the same `pulumi destroy` as for a
+cloud one.
 
 ## One-time setup
 
@@ -105,8 +144,10 @@ last recorded: prefer `fort preview` / `fort provision`, or export
 Demonstration shape (#87 decision PR): everything compiles against the
 real SDKs but nothing has run against an account — the #42 checkboxes
 (image upload contract, boot-config quirks, end-to-end first boot) are
-the next session's spike. The libvirt backend is a stub until it reaches
-create-nixos parity; lab VMs stay on `just create-nixos`. `fort
+the next session's spike. The libvirt backend
+reaches create-nixos's VM half (define + start from the injected qcow);
+lab VMs opt in with `provider: libvirt`, the rest stay on `just
+create-nixos`. `fort
 scaffold` renders the host's generated surface (nix host dir in the lab
 or cloud shape, the flux cluster dir, the apps root kustomization; the
 flake discovers the image variant from the host dir's runtime import);

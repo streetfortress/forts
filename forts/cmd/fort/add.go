@@ -179,7 +179,7 @@ func planAdd(o addOpts) (*plan, error) {
 	repoPath := strings.SplitN(strings.TrimPrefix(o.ref, "oci://"), ":", 2)[0]
 	v := view{
 		Fort: o.fort, App: app, SecretName: app + "-env",
-		Lab:       entry.Provider == "",
+		Lab:       !entry.Cloud(),
 		ChartURL:  "oci://" + repoPath,
 		ChartRepo: strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
 		Version:   resolved, PR: o.followPR,

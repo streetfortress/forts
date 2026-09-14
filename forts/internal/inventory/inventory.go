@@ -75,3 +75,12 @@ func LoadHost(path, name string) (Host, error) {
 	}
 	return h, nil
 }
+
+// Cloud says whether a host is realized by a cloud backend — a provider
+// other than the lab hypervisor. Lab facts (step-ca issuer, .lofi
+// hostnames, the qcow host shape) follow from !Cloud(), not from an
+// empty provider: a playbook-era VM adopted under `provider: libvirt`
+// is still a lab host.
+func (h Host) Cloud() bool {
+	return h.Provider != "" && h.Provider != "libvirt"
+}

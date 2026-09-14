@@ -103,9 +103,12 @@ func scaffold(args []string) error {
 		return nil
 	}
 	fmt.Printf("\n%d file(s) written. next: ./provisioning/preseed-identity.sh %s (keys, sops rules, deploy key, canary),\n", written, host)
-	if entry.Provider != "" {
+	switch {
+	case entry.Cloud():
 		fmt.Printf("then PR → merge → nix build ./nixos#%s-linode → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
-	} else {
+	case entry.Provider == "libvirt":
+		fmt.Printf("then PR → merge → nix build ./nixos#%s-qcow → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
+	default:
 		fmt.Printf("then PR → merge → just create-nixos %s\n", host)
 	}
 	return nil
@@ -113,7 +116,7 @@ func scaffold(args []string) error {
 
 func scaffoldShape(e inventory.Host) string {
 	s := "lab VM"
-	if e.Provider != "" {
+	if e.Cloud() {
 		s = e.Provider + " " + e.Region + " " + e.InstanceType
 	}
 	if e.FluxCluster {
@@ -139,7 +142,7 @@ func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 		LanDNS:       []string{"10.0.0.2", "8.8.8.8"},
 		StateVersion: "25.11",
 		ClusterInit:  true,
-		Cloud:        entry.Provider != "",
+		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
 		Region:       entry.Region,
 		InstanceType: entry.InstanceType,

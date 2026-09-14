@@ -183,7 +183,14 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 }
 
 func (p *dismantlePlan) report(w io.Writer, written bool) {
-	fmt.Fprintf(w, "dismantle %s   (%s)\n", p.host, map[bool]string{true: "cloud: " + p.entry.Provider, false: "lab: libvirt"}[p.entry.Provider != ""])
+	kind := "lab: playbook-era (just delete)"
+	switch {
+	case p.entry.Cloud():
+		kind = "cloud: " + p.entry.Provider
+	case p.entry.Provider == "libvirt":
+		kind = "lab: libvirt backend (fort destroy)"
+	}
+	fmt.Fprintf(w, "dismantle %s   (%s)\n", p.host, kind)
 	for _, rel := range p.removes {
 		fmt.Fprintf(w, "✗ %s\n", rel)
 	}

@@ -89,6 +89,13 @@ func TestRenderScaffold(t *testing.T) {
 		t.Errorf("cloud MESH_IP wrong")
 	}
 
+	// provider: libvirt is still the lab shape (fort adopt, the libvirt backend)
+	h2 := hosts["lab-fort"]
+	h2.Provider = "libvirt"
+	if got := string(render(t, "lab-fort", h2)[0].content); !strings.Contains(got, "qcow-runtime") || strings.Contains(got, "linode") {
+		t.Errorf("libvirt host should render the lab shape")
+	}
+
 	// a flux cluster off the mesh is refused (MESH_IP is mandatory, #99)
 	h := hosts["lab-fort"]
 	h.WgVpnIP = ""

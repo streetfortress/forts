@@ -19,7 +19,9 @@ Two steps, the reviewed merge between them (#217):
    clean tree, stack exists; refresh first; `state unprotect --all`
    immediately before `destroy` (never standalone); `stack rm`; revoke
    the `flux-<host>` deploy key; commit the state removal as its own
-   PR; lab hosts dispatch to `provisioning/vms/delete.yaml` instead.
+   PR; lab hosts raised by the
+   playbook (no `provider`) dispatch to `provisioning/vms/delete.yaml`,
+   `provider: libvirt` ones are the same `pulumi destroy`.
 
 # Manual Decomissioning with Pulumi
 

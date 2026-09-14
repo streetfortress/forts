@@ -11,7 +11,7 @@
 //
 //	fort scaffold web3                  # render files → branch → PR
 //	                                    # (merge; build + inject the image)
-//	fort provision web3 --image <path>  # upload → pulumi up → delete image
+//	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
 //	fort add web3 oci://…/symbology     # render a chart's fort-side tree
@@ -40,6 +40,8 @@ func main() {
 		err = scaffold(os.Args[2:])
 	case "provision":
 		err = provision(os.Args[2:])
+	case "adopt":
+		err = adopt(os.Args[2:])
 	case "preview":
 		err = preview(os.Args[2:])
 	case "add":
@@ -71,7 +73,7 @@ func usage() {
   (observed, from the live host) — are spec and status (#224).
 
   author  scaffold, add, seed, dismantle
-  apply   provision
+  apply   provision, adopt
   read    check, preview
 
   scaffold <host> [--write]
@@ -86,9 +88,21 @@ func usage() {
 
   provision <host> [--image <path>]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
-      the preview). With --image, first upload the injected single-use
-      bootstrap image and record it as the stack's forts:imageId; once the
-      instance exists, delete the image provider-side and locally (#42).
+      the preview). With --image, first stage the injected single-use
+      bootstrap image and record it as the stack's forts:imageId — linode:
+      upload the .img.gz; libvirt: grow the .qcow2 to disk_size, the
+      program streams it into the pool as the root disk — and once the
+      host exists, release it (provider-side where applicable, and the
+      local copy) (#42).
+
+  adopt <host>
+      bring a playbook-era lab VM (inventory: provider: libvirt, no stack
+      yet) under the backend WITHOUT a repave: rescan the pool, import the
+      live domain + volume into a new stack (reads the hypervisor, writes
+      local state only), preview the program against them and refuse
+      unless the only changes are live properties (autostart, running),
+      then one 'pulumi up' (you confirm) converges those. Stages the new
+      stack for its own PR.
 
   preview (<host> | --all) [--refresh] [--expect-no-changes]
       the read-only half: 'pulumi preview -s <host> --diff'. --refresh
@@ -141,5 +155,6 @@ func usage() {
       merge (forts/DECOMISSIONING.md until it lands).
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
-  environment, else sops-decrypt them from provisioning/secrets.yaml.`)
+  environment, else sops-decrypt them from provisioning/secrets.yaml.
+  provider: libvirt hosts reach soundship over ssh (LIBVIRT_DEFAULT_URI).`)
 }

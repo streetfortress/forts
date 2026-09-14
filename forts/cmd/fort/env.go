@@ -16,6 +16,11 @@ import (
 // provisioning/secrets.yaml, the same home as the gitea provisioning
 // token: repo-driven, no per-machine env setup, and the values are
 // never printed.
+// libvirtPoolName mirrors pulumi/libvirt.go (one lab, one pool).
+const libvirtPoolName = "images"
+
+const libvirtURI = "qemu+ssh://steven@soundship/system?sshauth=privkey&keyfile=%s"
+
 func cloudEnv(root string, entry inventory.Host) error {
 	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
 	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
@@ -34,6 +39,24 @@ func cloudEnv(root string, entry inventory.Host) error {
 	// in forts/README.md becomes unnecessary for fort commands.
 	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "forts", "pulumi", "state"))
 
+	// The lab hypervisor, reached over ssh from wherever fort runs. The
+	// provider carries its own ssh client (no ~/.ssh/config, no agent
+	// unless asked): the key file goes in the URI. One lab today; the
+	// per-fort manifest's [libvirt] table (#252) is where a second
+	// hypervisor would name itself.
+	if entry.Provider == "libvirt" {
+		if os.Getenv("LIBVIRT_DEFAULT_URI") == "" {
+			home, _ := os.UserHomeDir()
+			os.Setenv("LIBVIRT_DEFAULT_URI", fmt.Sprintf(libvirtURI, filepath.Join(home, ".ssh", "id_ed25519")))
+		}
+		// The provider applies the domain's XSLT (the qcow2 driver fix,
+		// pulumi/libvirt.go) by exec'ing xsltproc; the plugin inherits
+		// our PATH, so put nixpkgs' copy on it when the host has none —
+		// the guestfish / qemu-img fallback, one layer down.
+		if err := ensureTool("xsltproc", "nixpkgs#libxslt.bin"); err != nil {
+			return err
+		}
+	}
 	if entry.Provider == "linode" && os.Getenv("LINODE_TOKEN") == "" {
 		v, err := secret(root, "linode-token")
 		if err != nil {
@@ -61,4 +84,22 @@ func secret(root, key string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// ensureTool prepends a nix-built package's bin dir to PATH when the
+// named tool is not already there. `nix build --no-link` is a no-op
+// once the store has it.
+func ensureTool(tool, flakeRef string) error {
+	if _, err := exec.LookPath(tool); err == nil {
+		return nil
+	}
+	out, err := exec.Command("nix", "build", "--no-link", "--print-out-paths", flakeRef).Output()
+	if err != nil {
+		return fmt.Errorf("%s not on PATH and `nix build %s` failed: %w", tool, flakeRef, err)
+	}
+	bin := filepath.Join(strings.TrimSpace(string(out)), "bin")
+	if _, err := os.Stat(filepath.Join(bin, tool)); err != nil {
+		return fmt.Errorf("%s: not in %s", tool, bin)
+	}
+	return os.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
-	"github.com/linode/linodego"
 )
 
 // provision is the birth flow (#42): the secret-bearing single-use image
@@ -29,7 +28,7 @@ func provision(args []string) error {
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("provision", flag.ContinueOnError)
-	imagePath := fs.String("image", "", "injected bootstrap image (.img.gz): upload, provision, then delete on success")
+	imagePath := fs.String("image", "", "injected bootstrap image (linode: .img.gz to upload; libvirt: the .qcow2 the volume is streamed from); deleted locally on success")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -43,7 +42,7 @@ func provision(args []string) error {
 		return err
 	}
 	if entry.Provider == "" {
-		return fmt.Errorf("host %q has no provider — lab VMs stay on `just create-nixos`", host)
+		return fmt.Errorf("host %q has no provider — set `provider: libvirt` for the lab backend, or keep it on `just create-nixos`", host)
 	}
 	if _, err := os.Stat(filepath.Join(root, "nixos/hosts", host, "default.nix")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)
@@ -56,69 +55,46 @@ func provision(args []string) error {
 		return err
 	}
 
-	var client linodego.Client
-	var uploaded *linodego.Image
+	var flow imageFlow
+	var imageID string
 	if *imagePath != "" {
-		if entry.Provider != "linode" {
-			return fmt.Errorf("--image upload is only implemented for linode (host %q is %q)", host, entry.Provider)
+		f, ok := imageFlows[entry.Provider]
+		if !ok {
+			return fmt.Errorf("--image: no image flow for provider %q", entry.Provider)
 		}
-		c, err := linodego.NewClientFromEnv(nil) // LINODE_TOKEN
+		flow = f
+		id, err := flow.Stage(ctx, entry, host, *imagePath)
 		if err != nil {
 			return err
 		}
-		client = *c
-
-		f, err := os.Open(*imagePath)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("uploading %s → %s (%s)…\n", *imagePath, host+"-bootstrap", entry.Region)
-		img, err := client.UploadImage(ctx, linodego.ImageUploadOptions{
-			Region: entry.Region,
-			Label:  host + "-bootstrap",
-			Image:  f,
-		})
-		f.Close()
-		if err != nil {
-			return fmt.Errorf("image upload: %w", err)
-		}
-		uploaded = img
-		// The instance create will fail while the image is still
-		// processing; wait for it here rather than mid-preview.
-		if _, err := client.WaitForImageStatus(ctx, img.ID, linodego.ImageStatusAvailable, 600); err != nil {
-			return fmt.Errorf("image %s never became available (left in place): %w", img.ID, err)
-		}
+		imageID = id
 		// Committed provenance: the stack config records which image the
-		// host was born from; the instance ignores later changes to it.
-		if err := runPulumi(pulumiDir, "config", "set", "imageId", img.ID, "--stack", host); err != nil {
-			return fmt.Errorf("recording imageId (image %s left in place): %w", img.ID, err)
+		// host was born from; the program reads it at creation only.
+		if err := runPulumi(pulumiDir, "config", "set", "imageId", imageID, "--stack", host); err != nil {
+			return fmt.Errorf("recording imageId (image %s left in place): %w", imageID, err)
 		}
 	}
 
 	if err := runPulumi(pulumiDir, "up", "--stack", host); err != nil {
-		if uploaded != nil {
-			fmt.Fprintf(os.Stderr, "pulumi up failed — image %s left in place; rerun WITHOUT --image to retry (imageId is already set)\n", uploaded.ID)
+		if flow != nil {
+			fmt.Fprintf(os.Stderr, "pulumi up failed — image %s left in place; rerun WITHOUT --image to retry (imageId is already set)\n", imageID)
 		}
 		return err
 	}
 
-	if uploaded != nil {
+	if flow != nil {
 		// `pulumi up` exits 0 when the preview is declined, so gate
-		// deletion on the instance actually existing in stack outputs.
+		// deletion on the host actually existing in stack outputs.
 		out, err := outputPulumi(pulumiDir, "stack", "output", "ip", "--stack", host)
 		if err != nil || strings.TrimSpace(out) == "" {
-			fmt.Fprintf(os.Stderr, "instance not confirmed — image %s left in place; rerun without --image, or delete it: linode-cli images delete %s\n", uploaded.ID, uploaded.ID)
+			fmt.Fprintf(os.Stderr, "host not confirmed — image %s left in place; %s\n", imageID, flow.Leftover(imageID))
 			return nil
 		}
 		// Single-use by design: the artifact carries the host's key.
-		// Provider-side first, then the local injected copy.
-		if err := client.DeleteImage(ctx, uploaded.ID); err != nil {
-			return fmt.Errorf("deleting provider-side image %s (delete it manually!): %w", uploaded.ID, err)
+		if err := flow.Release(ctx, imageID, *imagePath); err != nil {
+			return err
 		}
-		if err := os.Remove(*imagePath); err != nil {
-			return fmt.Errorf("deleting local image %s (delete it manually!): %w", *imagePath, err)
-		}
-		fmt.Printf("single-use image %s deleted (provider-side and local)\n", uploaded.ID)
+		fmt.Printf("single-use image %s released (provider-side where applicable, and local)\n", imageID)
 	}
 	return nil
 }
