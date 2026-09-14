@@ -6,11 +6,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
 )
 
 // cloudEnv puts the credentials a pulumi run needs into the environment
+// for one provider (inventory's, or — for destroy — the one the stack's
+// checkpoint records: the host is gone from inventory by then)
 // of this process — and so of the pulumi (and its provider) we exec.
 // Explicit env wins; otherwise each value is sops-decrypted from
 // provisioning/secrets.yaml, the same home as the gitea provisioning
@@ -21,7 +21,7 @@ const libvirtPoolName = "images"
 
 const libvirtURI = "qemu+ssh://steven@soundship/system?sshauth=privkey&keyfile=%s"
 
-func cloudEnv(root string, entry inventory.Host) error {
+func cloudEnv(root string, provider string) error {
 	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
 	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
 	// against v4-generated SDK code, which mis-shapes outputs (specs as
@@ -44,7 +44,7 @@ func cloudEnv(root string, entry inventory.Host) error {
 	// unless asked): the key file goes in the URI. One lab today; the
 	// per-fort manifest's [libvirt] table (#252) is where a second
 	// hypervisor would name itself.
-	if entry.Provider == "libvirt" {
+	if provider == "libvirt" {
 		if os.Getenv("LIBVIRT_DEFAULT_URI") == "" {
 			home, _ := os.UserHomeDir()
 			os.Setenv("LIBVIRT_DEFAULT_URI", fmt.Sprintf(libvirtURI, filepath.Join(home, ".ssh", "id_ed25519")))
@@ -57,7 +57,7 @@ func cloudEnv(root string, entry inventory.Host) error {
 			return err
 		}
 	}
-	if entry.Provider == "linode" && os.Getenv("LINODE_TOKEN") == "" {
+	if provider == "linode" && os.Getenv("LINODE_TOKEN") == "" {
 		v, err := secret(root, "linode-token")
 		if err != nil {
 			return fmt.Errorf("LINODE_TOKEN not set and no linode-token in provisioning/secrets.yaml — add it with: sops --config .sops.yaml set provisioning/secrets.yaml '[\"linode-token\"]' '\"<token>\"'")

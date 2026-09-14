@@ -43,7 +43,7 @@ func adopt(args []string) error {
 	if exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json")) {
 		return fmt.Errorf("host %q already has a stack — nothing to adopt", host)
 	}
-	if err := cloudEnv(root, entry); err != nil {
+	if err := cloudEnv(root, entry.Provider); err != nil {
 		return err
 	}
 	if err := ensureTool("virsh", "nixpkgs#libvirt"); err != nil {

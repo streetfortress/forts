@@ -14,6 +14,8 @@
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
+//	fort dismantle web3 --write         # retire: repo half → PR (merge)
+//	fort destroy web3                   # then the side-effects half
 //	fort add web3 oci://…/symbology     # render a chart's fort-side tree
 //	    --version 0.1.5 --write         # from its contract (#144) → seed → PR
 //
@@ -52,6 +54,8 @@ func main() {
 		err = check(os.Args[2:])
 	case "dismantle":
 		err = dismantle(os.Args[2:])
+	case "destroy":
+		err = destroy(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -73,7 +77,7 @@ func usage() {
   (observed, from the live host) — are spec and status (#224).
 
   author  scaffold, add, seed, dismantle
-  apply   provision, adopt
+  apply   provision, adopt, destroy
   read    check, preview
 
   scaffold <host> [--write]
@@ -152,7 +156,19 @@ func usage() {
       residue: every remaining mention of the host for the reviewer to
       triage in the same PR, and cross-fort sops refs into it. Touches
       no pulumi state: fort destroy is the second, gated step after the
-      merge (forts/DECOMISSIONING.md until it lands).
+      merge.
+
+  destroy <host>
+      the half with side effects outside git, gated on the merge: refuses
+      unless the host is ABSENT from origin/main's inventory (and the
+      working tree's), the tree is clean, and the stack exists. Then, with
+      inherited stdio (you confirm each pulumi step): power the instance
+      off (linode), pulumi refresh, state unprotect --all (only ever
+      right before the destroy), destroy, stack rm; clears the file
+      backend's residue (.bak, history, backups), revokes the flux-<host>
+      deploy key on gitea, stages the state removal for its own PR. A
+      failure mid-way leaves the unprotected state in the tree and says
+      "rerun". Provider comes from the checkpoint, not inventory.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.

@@ -51,7 +51,7 @@ func provision(args []string) error {
 	pulumiDir := filepath.Join(root, "forts", "pulumi")
 	ctx := context.Background()
 
-	if err := cloudEnv(root, entry); err != nil {
+	if err := cloudEnv(root, entry.Provider); err != nil {
 		return err
 	}
 

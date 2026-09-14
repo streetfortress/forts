@@ -53,6 +53,12 @@ func Load(path string) (map[string]Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading inventory: %w", err)
 	}
+	return Parse(raw)
+}
+
+// Parse reads inventory text — a committed revision's copy as well as
+// the working tree's (fort destroy gates on origin/main's).
+func Parse(raw []byte) (map[string]Host, error) {
 	var inv inventoryFile
 	if err := yaml.Unmarshal(raw, &inv); err != nil {
 		return nil, fmt.Errorf("parsing inventory: %w", err)

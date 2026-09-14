@@ -79,7 +79,7 @@ func preview(args []string) error {
 	failed := 0
 	results := make([]string, 0, len(targets))
 	for _, name := range targets {
-		if err := cloudEnv(root, hosts[name]); err != nil {
+		if err := cloudEnv(root, hosts[name].Provider); err != nil {
 			return err
 		}
 		err := runPulumi(filepath.Join(root, "forts", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)
@@ -96,9 +96,33 @@ func preview(args []string) error {
 		}
 		results = append(results, fmt.Sprintf("%-6s %s", verdict, name))
 	}
+	if *all {
+		// State without inventory means destroy pending (#217): the
+		// dismantle PR merged, `fort destroy` has not run. Say so rather
+		// than silently skipping a stack inventory no longer names.
+		for _, name := range stacksInState(filepath.Join(root, "forts", "pulumi")) {
+			if _, ok := hosts[name]; !ok {
+				failed++
+				results = append(results, fmt.Sprintf("%-6s %s   destroy pending: state without inventory — fort destroy %s", "PENDING", name, name))
+			}
+		}
+	}
 	fmt.Println(strings.Join(results, "\n"))
 	if failed > 0 {
-		return fmt.Errorf("%d of %d stack(s) not clean", failed, len(targets))
+		return fmt.Errorf("%d stack(s) not clean", failed)
 	}
 	return nil
+}
+
+// stacksInState lists the stacks the committed file backend holds
+// (state/.pulumi/stacks/<project>/<stack>.json; .bak and .attrs are
+// the backend's own residue, not stacks).
+func stacksInState(pulumiDir string) []string {
+	matches, _ := filepath.Glob(filepath.Join(pulumiDir, "state/.pulumi/stacks/*/*.json"))
+	var out []string
+	for _, m := range matches {
+		out = append(out, strings.TrimSuffix(filepath.Base(m), ".json"))
+	}
+	sort.Strings(out)
+	return out
 }

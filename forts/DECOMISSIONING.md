@@ -14,18 +14,24 @@ Two steps, the reviewed merge between them (#217):
    sops refs into the host. Touches no pulumi state. Stage, triage,
    commit, PR, merge.
 2. **`fort destroy <host>`** — the half with side effects outside git,
-   NOT automated yet: the manual runbook below (from web3, #222). Its
-   gates when it lands: host absent from `origin/main`'s inventory,
-   clean tree, stack exists; refresh first; `state unprotect --all`
-   immediately before `destroy` (never standalone); `stack rm`; revoke
-   the `flux-<host>` deploy key; commit the state removal as its own
-   PR; lab hosts raised by the
-   playbook (no `provider`) dispatch to `provisioning/vms/delete.yaml`,
-   `provider: libvirt` ones are the same `pulumi destroy`.
+   gated on the merge: refuses unless the host is absent from
+   origin/main's inventory (and the working tree's), the tree is clean,
+   and the stack exists (a playbook-era lab VM has none: `just delete`).
+   Then the runbook below, as one verb with inherited stdio — you read
+   and confirm each pulumi step: power the instance off (linode), refresh,
+   `state unprotect --all` (only ever right before the destroy), destroy,
+   `stack rm`; clears the file backend's residue (history, backups, the
+   .bak web3 left behind), revokes the `flux-<host>` deploy key on gitea,
+   and stages the state removal for its own PR ("<host>: destroyed" —
+   git history is the provenance). The provider comes from the
+   checkpoint, not inventory (`pulumi destroy` never runs the program).
+   A failure mid-way leaves the unprotected state in the tree and says
+   "rerun". Between the two merges `fort preview --all` reports the
+   stack as `PENDING … destroy pending`, not as drift.
 
 # Manual Decomissioning with Pulumi
 
-The steps below exercise pulumi unprotect, destroy, and stack rm to decomission resources after their manifest cleanup [See pr #219 Retire web3 (definitions + manifest trees)](https://gitea.zen.lofi/sfi/deployments/pulls/219) — the half `fort dismantle` now does.
+The steps below are what `fort destroy` runs, kept as the record of the web3 teardown they were written from (pulumi unprotect, destroy, and stack rm after the manifest cleanup of [pr #219 Retire web3](https://gitea.zen.lofi/sfi/deployments/pulls/219) — the half `fort dismantle` does). Useful when a step has to be redone by hand.
 
 ## Notes from web3 Decomissioning
 

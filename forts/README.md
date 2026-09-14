@@ -81,8 +81,10 @@ fort seed web3 [--write]            # produce its sops Secrets (dependency
 fort check --all                    # the merge gate: Secrets vs contracts
                                     # (CI runs it; no age key needed)
 fort dismantle web3 [--write]       # retire: remove exactly what scaffold +
-                                    # preseed generated, report the residue
-                                    # → PR; then (DECOMISSIONING.md) destroy
+                                    # preseed generated, report the residue → PR
+fort destroy web3                   # after that merge: power off, refresh,
+                                    # unprotect, destroy, stack rm, deploy key;
+                                    # stages the state removal → its own PR
 ```
 
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
@@ -155,7 +157,7 @@ the identity steps (host key → age → sops → wg peer → deploy key →
 canary) are `provisioning/preseed-identity.sh` until it becomes a verb. `fort add` renders a chart's workload tree from the
 contract the chart ships and `fort seed` produces the Secrets
 (CONTRACTS.md — status section there). `fort dismantle` is the repo half
-of decommissioning (#217); the pulumi/deploy-key half is still the manual
-runbook in DECOMISSIONING.md until `fort destroy` lands. The public-face extraction (github.com/streetfortress/forts)
+of decommissioning (#217) and `fort destroy` the side-effects half, gated
+on the dismantle merge (DECOMISSIONING.md). The public-face extraction (github.com/streetfortress/forts)
 splits the generic tool from repo-specific inventory/state — later, and
 a publish step.
