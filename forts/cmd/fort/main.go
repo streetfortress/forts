@@ -63,6 +63,17 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage: fort <command> [args]
 
+  Verbs by intent — author verbs render repo changes staged for a PR,
+  apply verbs act on the provider, read verbs change nothing. The read
+  verbs split by source of truth (the kubectl mnemonic): check is the
+  admission gate over the repo, preview the diff against pulumi, and
+  the two not yet built — describe (declared, from the repo) and status
+  (observed, from the live host) — are spec and status (#224).
+
+  author  scaffold, add, seed, dismantle
+  apply   provision
+  read    check, preview
+
   scaffold <host> [--write]
       render the host's generated files from provisioning/inventory.yaml
       (stdout by default; --write creates nixos/hosts/<host>/default.nix,
@@ -75,11 +86,12 @@ func usage() {
       bootstrap image and record it as the stack's forts:imageId; once the
       instance exists, delete the image provider-side and locally (#42).
 
-  preview <host> [--refresh] [--expect-no-changes]
+  preview (<host> | --all) [--refresh] [--expect-no-changes]
       the read-only half: 'pulumi preview -s <host> --diff'. --refresh
-      reconciles state with the provider first (drift, as 'just iac-drift'
-      does); --expect-no-changes turns any proposed change into a nonzero
-      exit.
+      reconciles state with the provider first (drift); --expect-no-changes
+      turns any proposed change into a nonzero exit. --all walks every
+      cloud host in inventory, one OK/DRIFT/FAILED line per stack — with
+      --refresh --expect-no-changes that is 'just iac-drift'.
 
   add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
       [--hostname fqdn] [--without type,...] [--chart-dir path] [--write]

@@ -67,7 +67,8 @@ fort provision web3 --image <path>  # upload → pulumi up (you confirm) →
 fort preview web3                   # read the diff first (day-2 edits);
                                     # --refresh = drift against the provider
 fort provision web3                 # later day-2 applies (firewall/DNS edits)
-just iac-drift                      # preview --refresh --expect-no-changes
+fort preview --all --refresh \
+    --expect-no-changes             # fleet drift check (= just iac-drift)
 fort add web3 oci://…/symbology \
     --version 0.1.5 [--write]       # render a chart's fort-side tree from
                                     # its contract (CONTRACTS.md)

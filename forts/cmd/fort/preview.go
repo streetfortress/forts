@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
@@ -14,35 +15,57 @@ import (
 // with inherited stdio, credentials sourced the same way (env, else
 // provisioning/secrets.yaml). Day-2 edits (firewall, DNS) get read here
 // before `fort provision` applies them; `--refresh` is the drift check
-// (program vs provider, not program vs state — see `just iac-drift`).
+// (program vs provider, not program vs state). `--all` walks every cloud
+// host in inventory — with --refresh --expect-no-changes that is the
+// fleet drift check (`just iac-drift`), one summary line per host and a
+// nonzero exit if any stack proposed a change or failed to preview.
 func preview(args []string) error {
-	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("preview needs the host first: fort preview <host> [--refresh] [--expect-no-changes]")
-	}
-	host := args[0]
 	fs := flag.NewFlagSet("preview", flag.ContinueOnError)
+	all := fs.Bool("all", false, "every cloud host in inventory")
 	refresh := fs.Bool("refresh", false, "refresh state from the provider before diffing (drift)")
 	expectNone := fs.Bool("expect-no-changes", false, "exit nonzero if the preview proposes any change")
-	if err := fs.Parse(args[1:]); err != nil {
+	var host string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		host, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if (host == "") == !*all {
+		return fmt.Errorf("usage: fort preview (<host> | --all) [--refresh] [--expect-no-changes]")
 	}
 
 	root, err := repoRoot()
 	if err != nil {
 		return err
 	}
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	hosts, err := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml"))
 	if err != nil {
 		return err
 	}
-	if entry.Provider == "" {
-		return fmt.Errorf("host %q has no provider — lab VMs stay on `just create-nixos`", host)
-	}
-	if err := cloudEnv(root, entry); err != nil {
-		return err
+	var targets []string
+	if *all {
+		for name, h := range hosts {
+			if h.Provider != "" {
+				targets = append(targets, name)
+			}
+		}
+		sort.Strings(targets)
+		if len(targets) == 0 {
+			return fmt.Errorf("no cloud hosts in inventory (no provider: set)")
+		}
+	} else {
+		entry, ok := hosts[host]
+		if !ok {
+			return fmt.Errorf("host %q not in provisioning/inventory.yaml", host)
+		}
+		if entry.Provider == "" {
+			return fmt.Errorf("host %q has no provider — lab VMs stay on `just create-nixos`", host)
+		}
+		targets = []string{host}
 	}
 
-	pulumiArgs := []string{"preview", "--stack", host, "--diff"}
+	pulumiArgs := []string{"preview", "--diff"}
 	if *refresh {
 		pulumiArgs = append(pulumiArgs, "--refresh")
 	}
@@ -52,5 +75,30 @@ func preview(args []string) error {
 	if os.Getenv("CI") != "" {
 		pulumiArgs = append(pulumiArgs, "--non-interactive")
 	}
-	return runPulumi(filepath.Join(root, "forts", "pulumi"), pulumiArgs...)
+
+	failed := 0
+	results := make([]string, 0, len(targets))
+	for _, name := range targets {
+		if err := cloudEnv(root, hosts[name]); err != nil {
+			return err
+		}
+		err := runPulumi(filepath.Join(root, "forts", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)
+		if !*all {
+			return err
+		}
+		verdict := "OK"
+		if err != nil {
+			failed++
+			verdict = "FAILED"
+			if *expectNone {
+				verdict = "DRIFT"
+			}
+		}
+		results = append(results, fmt.Sprintf("%-6s %s", verdict, name))
+	}
+	fmt.Println(strings.Join(results, "\n"))
+	if failed > 0 {
+		return fmt.Errorf("%d of %d stack(s) not clean", failed, len(targets))
+	}
+	return nil
 }

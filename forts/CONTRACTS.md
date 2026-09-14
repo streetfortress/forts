@@ -43,7 +43,7 @@ No rename, no flag day: a chart adopts the pattern by shipping the file,
 and the fort's copy shrinks to an overlay or disappears at the next
 `fort add`/adoption pass.
 
-`fort seed`, `fort status`, and CI all resolve the effective contract the
+`fort seed`, `fort check`, and CI all resolve the effective contract the
 same way: pull the chart at the tag the app's OCIRepository pins, merge
 the overlay if present, resolve provider outputs by convention against
 the tree.
@@ -236,7 +236,8 @@ Operators (CNPG) stay fleet-wide in `fleet/infrastructure/controllers`;
 `fort add` never touches the infrastructure layer. If an operator ever
 becomes per-fort optional, that is a separate change to how
 `fleet/clusters/<fort>/infrastructure.yaml` selects controllers, and
-`fort status` gets an invariant ("fort requires postgres → cnpg present").
+`fort check --all` gets an invariant ("fort requires postgres → cnpg
+present").
 
 **Post-add report**: files written, provider instances created, the
 `fort seed` invocation (providers first), and every external key with
@@ -274,8 +275,11 @@ design wants blocked from merge. Charts without a contract pass
 unchanged (the gate is opt-in by shipping the file), so the fleet's
 third-party charts are unaffected.
 
-`fort status` is a different verb: the fleet readout (forts, online,
-location, DNS/IP, NixOS and flux revisions) — designed separately.
+`fort status` and `fort describe` are different verbs (#224): status is
+the live fleet readout (forts, online, DNS/IP, NixOS and flux revisions),
+describe is what the repo declares about one fort. In kubectl terms the
+read verbs are: check = the admission gate, preview = the diff, describe
+= spec, status = status. Only check and preview exist.
 
 Acceptance test for the generator itself: `fort add --dry-run` against
 the charts already deployed on sfi-prod must reproduce the committed
@@ -352,7 +356,7 @@ Two consequences to accept and record:
    chart that ships its own PodMonitor omits the contract's `metrics`
    block (the fort renders nothing). The CRDs those CRs need are a
    capability the contract will name (`requires` grows a `capabilities:
-   [monitoring.coreos.com, ...]` list, checked by `fort status`), since
+   [monitoring.coreos.com, ...]` list, checked by `fort check`), since
    a chart cannot install on a cluster without them.
    **Backups stay fort-ops** (decided 2026-09-13): the CNPG barman
    archive is the sites-db template's, and a logical-backup CR
@@ -512,7 +516,7 @@ on `^0\.0\.0-pr\.` by age — admin settings, not repo code.
 ### Adopting it on sfi-prod (the drift the gate would report today)
 
 sfi-prod runs 0.1.2 with a full fort-side contract. Bumping to 0.1.3 and
-reading the chart's contract, `fort status sfi-prod-439bf72` would say:
+reading the chart's contract, `fort check sfi-prod-439bf72` would say:
 
 - **Secret is complete** — every required key is present (seeded from
   web3's production values). Nothing to seed.
@@ -577,9 +581,10 @@ superseded and stays only until the next fort is seeded with the Go one.
 
 `fort check` is the gate above, in CI as of this step.
 
-Not yet, in the order below: `fort status` (the fleet readout), `fort
-rotate`, s3, remote providers, overlay `provider` overrides (placement
-is by convention), the `capabilities` list.
+Not yet, in the order below: `fort rotate`, s3, remote providers,
+overlay `provider` overrides (placement is by convention), the
+`capabilities` list. `fort status`/`fort describe` (#224) are nice-to-haves
+behind the publication milestone (#160).
 
 ## Sequencing (one PR each, in this order)
 
@@ -595,9 +600,9 @@ is by convention), the `capabilities` list.
    is deleted once a real fort has been seeded by the Go one.
 5. ~~**CI gate**: `fort check --all` — contract ↔ Secret key names ↔
    `wire` values; missing required keys fail~~.
-6. **`fort status`**: the fleet readout (forts, online, location,
-   DNS/IP, NixOS + flux revisions); fleet invariants ("every fort has a
-   dead-man rule") may ride along.
+6. **Fleet invariants in `fort check --all`** ("every production fort
+   has monitoring"): red or green, so they belong to the gate, not to a
+   readout. `fort status` / `fort describe` are #224, behind #160.
 7. **`fort rotate`** (+ the break-glass roll in its report).
 8. **s3**: bucket + the per-app credential decision.
 9. **Remote providers** (`provider.fort`): mesh exposure of `-rw`
