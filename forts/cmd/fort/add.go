@@ -222,7 +222,7 @@ func planAdd(o addOpts) (*plan, error) {
 		return nil, fmt.Errorf("%s exists — fort add never overwrites (fort remove first, or refine in place)", appDir)
 	}
 	if !exists(o.root, filepath.Join(apps, "kustomization.yaml")) {
-		return nil, fmt.Errorf("%s has no fleet/apps tree (run the provisioning replay / cluster-init first)", o.fort)
+		return nil, fmt.Errorf("%s has no fleet/apps tree (fort scaffold %s --write first)", o.fort, o.fort)
 	}
 	tpl, err := parseAddTemplates()
 	if err != nil {

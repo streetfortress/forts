@@ -21,8 +21,7 @@ import (
 // shape and the VM's differ, and adopt refuses rather than repave. The
 // one `pulumi up` that follows (you confirm) converges autostart, which
 // the playbook never set. Provenance: forts:imageId records the
-// adoption, not an image. After this, `fort destroy` is the VM's exit
-// and `just delete` is not.
+// adoption, not an image. After this, `fort destroy` is the VM's exit.
 func adopt(args []string) error {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort adopt <host>")

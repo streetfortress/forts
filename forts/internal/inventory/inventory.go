@@ -1,6 +1,6 @@
-// Package inventory reads provisioning/inventory.yaml — the same file
-// create-nixos consumes. One schema serves both halves of the tooling
-// (the fort CLI and the pulumi program) so the generators cannot drift.
+// Package inventory reads provisioning/inventory.yaml. One schema serves
+// both halves of the tooling (the fort CLI and the pulumi program) so the
+// generators cannot drift.
 package inventory
 
 import (
@@ -14,7 +14,7 @@ import (
 // (#87 schema) are additive: hosts without `provider` are libvirt lab
 // VMs and out of scope for cloud stacks.
 type Host struct {
-	// Node-layer fields (create-nixos schema).
+	// Node-layer fields (the lab schema, inherited from the playbook era).
 	AnsibleHost  string   `yaml:"ansible_host"`
 	Vcpus        int      `yaml:"vcpus"`
 	Memory       int      `yaml:"memory"`

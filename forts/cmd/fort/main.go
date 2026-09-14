@@ -19,11 +19,10 @@
 //	fort add web3 oci://…/symbology     # render a chart's fort-side tree
 //	    --version 0.1.5 --write         # from its contract (#144) → seed → PR
 //
-// Phase A parity is incremental: scaffold currently renders the host nix
-// file; the identity steps (host key → age recipient → sops rule →
-// encrypted secrets → wg peer → flux cluster-init) remain on
-// provisioning/vms/create-nixos.yaml until ported. create-nixos stays
-// authoritative for lab VMs throughout.
+// The create-nixos / delete playbooks that raised lab VMs on soundship
+// are gone: scaffold + mint cover their Phase A and cluster-init, the
+// libvirt backend their VM half, destroy their delete. Every host in
+// inventory names a provider (fort check --all enforces it).
 package main
 
 import (

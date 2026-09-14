@@ -11,8 +11,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
-// Libvirt realizes a host on the lab hypervisor (soundship) — the same
-// surface provisioning/vms/create-nixos.yaml's VM half defines, as
+// Libvirt realizes a host on the lab hypervisor (soundship) — the lab VM
+// the create-nixos playbook used to define, as
 // resources: a qcow2 volume in the `images` pool streamed from the
 // injected image through the libvirt API (no root hop — libvirtd writes
 // it), and a domain from that volume with the lab's fixed shape
@@ -29,7 +29,7 @@ import (
 // repave is `pulumi destroy` + provision, deliberately.
 //
 // Sizing is the inventory's node-layer fields (vcpus, memory, disk_size)
-// with create-nixos's defaults. The provider refuses `size` next to
+// with the lab defaults. The provider refuses `size` next to
 // `source` (the volume takes the image's virtual size), so `fort
 // provision` grows the qcow2 to disk_size with qemu-img BEFORE the
 // upload — the playbook's order — and the qcow's autoResize grows the
@@ -39,7 +39,7 @@ type Libvirt struct{}
 const (
 	libvirtPool   = "images"
 	libvirtBridge = "br0"
-	// create-nixos.yaml default_vm_spec — the two generators agree.
+	// the lab defaults (were create-nixos.yaml's default_vm_spec).
 	defaultVcpus  = 2
 	defaultMemory = 4
 	defaultDisk   = "40G"

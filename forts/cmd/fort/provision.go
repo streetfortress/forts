@@ -42,7 +42,7 @@ func provision(args []string) error {
 		return err
 	}
 	if entry.Provider == "" {
-		return fmt.Errorf("host %q has no provider — set `provider: libvirt` for the lab backend, or keep it on `just create-nixos`", host)
+		return fmt.Errorf("host %q has no provider — set `provider: libvirt` for the lab backend (the playbook path is gone)", host)
 	}
 	if _, err := os.Stat(filepath.Join(root, "nixos/hosts", host, "default.nix")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)

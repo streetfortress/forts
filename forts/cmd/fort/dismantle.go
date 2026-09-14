@@ -135,7 +135,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (forts/DECOMISSIONING.md until it lands). `just iac-drift` is red for it in between, which is the correct signal.")
 	}
 	if entry.Provider == "" {
-		p.notes = append(p.notes, "lab host (libvirt): the VM itself goes with provisioning/vms/delete.yaml on soundship (`just delete "+host+"`) after this merges.")
+		p.notes = append(p.notes, "no provider: nothing raised this host through the CLI, so nothing destroys it — the VM (if any) goes by hand on the hypervisor (`virsh destroy` + `virsh undefine --remove-all-storage`).")
 	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
 	sort.Strings(p.removes)
@@ -182,7 +182,7 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 }
 
 func (p *dismantlePlan) report(w io.Writer, written bool) {
-	kind := "lab: playbook-era (just delete)"
+	kind := "no provider (by hand)"
 	switch {
 	case p.entry.Cloud():
 		kind = "cloud: " + p.entry.Provider

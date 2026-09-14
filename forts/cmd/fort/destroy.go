@@ -123,8 +123,8 @@ func destroy(args []string) error {
 // destroyGates: the inverse of every other verb's precondition. The
 // host must be gone from origin/main's inventory (the dismantle PR
 // merged) and from the working tree's, the tree clean (so the state
-// removal lands as its own commit), and the stack must exist — a
-// playbook-era lab VM has none and belongs to `just delete`.
+// removal lands as its own commit), and the stack must exist — a host
+// nothing raised through the CLI has none and goes by hand.
 func destroyGates(root, host string, mainInventory []byte, clean bool) (provider string, problems []string) {
 	if hosts, err := inventory.Parse(mainInventory); err != nil {
 		problems = append(problems, "origin/main inventory: "+err.Error())
@@ -142,7 +142,7 @@ func destroyGates(root, host string, mainInventory []byte, clean bool) (provider
 	state := filepath.Join(root, "forts/pulumi/state/.pulumi/stacks/forts", host+".json")
 	raw, err := os.ReadFile(state)
 	if err != nil {
-		problems = append(problems, "no stack "+host+" in forts/pulumi/state — a playbook-era lab VM? (`just delete "+host+"` on soundship)")
+		problems = append(problems, "no stack "+host+" in forts/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor)")
 		return "", problems
 	}
 	provider, err = providerFromState(raw)

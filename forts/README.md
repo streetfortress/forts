@@ -98,8 +98,8 @@ and `xsltproc` / `qemu-img` come from nixpkgs when the host has none.
 
 ## The lab backend (`provider: libvirt`)
 
-The same surface `provisioning/vms/create-nixos.yaml`'s VM half defines,
-as resources: a qcow2 volume in soundship's `images` pool and a domain
+The lab VM as resources (what the create-nixos playbook's VM half used to
+define): a qcow2 volume in soundship's `images` pool and a domain
 with the lab's fixed shape (host-passthrough, virtio disk, br0, serial +
 VNC, autostart). No firewall, no DNS — the LAN bridge and the lab
 dnsmasq are the hypervisor's. Three provider facts shaped it (all found
@@ -148,9 +148,9 @@ Demonstration shape (#87 decision PR): everything compiles against the
 real SDKs but nothing has run against an account — the #42 checkboxes
 (image upload contract, boot-config quirks, end-to-end first boot) are
 the next session's spike. The libvirt backend
-reaches create-nixos's VM half (define + start from the injected qcow);
-lab VMs opt in with `provider: libvirt`, the rest stay on `just
-create-nixos`. `fort
+defines + starts the VM from the injected qcow; every lab VM carries
+`provider: libvirt` (the playbooks are gone — the three that predated
+the backend were adopted in place). `fort
 scaffold` renders the host's generated surface (nix host dir in the lab
 or cloud shape, the flux cluster dir, the apps root kustomization; the
 flake discovers the image variant from the host dir's runtime import);

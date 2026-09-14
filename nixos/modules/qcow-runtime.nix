@@ -8,7 +8,7 @@
 #      layers virtualisation/disk-image.nix onto this config via
 #      extendModules. The variant owns the disk layout (msdos, single
 #      root partition sda1, ext4 labeled `nixos` — mirrored by
-#      create-nixos.yaml's guestfish nixos_root_dev) but omits the
+#      inject-host-key.sh's guestfish root device) but omits the
 #      qemu-guest profile, console=ttyS0, and a grub timeout; this module
 #      supplies them. Without the profile's virtio initrd modules the
 #      image can't find /dev/vda at boot.
@@ -39,9 +39,9 @@
   boot.loader.grub.device = lib.mkDefault "/dev/vda";
   boot.loader.timeout = lib.mkDefault 0;
 
-  # Pin the image file name to what create-nixos.yaml copies
+  # Pin the image file name to what the image flow expects
   # (result/nixos.qcow2); the upstream default embeds the NixOS label,
-  # which would churn the playbook on every nixpkgs bump.
+  # which would churn every caller on every nixpkgs bump.
   image.modules.qemu = {
     image.baseName = "nixos";
   };

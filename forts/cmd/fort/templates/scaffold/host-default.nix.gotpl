@@ -43,8 +43,8 @@
                                    # TLS (lab CA trusted via k3s-server.nix)
 {{- end }}
 {{- if .FluxCluster }}
-    # Day-0 flux (flux_cluster: true in inventory): cluster-init scaffolded
-    # fleet/clusters/{{ .Hostname }}/ and seeded flux-sops-age-key +
+    # Day-0 flux (flux_cluster: true in inventory): fort scaffold laid down
+    # fleet/clusters/{{ .Hostname }}/ and fort mint seeded flux-sops-age-key +
     # flux-git-deploy-key into this host's sops file.
     ../../modules/flux-bootstrap.nix
     ../../modules/auto-rebuild.nix # pull-based OS updates (#93)

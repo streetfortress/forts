@@ -64,6 +64,10 @@ func check(args []string) error {
 		}
 	}()
 	errors := 0
+	if *all {
+		hosts, _ := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml"))
+		errors += reportFindings(os.Stdout, "inventory", providerFindings(hosts), o.annotate)
+	}
 	for _, fort := range forts {
 		findings, err := checkFort(o, fort)
 		if err != nil {
@@ -76,6 +80,21 @@ func check(args []string) error {
 	}
 	fmt.Println("all contracts satisfied")
 	return nil
+}
+
+// providerFindings: every host names the backend that raises it. The
+// create-nixos playbook that took provider-less hosts is gone, so an
+// entry without one is inert — nothing provisions, previews or destroys
+// it — and that is an error, not a lab default.
+func providerFindings(hosts map[string]inventory.Host) []finding {
+	var out []finding
+	for name, h := range hosts {
+		if h.Provider == "" {
+			out = append(out, finding{"error", "provisioning/inventory.yaml", name + ": no provider — set `provider: libvirt` (lab) or a cloud provider; nothing raises a provider-less host"})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].msg < out[j].msg })
+	return out
 }
 
 type checkOpts struct {

@@ -60,7 +60,7 @@ func preview(args []string) error {
 			return fmt.Errorf("host %q not in provisioning/inventory.yaml", host)
 		}
 		if entry.Provider == "" {
-			return fmt.Errorf("host %q has no provider — lab VMs stay on `just create-nixos`", host)
+			return fmt.Errorf("host %q has no provider — set `provider: libvirt` (lab) or a cloud provider; nothing raises a provider-less host any more", host)
 		}
 		targets = []string{host}
 	}

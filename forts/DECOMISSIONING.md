@@ -16,7 +16,7 @@ Two steps, the reviewed merge between them (#217):
 2. **`fort destroy <host>`** — the half with side effects outside git,
    gated on the merge: refuses unless the host is absent from
    origin/main's inventory (and the working tree's), the tree is clean,
-   and the stack exists (a playbook-era lab VM has none: `just delete`).
+   and the stack exists (a host nothing raised through the CLI has none: by hand).
    Then the runbook below, as one verb with inherited stdio — you read
    and confirm each pulumi step: power the instance off (linode), refresh,
    `state unprotect --all` (only ever right before the destroy), destroy,

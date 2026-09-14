@@ -28,8 +28,8 @@ import (
 // backends realize inventory intent per provider (#87: "inventory declares
 // intent, a per-provider backend realizes it"). Adding a cloud = one more
 // implementation of this interface. libvirt is the lab hypervisor
-// (soundship) — hosts opt in with `provider: libvirt`; without it they
-// stay on the create-nixos playbook.
+// (soundship) — lab hosts carry `provider: libvirt`; a host without a
+// provider is not raised by anything.
 var backends = map[string]Backend{
 	"linode":  &Linode{},
 	"libvirt": &Libvirt{},
@@ -42,7 +42,7 @@ func main() {
 			return err
 		}
 		if host.Provider == "" {
-			return fmt.Errorf("host %q has no provider: set `provider: libvirt` to raise it through this program, or keep it on the create-nixos path", ctx.Stack())
+			return fmt.Errorf("host %q has no provider: set `provider: libvirt` (lab) or a cloud provider", ctx.Stack())
 		}
 		backend, ok := backends[host.Provider]
 		if !ok {

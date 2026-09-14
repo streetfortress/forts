@@ -64,8 +64,7 @@ in
 
   config = lib.mkIf cfg.enable {
     # Host secrets consumed below; the host's sops file must carry both (the
-    # create-nixos flow seeds flux-sops-age-key; the deploy key is added per
-    # cluster with `sops set`).
+    # `fort mint` seeds both, flux-sops-age-key and flux-git-deploy-key).
     sops.secrets.flux-sops-age-key = { };
     sops.secrets.flux-git-deploy-key = { };
 

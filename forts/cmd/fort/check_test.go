@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
 )
 
 // The gate on a synthetic fort: a full-form dir that is complete, one
@@ -120,5 +122,16 @@ func TestCheckFleetOffline(t *testing.T) {
 				t.Logf("%s: %s: %s", f.level, f.dir, f.msg)
 			}
 		}
+	}
+}
+
+func TestProviderFindings(t *testing.T) {
+	hosts := map[string]inventory.Host{"b": {}, "a": {Provider: "libvirt"}, "c": {Provider: "linode"}, "d": {}}
+	got := providerFindings(hosts)
+	if len(got) != 2 || !strings.HasPrefix(got[0].msg, "b: no provider") || !strings.HasPrefix(got[1].msg, "d: no provider") || got[0].level != "error" {
+		t.Errorf("findings: %+v", got)
+	}
+	if len(providerFindings(map[string]inventory.Host{"a": {Provider: "libvirt"}})) != 0 {
+		t.Error("a provider-bearing host should pass")
 	}
 }

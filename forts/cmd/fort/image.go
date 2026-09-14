@@ -85,7 +85,7 @@ func (l *linodeImage) Leftover(id string) string {
 // libvirt API, so the artifact's absolute path IS the id. Stage grows
 // the qcow2's virtual size to the inventory's disk_size first (the
 // provider refuses `size` next to `source`; the volume takes the
-// image's virtual size — create-nixos's order). The volume becomes the
+// image's virtual size — the playbook's order, kept). The volume becomes the
 // root disk (not consumed), so Release removes only the local copy; the
 // program ignores later changes to the source.
 type libvirtImage struct{}
@@ -103,7 +103,7 @@ func (l *libvirtImage) Stage(ctx context.Context, entry inventory.Host, host, pa
 	}
 	size := entry.DiskSize
 	if size == "" {
-		size = "40G" // create-nixos default_vm_spec
+		size = "40G" // the lab default (was create-nixos default_vm_spec)
 	}
 	fmt.Printf("growing %s to %s (qemu-img resize; the root fs autoResizes on first boot)…\n", abs, size)
 	if err := qemuImg("resize", abs, size); err != nil {

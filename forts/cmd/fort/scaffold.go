@@ -16,8 +16,8 @@ import (
 var scaffoldTemplates embed.FS
 
 // hostView is the template context for one host's generated files —
-// inventory facts plus the create-nixos defaults, so the two generators
-// agree while they coexist.
+// inventory facts plus the lab defaults the create-nixos playbook used, so
+// hosts scaffolded before and after it agree.
 type hostView struct {
 	Hostname     string
 	IP           string
@@ -48,8 +48,8 @@ type scaffoldFile struct {
 // scaffold renders a host's generated surface from its inventory entry:
 // the nix host dir (default.nix in the lab or cloud shape, secrets.nix)
 // and, for a flux cluster, fleet/clusters/<host>/ + the apps root
-// kustomization — the same files create-nixos's cluster-init lays down
-// for lab VMs (its force:no templates then find them present). Pure
+// kustomization — the files the playbook-era cluster-init laid down for
+// lab VMs, one generator for lab and cloud now. Pure
 // generator with force-no semantics per file: inventory seeds the host
 // once, hand refinements live in the files and are never clobbered; a
 // re-run fills gaps only. The identity half (keys, sops rules, deploy
@@ -109,7 +109,7 @@ func scaffold(args []string) error {
 	case entry.Provider == "libvirt":
 		fmt.Printf("then PR → merge → nix build ./nixos#%s-qcow → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
 	default:
-		fmt.Printf("then PR → merge → just create-nixos %s\n", host)
+		fmt.Printf("then set `provider: libvirt` in inventory before fort mint — nothing raises a provider-less host\n")
 	}
 	return nil
 }

@@ -105,7 +105,7 @@ func TestRenderScaffold(t *testing.T) {
 }
 
 // The committed fleet/clusters dirs are what the templates render — the
-// generator reproduces the tree cluster-init laid down (modulo nothing:
+// generator reproduces the tree the playbook-era cluster-init laid down (modulo nothing:
 // these files carry no hand edits today).
 func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	repo, err := repoRootFrom(mustGetwd(t))
