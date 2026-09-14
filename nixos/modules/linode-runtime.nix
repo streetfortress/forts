@@ -14,7 +14,8 @@
 { lib, modulesPath, ... }:
 
 {
-  imports = [ "${toString modulesPath}/virtualisation/linode-config.nix" ];
+  imports = [ ./platform.nix "${toString modulesPath}/virtualisation/linode-config.nix" ];
+  sfi.platform = "linode";
 
   # mkForce: upstream sets device = "/dev/sda" at normal priority.
   # autoResize rides along unchanged (first boot grows the deployed fs

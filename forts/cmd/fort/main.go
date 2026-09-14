@@ -75,10 +75,14 @@ func usage() {
   read    check, preview
 
   scaffold <host> [--write]
-      render the host's generated files from provisioning/inventory.yaml
-      (stdout by default; --write creates nixos/hosts/<host>/default.nix,
-      refusing to overwrite an existing file — inventory seeds the host,
-      you refine it in place)
+      render the host's generated surface from provisioning/inventory.yaml:
+      nixos/hosts/<host>/{default.nix,secrets.nix} in the lab shape (qcow
+      runtime, static LAN) or, when the entry has a provider, the cloud
+      shape (linode runtime, split DNS over the mesh, zram); for a flux
+      cluster also fleet/clusters/<host>/ (6 files) and the apps root
+      kustomization. Prints the marked tree; --write lays it down, never
+      overwriting a file that exists (a re-run fills gaps) — inventory
+      seeds the host, you refine it in place. Then preseed-identity.sh.
 
   provision <host> [--image <path>]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
@@ -130,7 +134,7 @@ func usage() {
       <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
       shared-infrastructure recipient (then sops updatekeys on the files
       that lost it), the wireguard peer, fleet/clusters/<host> and
-      fleet/apps/<host>, the flake's cloudHosts entry — and prints the
+      fleet/apps/<host> — and prints the
       residue: every remaining mention of the host for the reviewer to
       triage in the same PR, and cross-fort sops refs into it. Touches
       no pulumi state: fort destroy is the second, gated step after the

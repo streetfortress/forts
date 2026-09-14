@@ -58,9 +58,11 @@ which keeps refresh and drift green after the image is gone.
 ## Flow
 
 ```
-fort scaffold web3                  # renders generated files → branch → PR
-                                    # (merge — generated code is reviewed;
-                                    #  build + inject the bootstrap image)
+fort scaffold web3 --write          # host nix files (cloud shape) + the flux
+                                    # cluster dir + apps root kustomization
+./provisioning/preseed-identity.sh web3   # keys, sops rules, deploy key, canary
+                                    # → branch → PR (merge — generated code is
+                                    #  reviewed; build + inject the bootstrap image)
 fort provision web3 --image <path>  # upload → pulumi up (you confirm) →
                                     # image deleted both sides
                                     # flux bootstraps and owns everything above
@@ -105,9 +107,11 @@ real SDKs but nothing has run against an account — the #42 checkboxes
 (image upload contract, boot-config quirks, end-to-end first boot) are
 the next session's spike. The libvirt backend is a stub until it reaches
 create-nixos parity; lab VMs stay on `just create-nixos`. `fort
-scaffold` renders the host nix file today; the identity steps (host key
-→ age → sops → wg peer → flux cluster-init) remain on the playbook
-until ported. `fort add` renders a chart's workload tree from the
+scaffold` renders the host's generated surface (nix host dir in the lab
+or cloud shape, the flux cluster dir, the apps root kustomization; the
+flake discovers the image variant from the host dir's runtime import);
+the identity steps (host key → age → sops → wg peer → deploy key →
+canary) are `provisioning/preseed-identity.sh` until it becomes a verb. `fort add` renders a chart's workload tree from the
 contract the chart ships and `fort seed` produces the Secrets
 (CONTRACTS.md — status section there). `fort dismantle` is the repo half
 of decommissioning (#217); the pulumi/deploy-key half is still the manual

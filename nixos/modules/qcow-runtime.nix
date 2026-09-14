@@ -25,7 +25,8 @@
 { lib, modulesPath, ... }:
 
 {
-  imports = [ "${toString modulesPath}/profiles/qemu-guest.nix" ];
+  imports = [ ./platform.nix "${toString modulesPath}/profiles/qemu-guest.nix" ];
+  sfi.platform = "qemu";
 
   fileSystems."/" = {
     device = lib.mkDefault "/dev/disk/by-label/nixos";

@@ -8,7 +8,7 @@ Two steps, the reviewed merge between them (#217):
    both sops rule blocks and the shared-infrastructure recipient line(s)
    (then `sops updatekeys` on the files that lost it — the retired key
    keeps decrypting until that runs), the wireguard peer, the fleet
-   trees, the flake's `cloudHosts` entry; prints the **residue** (every
+   trees (the flake auto-discovers host dirs, so nothing there); prints the **residue** (every
    remaining mention, for the reviewer to triage in the same PR — #167
    kept incident comments as provenance on purpose) and any cross-fort
    sops refs into the host. Touches no pulumi state. Stage, triage,

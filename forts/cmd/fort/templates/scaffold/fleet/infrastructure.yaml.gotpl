@@ -1,0 +1,54 @@
+# Two-layer infrastructure, flux-standard split: controllers first (CRDs +
+# helm releases), then configs (CRs whose kinds those controllers define —
+# ClusterIssuer, GatewayClass). The configs Kustomization keeps the
+# pre-split name "infrastructure" so the live object is never deleted and
+# apps' dependsOn still holds.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infra-controllers
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./fleet/infrastructure/controllers
+  prune: true
+  wait: true
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  dependsOn:
+    - name: infra-controllers
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./fleet/infrastructure/configs
+  prune: true
+  wait: true
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars

@@ -1,18 +1,23 @@
 package main
 
 import (
-	_ "embed"
+	"bytes"
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
 )
 
-//go:embed templates/host-default.nix.gotpl
-var hostTemplate string
+//go:embed templates/scaffold
+var scaffoldTemplates embed.FS
 
+// hostView is the template context for one host's generated files —
+// inventory facts plus the create-nixos defaults, so the two generators
+// agree while they coexist.
 type hostView struct {
 	Hostname     string
 	IP           string
@@ -25,15 +30,44 @@ type hostView struct {
 	LanDNS       []string
 	StateVersion string
 	ClusterInit  bool
+	// Cloud hosts (inventory `provider`): the linode-runtime shape —
+	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
+	Cloud        bool
+	Provider     string
+	Region       string
+	InstanceType string
 }
 
+// scaffoldFile is one rendered file: repo-relative path + content.
+type scaffoldFile struct {
+	path    string
+	content []byte
+	note    string
+}
+
+// scaffold renders a host's generated surface from its inventory entry:
+// the nix host dir (default.nix in the lab or cloud shape, secrets.nix)
+// and, for a flux cluster, fleet/clusters/<host>/ + the apps root
+// kustomization — the same files create-nixos's cluster-init lays down
+// for lab VMs (its force:no templates then find them present). Pure
+// generator with force-no semantics per file: inventory seeds the host
+// once, hand refinements live in the files and are never clobbered; a
+// re-run fills gaps only. The identity half (keys, sops rules, deploy
+// key, canary) is preseed-identity.sh, run after this.
 func scaffold(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("scaffold needs a host name")
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("usage: fort scaffold <host> [--write]")
 	}
 	host := args[0]
-	write := len(args) > 1 && args[1] == "--write"
-
+	write := false
+	for _, a := range args[1:] {
+		switch a {
+		case "--write":
+			write = true
+		default:
+			return fmt.Errorf("usage: fort scaffold <host> [--write]")
+		}
+	}
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -42,9 +76,57 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
+	files, err := renderScaffold(host, entry)
+	if err != nil {
+		return err
+	}
 
-	// Defaults per create-nixos.yaml's default_vm_spec, so the two
-	// generators agree while they coexist.
+	fmt.Printf("%s   (%s)\n", host, scaffoldShape(entry))
+	written := 0
+	for _, f := range files {
+		mark, status := '●', f.note
+		if exists(root, f.path) {
+			mark, status = '○', "exists — kept (scaffolding never overwrites)"
+		} else if write {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.path)), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(root, f.path), f.content, 0o644); err != nil {
+				return err
+			}
+			written++
+		}
+		fmt.Printf("%c %-44s %s\n", mark, f.path, status)
+	}
+	if !write {
+		fmt.Println("\ndry run — nothing written (scaffold --write).")
+		return nil
+	}
+	fmt.Printf("\n%d file(s) written. next: ./provisioning/preseed-identity.sh %s (keys, sops rules, deploy key, canary),\n", written, host)
+	if entry.Provider != "" {
+		fmt.Printf("then PR → merge → nix build ./nixos#%s-linode → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
+	} else {
+		fmt.Printf("then PR → merge → just create-nixos %s\n", host)
+	}
+	return nil
+}
+
+func scaffoldShape(e inventory.Host) string {
+	s := "lab VM"
+	if e.Provider != "" {
+		s = e.Provider + " " + e.Region + " " + e.InstanceType
+	}
+	if e.FluxCluster {
+		s += ", flux cluster"
+	}
+	if e.Production {
+		s += ", production profile"
+	}
+	return s
+}
+
+// renderScaffold is the pure half: inventory entry → files.
+func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 	view := hostView{
 		Hostname:     host,
 		IP:           entry.AnsibleHost,
@@ -57,6 +139,10 @@ func scaffold(args []string) error {
 		LanDNS:       []string{"10.0.0.2", "8.8.8.8"},
 		StateVersion: "25.11",
 		ClusterInit:  true,
+		Cloud:        entry.Provider != "",
+		Provider:     entry.Provider,
+		Region:       entry.Region,
+		InstanceType: entry.InstanceType,
 	}
 	if entry.LanPrefix != nil {
 		view.LanPrefix = *entry.LanPrefix
@@ -73,36 +159,52 @@ func scaffold(args []string) error {
 	if entry.ClusterInit != nil {
 		view.ClusterInit = *entry.ClusterInit
 	}
+	if view.FluxCluster && !view.HasWg {
+		// cluster-vars.yaml's MESH_IP is mandatory (#99): every flux
+		// cluster is a mesh member — a production host without wg_vpn_ip
+		// has no login path at all.
+		return nil, fmt.Errorf("%s: flux_cluster without wg_vpn_ip — every flux cluster is a mesh member", host)
+	}
 
-	tpl, err := template.New("host").Parse(hostTemplate)
+	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/*.gotpl", "templates/scaffold/fleet/*.gotpl")
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	if !write {
-		return tpl.Execute(os.Stdout, view)
+	render := func(name string) ([]byte, error) {
+		var b bytes.Buffer
+		err := tpl.ExecuteTemplate(&b, name, view)
+		return b.Bytes(), err
 	}
-
-	dest := filepath.Join(root, "nixos/hosts", host, "default.nix")
-	if _, err := os.Stat(dest); err == nil {
-		// create-nixos's force:no semantics: inventory seeds the host
-		// once; hand refinements live in the file and are never clobbered.
-		return fmt.Errorf("%s exists — scaffolding never overwrites (edit in place, or remove the file first)", dest)
+	hostTpl, hostNote := "host-default.nix.gotpl", "lab VM shape (qcow runtime, static LAN)"
+	if view.Cloud {
+		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, split DNS over the mesh, zram)"
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
+	hostDir := filepath.Join("nixos/hosts", host)
+	plan := []struct{ path, tpl, note string }{
+		{filepath.Join(hostDir, "default.nix"), hostTpl, hostNote},
+		{filepath.Join(hostDir, "secrets.nix"), "secrets.nix.gotpl", "sops-nix wiring (host key → age)"},
 	}
-	f, err := os.Create(dest)
-	if err != nil {
-		return err
+	if view.FluxCluster {
+		clusters := filepath.Join("fleet/clusters", host)
+		plan = append(plan,
+			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path fleet/clusters/" + host},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.WgVpnIP},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
+			struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until preseed)"},
+		)
 	}
-	defer f.Close()
-	if err := tpl.Execute(f, view); err != nil {
-		return err
+	var out []scaffoldFile
+	for _, p := range plan {
+		b, err := render(p.tpl)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", p.tpl, err)
+		}
+		out = append(out, scaffoldFile{p.path, b, p.note})
 	}
-	fmt.Printf("wrote %s\n", dest)
-	fmt.Println("NOT yet ported from create-nixos (run it for these): host key, age recipient, sops rule + secrets, wg peer, flux cluster-init")
-	return nil
+	return out, nil
 }
 
 func repoRoot() (string, error) {

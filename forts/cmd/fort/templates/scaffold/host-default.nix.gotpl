@@ -5,9 +5,10 @@
 # inventory seeds the host, you refine it here.
 #
 # Built as a qcow2 via the upstream image framework (#95) — the flake auto-
-# discovers this dir and exposes it as `{{ .Hostname }}-qcow`. The root
-# filesystem and bootloader come from qcow-runtime.nix + the qemu image
-# variant, so there is no hand-written hardware.nix.
+# discovers this dir and exposes it as `{{ .Hostname }}-qcow` (the
+# qcow-runtime import below says which variant). The root filesystem and
+# bootloader come from qcow-runtime.nix + the qemu image variant, so there
+# is no hand-written hardware.nix.
 {{ if .Production -}}
 # PRODUCTION PROFILE (production: true in inventory): SSH answers on the
 # wireguard mesh address ONLY — reach it as `deployer@{{ .WgVpnIP }}`,
@@ -16,12 +17,14 @@
 {{- else -}}
 # Reachable as `steven` over SSH (keys from modules/interactive.nix).
 {{- end }}
-{ modulesPath, ... }:
+{ ... }:
 
 {
   imports = [
-    # virtio drivers for the KVM guest; harmless if the format already adds them.
-    (modulesPath + "/profiles/qemu-guest.nix")
+    # qcow VM runtime contract (virtio guest profile, root-by-label, grub on
+    # /dev/vda, serial console) — declares sfi.platform = "qemu", which is
+    # how the flake knows to build `{{ .Hostname }}-qcow`.
+    ../../modules/qcow-runtime.nix
     # Role modules — the host dir is self-describing so the flake stays uniform
     # and needs no per-host edit when a new host is added via inventory.
     ./secrets.nix

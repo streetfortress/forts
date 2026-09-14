@@ -8,8 +8,7 @@ import (
 )
 
 // Replays dismantle on a copy of the real tree's relevant files for the
-// drill fort (lab: no cloudHosts entry) and the production fort (cloud:
-// cloudHosts entry) with a fake sops tool, and checks that exactly the
+// drill fort (lab) and the production fort (cloud) with a fake sops tool, and checks that exactly the
 // generated surface goes and everything else survives.
 func TestDismantle(t *testing.T) {
 	repo, err := repoRootFrom(mustGetwd(t))
@@ -26,7 +25,7 @@ func TestDismantle(t *testing.T) {
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			tmp := t.TempDir()
-			for _, rel := range []string{"provisioning/inventory.yaml", ".sops.yaml", "nixos/.sops.yaml", "nixos/flake.nix", "wireguard/peers.json", "README.md",
+			for _, rel := range []string{"provisioning/inventory.yaml", ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json", "README.md",
 				"nixos/secrets/" + tc.host + ".yaml", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
@@ -87,13 +86,6 @@ func TestDismantle(t *testing.T) {
 			if strings.Contains(peers, `"`+tc.host+`"`) || !strings.Contains(peers, `"luxor"`) {
 				t.Errorf("peers.json wrong:\n%s", peers[:200])
 			}
-			flake := readFile(t, filepath.Join(tmp, "nixos/flake.nix"))
-			if strings.Contains(flake, `"`+tc.host+`"`) {
-				t.Errorf("flake still lists %s", tc.host)
-			}
-			if !strings.Contains(flake, "cloudHosts = [") {
-				t.Errorf("flake cloudHosts list damaged")
-			}
 			if len(tool.rekeyed) != 1 || !strings.HasSuffix(tool.rekeyed[0], "alertmanager-edge-config.sops.yaml") {
 				t.Errorf("updatekeys: %v", tool.rekeyed)
 			}
@@ -110,12 +102,6 @@ func TestDismantle(t *testing.T) {
 			if !strings.Contains(rep, want) {
 				t.Errorf("recipient count: want %q in\n%s", want, rep)
 			}
-			if tc.cloud && !strings.Contains(rep, "cloudHosts") {
-				t.Errorf("cloud host: flake edit missing:\n%s", rep)
-			}
-			if !tc.cloud && strings.Contains(rep, "cloudHosts") {
-				t.Errorf("lab host: unexpected flake edit:\n%s", rep)
-			}
 		})
 	}
 }
@@ -128,13 +114,6 @@ func TestDismantleEdits(t *testing.T) {
 	}
 	if _, err := removeInventoryBlock(inv, "zzz"); err == nil {
 		t.Error("missing host should error")
-	}
-	flake := `      cloudHosts = [ "a" "b" ];`
-	if out, _ := removeFromCloudHosts(flake, "a"); out != `      cloudHosts = [ "b" ];` {
-		t.Errorf("cloudHosts: %s", out)
-	}
-	if out, _ := removeFromCloudHosts(`cloudHosts = [ "a" ];`, "a"); out != `cloudHosts = [ ];` {
-		t.Errorf("cloudHosts last: %s", out)
 	}
 	if _, err := removeMarkerBlock("x\n", "h"); err == nil {
 		t.Error("missing block should error")

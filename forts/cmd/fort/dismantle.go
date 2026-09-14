@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -119,14 +118,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 	}
 
-	// 5. flake cloudHosts (hand-maintained list; a deleted host dir
-	// without this edit breaks flake eval)
-	flake, _ := os.ReadFile(filepath.Join(root, "nixos/flake.nix"))
-	if strings.Contains(string(flake), `"`+host+`"`) {
-		p.edits = append(p.edits, dEdit{"nixos/flake.nix", "- \"" + host + "\" from cloudHosts", func(s string) (string, error) { return removeFromCloudHosts(s, host) }})
-	}
-
-	// 6. residue: everything else that still names the host — counted
+	// 5. residue: everything else that still names the host — counted
 	// on the post-edit text for the files this plan edits, so a dry run
 	// shows what the reviewer will actually face.
 	edited := map[string]string{}
@@ -302,31 +294,6 @@ func removePeer(text, host string) (string, error) {
 		return "", fmt.Errorf("no peer %q", host)
 	}
 	return string(out), nil
-}
-
-var cloudHostsRe = regexp.MustCompile(`(cloudHosts\s*=\s*\[)([^\]]*)(\])`)
-
-func removeFromCloudHosts(text, host string) (string, error) {
-	m := cloudHostsRe.FindStringSubmatchIndex(text)
-	if m == nil {
-		return "", fmt.Errorf("no cloudHosts list")
-	}
-	inner := text[m[4]:m[5]]
-	fields := strings.Fields(inner)
-	var kept []string
-	for _, f := range fields {
-		if f != `"`+host+`"` {
-			kept = append(kept, f)
-		}
-	}
-	if len(kept) == len(fields) {
-		return "", fmt.Errorf("%q not in cloudHosts", host)
-	}
-	repl := " " + strings.Join(kept, " ") + " "
-	if len(kept) == 0 {
-		repl = " "
-	}
-	return text[:m[4]] + repl + text[m[5]:], nil
 }
 
 // --- residue

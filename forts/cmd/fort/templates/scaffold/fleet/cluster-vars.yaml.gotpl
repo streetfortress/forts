@@ -1,0 +1,13 @@
+# Per-cluster identity for the shared fleet/infrastructure layer (#99).
+# Applied by the flux-system root sync (this dir is the FluxInstance sync
+# path) and referenced via postBuild.substituteFrom on the infra-controllers,
+# infrastructure and apps Kustomizations. MESH_IP must stay in sync with
+# wireguard/peers.json.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-vars
+  namespace: flux-system
+data:
+  CLUSTER_NAME: {{ .Hostname }}
+  MESH_IP: {{ .WgVpnIP }}
