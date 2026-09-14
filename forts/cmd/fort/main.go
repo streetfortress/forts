@@ -131,7 +131,8 @@ func usage() {
       committed full-form secrets.contract.yaml where there is one, else
       the chart's own contract (pulled at the pinned tag) + the fort's
       overlay, resolved against the fort's providers by convention.
-      Dirs default to every contract/chart dir of the fort, in
+      A <dir> is the app's name (sites-db) or its repo-relative path;
+      dirs default to every contract/chart dir of the fort, in
       dependency order. Existing files are never rewritten: missing keys
       are added (sops set); --set KEY takes one value from stdin for an
       external key. Prints the ◆ plan; --write seeds. No value is ever

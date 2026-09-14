@@ -338,7 +338,7 @@ func TestSeedEdgeCases(t *testing.T) {
 
 	// an explicitly named dir with nothing to seed → error
 	write("gateway/kustomization.yaml", "resources: []\n")
-	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{filepath.Join("fleet/apps", fort, "gateway")}}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"gateway"}} // bare name = fleet/apps/<fort>/gateway
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "nothing to seed") {
 		t.Errorf("typo'd dir: want an error, got %v", err)
 	}
@@ -367,4 +367,20 @@ func yamlNode(t *testing.T, s string) *yaml.Node {
 		t.Fatal(err)
 	}
 	return doc.Content[0]
+}
+
+func TestAppDir(t *testing.T) {
+	apps := "fleet/apps/f"
+	for in, want := range map[string]string{
+		"sites-db":                  "fleet/apps/f/sites-db",
+		"sites-db/":                 "fleet/apps/f/sites-db",
+		"./sites-db":                "fleet/apps/f/sites-db",
+		"fleet/apps/f/sites-db":     "fleet/apps/f/sites-db",
+		"fleet/apps/f/sites-db/":    "fleet/apps/f/sites-db",
+		"fleet/apps/other/sites-db": "fleet/apps/other/sites-db", // caller's prefix check rejects it
+	} {
+		if got := appDir(apps, in); got != want {
+			t.Errorf("appDir(%q) = %q, want %q", in, got, want)
+		}
+	}
 }

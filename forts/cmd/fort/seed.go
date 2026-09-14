@@ -146,7 +146,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 	}
 	var plans []*seedPlan
 	for _, d := range dirs {
-		d = filepath.Clean(d)
+		d = appDir(apps, d)
 		if !strings.HasPrefix(d, apps+"/") {
 			return nil, fmt.Errorf("%s is not under %s", d, apps)
 		}
@@ -208,6 +208,17 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 		plans = append(plans, p)
 	}
 	return orderPlans(plans)
+}
+
+// appDir resolves a <dir> argument: a bare app name (`sites-db`, the
+// form CONTRACTS.md uses) lives under the fort's apps root; anything with
+// a slash is taken as repo-relative and must land there too.
+func appDir(apps, d string) string {
+	d = filepath.Clean(d)
+	if !strings.Contains(d, "/") {
+		return filepath.Join(apps, d)
+	}
+	return d
 }
 
 // effectiveContract returns the dir's full-form contract and where it
