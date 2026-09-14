@@ -73,6 +73,8 @@ fort add web3 oci://…/symbology \
                                     # its contract (CONTRACTS.md)
 fort seed web3 [--write]            # produce its sops Secrets (dependency
                                     # order derived) → PR
+fort check --all                    # the merge gate: Secrets vs contracts
+                                    # (CI runs it; no age key needed)
 ```
 
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's

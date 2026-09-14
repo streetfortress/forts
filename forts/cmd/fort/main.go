@@ -46,6 +46,8 @@ func main() {
 		err = add(os.Args[2:])
 	case "seed":
 		err = seed(os.Args[2:])
+	case "check":
+		err = check(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -98,6 +100,15 @@ func usage() {
       are added (sops set); --set KEY takes one value from stdin for an
       external key. Prints the ◆ plan; --write seeds. No value is ever
       printed.
+
+  check (<fort>... | --all) [--chart-dir path]
+      the merge gate: every app dir's committed Secret carries the keys
+      its effective contract requires (plaintext key names, no
+      decryption), every provider var resolves to a seeded file+key,
+      every required provider is present and its wire: values are set
+      in the HelmRelease. Charts are pulled at the pinned tag once per
+      run. Strict on every fort (all are production-hardened); exits
+      nonzero on any error; annotates for CI when GITEA_ACTIONS is set.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.`)

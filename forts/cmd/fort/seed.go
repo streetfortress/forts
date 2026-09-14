@@ -99,7 +99,10 @@ type seedOpts struct {
 	setKey, setValue     string
 	write                bool
 	tool                 secretsTool
+	charts               map[string]pulledChart // optional pull cache (fort check); nil = pull + discard per dir
 }
+
+type pulledChart struct{ dir, version string }
 
 type seedPlan struct {
 	dir    string // repo-relative
@@ -147,7 +150,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 		if !strings.HasPrefix(d, apps+"/") {
 			return nil, fmt.Errorf("%s is not under %s", d, apps)
 		}
-		ff, source, err := effectiveContract(o, d)
+		ff, _, source, err := effectiveContract(o, d)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d, err)
 		}
@@ -210,54 +213,63 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 // effectiveContract returns the dir's full-form contract and where it
 // came from: the committed full form, or the chart's contract merged
 // with the committed overlay. nil for dirs with neither.
-func effectiveContract(o seedOpts, dir string) (*FullForm, string, error) {
+func effectiveContract(o seedOpts, dir string) (*FullForm, *contract.Contract, string, error) {
 	var overlay []byte
 	if raw, err := os.ReadFile(filepath.Join(o.root, dir, contract.FileName)); err == nil {
 		if isFullForm(raw) {
 			ff, err := parseFullForm(raw)
-			return ff, contract.FileName + " (full form)", err
+			return ff, nil, contract.FileName + " (full form)", err
 		}
 		overlay = raw
 	}
 	pin, err := readChartPin(filepath.Join(o.root, dir, "repository.yaml"))
 	if err != nil || pin == nil {
 		if overlay != nil {
-			return nil, "", fmt.Errorf("an overlay needs a chart to overlay: no OCIRepository pin in repository.yaml")
+			return nil, nil, "", fmt.Errorf("an overlay needs a chart to overlay: no OCIRepository pin in repository.yaml")
 		}
-		return nil, "", nil
+		return nil, nil, "", nil
 	}
 	chartDir := o.chartDir
 	version := pin.version
 	if chartDir == "" {
-		d, v, err := resolveChart(o.root, pin.url, pin.version, pin.followPR)
-		if err != nil {
-			return nil, "", err
+		key := pin.url + "@" + pin.version + "@" + pin.followPR
+		if pc, ok := o.charts[key]; ok {
+			chartDir, version = pc.dir, pc.version
+		} else {
+			d, v, err := resolveChart(o.root, pin.url, pin.version, pin.followPR)
+			if err != nil {
+				return nil, nil, "", err
+			}
+			if o.charts != nil {
+				o.charts[key] = pulledChart{d, v}
+			} else {
+				defer os.RemoveAll(filepath.Dir(d))
+			}
+			chartDir, version = d, v
 		}
-		defer os.RemoveAll(filepath.Dir(d))
-		chartDir, version = d, v
 	}
 	c, err := contract.Load(chartDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if overlay != nil {
-				return nil, "", fmt.Errorf("chart %s ships no contract for the overlay to extend", pin.url)
+				return nil, nil, "", fmt.Errorf("chart %s ships no contract for the overlay to extend", pin.url)
 			}
-			return nil, "", nil
+			return nil, nil, "", nil
 		}
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	app := filepath.Base(dir)
 	ov, err := parseOverlay(overlay)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	providers, err := providersForSeed(o.root, o.fort, app, c)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	vars, keys, _, err := fullFormFromChart(c, providers)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	ff := &FullForm{Sources: ov.Sources}
 	for _, v := range vars {
@@ -277,7 +289,7 @@ func effectiveContract(o seedOpts, dir string) (*FullForm, string, error) {
 		}
 	}
 	ff.Secrets = []SecretFile{{File: "secrets.sops.yaml", Name: app + "-env", Namespace: app, Keys: keys}}
-	return ff, fmt.Sprintf("chart contract (%s %s)%s", pin.url, version, map[bool]string{true: " + overlay", false: ""}[overlay != nil]), nil
+	return ff, c, fmt.Sprintf("chart contract (%s %s)%s", pin.url, version, map[bool]string{true: " + overlay", false: ""}[overlay != nil]), nil
 }
 
 // overlay is the fort-side file when it is not the full form: the same

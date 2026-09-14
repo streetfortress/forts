@@ -244,23 +244,29 @@ its description. Nothing secret is printed.
 
 ## The gate is the product
 
-`ci/fleet-checks.py` grows one check per app whose pinned chart ships a
-contract. Because the repo's sops rules encrypt only `data`/`stringData`
-*values*, the key names of every committed Secret are plaintext — CI can
-verify the wiring without any age key:
+`fort check --all` runs in CI (`checks.yaml`, after the Go tests) and
+locally. For every app dir of every flux fort it resolves the effective
+contract — the committed full form, or the chart's contract pulled at
+the pinned tag (once per run) merged with the overlay — and, because the
+repo's sops rules encrypt only `data`/`stringData` *values*, verifies the
+wiring from plaintext key names without any age key:
 
-1. `helm pull` the chart at the tag the app's OCIRepository pins (the
-   `ubuntu-deploy` runner already has helm and sops; it needs the
-   step-ca root and reaches gitea over the mesh; cache by tag). Merge
-   the overlay if present.
-2. The Secret's `stringData` key set ⊇ the contract's non-optional keys.
-   Missing non-optional keys **fail** on `production: true` forts and
-   warn elsewhere. Extra keys warn (the #180 superset pattern during a
-   migration) — never fail.
-3. Every non-optional `requires` instance resolves to a provider dir in
-   the tree (or an overlay `provider`), and its `wire` values paths are
-   set in the HelmRelease.
-4. Secret-typed outputs never appear in values.
+1. Every Secret file the contract describes exists (else: not seeded)
+   and its key set ⊇ the contract's non-external keys — missing ones
+   **fail** ("fort seed adds them").
+2. Required `external` keys unset **fail** ("fort seed --set KEY");
+   optional ones warn. Extra keys warn (the #180 superset pattern during
+   a migration) — never fail.
+3. Every `sops:` ref (provider vars, cross-fort sources) points at a
+   committed file that carries the key.
+4. Every non-optional `requires` instance has its provider dir on the
+   fort and its `wire` values paths set in the HelmRelease.
+
+**Strict on every fort.** All four flux forts are `production: true` —
+the flag is the hardened host profile, not "serves users" — so there is
+no lenient tier: the rehearsal forts are held to the production bar,
+and test values go in with `--set`. A separate tier field could relax
+this later if a throwaway fort ever needs it.
 
 The payoff: a Renovate chart bump whose new contract adds a required key
 goes **red until seeded**, which is exactly the misconfiguration this
@@ -268,10 +274,8 @@ design wants blocked from merge. Charts without a contract pass
 unchanged (the gate is opt-in by shipping the file), so the fleet's
 third-party charts are unaffected.
 
-`fort status <fort>` derives the same facts locally (apps, providers,
-tenants, missing keys, chart-vs-contract drift); `fort status --all`
-is where fleet invariants live ("every production fort has a dead-man
-rule", #217; "every production Secret is complete").
+`fort status` is a different verb: the fleet readout (forts, online,
+location, DNS/IP, NixOS and flux revisions) — designed separately.
 
 Acceptance test for the generator itself: `fort add --dry-run` against
 the charts already deployed on sfi-prod must reproduce the committed
@@ -571,9 +575,11 @@ Tests use a fake sops; the fleet-parity test checks every committed
 contract against its Secret's plaintext key names. The python seeder is
 superseded and stays only until the next fort is seeded with the Go one.
 
-Not yet, in the order below: the CI gate, `fort status`, `fort rotate`,
-s3, remote providers, overlay `provider` overrides (placement is by
-convention).
+`fort check` is the gate above, in CI as of this step.
+
+Not yet, in the order below: `fort status` (the fleet readout), `fort
+rotate`, s3, remote providers, overlay `provider` overrides (placement
+is by convention), the `capabilities` list.
 
 ## Sequencing (one PR each, in this order)
 
@@ -587,9 +593,11 @@ convention).
    the effective contract (chart pull + overlay), `sops set` mode for
    existing files (add missing keys, `--set KEY`)~~. The python seeder
    is deleted once a real fort has been seeded by the Go one.
-5. **CI gate**: contract ↔ Secret key names ↔ `wire` values; missing
-   required keys fail production.
-6. **`fort status`** (local derivation; `--all` invariants).
+5. ~~**CI gate**: `fort check --all` — contract ↔ Secret key names ↔
+   `wire` values; missing required keys fail~~.
+6. **`fort status`**: the fleet readout (forts, online, location,
+   DNS/IP, NixOS + flux revisions); fleet invariants ("every fort has a
+   dead-man rule") may ride along.
 7. **`fort rotate`** (+ the break-glass roll in its report).
 8. **s3**: bucket + the per-app credential decision.
 9. **Remote providers** (`provider.fort`): mesh exposure of `-rw`
