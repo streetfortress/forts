@@ -330,7 +330,7 @@ func checkWires(root, fort, dir string, c *contract.Contract) []finding {
 	apps := filepath.Join("fleet/apps", fort)
 	values := releaseValues(filepath.Join(root, dir, "release.yaml"))
 	for _, r := range c.Instances() {
-		providerDir := map[string]string{"postgres": "sites-db", "valkey": "valkey", "s3": "rustfs"}[r.Type]
+		providerDir := providerDirs[r.Type]
 		if !exists(root, filepath.Join(apps, providerDir)) {
 			if !r.Instance.Optional {
 				out = append(out, finding{"error", dir, fmt.Sprintf("requires.%s.%s: no %s/ on %s (fort add renders it)", r.Type, r.Handle, providerDir, fort)})

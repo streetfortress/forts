@@ -60,7 +60,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 		"gateway/kustomization.yaml", "gateway/gateway.yaml", "gateway/redirect-https.yaml",
 		"gateway/cluster-issuer-step-ca.yaml", "gateway/certificate-symbology.yaml", "gateway/listener-symbology.yaml",
 		"valkey/kustomization.yaml", "valkey/namespace.yaml", "valkey/repository.yaml", "valkey/release.yaml",
-		"valkey/acl-symbology.yaml", "valkey/secrets.contract.yaml",
+		"valkey/acl-symbology.yaml", "valkey/secrets.contract.yaml", "valkey/monitoring.yaml",
 		"symbology/kustomization.yaml", "symbology/namespace.yaml", "symbology/route.yaml",
 		"symbology/monitoring.yaml", "symbology/step-ca-root.pem",
 	}

@@ -66,6 +66,7 @@ fleet/apps/sfi-x/   (chart 0.1.9)
 ● valkey/
   ● acl-symbology.yaml           JSON6902 add /spec/values/auth/aclUsers/symbology
   ● kustomization.yaml           patches: acl-symbology.yaml
+  ● monitoring.yaml              PodMonitor + ValkeyDown (cache duty: no eviction alert)
   ● namespace.yaml
   ● release.yaml
   ● repository.yaml

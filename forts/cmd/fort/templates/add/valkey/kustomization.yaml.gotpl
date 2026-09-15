@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - repository.yaml
   - release.yaml
+  - monitoring.yaml
   # Secret valkey-users (key per ACL user: default + {{ .App }}), seeded
   # from secrets.contract.yaml; listed-but-absent = the pre-merge
   # kustomize guard.

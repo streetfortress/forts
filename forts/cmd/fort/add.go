@@ -333,6 +333,7 @@ func planAdd(o addOpts) (*plan, error) {
 				for _, f := range []string{"namespace.yaml", "repository.yaml", "release.yaml"} {
 					p.add(action{path: filepath.Join(vkDir, f), mark: '●', content: static("valkey/" + f)})
 				}
+				p.add(action{path: filepath.Join(vkDir, "monitoring.yaml"), mark: '●', note: "PodMonitor + ValkeyDown (cache duty: no eviction alert)", content: static("valkey/monitoring.yaml")})
 				p.add(action{path: filepath.Join(vkDir, "kustomization.yaml"), mark: '●', note: "patches: acl-" + app + ".yaml", content: render("valkey/kustomization.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "secrets.contract.yaml"), mark: '●', note: "valkey-users: default + " + app, content: render("valkey/secrets.contract.yaml.gotpl")})
