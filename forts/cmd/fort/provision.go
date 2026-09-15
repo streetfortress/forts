@@ -48,8 +48,20 @@ func provision(args []string) error {
 	pulumiDir := filepath.Join(root, "forts", "pulumi")
 	ctx := context.Background()
 
+	initNeeded, err := stackGate(pulumiDir, host, *imagePath != "")
+	if err != nil {
+		return err
+	}
 	if err := cloudEnv(root, entry.Provider); err != nil {
 		return err
+	}
+	if initNeeded {
+		// Birth: the stack is created here, not by hand — its config
+		// file (Pulumi.<host>.yaml, the encryption salt) and the
+		// checkpoint are what the state PR carries.
+		if err := initStack(pulumiDir, host); err != nil {
+			return err
+		}
 	}
 
 	var flow imageFlow
@@ -78,6 +90,9 @@ func provision(args []string) error {
 		}
 		return err
 	}
+	// The apply verbs stage the file backend: the checkpoint (and, at
+	// birth, Pulumi.<host>.yaml) is the state PR.
+	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()
 
 	if flow != nil {
 		// `pulumi up` exits 0 when the preview is declined, so gate
@@ -94,6 +109,34 @@ func provision(args []string) error {
 		fmt.Printf("single-use image %s released (provider-side where applicable, and local)\n", imageID)
 	}
 	return nil
+}
+
+// hasStack reports whether the file backend holds a checkpoint for host —
+// the same test adopt and destroy make.
+func hasStack(pulumiDir, host string) bool {
+	return exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json"))
+}
+
+// stackGate decides, before anything touches the provider, whether
+// provision creates the host's stack. A birth (--image) creates it when
+// absent, so `pulumi stack init` is no longer a by-hand step (#250
+// finding 15). A day-2 apply on a host with no stack refuses: that is a
+// typo or a host not yet born, and an empty stack would put a host that
+// never was on `preview --all`.
+func stackGate(pulumiDir, host string, birth bool) (initNeeded bool, err error) {
+	if hasStack(pulumiDir, host) {
+		return false, nil
+	}
+	if !birth {
+		return false, fmt.Errorf("host %q has no stack — a birth needs --image (fort image %s, then fort provision %s --image …)", host, host, host)
+	}
+	return true, nil
+}
+
+// initStack is the one `pulumi stack init` — passphrase secrets provider,
+// the passphrase itself sops-managed (cloudEnv). Shared with adopt.
+func initStack(pulumiDir, host string) error {
+	return runPulumi(pulumiDir, "stack", "init", host, "--secrets-provider", "passphrase", "--non-interactive")
 }
 
 // runPulumi execs the stock CLI with inherited stdio in forts/pulumi —

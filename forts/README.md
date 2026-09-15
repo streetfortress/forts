@@ -103,11 +103,10 @@ after creation for exactly this reason — a different shape is a repave.
 `fort destroy` for a lab host is the same `pulumi destroy` as for a
 cloud one.
 
-## One-time setup
+## Setup
 
-```
-PULUMI_CONFIG_PASSPHRASE=... pulumi stack init web3 --secrets-provider passphrase
-```
+None per host: `fort provision <host> --image …` creates the stack at
+birth (`fort adopt` at adoption), and `fort destroy` removes it.
 
 `fort` commands pin `PULUMI_BACKEND_URL` to this checkout's
 `forts/pulumi/state`, so no `pulumi login` is needed for them — and a

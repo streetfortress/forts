@@ -119,12 +119,14 @@ func usage() {
 
   provision <host> [--image <path>]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
-      the preview). With --image, first stage the injected single-use
-      bootstrap image and record it as the stack's forts:imageId — linode:
-      upload the .img.gz; libvirt: grow the .qcow2 to disk_size, the
-      program streams it into the pool as the root disk — and once the
-      host exists, release it (provider-side where applicable, and the
-      local copy) (#42).
+      the preview). With --image, the birth: create the stack if the host
+      has none, stage the injected single-use bootstrap image and record
+      it as the stack's forts:imageId — linode: upload the .img.gz;
+      libvirt: grow the .qcow2 to disk_size, the program streams it into
+      the pool as the root disk — and once the host exists, release it
+      (provider-side where applicable, and the local copy) (#42). Without
+      --image a host with no stack is refused. The state (and at birth
+      Pulumi.<host>.yaml) is staged for its own PR.
 
   adopt <host>
       bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a repave: rescan the pool, import the

@@ -25,6 +25,11 @@ only the durable surface (instance, disks, boot config, firewall, DNS;
 or volume + domain in the lab). `--image` runs the birth flow around the
 apply:
 
+0. **The stack.** A host with no checkpoint under
+   `forts/pulumi/state/` gets `pulumi stack init` (passphrase secrets
+   provider); its `Pulumi.<host>.yaml` is born here. Only a birth
+   creates a stack: without `--image` a stackless host is refused, so a
+   typo can never put an empty stack on `preview --all`.
 1. **Stage.** linode: upload the `.img.gz` through the Images API and
    wait until it is usable. libvirt: `qemu-img resize` the `.qcow2` to
    the manifest's `[shape] disk` (the provider refuses `size` next to
@@ -44,8 +49,8 @@ If the apply fails, the image stays where it was and the message says
 so: rerun **without** `--image` (the id is already set). Without
 `--image`, `provision` is the plain day-2 apply.
 
-After a birth, stage lands in `forts/pulumi` (state, `Pulumi.<host>.yaml`);
-commit it as its own PR. The instance is protected (`protect: true` on
+After any apply, `forts/pulumi` is staged (state; at birth also
+`Pulumi.<host>.yaml`); commit it as its own PR. The instance is protected (`protect: true` on
 every fort) from that point until [`destroy`](destroy.md).
 
 ## Building the image

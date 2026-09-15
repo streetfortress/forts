@@ -39,7 +39,7 @@ func adopt(args []string) error {
 		return fmt.Errorf("host %q: adopt is for lab VMs the playbook raised — the manifest needs a [libvirt] table (got [%s])", host, entry.Provider)
 	}
 	pulumiDir := filepath.Join(root, "forts", "pulumi")
-	if exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json")) {
+	if hasStack(pulumiDir, host) {
 		return fmt.Errorf("host %q already has a stack — nothing to adopt", host)
 	}
 	if err := cloudEnv(root, entry.Provider); err != nil {
@@ -69,7 +69,7 @@ func adopt(args []string) error {
 	}
 	fmt.Printf("%s   domain %s, volume %s\n", host, uuid, key)
 
-	if err := runPulumi(pulumiDir, "stack", "init", host, "--secrets-provider", "passphrase", "--non-interactive"); err != nil {
+	if err := initStack(pulumiDir, host); err != nil {
 		return err
 	}
 	if err := runPulumi(pulumiDir, "config", "set", "imageId", "adopted-"+time.Now().UTC().Format("2006-01-02"), "--stack", host); err != nil {
