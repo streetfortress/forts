@@ -19,7 +19,8 @@ import (
 // under the repo's encrypted_regex, so no age key is involved; the
 // chart's contract is pulled at the pinned tag once per run. A Renovate
 // chart bump whose new contract adds a required key therefore goes red
-// here until seeded.
+// here until seeded. The fleet half (fleet.go) runs first: tree ↔
+// manifests, every flux layer builds, strict envsubst is satisfiable.
 //
 // Strict on every fort: every fort is the hardened host profile (that is
 // what a fort is, not "serves users"), so there is no lenient tier to
@@ -63,21 +64,36 @@ func check(args []string) error {
 			os.RemoveAll(filepath.Dir(pc.dir))
 		}
 	}()
+	// kustomize is exec'd like sops/helm/pulumi; CI installs it, a dev
+	// host without one gets nixpkgs' copy on PATH.
+	if err := ensureTool("kustomize", "nixpkgs#kustomize"); err != nil {
+		return err
+	}
 	errors := 0
 	if *all {
 		errors += reportFindings(os.Stdout, manifest.Dir, manifestFindings(problems), o.annotate)
 	}
+	known := map[string]bool{}
+	for _, f := range forts {
+		known[f] = true
+	}
+	shared := checkFleetShared(root, known, *all)
+	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {
-		findings, err := checkFort(o, fort)
-		if err != nil {
-			return err
+		findings := checkFleetFort(root, fort, shared)
+		if exists(root, filepath.Join("fleet/apps", fort)) {
+			cf, err := checkFort(o, fort)
+			if err != nil {
+				return err
+			}
+			findings = append(findings, cf...)
 		}
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
 	}
 	if errors > 0 {
 		return fmt.Errorf("%d error(s)", errors)
 	}
-	fmt.Println("all contracts satisfied")
+	fmt.Println("all checks passed")
 	return nil
 }
 

@@ -151,13 +151,19 @@ func usage() {
       printed.
 
   check (<fort>... | --all) [--chart-dir path]
-      the merge gate: every app dir's committed Secret carries the keys
-      its effective contract requires (plaintext key names, no
-      decryption), every provider var resolves to a seeded file+key,
-      every required provider is present and its wire: values are set
-      in the HelmRelease. Charts are pulled at the pinned tag once per
-      run. Strict on every fort (all are production-hardened); exits
-      nonzero on any error; annotates for CI when GITEA_ACTIONS is set.
+      the merge gate. Fleet: the fort's nix host dir, flux cluster dir
+      and apps tree exist; fleet/apps/<fort>, flux-system and the shared
+      infrastructure layers kustomize-build (a listed-but-unseeded sops
+      file fails it — the guard working); every ${VAR} they carry is a
+      cluster-vars key (flux's envsubst is strict). Contracts: every app
+      dir's committed Secret carries the keys its effective contract
+      requires (plaintext key names, no decryption), every provider var
+      resolves to a seeded file+key, every required provider is present
+      and its wire: values are set in the HelmRelease. Charts are pulled
+      at the pinned tag once per run. --all also validates every
+      manifest and warns on host dirs no manifest claims. Strict on
+      every fort; exits nonzero on any error; annotates for CI when
+      GITEA_ACTIONS is set.
 
   dismantle <host> [--write]
       the inverse of scaffold + mint, as a repo mutation

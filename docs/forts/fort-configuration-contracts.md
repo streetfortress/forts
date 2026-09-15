@@ -596,7 +596,7 @@ behind the publication milestone (#160).
 4. ~~**`fort seed`** (Go port of `provisioning/seed-secrets.py`): reads
    the effective contract (chart pull + overlay), `sops set` mode for
    existing files (add missing keys, `--set KEY`)~~. The python seeder
-   is deleted once a real fort has been seeded by the Go one.
+   was deleted in #275, once every fort had been seeded by the Go one.
 5. ~~**CI gate**: `fort check --all` — contract ↔ Secret key names ↔
    `wire` values; missing required keys fail~~.
 6. **Fleet invariants in `fort check --all`** ("every production fort

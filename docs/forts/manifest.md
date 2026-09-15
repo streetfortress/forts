@@ -93,7 +93,7 @@ second variant.
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
 | `destroy` | the gate: no manifest on `origin/main` and none in the working tree |
-| `ci/fleet-checks.py`, the nix-eval job | the list of hosts |
+| `check --all` (fleet half), the nix-eval job | the list of hosts |
 
 ## History
 

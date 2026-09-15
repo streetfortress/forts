@@ -35,9 +35,10 @@ Every fort change follows the same beat, and the reasons are the rules.
    It stages exactly what it generated. You refine in place — replicas,
    hostnames, the odd hand edit — and commit.
 2. **PR, review, merge.** Generated code is reviewed like any other. CI
-   runs `fort check --all` (secrets match contracts, every host names a
-   provider), the fleet kustomize build (a listed-but-unseeded Secret fails
-   it — that red X is the guard working), and `nix eval` of every host.
+   runs `fort check --all` (every manifest valid, the tree matches them,
+   every flux layer kustomize-builds — a listed-but-unseeded Secret fails
+   it, that red X is the guard working — strict envsubst satisfiable,
+   secrets match contracts) and `nix eval` of every host.
 3. **Apply from merged main.** `provision` and `destroy` run against what
    main says. `destroy` refuses outright unless the host's manifest is
    *absent* from `origin/main` — the merged dismantle PR is the deliberate

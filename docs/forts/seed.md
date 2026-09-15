@@ -72,8 +72,8 @@ carries the keys its effective contract requires (plaintext key names,
 no decryption — CI has no age key), every provider variable resolves to
 a seeded file and key, every required provider is present and its `wire:`
 values are set in the HelmRelease, and a chart bump that adds a required
-key goes red on every fort that pins it. Strict on every fort. Run it before the PR; the fleet
-kustomize check fails on a listed-but-absent Secret file, which is the
+key goes red on every fort that pins it. Strict on every fort. Run it before the PR; its
+kustomize build fails on a listed-but-absent Secret file, which is the
 same guard from the other side.
 
 ## Needs

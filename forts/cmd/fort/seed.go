@@ -20,7 +20,7 @@ import (
 )
 
 // seed produces a fort's sops-encrypted Secrets from contracts
-// (docs/forts/fort-configuration-contracts.md): the Go successor of provisioning/seed-secrets.py.
+// (docs/forts/fort-configuration-contracts.md): the Go successor of the retired provisioning/seed-secrets.py.
 // For each app dir the effective contract is the fort-side full form
 // when one is committed, else the chart's own contract (pulled at the
 // tag the dir's OCIRepository pins) merged with the fort-side overlay
