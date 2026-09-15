@@ -497,9 +497,9 @@ func sharedRecipients(config string) []string {
 	for _, l := range strings.Split(config, "\n") {
 		t := strings.TrimSpace(l)
 		switch {
-		case strings.HasPrefix(t, "# BEGIN ANSIBLE sops rule:"):
+		case strings.HasPrefix(t, "# BEGIN fort sops rule:"):
 			inBlock, cur = true, nil
-		case strings.HasPrefix(t, "# END ANSIBLE sops rule:"):
+		case strings.HasPrefix(t, "# END fort sops rule:"):
 			if inBlock {
 				blocks = append(blocks, cur)
 			}
@@ -556,11 +556,11 @@ func addHostRule(text, host string, recipients []string) (string, error) {
 		return "", fmt.Errorf("catch-all anchor `%s` not found once", strings.TrimSpace(anchor))
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "  # BEGIN ANSIBLE sops rule: %s\n  - path_regex: secrets/%s\\.yaml$\n    age:\n", host, host)
+	fmt.Fprintf(&b, "  # BEGIN fort sops rule: %s\n  - path_regex: secrets/%s\\.yaml$\n    age:\n", host, host)
 	for _, r := range recipients {
 		fmt.Fprintf(&b, "      - %s\n", r)
 	}
-	fmt.Fprintf(&b, "  # END ANSIBLE sops rule: %s\n", host)
+	fmt.Fprintf(&b, "  # END fort sops rule: %s\n", host)
 	return strings.Replace(text, anchor, b.String()+anchor, 1), nil
 }
 
@@ -572,14 +572,14 @@ func addFleetRule(text, host string, admins []string, clusterRecipient string) (
 	for i, l := range lines {
 		if strings.HasPrefix(l, anchor) {
 			var b []string
-			b = append(b, "  # BEGIN ANSIBLE sops rule: "+host,
+			b = append(b, "  # BEGIN fort sops rule: "+host,
 				fmt.Sprintf("  - path_regex: fleet/(clusters|apps)/%s/.*", host),
 				"    encrypted_regex: ^(data|stringData)$",
 				"    age:")
 			for _, a := range admins {
 				b = append(b, "      - "+a)
 			}
-			b = append(b, "      - "+clusterRecipient+" # "+host, "  # END ANSIBLE sops rule: "+host)
+			b = append(b, "      - "+clusterRecipient+" # "+host, "  # END fort sops rule: "+host)
 			out := append(append(append([]string{}, lines[:i]...), b...), lines[i:]...)
 			return strings.Join(out, "\n"), nil
 		}
@@ -588,9 +588,9 @@ func addFleetRule(text, host string, admins []string, clusterRecipient string) (
 }
 
 // addInfraRecipient adds the cluster's recipient line right under the
-// `# ANSIBLE-MANAGED: one recipient per cluster` marker.
+// `# fort-managed: one recipient per cluster` marker.
 func addInfraRecipient(text, line string) (string, error) {
-	anchor := "# ANSIBLE-MANAGED: one recipient per cluster"
+	anchor := "# fort-managed: one recipient per cluster"
 	lines := strings.Split(text, "\n")
 	for i, l := range lines {
 		if strings.Contains(l, anchor) {
@@ -614,7 +614,7 @@ func peerPublicKey(text, host string) (string, bool) {
 	return p.PublicKey, ok
 }
 
-// markerBlock returns the host's `# BEGIN … # END ANSIBLE sops rule:
+// markerBlock returns the host's `# BEGIN … # END fort sops rule:
 // <host>` block ("" when absent), matching the markers as whole trimmed
 // lines the way dismantle's removeMarkerBlock does — a substring match
 // would let `sfi-fort` find `sfi-fort-e33e2d5`'s block.
@@ -623,9 +623,9 @@ func markerBlock(text, host string) string {
 	begin := -1
 	for i, l := range lines {
 		switch strings.TrimSpace(l) {
-		case "# BEGIN ANSIBLE sops rule: " + host:
+		case "# BEGIN fort sops rule: " + host:
 			begin = i
-		case "# END ANSIBLE sops rule: " + host:
+		case "# END fort sops rule: " + host:
 			if begin >= 0 {
 				return strings.Join(lines[begin:i+1], "\n")
 			}

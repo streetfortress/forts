@@ -87,13 +87,13 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 			p.removes = append(p.removes, rel)
 		}
 	}
-	p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", "- BEGIN/END ANSIBLE sops rule: " + host, func(s string) (string, error) { return removeMarkerBlock(s, host) }})
+	p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", "- BEGIN/END fort sops rule: " + host, func(s string) (string, error) { return removeMarkerBlock(s, host) }})
 
 	// 3. fleet layer (flux_cluster hosts): rule block + shared recipient(s)
 	if entry.FluxCluster {
 		fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
 		recipients := strings.Count(string(fleetSops), "# cluster: "+host)
-		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END ANSIBLE sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared fleet/infrastructure rule", host, recipients, host), func(s string) (string, error) {
+		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared fleet/infrastructure rule", host, recipients, host), func(s string) (string, error) {
 			s, err := removeMarkerBlock(s, host)
 			if err != nil {
 				return "", err
@@ -224,21 +224,21 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 
 // --- edits
 
-// removeMarkerBlock deletes the `# BEGIN ANSIBLE sops rule: <host>` …
+// removeMarkerBlock deletes the `# BEGIN fort sops rule: <host>` …
 // `# END …` block fort mint (before it, preseed-identity / cluster-init) wrote (inclusive).
 func removeMarkerBlock(text, host string) (string, error) {
 	lines := strings.Split(text, "\n")
 	begin, end := -1, -1
 	for i, l := range lines {
 		switch strings.TrimSpace(l) {
-		case "# BEGIN ANSIBLE sops rule: " + host:
+		case "# BEGIN fort sops rule: " + host:
 			begin = i
-		case "# END ANSIBLE sops rule: " + host:
+		case "# END fort sops rule: " + host:
 			end = i
 		}
 	}
 	if begin < 0 || end < begin {
-		return "", fmt.Errorf("no `# BEGIN/END ANSIBLE sops rule: %s` block", host)
+		return "", fmt.Errorf("no `# BEGIN/END fort sops rule: %s` block", host)
 	}
 	return strings.Join(append(append([]string{}, lines[:begin]...), lines[end+1:]...), "\n"), nil
 }

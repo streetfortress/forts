@@ -268,8 +268,8 @@ func TestMintLabHost(t *testing.T) {
 }
 
 func TestSharedRecipients(t *testing.T) {
-	blockA := "  # BEGIN ANSIBLE sops rule: a\n  - path_regex: x\n    age:\n      - age1admin # admin\n      - age1ops\n      - age1hosta # a\n  # END ANSIBLE sops rule: a\n"
-	blockB := "  # BEGIN ANSIBLE sops rule: b\n  - path_regex: y\n    age:\n      - age1ops\n      - age1admin # admin\n      - age1hostb # b\n  # END ANSIBLE sops rule: b\n"
+	blockA := "  # BEGIN fort sops rule: a\n  - path_regex: x\n    age:\n      - age1admin # admin\n      - age1ops\n      - age1hosta # a\n  # END fort sops rule: a\n"
+	blockB := "  # BEGIN fort sops rule: b\n  - path_regex: y\n    age:\n      - age1ops\n      - age1admin # admin\n      - age1hostb # b\n  # END fort sops rule: b\n"
 	catchAll := "  - path_regex: .*\n    age:\n      - age1admin # admin\n      - age1fallback\n"
 	if got := strings.Join(sharedRecipients("creation_rules:\n"+blockA+blockB+catchAll), ","); got != "age1admin # admin,age1ops" {
 		t.Errorf("two blocks: %q", got)
@@ -284,11 +284,11 @@ func TestSharedRecipients(t *testing.T) {
 }
 
 func TestMarkerBlock(t *testing.T) {
-	cfg := "creation_rules:\n  # BEGIN ANSIBLE sops rule: sfi-fort-e33e2d5\n  - path_regex: x\n    age:\n      - age1other\n  # END ANSIBLE sops rule: sfi-fort-e33e2d5\n"
+	cfg := "creation_rules:\n  # BEGIN fort sops rule: sfi-fort-e33e2d5\n  - path_regex: x\n    age:\n      - age1other\n  # END fort sops rule: sfi-fort-e33e2d5\n"
 	if markerBlock(cfg, "sfi-fort") != "" {
 		t.Error("a host-name prefix matched another host's block")
 	}
-	if b := markerBlock(cfg, "sfi-fort-e33e2d5"); !strings.HasPrefix(b, "  # BEGIN") || !strings.HasSuffix(b, "# END ANSIBLE sops rule: sfi-fort-e33e2d5") {
+	if b := markerBlock(cfg, "sfi-fort-e33e2d5"); !strings.HasPrefix(b, "  # BEGIN") || !strings.HasSuffix(b, "# END fort sops rule: sfi-fort-e33e2d5") {
 		t.Errorf("block: %q", b)
 	}
 }
