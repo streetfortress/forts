@@ -30,7 +30,7 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
 - **No renames, ever.** Hostname keys peers.json, sops, the flux cluster
   dir, and flake auto-discovery — rename = decommission + provision.
   Deleting a manifest touches no state; destruction is only ever
-  `pulumi destroy -s <host>`, and every resource of a `production: true`
+  `pulumi destroy -s <host>`, and every resource of every
   host carries `protect: true` so even that requires deliberate
   unprotecting first.
 

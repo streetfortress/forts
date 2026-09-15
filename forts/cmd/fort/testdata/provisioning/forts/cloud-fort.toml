@@ -1,6 +1,4 @@
 # Test fixture: a cloud host (see lab-fort.toml).
-production = true
-flux_cluster = true
 mesh_ip = "10.1.0.98"
 
 [dns]

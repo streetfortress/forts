@@ -53,9 +53,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 	image := config.Require(ctx, "forts:imageId")
 
 	var opts []pulumi.ResourceOption
-	if host.Production {
-		opts = append(opts, pulumi.Protect(true))
-	}
+	opts = append(opts, pulumi.Protect(true))
 
 	vol, err := libvirt.NewVolume(ctx, name+"-disk", &libvirt.VolumeArgs{
 		Name:   pulumi.String(name + ".qcow2"),

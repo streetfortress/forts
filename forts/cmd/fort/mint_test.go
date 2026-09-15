@@ -60,7 +60,7 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write(manifest.Path(host), "production = true\nflux_cluster = true\nmesh_ip = \"10.1.0.97\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
@@ -226,103 +226,7 @@ func TestMint(t *testing.T) {
 	}
 }
 
-// A lab host that is not a flux cluster: host key, wg key, k3s token,
-// the nixos rule and the peer (endpoint = the lab address) — no cluster
-// key, no fleet rule, no canary, no gitea.
-func TestMintLabHost(t *testing.T) {
-	const host = "lab-plain"
-	tmp := t.TempDir()
-	write := func(rel, content string) {
-		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
-		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
-	}
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.77\"\n[libvirt]\nip = \"10.0.0.77\"\n")
-	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - age1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # admin\n")
-	write("wireguard/peers.json", "{\n  \"peers\": {}\n}\n")
-	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
-	tool := &fakeTool{}
-	p, err := planMint(tmp, host, tool, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(p.missing) != 4 || len(p.edits) != 2 || p.canaryPath != "" || len(p.rekey) != 0 || p.deployKey != "" {
-		t.Fatalf("plan: missing=%v edits=%d canary=%q rekey=%v deploy=%q", p.missing, len(p.edits), p.canaryPath, p.rekey, p.deployKey)
-	}
-	if err := p.apply(tool, nil); err != nil {
-		t.Fatal(err)
-	}
-	nixos := readFile(t, filepath.Join(tmp, "nixos/.sops.yaml"))
-	if !strings.Contains(nixos, "      - age1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # admin\n      - "+p.hostRecip+"\n") {
-		t.Errorf("fresh config: the catch-all's recipients + the host:\n%s", nixos)
-	}
-	if peers := readFile(t, filepath.Join(tmp, "wireguard/peers.json")); !strings.Contains(peers, `"wg_endpoint_ip": "10.0.0.77"`) {
-		t.Errorf("peer endpoint from the lab address:\n%s", peers)
-	}
-	var have map[string]string
-	if err := yamlUnmarshalFile(filepath.Join(tmp, "nixos/secrets", host+".yaml"), &have); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := have[keyAge]; ok || len(have) != 4 {
-		t.Errorf("lab host secrets: %v", keysOf(have))
-	}
-}
-
-func TestSharedRecipients(t *testing.T) {
-	blockA := "  # BEGIN fort sops rule: a\n  - path_regex: x\n    age:\n      - age1admin # admin\n      - age1ops\n      - age1hosta # a\n  # END fort sops rule: a\n"
-	blockB := "  # BEGIN fort sops rule: b\n  - path_regex: y\n    age:\n      - age1ops\n      - age1admin # admin\n      - age1hostb # b\n  # END fort sops rule: b\n"
-	catchAll := "  - path_regex: .*\n    age:\n      - age1admin # admin\n      - age1fallback\n"
-	if got := strings.Join(sharedRecipients("creation_rules:\n"+blockA+blockB+catchAll), ","); got != "age1admin # admin,age1ops" {
-		t.Errorf("two blocks: %q", got)
-	}
-	// one block: its host's own recipient must not become "shared" — the catch-all joins
-	if got := strings.Join(sharedRecipients("creation_rules:\n"+blockA+catchAll), ","); got != "age1admin # admin" {
-		t.Errorf("one block: %q", got)
-	}
-	if got := strings.Join(sharedRecipients("creation_rules:\n"+catchAll), ","); got != "age1admin # admin,age1fallback" {
-		t.Errorf("fallback: %q", got)
-	}
-}
-
-func TestMarkerBlock(t *testing.T) {
-	cfg := "creation_rules:\n  # BEGIN fort sops rule: sfi-fort-e33e2d5\n  - path_regex: x\n    age:\n      - age1other\n  # END fort sops rule: sfi-fort-e33e2d5\n"
-	if markerBlock(cfg, "sfi-fort") != "" {
-		t.Error("a host-name prefix matched another host's block")
-	}
-	if b := markerBlock(cfg, "sfi-fort-e33e2d5"); !strings.HasPrefix(b, "  # BEGIN") || !strings.HasSuffix(b, "# END fort sops rule: sfi-fort-e33e2d5") {
-		t.Errorf("block: %q", b)
-	}
-}
-
-func TestDeployKeyStatus(t *testing.T) {
-	const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGx6GXsI2LCgCru4Jm5qAV4xKqMfWHKrmW2pVHvG6GGa flux-h\n"
-	ours := strings.TrimSpace(pub)
-	stale := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIStale flux-h"
-	for _, tc := range []struct {
-		keys          []giteaKey
-		want, wantErr string
-		wantRegister  bool
-	}{
-		{nil, "would register", "", true},
-		{[]giteaKey{{ID: 1, Title: "flux-other", Key: stale}}, "would register", "", true},
-		{[]giteaKey{{ID: 7, Title: "flux-h", Key: ours}}, "id 7, verified match", "", false},
-		{[]giteaKey{{ID: 7, Title: "flux-h", Key: ours}, {ID: 9, Title: "flux-h", Key: ours}}, "ids 7, 9 — duplicates", "", false},
-		{[]giteaKey{{ID: 7, Title: "flux-h", Key: ours}, {ID: 9, Title: "flux-h", Key: stale}}, "", "id 9) differs", false},
-		{[]giteaKey{{ID: 9, Title: "flux-h", Key: stale}, {ID: 7, Title: "flux-h", Key: ours}}, "", "id 9) differs", false},
-	} {
-		g, _ := fakeGitea(t, tc.keys)
-		got, register, err := deployKeyStatus(g, "h", pub)
-		switch {
-		case tc.wantErr != "":
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("%v: want error %q, got %q %v", tc.keys, tc.wantErr, got, err)
-			}
-		case err != nil || !strings.Contains(got, tc.want) || register != tc.wantRegister:
-			t.Errorf("%v: got %q register=%v %v", tc.keys, got, register, err)
-		}
-	}
-}
-
-func TestMintFluxNeedsGitea(t *testing.T) {
+func TestMintNeedsGitea(t *testing.T) {
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
@@ -330,7 +234,7 @@ func TestMintFluxNeedsGitea(t *testing.T) {
 	tmp := t.TempDir()
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
 	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
-		t.Errorf("flux cluster without a client: want refusal, got %v", err)
+		t.Errorf("without a client: want refusal, got %v", err)
 	}
 }
 

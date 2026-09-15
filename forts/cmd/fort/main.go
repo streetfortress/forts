@@ -86,16 +86,14 @@ func usage() {
       render the host's generated surface from its manifest,
       provisioning/forts/<host>.toml: nixos/hosts/<host>/{default.nix,
       secrets.nix} in the lab shape (qcow runtime, static LAN) or, with a
-      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); for a flux
-      cluster also fleet/clusters/<host>/ (6 files) and the apps root
+      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); also fleet/clusters/<host>/ (6 files) and the apps root
       kustomization. Prints the marked tree; --write lays it down, never
       overwriting a file that exists (a re-run fills gaps) — the manifest
       seeds the host, you refine it in place. Then fort mint.
 
   mint <host> [--write]
       mint the host's identity: its ssh host key (which doubles as its
-      age identity), wireguard key + mesh peer, k3s token, and for a
-      flux cluster the cluster age key, the flux deploy key (registered
+      age identity), wireguard key + mesh peer, k3s token, the cluster age key, the flux deploy key (registered
       read-only on gitea — the one call outside the tree) and the sops
       canary; the sops rules that make the host a recipient of its own
       secrets. Private halves exist in memory and land only in

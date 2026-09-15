@@ -21,13 +21,13 @@ import (
 // chart bump whose new contract adds a required key therefore goes red
 // here until seeded.
 //
-// Strict on every fort: all four flux forts are `production: true`
-// (the flag is the hardened host profile, not "serves users"), so there
-// is no lenient tier to speak of — a missing required key is an error
+// Strict on every fort: every fort is the hardened host profile (that is
+// what a fort is, not "serves users"), so there is no lenient tier to
+// speak of — a missing required key is an error
 // anywhere, extras and missing optional keys are warnings.
 func check(args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	all := fs.Bool("all", false, "every flux_cluster host with a manifest")
+	all := fs.Bool("all", false, "every host with a manifest")
 	chartDir := fs.String("chart-dir", "", "read every chart's contract from this local dir instead of pulling (tests)")
 	var forts []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -49,10 +49,8 @@ func check(args []string) error {
 		}
 		problems = p
 		forts = nil
-		for name, h := range hosts {
-			if h.FluxCluster {
-				forts = append(forts, name)
-			}
+		for name := range hosts {
+			forts = append(forts, name)
 		}
 		sort.Strings(forts)
 	}

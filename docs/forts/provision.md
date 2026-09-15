@@ -46,7 +46,7 @@ so: rerun **without** `--image` (the id is already set). Without
 
 After a birth, stage lands in `forts/pulumi` (state, `Pulumi.<host>.yaml`);
 commit it as its own PR. The instance is protected (`protect: true` on
-production forts) from that point until [`destroy`](destroy.md).
+every fort) from that point until [`destroy`](destroy.md).
 
 ## Building the image
 

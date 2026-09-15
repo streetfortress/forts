@@ -9,14 +9,10 @@
 # qcow-runtime import below says which variant). The root filesystem and
 # bootloader come from qcow-runtime.nix + the qemu image variant, so there
 # is no hand-written hardware.nix.
-{{ if .Production -}}
-# PRODUCTION PROFILE (production = true in the manifest): SSH answers on the
+# PRODUCTION PROFILE (every fort): SSH answers on the
 # wireguard mesh address ONLY — reach it as `deployer@{{ .MeshIP }}`,
 # not the LAN/public IP. No steven, no home stack, no wheel; see
 # modules/production.nix.
-{{- else -}}
-# Reachable as `steven` over SSH (keys from modules/interactive.nix).
-{{- end }}
 { ... }:
 
 {
@@ -29,36 +25,20 @@
     # and needs no per-host edit when a new host gets a manifest.
     ./secrets.nix
     ../../modules/k3s-server.nix
-{{- if .HasWg }}
     ../../modules/wireguard.nix    # mesh member (mesh_ip in the manifest)
-{{- end }}
-{{- if .Production }}
     # Hardened slim profile (#86): `deployer` account, mesh-only SSH, no
     # home stack. Replaces interactive.nix + dotfiles.nix — steven does not
     # exist on a production node.
     ../../modules/production.nix
-{{- else }}
-    ../../modules/interactive.nix  # steven's account (was in common.nix)
-    ../../modules/dotfiles.nix     # clone ~/.files from the internal gitea over
-                                   # TLS (lab CA trusted via k3s-server.nix)
-{{- end }}
-{{- if .FluxCluster }}
-    # Day-0 flux (flux_cluster = true in the manifest): fort scaffold laid down
+    # Day-0 flux: fort scaffold laid down
     # fleet/clusters/{{ .Hostname }}/ and fort mint seeded flux-sops-age-key +
     # flux-git-deploy-key into this host's sops file.
     ../../modules/flux-bootstrap.nix
     ../../modules/auto-rebuild.nix # pull-based OS updates (#93)
-{{- else }}
-    # Uncomment for a flux-managed cluster node once fleet/clusters/<name>/
-    # exists and the host's sops file carries flux-sops-age-key +
-    # flux-git-deploy-key (see modules/flux-bootstrap.nix header) — or set
-    # flux_cluster = true in the manifest and re-scaffold to automate that.
-    # ../../modules/flux-bootstrap.nix
-{{- end }}
   ];
 
   networking.hostName = "{{ .Hostname }}";
-{{ if .FluxCluster }}
+
   sfi.flux-bootstrap = {
     enable = true;
     cluster = "{{ .Hostname }}";
@@ -67,12 +47,7 @@
   # Watch main; a changed host config lands within ~6h — or now, via
   # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
-{{ else }}
-  # sfi.flux-bootstrap = {
-  #   enable = true;
-  #   cluster = "{{ .Hostname }}";
-  # };
-{{ end }}
+
   # Static address on the hypervisor's LAN bridge — matches [libvirt] ip in
   # provisioning/forts/{{ .Hostname }}.toml.
   networking.useDHCP = false;

@@ -21,9 +21,6 @@ var scaffoldTemplates embed.FS
 type hostView struct {
 	Hostname     string
 	IP           string
-	Production   bool
-	FluxCluster  bool
-	HasWg        bool
 	MeshIP       string
 	LanPrefix    int
 	LanGateway   string
@@ -119,12 +116,6 @@ func scaffoldShape(e manifest.Host) string {
 			s += " " + l.Region + " " + l.Type
 		}
 	}
-	if e.FluxCluster {
-		s += ", flux cluster"
-	}
-	if e.Production {
-		s += ", production profile"
-	}
 	return s
 }
 
@@ -132,9 +123,6 @@ func scaffoldShape(e manifest.Host) string {
 func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	view := hostView{
 		Hostname:     host,
-		Production:   entry.Production,
-		FluxCluster:  entry.FluxCluster,
-		HasWg:        entry.MeshIP != "",
 		MeshIP:       entry.MeshIP,
 		LanPrefix:    24,
 		LanGateway:   "10.0.0.1",
@@ -165,12 +153,12 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if entry.ClusterInit != nil {
 		view.ClusterInit = *entry.ClusterInit
 	}
-	if view.FluxCluster && !view.HasWg {
-		// cluster-vars.yaml's MESH_IP is mandatory (#99): every flux
-		// cluster is a mesh member — a production host without mesh_ip
-		// has no login path at all. (manifest.Validate says so first; this
-		// covers hosts built in memory.)
-		return nil, fmt.Errorf("%s: flux_cluster without mesh_ip — every flux cluster is a mesh member", host)
+	if view.MeshIP == "" {
+		// cluster-vars.yaml's MESH_IP is mandatory (#99): every fort is a
+		// mesh member — a hardened host without mesh_ip has no login path
+		// at all. (manifest.Validate says so first; this covers hosts built
+		// in memory.)
+		return nil, fmt.Errorf("%s: mesh_ip is required — every fort is a mesh member", host)
 	}
 
 	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/*.gotpl", "templates/scaffold/fleet/*.gotpl")
@@ -191,18 +179,16 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		{filepath.Join(hostDir, "default.nix"), hostTpl, hostNote},
 		{filepath.Join(hostDir, "secrets.nix"), "secrets.nix.gotpl", "sops-nix wiring (host key → age)"},
 	}
-	if view.FluxCluster {
-		clusters := filepath.Join("fleet/clusters", host)
-		plan = append(plan,
-			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path fleet/clusters/" + host},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.MeshIP},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
-			struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
-		)
-	}
+	clusters := filepath.Join("fleet/clusters", host)
+	plan = append(plan,
+		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path fleet/clusters/" + host},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.MeshIP},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
+		struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
+	)
 	var out []scaffoldFile
 	for _, p := range plan {
 		b, err := render(p.tpl)

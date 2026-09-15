@@ -90,33 +90,29 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 	p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", "- BEGIN/END fort sops rule: " + host, func(s string) (string, error) { return removeMarkerBlock(s, host) }})
 
-	// 3. fleet layer (flux_cluster hosts): rule block + shared recipient(s)
-	if entry.FluxCluster {
-		fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
-		recipients := strings.Count(string(fleetSops), "# cluster: "+host)
-		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared fleet/infrastructure rule", host, recipients, host), func(s string) (string, error) {
-			s, err := removeMarkerBlock(s, host)
-			if err != nil {
-				return "", err
-			}
-			s, _ = removeLinesContaining(s, "# cluster: "+host)
-			return s, nil
-		}})
-		if recipients > 0 {
-			files, _ := sopsFilesUnder(root, "fleet/infrastructure")
-			p.rekey = files
+	// 3. fleet layer: rule block + shared recipient(s)
+	fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
+	recipients := strings.Count(string(fleetSops), "# cluster: "+host)
+	p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared fleet/infrastructure rule", host, recipients, host), func(s string) (string, error) {
+		s, err := removeMarkerBlock(s, host)
+		if err != nil {
+			return "", err
 		}
-		for _, rel := range []string{filepath.Join("fleet/clusters", host), filepath.Join("fleet/apps", host)} {
-			if exists(root, rel) {
-				p.removes = append(p.removes, rel)
-			}
+		s, _ = removeLinesContaining(s, "# cluster: "+host)
+		return s, nil
+	}})
+	if recipients > 0 {
+		files, _ := sopsFilesUnder(root, "fleet/infrastructure")
+		p.rekey = files
+	}
+	for _, rel := range []string{filepath.Join("fleet/clusters", host), filepath.Join("fleet/apps", host)} {
+		if exists(root, rel) {
+			p.removes = append(p.removes, rel)
 		}
 	}
 
 	// 4. wireguard peer
-	if entry.MeshIP != "" {
-		p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
-	}
+	p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 
 	// 5. residue: everything else that still names the host — counted
 	// on the post-edit text for the files this plan edits, so a dry run

@@ -1,8 +1,8 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
-# Imported by hosts/<name>/default.nix — scaffolded automatically when the host
-# sets `production = true` in provisioning/forts/<name>.toml (and dotfiles.nix +
-# interactive.nix are dropped from the same scaffold; the profiles are mutually
-# exclusive).
+# Imported by every fort's hosts/<name>/default.nix (`fort scaffold` renders it
+# unconditionally — a fort is always this profile, #272; dotfiles.nix +
+# interactive.nix are for hand-managed hosts like zenbook, the profiles are
+# mutually exclusive).
 #
 # Relative to the lab VM shape this changes:
 #   - No Home Manager payload, and no steven at all: interactive.nix isn't

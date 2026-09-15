@@ -4,7 +4,9 @@
 // program) so the generators cannot drift.
 //
 // The neutral top level is the contract every consumer reads — scaffold,
-// mint, flux, the mesh: production, flux_cluster, mesh_ip, [shape], [dns].
+// mint, flux, the mesh: mesh_ip, [shape], [dns]. What a fort IS is not a
+// key: every fort is the hardened host profile, flux-managed, a mesh
+// member (#272) — a different shape will be a positive declaration.
 // Exactly one provider table ([linode], [libvirt]) names the backend that
 // raises the host; it is decoded by that provider's own Spec type and is
 // opaque to everything else. Adding a provider = one file in this package
@@ -36,14 +38,9 @@ func Path(host string) string { return filepath.Join(Dir, host+".toml") }
 // Host is one fort's manifest: the neutral intent plus the one provider
 // table, decoded.
 type Host struct {
-	// Production selects the hardened host profile (modules/production.nix:
-	// deployer-only, mesh-scoped SSH) and `protect: true` on the stack.
-	Production bool `toml:"production"`
-	// FluxCluster: the host runs flux against fleet/clusters/<host>;
-	// scaffold renders that dir, mint the cluster key + deploy key.
-	FluxCluster bool `toml:"flux_cluster"`
 	// MeshIP is the host's WireGuard mesh address; mint keys the wg key
-	// and the peer entry off it. Mandatory for a flux cluster (#99).
+	// and the peer entry off it. Mandatory (#99): a hardened host without
+	// one has no login path at all.
 	MeshIP string `toml:"mesh_ip"`
 	// MeshEndpoint is where other peers dial this host (peers.json's
 	// wg_endpoint_ip). Optional: see Endpoint for the defaults.
@@ -240,16 +237,13 @@ func (h Host) Validate(host string) error {
 	if h.Spec == nil || h.Provider == "" {
 		return fail("no provider table — add [libvirt] (lab) or [linode]; nothing raises a provider-less host")
 	}
-	if h.FluxCluster && h.MeshIP == "" {
-		// cluster-vars.yaml's MESH_IP is mandatory (#99): every flux
-		// cluster is a mesh member — a production host without one has
-		// no login path at all.
-		return fail("flux_cluster without mesh_ip — every flux cluster is a mesh member")
+	if h.MeshIP == "" {
+		// cluster-vars.yaml's MESH_IP is mandatory (#99): every fort is a
+		// mesh member — a hardened host without one has no login path.
+		return fail("mesh_ip is required — every fort is a mesh member")
 	}
-	if h.MeshIP != "" {
-		if a, err := netip.ParseAddr(h.MeshIP); err != nil || !a.Is4() {
-			return fail("mesh_ip %q: want an IPv4 address", h.MeshIP)
-		}
+	if a, err := netip.ParseAddr(h.MeshIP); err != nil || !a.Is4() {
+		return fail("mesh_ip %q: want an IPv4 address", h.MeshIP)
 	}
 	if (h.DNS.Zone == "") != (h.DNS.Name == "") {
 		return fail("[dns] needs both zone and name — an apex record must be asked for explicitly")

@@ -75,7 +75,7 @@ func adopt(args []string) error {
 	if err := runPulumi(pulumiDir, "config", "set", "imageId", "adopted-"+time.Now().UTC().Format("2006-01-02"), "--stack", host); err != nil {
 		return err
 	}
-	protect := fmt.Sprintf("--protect=%v", entry.Production)
+	const protect = "--protect=true" // every fort
 	fmt.Println("== importing (reads the hypervisor, writes only local state)")
 	for _, r := range [][]string{
 		{"libvirt:index/volume:Volume", host + "-disk", key},

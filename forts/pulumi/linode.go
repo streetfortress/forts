@@ -73,15 +73,13 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 	// the record of which image this host was born from.
 	imageID := config.Require(ctx, "forts:imageId")
 
-	// protect on production applies to the whole host surface, not just
+	// protect applies to every fort and to the whole host surface, not just
 	// the instance: an un-gated firewall delete would strip provider-side
 	// filtering from a running host. `pulumi destroy` refuses until each
 	// resource is explicitly unprotected — the "gated manual delete".
 	// Deleting the manifest alone never reaches this state at all.
 	var opts []pulumi.ResourceOption
-	if host.Production {
-		opts = append(opts, pulumi.Protect(true))
-	}
+	opts = append(opts, pulumi.Protect(true))
 
 	// Default-deny + exactly the production profile's public surface:
 	// 80/443 and the WireGuard transport — IPv4 ONLY, by declaration:

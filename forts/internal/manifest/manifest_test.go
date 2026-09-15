@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-const lab = `production = true
-flux_cluster = true
-mesh_ip = "10.1.0.15"
+const lab = `mesh_ip = "10.1.0.15"
 k3s_cluster_init = false
 
 [shape]
@@ -21,9 +19,7 @@ disk = "80G"
 ip = "10.0.0.41"
 `
 
-const cloud = `production = true
-flux_cluster = true
-mesh_ip = "10.1.0.54"
+const cloud = `mesh_ip = "10.1.0.54"
 
 [dns]
 zone = "streetfortress.cloud"
@@ -67,18 +63,18 @@ func TestParse(t *testing.T) {
 
 func TestParseRefuses(t *testing.T) {
 	for _, tc := range []struct{ name, text, want string }{
-		{"no provider", "production = true\n", "no provider table"},
+		{"no provider", "mesh_ip = \"10.1.0.1\"\n", "no provider table"},
 		{"two providers", lab + "\n[linode]\nregion = \"x\"\ntype = \"y\"\n", "2 provider tables (libvirt, linode)"},
 		{"unknown key", "productoin = true\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key productoin"},
 		{"unknown provider key", "[libvirt]\nip = \"10.0.0.1\"\nansible_host = \"x\"\n", "[libvirt]: unknown key ansible_host"},
 		{"unknown table", "[hetzner]\nx = 1\n", "unknown key hetzner"},
-		{"flux without mesh", "flux_cluster = true\n[libvirt]\nip = \"10.0.0.1\"\n", "flux_cluster without mesh_ip"},
+		{"no mesh", "[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip is required"},
 		{"bad mesh ip", "mesh_ip = \"lol\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip"},
-		{"linode missing type", "[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
-		{"libvirt missing ip", "[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
-		{"dns half", "[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
-		{"bad disk", "[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
-		{"wrong type", "production = \"yes\"\n[libvirt]\nip = \"10.0.0.1\"\n", "production"},
+		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
+		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
+		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
+		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
+		{"wrong type", "k3s_cluster_init = \"yes\"\nmesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "k3s_cluster_init"},
 	} {
 		_, err := Parse("h", []byte(tc.text))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

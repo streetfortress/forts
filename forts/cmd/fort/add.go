@@ -143,9 +143,6 @@ func planAdd(o addOpts) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !entry.FluxCluster {
-		return nil, fmt.Errorf("%s is not a flux cluster (flux_cluster = true in its manifest)", o.fort)
-	}
 
 	chartDir, resolved := o.chartDir, o.version
 	if chartDir == "" {

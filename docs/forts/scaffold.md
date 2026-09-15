@@ -34,7 +34,7 @@ nixos/hosts/<host>/
 ● secrets.nix        sops-nix wiring: the host's age identity is derived from
                      its ssh host key; declares wireguard-private-key when the
                      manifest has mesh_ip
-fleet/clusters/<host>/                       (flux_cluster: true only)
+fleet/clusters/<host>/
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path fleet/clusters/<host>
 ● flux-system/kustomization.yaml
@@ -47,16 +47,17 @@ fleet/apps/<host>/
 
 Manifest fields it reads: the provider table (`[libvirt]` `ip` — the lab
 static IP — and its optional `lan_prefix`, `lan_gateway`, `lan_dns`;
-`[linode]` `region` + `type` for the header comment), `mesh_ip`,
-`flux_cluster`, `production`, and the optional seeds `nixos_state_version`,
+`[linode]` `region` + `type` for the header comment), `mesh_ip`, and the
+optional seeds `nixos_state_version`,
 `k3s_cluster_init`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
 `25.11`.
 
-A flux cluster without `mesh_ip` is refused (by the manifest loader, so
-every verb says so): every flux cluster is a
-mesh member (`MESH_IP` is mandatory), and a production host without a
-mesh address has no login path at all.
+A manifest without `mesh_ip` is refused (by the loader, so every verb
+says so): every fort is a mesh member (`MESH_IP` is mandatory), and a
+hardened host without a mesh address has no login path at all. Every fort
+is the hardened profile and a flux cluster — there is no key for either
+(#272).
 
 ## Force-no semantics
 

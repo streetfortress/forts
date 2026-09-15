@@ -134,8 +134,8 @@ func TestManifestFindings(t *testing.T) {
 		os.MkdirAll(filepath.Join(root, manifest.Dir), 0o755)
 		os.WriteFile(filepath.Join(root, manifest.Path(host)), []byte(content), 0o644)
 	}
-	write("d", "production = true\n")
-	write("a", "[libvirt]\nip = \"10.0.0.1\"\n")
+	write("d", "mesh_ip = \"10.1.0.2\"\n")
+	write("a", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n")
 	write("b", "[libvirt]\nip = \"10.0.0.2\"\n[linode]\nregion = \"r\"\ntype = \"t\"\n")
 	hosts, problems, err := manifest.LoadAll(root)
 	if err != nil || len(hosts) != 1 {

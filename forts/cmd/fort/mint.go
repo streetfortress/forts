@@ -51,18 +51,10 @@ func mint(args []string) error {
 		return err
 	}
 	tool := sopsCLI{root: root}
-	// The deploy key is a flux cluster's; a lab-only host needs no
-	// gitea credential (the token lives in sops — not every operator
-	// has it, and the retired script never asked either).
-	entry, err := manifest.Load(root, host)
+	// The flux deploy key is registered on gitea (the token lives in sops).
+	gitea, err := giteaClient(root)
 	if err != nil {
 		return err
-	}
-	var gitea *giteaDeployKeys
-	if entry.FluxCluster {
-		if gitea, err = giteaClient(root); err != nil {
-			return err
-		}
 	}
 	p, err := planMint(root, host, tool, gitea)
 	if err != nil {
@@ -126,8 +118,8 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	if err != nil {
 		return nil, err
 	}
-	if entry.FluxCluster && gitea == nil {
-		return nil, fmt.Errorf("host %q is a flux cluster: its deploy key needs the gitea client", host)
+	if gitea == nil {
+		return nil, fmt.Errorf("host %q: the flux deploy key needs the gitea client", host)
 	}
 	p := &mintPlan{root: root, host: host, entry: entry, have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
@@ -138,11 +130,9 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	if !exists(root, filepath.Join("nixos/hosts", host, "default.nix")) {
 		need = append(need, filepath.Join("nixos/hosts", host, "default.nix"))
 	}
-	if entry.FluxCluster {
-		for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
-			if !exists(root, rel) {
-				need = append(need, rel)
-			}
+	for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
+		if !exists(root, rel) {
+			need = append(need, rel)
 		}
 	}
 	if len(need) > 0 {
@@ -176,15 +166,13 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	} else if p.k3sToken, err = newToken(); err != nil {
 		return nil, err
 	}
-	if entry.MeshIP != "" {
-		if v, ok := take(keyWgPrivate); ok {
-			p.wg, err = wgKeyFrom(v)
-		} else {
-			p.wg, err = newWGKey()
-		}
-		if err != nil {
-			return nil, err
-		}
+	if v, ok := take(keyWgPrivate); ok {
+		p.wg, err = wgKeyFrom(v)
+	} else {
+		p.wg, err = newWGKey()
+	}
+	if err != nil {
+		return nil, err
 	}
 	if v, ok := take(keySSHHost); ok {
 		p.hostKey, err = sshKeyFrom(v, host)
@@ -202,23 +190,21 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	if p.hostRecip, err = sshToAge(p.hostKey.public); err != nil {
 		return nil, err
 	}
-	if entry.FluxCluster {
-		if v, ok := take(keyAge); ok {
-			p.cluster, err = ageKeyFrom(v)
-		} else {
-			p.cluster, err = newAgeKey()
-		}
-		if err != nil {
-			return nil, err
-		}
-		if v, ok := take(keyDeploy); ok {
-			p.deploy, err = sshKeyFrom(v, "flux-"+host)
-		} else {
-			p.deploy, err = newSSHKey("flux-" + host)
-		}
-		if err != nil {
-			return nil, err
-		}
+	if v, ok := take(keyAge); ok {
+		p.cluster, err = ageKeyFrom(v)
+	} else {
+		p.cluster, err = newAgeKey()
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := take(keyDeploy); ok {
+		p.deploy, err = sshKeyFrom(v, "flux-"+host)
+	} else {
+		p.deploy, err = newSSHKey("flux-" + host)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. the rules and the peer — each only if absent, as text edits
@@ -241,72 +227,66 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 		p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", fmt.Sprintf("+ rule secrets/%s.yaml → %d shared recipient(s) + host %s", host, len(recips)-1, p.hostRecip),
 			func(s string) (string, error) { return addHostRule(s, host, recips) }})
 	}
-	if entry.MeshIP != "" {
-		peers, err := os.ReadFile(filepath.Join(root, "wireguard/peers.json"))
-		if err != nil {
-			return nil, err
-		}
-		if pub, ok := peerPublicKey(string(peers), host); ok {
-			if pub != p.wg.public {
-				return nil, fmt.Errorf("wireguard/peers.json already lists %s with a public key that is not the one %s derives — the real wireguard key is not in the secrets file, or the peer is stale; a re-key is a deliberate act", host, keyWgPrivate)
-			}
-		} else {
-			note := "+ .peers." + host + " (" + entry.MeshIP
-			if p.endpoint != "" {
-				note += ", endpoint " + p.endpoint
-			}
-			p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
-				func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
-		}
+	peers, err := os.ReadFile(filepath.Join(root, "wireguard/peers.json"))
+	if err != nil {
+		return nil, err
 	}
-	if entry.FluxCluster {
-		fleetSops, err := os.ReadFile(filepath.Join(root, ".sops.yaml"))
-		if err != nil {
-			return nil, err
+	if pub, ok := peerPublicKey(string(peers), host); ok {
+		if pub != p.wg.public {
+			return nil, fmt.Errorf("wireguard/peers.json already lists %s with a public key that is not the one %s derives — the real wireguard key is not in the secrets file, or the peer is stale; a re-key is a deliberate act", host, keyWgPrivate)
 		}
-		var notes []string
-		var fns []func(string) (string, error)
-		if block := markerBlock(string(fleetSops), host); block != "" {
-			if !strings.Contains(block, p.cluster.recipient) {
-				return nil, fmt.Errorf(".sops.yaml already has a rule for %s but its cluster recipient is not the one %s derives (%s) — the real cluster age key is not in the secrets file, or the rule is stale; a re-key is a deliberate act", host, keyAge, p.cluster.recipient)
-			}
-		} else {
-			p.admins[".sops.yaml"] = sharedRecipients(string(fleetSops))
-			admins := p.admins[".sops.yaml"]
-			notes = append(notes, fmt.Sprintf("+ rule fleet/(clusters|apps)/%s/ → %d shared + cluster %s", host, len(admins), p.cluster.recipient))
-			fns = append(fns, func(s string) (string, error) { return addFleetRule(s, host, admins, p.cluster.recipient) })
+	} else {
+		note := "+ .peers." + host + " (" + entry.MeshIP
+		if p.endpoint != "" {
+			note += ", endpoint " + p.endpoint
 		}
-		infraLine := "      - " + p.cluster.recipient + " # cluster: " + host
-		if !strings.Contains(string(fleetSops), infraLine) {
-			notes = append(notes, "+ `# cluster: "+host+"` recipient in the shared fleet/infrastructure rule")
-			fns = append(fns, func(s string) (string, error) { return addInfraRecipient(s, infraLine) })
-			p.rekey, _ = sopsFilesUnder(root, "fleet/infrastructure")
+		p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
+			func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
+	}
+	fleetSops, err := os.ReadFile(filepath.Join(root, ".sops.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var notes []string
+	var fns []func(string) (string, error)
+	if block := markerBlock(string(fleetSops), host); block != "" {
+		if !strings.Contains(block, p.cluster.recipient) {
+			return nil, fmt.Errorf(".sops.yaml already has a rule for %s but its cluster recipient is not the one %s derives (%s) — the real cluster age key is not in the secrets file, or the rule is stale; a re-key is a deliberate act", host, keyAge, p.cluster.recipient)
 		}
-		if len(fns) > 0 {
-			p.edits = append(p.edits, dEdit{".sops.yaml", strings.Join(notes, "; "), func(s string) (string, error) {
-				for _, fn := range fns {
-					var err error
-					if s, err = fn(s); err != nil {
-						return "", err
-					}
+	} else {
+		p.admins[".sops.yaml"] = sharedRecipients(string(fleetSops))
+		admins := p.admins[".sops.yaml"]
+		notes = append(notes, fmt.Sprintf("+ rule fleet/(clusters|apps)/%s/ → %d shared + cluster %s", host, len(admins), p.cluster.recipient))
+		fns = append(fns, func(s string) (string, error) { return addFleetRule(s, host, admins, p.cluster.recipient) })
+	}
+	infraLine := "      - " + p.cluster.recipient + " # cluster: " + host
+	if !strings.Contains(string(fleetSops), infraLine) {
+		notes = append(notes, "+ `# cluster: "+host+"` recipient in the shared fleet/infrastructure rule")
+		fns = append(fns, func(s string) (string, error) { return addInfraRecipient(s, infraLine) })
+		p.rekey, _ = sopsFilesUnder(root, "fleet/infrastructure")
+	}
+	if len(fns) > 0 {
+		p.edits = append(p.edits, dEdit{".sops.yaml", strings.Join(notes, "; "), func(s string) (string, error) {
+			for _, fn := range fns {
+				var err error
+				if s, err = fn(s); err != nil {
+					return "", err
 				}
-				return s, nil
-			}})
-		}
-		if rel := filepath.Join("fleet/apps", host, "sops-canary.yaml"); !exists(root, rel) {
-			p.canaryPath = rel
-		}
+			}
+			return s, nil
+		}})
+	}
+	if rel := filepath.Join("fleet/apps", host, "sops-canary.yaml"); !exists(root, rel) {
+		p.canaryPath = rel
 	}
 
 	// 4. the deploy key on gitea — checked now (read-only) so a mismatch
 	// refuses before anything is written; registered by apply.
-	if entry.FluxCluster {
-		status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
-		if err != nil {
-			return nil, err
-		}
-		p.deployKey, p.registerOn = status, register
+	status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
+	if err != nil {
+		return nil, err
 	}
+	p.deployKey, p.registerOn = status, register
 	return p, nil
 }
 
@@ -434,17 +414,10 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	} else {
 		facts = append(facts, "lab: libvirt backend")
 	}
-	if p.entry.FluxCluster {
-		facts = append(facts, "flux cluster")
-	}
-	if p.entry.MeshIP != "" {
-		facts = append(facts, "mesh "+p.entry.MeshIP)
-	}
+	facts = append(facts, "mesh "+p.entry.MeshIP)
 	fmt.Fprintf(w, "mint %s   (%s)\n", p.host, strings.Join(facts, " · "))
 	fmt.Fprintf(w, "  host age recipient %s\n", p.hostRecip)
-	if p.entry.FluxCluster {
-		fmt.Fprintf(w, "  cluster recipient  %s\n", p.cluster.recipient)
-	}
+	fmt.Fprintf(w, "  cluster recipient  %s\n", p.cluster.recipient)
 	switch {
 	case p.newFile:
 		fmt.Fprintf(w, "● %-36s %s — minted, sops-encrypted (host key doubles as its age identity)\n", p.secretsPath, strings.Join(p.missing, ", "))

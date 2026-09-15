@@ -10,7 +10,7 @@ import (
 
 // The two shapes from the fixture manifests: a lab VM (qcow runtime,
 // static LAN) and a cloud fort (linode runtime, split DNS over the mesh,
-// zram, no LAN block) — both flux clusters, so both get the fleet dirs.
+// zram, no LAN block) — both get the fleet dirs (every fort is a flux cluster).
 func TestRenderScaffold(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
@@ -50,18 +50,18 @@ func TestRenderScaffold(t *testing.T) {
 			t.Errorf("cloud default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"qcow-runtime", "systemd.network.networks", "qemu-guest", "../../modules/interactive.nix"} {
+	for _, s := range []string{"qcow-runtime", "systemd.network.networks", "qemu-guest", "../../modules/interactive.nix", "../../modules/dotfiles.nix"} {
 		if strings.Contains(c, s) {
 			t.Errorf("cloud default.nix should not carry %q", s)
 		}
 	}
 	l := lab["nixos/hosts/lab-fort/default.nix"]
-	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/interactive.nix", "services.k3s.clusterInit = true"} {
+	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.99", "services.k3s.clusterInit = true"} {
 		if !strings.Contains(l, s) {
 			t.Errorf("lab default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"linode-runtime", "zramSwap", "production.nix"} {
+	for _, s := range []string{"linode-runtime", "zramSwap", "../../modules/interactive.nix", "../../modules/dotfiles.nix"} {
 		if strings.Contains(l, s) {
 			t.Errorf("lab default.nix should not carry %q", s)
 		}
@@ -94,11 +94,11 @@ func TestRenderScaffold(t *testing.T) {
 		t.Errorf("libvirt host should render the lab shape")
 	}
 
-	// a flux cluster off the mesh is refused (MESH_IP is mandatory, #99)
+	// a fort off the mesh is refused (MESH_IP is mandatory, #99)
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
 	if _, err := renderScaffold("lab-fort", h); err == nil {
-		t.Errorf("flux_cluster without mesh_ip should be refused")
+		t.Errorf("a manifest without mesh_ip should be refused")
 	}
 }
 
@@ -118,7 +118,7 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 		// luxor was bootstrapped by hand and carries a bespoke apps layer
 		// (databasus-configs) and pre-module comments — the exception its
 		// manifest's header records, not a template drift.
-		if !h.FluxCluster || name == "luxor" {
+		if name == "luxor" {
 			continue
 		}
 		for _, f := range render(t, name, h) {

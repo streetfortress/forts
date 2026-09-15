@@ -129,8 +129,7 @@ every `wire` path exists in `values.yaml`.
 **Pending means absent.** An `external` key with no value yet is simply
 left out of the Secret — no sentinel, no marker file. The seeder skips
 it and reports it; `fort seed --set KEY` reads the value from stdin and
-adds it with `sops set`; CI's key-set comparison fails a `production:
-true` fort on any missing non-optional key and warns elsewhere.
+adds it with `sops set`; CI's key-set comparison fails a fort on any missing non-optional key and warns elsewhere.
 
 ## Overlay schema
 
@@ -263,8 +262,8 @@ wiring from plaintext key names without any age key:
 4. Every non-optional `requires` instance has its provider dir on the
    fort and its `wire` values paths set in the HelmRelease.
 
-**Strict on every fort.** All four flux forts are `production: true` —
-the flag is the hardened host profile, not "serves users" — so there is
+**Strict on every fort.** Every fort is the hardened host profile —
+that is what a fort is, not "serves users" — so there is
 no lenient tier: the rehearsal forts are held to the production bar,
 and test values go in with `--set`. A separate tier field could relax
 this later if a throwaway fort ever needs it.
@@ -470,10 +469,10 @@ optional ones, each with the chart's description of where it comes from.
 `fort seed sfi-fort-e33e2d5 symbology --set STRIPE_SECRET_KEY` adds one.
 The PR's CI: kustomize builds (every listed sops file exists now); the
 contract gate pulls 0.1.3 and finds three required keys missing. The
-drill fort is `production = true` in its manifest (hardened host profile),
+drill fort is hardened like every fort,
 so that is a **failure**, not a warning — the rehearsal is held to the
 production bar, and test values go in with `--set` before the PR is
-mergeable. Only a non-production fort gets the warning.
+mergeable — there is no lenient fort to warn instead.
 
 ### Exercising the CLI against an unreleased chart
 

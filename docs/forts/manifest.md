@@ -9,8 +9,6 @@ from a sibling is `cp`, three edits, `fort check --all`.
 
 ```toml
 # sfi-prod-439bf72 — THE production fort, on Linode.   ← the fort's history lives here
-production = true            # hardened host profile + protect: true on the stack
-flux_cluster = true          # fleet/clusters/<host> exists; mint makes the cluster key
 mesh_ip = "10.1.0.54"        # WireGuard mesh address (mandatory for a flux cluster)
 k3s_cluster_init = false     # optional scaffold seed: sqlite datastore, not etcd
 
@@ -25,8 +23,6 @@ type = "g6-standard-2"
 
 ```toml
 # staging-k3s — the staging fort, on the lab hypervisor.
-production = true
-flux_cluster = true
 mesh_ip = "10.1.0.13"
 k3s_cluster_init = false
 
@@ -39,11 +35,17 @@ disk = "80G"
 ip = "10.0.0.40"             # the static LAN address baked into the image
 ```
 
-**The neutral top level is the contract.** `production`, `flux_cluster`,
-`mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
+**The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
 `nixos_state_version`, `[shape]`, `[dns]` — this is what scaffold, mint,
 add, check, the pulumi program and the mesh read. Every consumer reads the
 same Go struct (`forts/internal/manifest`), so the generators cannot drift.
+
+**A fort is always hardened, flux-managed, on the mesh.** There is no
+`production` or `flux_cluster` key (#272): every fort imports
+`production.nix` (deployer-only, mesh-scoped SSH), gets
+`fleet/clusters/<host>` + the cluster key + the deploy key, carries
+`protect: true` on its stack, and `mesh_ip` is required. A different shape
+(#273) will be a positive declaration, not the absence of flux.
 
 **One provider table, opaque to everyone but its backend.** `[linode]` and
 `[libvirt]` are decoded by their own Go types (`LinodeSpec`, `LibvirtSpec`),
@@ -85,13 +87,13 @@ second variant.
 | verb | reads |
 |---|---|
 | `scaffold` | everything: the provider table picks the host shape, `mesh_ip` → `MESH_IP`, the seeds |
-| `mint` | `flux_cluster` (cluster key, deploy key, canary), `mesh_ip` (wg key, peer), the endpoint |
-| `add`, `seed`, `check` | `flux_cluster`, `[dns] zone` (the app hostname's zone on a cloud fort) |
-| `provision`, `preview`, `adopt` | the provider table (which backend, its credentials), `production` (protect) |
-| the pulumi program | the provider table, `production`, `[dns]`, `[shape]`, `mesh_ip` (exported) |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the cluster key, deploy key and canary always |
+| `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
+| `provision`, `preview`, `adopt` | the provider table (which backend, its credentials) |
+| the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
 | `destroy` | the gate: no manifest on `origin/main` and none in the working tree |
-| `ci/fleet-checks.py`, the nix-eval job | the list of hosts; `flux_cluster` |
+| `ci/fleet-checks.py`, the nix-eval job | the list of hosts |
 
 ## History
 

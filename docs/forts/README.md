@@ -1,7 +1,7 @@
 # Forts — the CLI workflow
 
 A **fort** is one host: one NixOS machine, one pulumi stack named after it,
-and (for `flux_cluster: true`) one single-node k3s cluster that flux
+and one single-node k3s cluster that flux
 reconciles from `fleet/clusters/<host>` + `fleet/apps/<host>`. Everything
 about it — the node config, its identity, its workloads, the state that
 says it exists — lives in this repo, and the `fort` CLI (`forts/cmd/fort`)
