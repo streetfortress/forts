@@ -22,7 +22,7 @@ import (
 // side effects outside git, reachable only once main says the host is
 // retired — the merged dismantle PR is the deliberate act `protect:
 // true` was guarding for. The steps are the web3 runbook
-// (forts/DECOMISSIONING.md), in order, each pulumi step with inherited
+// (docs/forts/destroy.md), in order, each pulumi step with inherited
 // stdio so a human reads and confirms exactly as by hand. `pulumi
 // destroy` does not run the program, so the missing inventory entry is
 // no obstacle: the provider comes from the checkpoint. A failure

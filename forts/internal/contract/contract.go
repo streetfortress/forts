@@ -1,5 +1,5 @@
 // Package contract reads a chart's secrets.contract.yaml — the
-// environment-agnostic declaration of what a chart needs (forts/CONTRACTS.md):
+// environment-agnostic declaration of what a chart needs (docs/forts/fort-configuration-contracts.md):
 // the keys its existingSecret must carry and how each is produced, the
 // platform services it consumes and the values paths their endpoints
 // wire into, the Service the fleet routes to, the metrics port.

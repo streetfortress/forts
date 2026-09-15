@@ -15,7 +15,7 @@ import (
 // with its metadata and keyed value specs. `fort add` renders it for a
 // chart from the chart's own contract; `fort seed` executes it, or
 // derives it on the fly from the chart's contract + overlay when the
-// fort-side file is absent or an overlay (forts/CONTRACTS.md).
+// fort-side file is absent or an overlay (docs/forts/fort-configuration-contracts.md).
 //
 // Order is preserved everywhere (a map would sort the author's key
 // order away and make diffs churn), hence the yaml.Node walking.
@@ -222,7 +222,7 @@ type providerBinding struct {
 }
 
 // providerDirs: the shared instance each provider type lives in on a
-// fort (forts/CONTRACTS.md conventions).
+// fort (docs/forts/fort-configuration-contracts.md conventions).
 var providerDirs = map[string]string{"postgres": "sites-db", "valkey": "valkey", "s3": "rustfs"}
 
 // conventionalBinding is THE place the per-fort conventions for a

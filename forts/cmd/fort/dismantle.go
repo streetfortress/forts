@@ -132,7 +132,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 	p.residue, p.crossRefs = scanResidue(root, host, p.removes, edited)
 	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("forts/pulumi/state/.pulumi/stacks/forts", host+".json")) {
-		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (forts/DECOMISSIONING.md until it lands). `just iac-drift` is red for it in between, which is the correct signal.")
+		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (docs/forts/destroy.md). `just iac-drift` is red for it in between, which is the correct signal.")
 	}
 	if entry.Provider == "" {
 		p.notes = append(p.notes, "no provider: nothing raised this host through the CLI, so nothing destroys it — the VM (if any) goes by hand on the hypervisor (`virsh destroy` + `virsh undefine --remove-all-storage`).")

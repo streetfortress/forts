@@ -13,7 +13,7 @@ import (
 	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
 )
 
-// check is the merge gate (forts/CONTRACTS.md, "The gate is the
+// check is the merge gate (docs/forts/fort-configuration-contracts.md, "The gate is the
 // product"): for every app dir of a fort, the committed Secret must
 // carry what its effective contract requires. Key names are plaintext
 // under the repo's encrypted_regex, so no age key is involved; the

@@ -57,36 +57,10 @@ which keeps refresh and drift green after the image is gone.
 
 ## Flow
 
-```
-fort scaffold web3 --write          # host nix files (cloud shape) + the flux
-                                    # cluster dir + apps root kustomization
-fort mint web3 --write              # identity: keys, sops rules, mesh peer,
-                                    # deploy key on gitea, canary (dry run first)
-                                    # → branch → PR (merge — generated code is
-                                    #  reviewed; build + inject the bootstrap image)
-fort provision web3 --image <path>  # linode: upload → pulumi up (you confirm)
-                                    # → image deleted both sides; libvirt: the
-                                    # qcow2 (grown to disk_size) streams into
-                                    # soundship's pool as the root disk, local
-                                    # copy deleted. flux owns everything above
-fort preview web3                   # read the diff first (day-2 edits);
-                                    # --refresh = drift against the provider
-fort provision web3                 # later day-2 applies (firewall/DNS edits)
-fort preview --all --refresh \
-    --expect-no-changes             # fleet drift check (= just iac-drift)
-fort add web3 oci://…/symbology \
-    --version 0.1.5 [--write]       # render a chart's fort-side tree from
-                                    # its contract (CONTRACTS.md)
-fort seed web3 [--write]            # produce its sops Secrets (dependency
-                                    # order derived) → PR
-fort check --all                    # the merge gate: Secrets vs contracts
-                                    # (CI runs it; no age key needed)
-fort dismantle web3 [--write]       # retire: remove exactly what scaffold +
-                                    # mint generated, report the residue → PR
-fort destroy web3                   # after that merge: power off, refresh,
-                                    # unprotect, destroy, stack rm, deploy key;
-                                    # stages the state removal → its own PR
-```
+The workflow — author verbs → PR → merge → apply verbs → commit the
+pulumi state — and one page per verb are in
+[`docs/forts/`](../docs/forts/README.md). `fort` with no arguments
+prints the usage block, which is the same list.
 
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
 `PULUMI_CONFIG_PASSPHRASE` — taken from the environment when set, else
@@ -158,8 +132,8 @@ flake discovers the image variant from the host dir's runtime import);
 deploy key → canary; private halves in memory, then only in the host's
 sops file). `fort add` renders a chart's workload tree from the
 contract the chart ships and `fort seed` produces the Secrets
-(CONTRACTS.md — status section there). `fort dismantle` is the repo half
+(docs/forts/fort-configuration-contracts.md — status section there). `fort dismantle` is the repo half
 of decommissioning (#217) and `fort destroy` the side-effects half, gated
-on the dismantle merge (DECOMISSIONING.md). The public-face extraction (github.com/streetfortress/forts)
+on the dismantle merge (docs/forts/destroy.md). The public-face extraction (github.com/streetfortress/forts)
 splits the generic tool from repo-specific inventory/state — later, and
 a publish step.

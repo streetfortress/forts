@@ -132,7 +132,7 @@ func usage() {
   add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
       [--hostname fqdn] [--without type,...] [--chart-dir path] [--write]
       render a chart's fort-side tree from the secrets.contract.yaml it
-      ships (forts/CONTRACTS.md): app dir + HelmRelease with the
+      ships (docs/forts/fort-configuration-contracts.md): app dir + HelmRelease with the
       contract's wire: values filled by convention, gateway listener +
       certificate, provider instances (valkey) on first need and tenant
       registration (sites-db, valkey) after that, the seeding contract.

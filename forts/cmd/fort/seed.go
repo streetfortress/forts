@@ -20,7 +20,7 @@ import (
 )
 
 // seed produces a fort's sops-encrypted Secrets from contracts
-// (forts/CONTRACTS.md): the Go successor of provisioning/seed-secrets.py.
+// (docs/forts/fort-configuration-contracts.md): the Go successor of provisioning/seed-secrets.py.
 // For each app dir the effective contract is the fort-side full form
 // when one is committed, else the chart's own contract (pulled at the
 // tag the dir's OCIRepository pins) merged with the fort-side overlay
@@ -211,7 +211,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 }
 
 // appDir resolves a <dir> argument: a bare app name (`sites-db`, the
-// form CONTRACTS.md uses) lives under the fort's apps root; anything with
+// form docs/forts/fort-configuration-contracts.md uses) lives under the fort's apps root; anything with
 // a slash is taken as repo-relative and must land there too.
 func appDir(apps, d string) string {
 	d = filepath.Clean(d)

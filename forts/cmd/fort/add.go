@@ -22,7 +22,7 @@ import (
 var addTemplates embed.FS
 
 // add renders a chart's fort-side tree from its contract
-// (forts/CONTRACTS.md): the app dir, the gateway listener + certificate,
+// (docs/forts/fort-configuration-contracts.md): the app dir, the gateway listener + certificate,
 // provider instances on first need and tenant registration after that.
 // A pure generator — new files plus appended list entries, never a
 // rewrite; nothing is applied. Dry-run prints the marked tree; --write
@@ -343,7 +343,7 @@ func planAdd(o addOpts) (*plan, error) {
 			if r.Instance.Optional {
 				continue
 			}
-			return nil, fmt.Errorf("requires.s3.%s: the s3 provider is not implemented yet (forts/CONTRACTS.md sequencing)", r.Handle)
+			return nil, fmt.Errorf("requires.s3.%s: the s3 provider is not implemented yet (docs/forts/fort-configuration-contracts.md sequencing)", r.Handle)
 		}
 		for out, path := range r.Instance.Wire {
 			val, ok := outputs[key][out]

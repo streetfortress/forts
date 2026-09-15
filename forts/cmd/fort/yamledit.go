@@ -6,7 +6,7 @@ import (
 )
 
 // Text-level edits for the two "append a line to an existing file" cases
-// fort add is allowed (forts/CONTRACTS.md: new files + appended list
+// fort add is allowed (docs/forts/fort-configuration-contracts.md: new files + appended list
 // entries, never a rewrite). Working on text rather than a YAML tree
 // keeps every comment and the author's formatting byte-for-byte; the
 // files are ours, so the shapes assumed here are the shapes we render.
