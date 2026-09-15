@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,32 +19,26 @@ func TestDestroyGates(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	inv := func(hosts ...string) string {
-		s := "all:\n  children:\n    nixos:\n      hosts:\n"
-		for _, h := range hosts {
-			s += "        " + h + ":\n          provider: libvirt\n"
-		}
-		return s
-	}
-	write("provisioning/inventory.yaml", inv("other"))
+	const lab = "[libvirt]\nip = \"10.0.0.1\"\n"
+	write(manifest.Path("other"), lab)
 	write("forts/pulumi/state/.pulumi/stacks/forts/gone.json", checkpoint)
 
-	// the happy path: absent everywhere, clean, stack exists
-	if p, problems := destroyGates(tmp, "gone", []byte(inv("other")), true); p != "libvirt" || len(problems) != 0 {
+	// the happy path: no manifest anywhere, clean, stack exists
+	if p, problems := destroyGates(tmp, "gone", false, true); p != "libvirt" || len(problems) != 0 {
 		t.Errorf("want libvirt + no problems, got %q %v", p, problems)
 	}
 	// still on main
-	if _, problems := destroyGates(tmp, "gone", []byte(inv("other", "gone")), true); len(problems) != 1 || !strings.Contains(problems[0], "origin/main") {
+	if _, problems := destroyGates(tmp, "gone", true, true); len(problems) != 1 || !strings.Contains(problems[0], "origin/main") {
 		t.Errorf("main gate: %v", problems)
 	}
 	// still in the working tree + dirty
-	write("provisioning/inventory.yaml", inv("other", "gone"))
-	if _, problems := destroyGates(tmp, "gone", []byte(inv("other")), false); len(problems) != 2 {
+	write(manifest.Path("gone"), lab)
+	if _, problems := destroyGates(tmp, "gone", false, false); len(problems) != 2 {
 		t.Errorf("tree gates: %v", problems)
 	}
-	write("provisioning/inventory.yaml", inv("other"))
+	os.Remove(filepath.Join(tmp, manifest.Path("gone")))
 	// no stack
-	if p, problems := destroyGates(tmp, "never", []byte(inv("other")), true); p != "" || len(problems) != 1 || !strings.Contains(problems[0], "no stack") {
+	if p, problems := destroyGates(tmp, "never", false, true); p != "" || len(problems) != 1 || !strings.Contains(problems[0], "no stack") {
 		t.Errorf("stack gate: %q %v", p, problems)
 	}
 	if _, err := providerFromState([]byte(`{"checkpoint":{"latest":{"resources":[]}}}`)); err == nil {

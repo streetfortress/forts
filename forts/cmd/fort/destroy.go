@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"github.com/linode/linodego"
 )
 
@@ -24,8 +24,8 @@ import (
 // true` was guarding for. The steps are the web3 runbook
 // (docs/forts/destroy.md), in order, each pulumi step with inherited
 // stdio so a human reads and confirms exactly as by hand. `pulumi
-// destroy` does not run the program, so the missing inventory entry is
-// no obstacle: the provider comes from the checkpoint. A failure
+// destroy` does not run the program, so the missing manifest is no
+// obstacle: the provider comes from the checkpoint. A failure
 // mid-way leaves the (partly deleted, unprotected) state in the working
 // tree — the right place for it — and the rerun picks up where it was.
 func destroy(args []string) error {
@@ -42,15 +42,15 @@ func destroy(args []string) error {
 	if err := exec.Command("git", "-C", root, "fetch", "-q", "origin").Run(); err != nil {
 		return fmt.Errorf("git fetch origin: %w", err)
 	}
-	mainInv, err := exec.Command("git", "-C", root, "show", "origin/main:provisioning/inventory.yaml").Output()
+	onMain, err := exec.Command("git", "-C", root, "ls-tree", "--name-only", "origin/main", "--", manifest.Path(host)).Output()
 	if err != nil {
-		return fmt.Errorf("reading origin/main's inventory: %w", err)
+		return fmt.Errorf("reading origin/main: %w", err)
 	}
 	status, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
 	if err != nil {
 		return err
 	}
-	provider, problems := destroyGates(root, host, mainInv, len(strings.TrimSpace(string(status))) == 0)
+	provider, problems := destroyGates(root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0)
 	fmt.Printf("%s   (provider %s, from the checkpoint)\n", host, provider)
 	if len(problems) > 0 {
 		for _, p := range problems {
@@ -58,7 +58,7 @@ func destroy(args []string) error {
 		}
 		return fmt.Errorf("refusing: %d gate(s) not met", len(problems))
 	}
-	fmt.Println("  ✓ absent from origin/main's inventory and the working tree's; tree clean; stack exists")
+	fmt.Println("  ✓ no manifest on origin/main or in the working tree; tree clean; stack exists")
 
 	if err := cloudEnv(root, provider); err != nil {
 		return err
@@ -121,20 +121,16 @@ func destroy(args []string) error {
 }
 
 // destroyGates: the inverse of every other verb's precondition. The
-// host must be gone from origin/main's inventory (the dismantle PR
-// merged) and from the working tree's, the tree clean (so the state
+// host's manifest must be gone from origin/main (the dismantle PR
+// merged) and from the working tree, the tree clean (so the state
 // removal lands as its own commit), and the stack must exist — a host
 // nothing raised through the CLI has none and goes by hand.
-func destroyGates(root, host string, mainInventory []byte, clean bool) (provider string, problems []string) {
-	if hosts, err := inventory.Parse(mainInventory); err != nil {
-		problems = append(problems, "origin/main inventory: "+err.Error())
-	} else if _, ok := hosts[host]; ok {
-		problems = append(problems, "still declared in origin/main's inventory — merge the `fort dismantle "+host+"` PR first (this refuses to unprotect a declared host)")
+func destroyGates(root, host string, onMain, clean bool) (provider string, problems []string) {
+	if onMain {
+		problems = append(problems, "still declared on origin/main ("+manifest.Path(host)+") — merge the `fort dismantle "+host+"` PR first (this refuses to unprotect a declared host)")
 	}
-	if hosts, err := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml")); err == nil {
-		if _, ok := hosts[host]; ok {
-			problems = append(problems, "still in the working tree's inventory — check out merged main")
-		}
+	if exists(root, manifest.Path(host)) {
+		problems = append(problems, "still in the working tree ("+manifest.Path(host)+") — check out merged main")
 	}
 	if !clean {
 		problems = append(problems, "working tree not clean — the state removal must land as its own commit")

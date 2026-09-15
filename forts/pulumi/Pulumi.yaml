@@ -1,4 +1,4 @@
-# Pulumi project (#42/#87): micro-stacks, stack name == inventory host.
+# Pulumi project (#42/#87): micro-stacks, stack name == the manifest's host.
 # The project name is baked into every resource URN — settled as `forts`
 # before any real state existed; renaming it later is state surgery.
 #

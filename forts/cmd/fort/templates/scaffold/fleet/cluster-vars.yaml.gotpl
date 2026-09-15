@@ -10,4 +10,4 @@ metadata:
   namespace: flux-system
 data:
   CLUSTER_NAME: {{ .Hostname }}
-  MESH_IP: {{ .WgVpnIP }}
+  MESH_IP: {{ .MeshIP }}

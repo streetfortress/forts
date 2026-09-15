@@ -5,7 +5,7 @@ fort scaffold <host> [--write]
 ```
 
 `scaffold` renders every file a host needs that is derivable from its
-inventory entry, and nothing that is not. It is a pure template render:
+[manifest](manifest.md), and nothing that is not. It is a pure template render:
 no secrets, no network, no provider. That is why it is the first verb, why
 anyone with a checkout can run it, and why its output is golden-tested
 against the committed cluster dirs — the generator must keep reproducing
@@ -23,7 +23,7 @@ the primitives rather than fattening one.
 
 ## What it renders
 
-From `provisioning/inventory.yaml`'s entry for `<host>`:
+From `provisioning/forts/<host>.toml`:
 
 ```
 nixos/hosts/<host>/
@@ -33,26 +33,28 @@ nixos/hosts/<host>/
                      names a cloud provider
 ● secrets.nix        sops-nix wiring: the host's age identity is derived from
                      its ssh host key; declares wireguard-private-key when the
-                     entry has wg_vpn_ip
+                     manifest has mesh_ip
 fleet/clusters/<host>/                       (flux_cluster: true only)
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path fleet/clusters/<host>
 ● flux-system/kustomization.yaml
-● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <wg_vpn_ip>
+● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → fleet/apps/<host>
 fleet/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
 ```
 
-Inventory fields it reads: `provider`, `region`, `instance_type`,
-`ansible_host` (the lab static IP), `wg_vpn_ip`, `flux_cluster`,
-`production`, and the optional lab overrides `lan_prefix`, `lan_gateway`,
-`lan_dns`, `nixos_state_version`, `k3s_cluster_init`. The lab defaults
+Manifest fields it reads: the provider table (`[libvirt]` `ip` — the lab
+static IP — and its optional `lan_prefix`, `lan_gateway`, `lan_dns`;
+`[linode]` `region` + `type` for the header comment), `mesh_ip`,
+`flux_cluster`, `production`, and the optional seeds `nixos_state_version`,
+`k3s_cluster_init`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
 `25.11`.
 
-A flux cluster without `wg_vpn_ip` is refused: every flux cluster is a
+A flux cluster without `mesh_ip` is refused (by the manifest loader, so
+every verb says so): every flux cluster is a
 mesh member (`MESH_IP` is mandatory), and a production host without a
 mesh address has no login path at all.
 
@@ -61,7 +63,7 @@ mesh address has no login path at all.
 `--write` lays a file down only when it does not exist; an existing one is
 reported `○ exists — kept` and never touched. So:
 
-- inventory seeds the host once; hand refinements live in the files and
+- the manifest seeds the host once; hand refinements live in the files and
   are never clobbered;
 - a re-run after a template change shows what would be *new*, not a diff
   against your edits;

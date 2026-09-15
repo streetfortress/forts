@@ -125,9 +125,9 @@ func (f *fakeTool) UpdateKeys(path string) error {
 }
 
 func TestSeedFullForm(t *testing.T) {
-	const fort = "lab-fort" // testdata/inventory.yaml — no real fort involved
+	const fort = "lab-fort" // testdata manifest — no real fort involved
 	tmp := t.TempDir()
-	copyFile(t, "testdata/inventory.yaml", filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, "testdata", tmp, fort)
 	apps := filepath.Join(tmp, "fleet/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {
@@ -248,7 +248,7 @@ func TestSeedFromChartContract(t *testing.T) {
 	}
 	const fort = "sfi-fort-e33e2d5"
 	tmp := t.TempDir()
-	copyFile(t, filepath.Join(repo, "provisioning/inventory.yaml"), filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, repo, tmp, fort)
 	golden := filepath.Join(repo, "fleet/apps", fort)
 	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/secrets.contract.yaml", "valkey/secrets.contract.yaml"} {
 		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "fleet/apps", fort, rel))
@@ -318,7 +318,7 @@ func remove(list []string, s string) []string {
 func TestSeedEdgeCases(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
-	copyFile(t, "testdata/inventory.yaml", filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, "testdata", tmp, fort)
 	apps := filepath.Join(tmp, "fleet/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {

@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // dismantle is the inverse of `fort scaffold` + `fort mint`: a pure repo mutation that removes exactly what they
@@ -56,7 +56,7 @@ func dismantle(args []string) error {
 
 type dismantlePlan struct {
 	root, host string
-	entry      inventory.Host
+	entry      manifest.Host
 	removes    []string // repo-relative paths (files or dirs)
 	edits      []dEdit
 	rekey      []string // sops files under the shared infrastructure rule
@@ -72,14 +72,15 @@ type dEdit struct {
 }
 
 func planDismantle(root, host string) (*dismantlePlan, error) {
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
 	}
 	p := &dismantlePlan{root: root, host: host, entry: entry}
 
-	// 1. inventory
-	p.edits = append(p.edits, dEdit{"provisioning/inventory.yaml", "- " + host + " entry (with its attached comment)", func(s string) (string, error) { return removeInventoryBlock(s, host) }})
+	// 1. the manifest — the declaration goes first; the rest is its
+	// realization
+	p.removes = append(p.removes, manifest.Path(host))
 
 	// 2. node layer
 	for _, rel := range []string{filepath.Join("nixos/hosts", host), filepath.Join("nixos/secrets", host+".yaml")} {
@@ -113,7 +114,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 
 	// 4. wireguard peer
-	if entry.WgVpnIP != "" {
+	if entry.MeshIP != "" {
 		p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 	}
 
@@ -182,12 +183,9 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 }
 
 func (p *dismantlePlan) report(w io.Writer, written bool) {
-	kind := "no provider (by hand)"
-	switch {
-	case p.entry.Cloud():
+	kind := "lab: libvirt backend (fort destroy)"
+	if p.entry.Cloud() {
 		kind = "cloud: " + p.entry.Provider
-	case p.entry.Provider == "libvirt":
-		kind = "lab: libvirt backend (fort destroy)"
 	}
 	fmt.Fprintf(w, "dismantle %s   (%s)\n", p.host, kind)
 	for _, rel := range p.removes {
@@ -254,37 +252,6 @@ func removeLinesContaining(text, needle string) (string, int) {
 		out = append(out, l)
 	}
 	return strings.Join(out, "\n"), n
-}
-
-// removeInventoryBlock drops the host's mapping under
-// all.children.nixos.hosts (8-space key) together with the comment
-// lines directly above it, up to the next sibling key.
-func removeInventoryBlock(text, host string) (string, error) {
-	lines := strings.Split(text, "\n")
-	const indent = "        "
-	start := -1
-	for i, l := range lines {
-		if l == indent+host+":" {
-			start = i
-			break
-		}
-	}
-	if start < 0 {
-		return "", fmt.Errorf("no `%s%s:` entry", indent, host)
-	}
-	end := start + 1
-	for end < len(lines) {
-		l := lines[end]
-		if strings.TrimSpace(l) != "" && !strings.HasPrefix(l, indent+" ") {
-			break
-		}
-		end++
-	}
-	first := start
-	for first > 0 && strings.HasPrefix(lines[first-1], indent+"#") {
-		first--
-	}
-	return strings.Join(append(append([]string{}, lines[:first]...), lines[end:]...), "\n"), nil
 }
 
 // removePeer is `jq 'del(.peers[$n])'` — preseed wrote the file with jq,

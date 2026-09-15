@@ -1,9 +1,10 @@
 # forts — cloud provisioning (#42/#87)
 
 You manage *forts* with this: one fort = one host = base image + flux
-workloads, keyed by its inventory hostname everywhere (nix host dir,
-pulumi stack, peers.json, sops). `cmd/fort` is the CLI; `pulumi/` is the
-resource program it wraps; `internal/inventory` is the shared schema.
+workloads, declared by its manifest (`provisioning/forts/<host>.toml`,
+docs/forts/manifest.md) and keyed by that hostname everywhere (nix host
+dir, pulumi stack, peers.json, sops). `cmd/fort` is the CLI; `pulumi/` is
+the resource program it wraps; `internal/manifest` is the shared schema.
 
 The provider-side surface is deliberately three things — **instance,
 firewall, DNS** — because the WireGuard mesh owns machine-to-machine
@@ -12,7 +13,7 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
 
 ## Shape
 
-- **One stack per host, stack name == inventory hostname.** Blast radius
+- **One stack per host, stack name == the manifest's hostname.** Blast radius
   is one machine by construction; adding a host cannot churn the others.
   Zone-level resources (DNS zone, shared assets) get a `shared` stack
   when they materialize.
@@ -28,7 +29,7 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
   provider. Moving to S3 later is `stack export | import`.
 - **No renames, ever.** Hostname keys peers.json, sops, the flux cluster
   dir, and flake auto-discovery — rename = decommission + provision.
-  Removing an inventory entry touches no state; destruction is only ever
+  Deleting a manifest touches no state; destruction is only ever
   `pulumi destroy -s <host>`, and every resource of a `production: true`
   host carries `protect: true` so even that requires deliberate
   unprotecting first.
@@ -135,5 +136,5 @@ contract the chart ships and `fort seed` produces the Secrets
 (docs/forts/fort-configuration-contracts.md — status section there). `fort dismantle` is the repo half
 of decommissioning (#217) and `fort destroy` the side-effects half, gated
 on the dismantle merge (docs/forts/destroy.md). The public-face extraction (github.com/streetfortress/forts)
-splits the generic tool from repo-specific inventory/state — later, and
+splits the generic tool from repo-specific manifests/state — later, and
 a publish step.

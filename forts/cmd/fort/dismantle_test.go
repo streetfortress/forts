@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func TestDismantle(t *testing.T) {
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			tmp := t.TempDir()
-			for _, rel := range []string{"provisioning/inventory.yaml", ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json", "README.md",
+			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), manifest.Path("staging-k3s"), ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json", "README.md",
 				"nixos/secrets/" + tc.host + ".yaml", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
@@ -61,13 +62,12 @@ func TestDismantle(t *testing.T) {
 					t.Errorf("%s was removed", rel)
 				}
 			}
-			inv := readFile(t, filepath.Join(tmp, "provisioning/inventory.yaml"))
-			if strings.Contains(inv, "        "+tc.host+":") {
-				t.Errorf("inventory still has %s", tc.host)
+			if exists(tmp, manifest.Path(tc.host)) {
+				t.Errorf("manifest %s still exists", manifest.Path(tc.host))
 			}
-			for _, other := range []string{"        luxor:", "        staging-k3s:"} {
-				if !strings.Contains(inv, other) {
-					t.Errorf("inventory lost %q", other)
+			for _, other := range []string{"luxor", "staging-k3s"} {
+				if !exists(tmp, manifest.Path(other)) {
+					t.Errorf("manifest %s was removed", other)
 				}
 			}
 			for _, f := range []string{".sops.yaml", "nixos/.sops.yaml"} {
@@ -107,14 +107,6 @@ func TestDismantle(t *testing.T) {
 }
 
 func TestDismantleEdits(t *testing.T) {
-	inv := "hosts:\n        # attached comment\n        a:\n          x: 1\n          # inner\n          y: 2\n        b:\n          x: 3\n"
-	out, err := removeInventoryBlock(inv, "a")
-	if err != nil || out != "hosts:\n        b:\n          x: 3\n" {
-		t.Errorf("removeInventoryBlock: %v\n%s", err, out)
-	}
-	if _, err := removeInventoryBlock(inv, "zzz"); err == nil {
-		t.Error("missing host should error")
-	}
 	if _, err := removeMarkerBlock("x\n", "h"); err == nil {
 		t.Error("missing block should error")
 	}

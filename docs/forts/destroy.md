@@ -14,22 +14,22 @@ exactly as by hand.
 
 ```
 sfi-x   (provider linode, from the checkpoint)
-  ✗ still declared in origin/main's inventory — merge the `fort dismantle sfi-x` PR first (this refuses to unprotect a declared host)
+  ✗ still declared on origin/main (provisioning/forts/sfi-x.toml) — merge the `fort dismantle sfi-x` PR first (this refuses to unprotect a declared host)
   ✗ working tree not clean — the state removal must land as its own commit
 refusing: 2 gate(s) not met
 ```
 
-- The host must be **absent from `origin/main`'s inventory** (fetched
+- The host's manifest must be **absent from `origin/main`** (fetched
   first) — the merged [dismantle](dismantle.md) PR is the deliberate act
-  `protect: true` was guarding for — and absent from the working tree's.
+  `protect: true` was guarding for — and absent from the working tree.
 - The **tree must be clean**, so the state removal lands as its own
   commit.
 - The **stack must exist**. A host nothing raised through the CLI has no
   stack and goes by hand on its hypervisor or console.
 
 The provider comes from the checkpoint's `pulumi:providers:*` resource,
-not from inventory: `pulumi destroy` never runs the program, so the
-missing inventory entry is no obstacle.
+not from the manifest: `pulumi destroy` never runs the program, so the
+missing manifest is no obstacle.
 
 ## Steps
 

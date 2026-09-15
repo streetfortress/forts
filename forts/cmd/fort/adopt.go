@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // adopt brings a playbook-era lab VM under the libvirt backend without a
@@ -31,12 +31,12 @@ func adopt(args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return err
 	}
 	if entry.Provider != "libvirt" {
-		return fmt.Errorf("host %q: adopt is for lab VMs the playbook raised — set `provider: libvirt` in inventory first (got %q)", host, entry.Provider)
+		return fmt.Errorf("host %q: adopt is for lab VMs the playbook raised — the manifest needs a [libvirt] table (got [%s])", host, entry.Provider)
 	}
 	pulumiDir := filepath.Join(root, "forts", "pulumi")
 	if exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json")) {

@@ -9,8 +9,8 @@ import (
 )
 
 // cloudEnv puts the credentials a pulumi run needs into the environment
-// for one provider (inventory's, or — for destroy — the one the stack's
-// checkpoint records: the host is gone from inventory by then)
+// for one provider (the manifest's, or — for destroy — the one the stack's
+// checkpoint records: the manifest is gone by then)
 // of this process — and so of the pulumi (and its provider) we exec.
 // Explicit env wins; otherwise each value is sops-decrypted from
 // provisioning/secrets.yaml, the same home as the gitea provisioning
@@ -42,8 +42,8 @@ func cloudEnv(root string, provider string) error {
 	// The lab hypervisor, reached over ssh from wherever fort runs. The
 	// provider carries its own ssh client (no ~/.ssh/config, no agent
 	// unless asked): the key file goes in the URI. One lab today; the
-	// per-fort manifest's [libvirt] table (#252) is where a second
-	// hypervisor would name itself.
+	// manifest's [libvirt] table is where a second hypervisor would name
+	// itself (a `uri` key, when there is one).
 	if provider == "libvirt" {
 		if os.Getenv("LIBVIRT_DEFAULT_URI") == "" {
 			home, _ := os.UserHomeDir()

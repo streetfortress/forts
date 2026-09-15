@@ -14,7 +14,7 @@ import (
 	"text/template"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/contract"
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,12 +139,12 @@ const sitesDBPatchesComment = `# Tenant registration: one JSON6902 patch per ten
 var outputRef = regexp.MustCompile(`\$\{(postgres|valkey|s3)\.([A-Za-z0-9_-]+)\.([a-zA-Z]+)\}`)
 
 func planAdd(o addOpts) (*plan, error) {
-	entry, err := inventory.LoadHost(filepath.Join(o.root, "provisioning/inventory.yaml"), o.fort)
+	entry, err := manifest.Load(o.root, o.fort)
 	if err != nil {
 		return nil, err
 	}
 	if !entry.FluxCluster {
-		return nil, fmt.Errorf("%s is not a flux cluster (flux_cluster: true in inventory)", o.fort)
+		return nil, fmt.Errorf("%s is not a flux cluster (flux_cluster = true in its manifest)", o.fort)
 	}
 
 	chartDir, resolved := o.chartDir, o.version
@@ -191,7 +191,7 @@ func planAdd(o addOpts) (*plan, error) {
 	if v.Lab {
 		v.Issuer, v.Zone = "step-ca", "lofi"
 	} else {
-		v.Issuer, v.Zone = "letsencrypt", entry.DNSZone
+		v.Issuer, v.Zone = "letsencrypt", entry.DNS.Zone
 		if v.Zone == "" {
 			v.Zone = "streetfortress.cloud"
 		}

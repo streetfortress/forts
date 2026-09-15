@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/contract"
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -126,7 +126,7 @@ type seedFile struct {
 // order (a dir whose sops: refs point into another dir of the same fort
 // comes after it), and decides per Secret file what seeding would do.
 func planSeed(o seedOpts) ([]*seedPlan, error) {
-	if _, err := inventory.LoadHost(filepath.Join(o.root, "provisioning/inventory.yaml"), o.fort); err != nil {
+	if _, err := manifest.Load(o.root, o.fort); err != nil {
 		return nil, err
 	}
 	apps := filepath.Join("fleet/apps", o.fort)

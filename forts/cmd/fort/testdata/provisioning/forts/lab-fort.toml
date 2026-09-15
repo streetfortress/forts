@@ -1,0 +1,9 @@
+# Test fixture: a lab host with the fields the fort CLI reads. Fixture-
+# shaped tests use testdata/forts/ so they do not depend on which forts
+# the real provisioning/forts/ declares today; the golden tests that
+# replay against COMMITTED trees keep the real ones.
+flux_cluster = true
+mesh_ip = "10.1.0.99"
+
+[libvirt]
+ip = "10.0.0.99"

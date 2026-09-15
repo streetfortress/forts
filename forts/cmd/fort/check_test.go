@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // The gate on a synthetic fort: a full-form dir that is complete, one
 // missing a key, a chart-contract dir with an unset required external
 // key, an unset wire value, and a provider ref into a file without the
-// key. Uses the fixture inventory and the symbology contract fixture.
+// key. Uses the fixture manifest and the symbology contract fixture.
 func TestCheckFindings(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
-	copyFile(t, "testdata/inventory.yaml", filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, "testdata", tmp, fort)
 	apps := filepath.Join(tmp, "fleet/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {
@@ -125,13 +125,27 @@ func TestCheckFleetOffline(t *testing.T) {
 	}
 }
 
-func TestProviderFindings(t *testing.T) {
-	hosts := map[string]inventory.Host{"b": {}, "a": {Provider: "libvirt"}, "c": {Provider: "linode"}, "d": {}}
-	got := providerFindings(hosts)
-	if len(got) != 2 || !strings.HasPrefix(got[0].msg, "b: no provider") || !strings.HasPrefix(got[1].msg, "d: no provider") || got[0].level != "error" {
+// The manifest gate: LoadAll's problems become findings, one per bad
+// file, named by the file, sorted, the path prefix stripped from the
+// message (the dir column carries it).
+func TestManifestFindings(t *testing.T) {
+	root := t.TempDir()
+	write := func(host, content string) {
+		os.MkdirAll(filepath.Join(root, manifest.Dir), 0o755)
+		os.WriteFile(filepath.Join(root, manifest.Path(host)), []byte(content), 0o644)
+	}
+	write("d", "production = true\n")
+	write("a", "[libvirt]\nip = \"10.0.0.1\"\n")
+	write("b", "[libvirt]\nip = \"10.0.0.2\"\n[linode]\nregion = \"r\"\ntype = \"t\"\n")
+	hosts, problems, err := manifest.LoadAll(root)
+	if err != nil || len(hosts) != 1 {
+		t.Fatalf("hosts %v err %v", hosts, err)
+	}
+	got := manifestFindings(problems)
+	if len(got) != 2 || got[0].dir != manifest.Path("b") || !strings.HasPrefix(got[0].msg, "2 provider tables") || got[1].dir != manifest.Path("d") || !strings.HasPrefix(got[1].msg, "no provider table") || got[0].level != "error" {
 		t.Errorf("findings: %+v", got)
 	}
-	if len(providerFindings(map[string]inventory.Host{"a": {Provider: "libvirt"}})) != 0 {
-		t.Error("a provider-bearing host should pass")
+	if len(manifestFindings(nil)) != 0 {
+		t.Error("no problems, no findings")
 	}
 }

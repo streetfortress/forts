@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"github.com/pulumi/pulumi-libvirt/sdk/go/libvirt"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
@@ -28,40 +26,27 @@ import (
 // the birth and a rebuilt image never proposes a disk replacement — a
 // repave is `pulumi destroy` + provision, deliberately.
 //
-// Sizing is the inventory's node-layer fields (vcpus, memory, disk_size)
-// with the lab defaults. The provider refuses `size` next to
+// Sizing is the manifest's [shape] (vcpus, memory, disk) with the lab
+// defaults. The provider refuses `size` next to
 // `source` (the volume takes the image's virtual size), so `fort
 // provision` grows the qcow2 to disk_size with qemu-img BEFORE the
 // upload — the playbook's order — and the qcow's autoResize grows the
-// root fs into it on first boot.
+// root fs into it on first boot. The [libvirt] table is the static LAN
+// address (baked into the image; exported for `fort provision`).
 type Libvirt struct{}
 
 const (
 	libvirtPool   = "images"
 	libvirtBridge = "br0"
-	// the lab defaults (were create-nixos.yaml's default_vm_spec).
-	defaultVcpus  = 2
-	defaultMemory = 4
-	defaultDisk   = "40G"
 )
 
-func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host inventory.Host) error {
-	vcpus, memory, disk := host.Vcpus, host.Memory, host.DiskSize
-	if vcpus == 0 {
-		vcpus = defaultVcpus
+func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host) error {
+	spec := host.Libvirt()
+	if spec == nil {
+		return fmt.Errorf("host %q: no [libvirt] table", name)
 	}
-	if memory == 0 {
-		memory = defaultMemory
-	}
-	if disk == "" {
-		disk = defaultDisk
-	}
-	if _, err := parseSize(disk); err != nil {
-		return fmt.Errorf("host %q: disk_size: %w", name, err)
-	}
-	if host.AnsibleHost == "" {
-		return fmt.Errorf("host %q: libvirt requires ansible_host (the static LAN address baked into the image)", name)
-	}
+	shape := host.Shape.WithLabDefaults()
+	vcpus, memory := shape.Vcpus, shape.Memory
 
 	// The injected qcow2, set by `fort provision --image` — read at
 	// creation only (ignoreChanges below).
@@ -130,29 +115,10 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host inventory.Hos
 
 	// Same outputs as the Linode backend, so `fort provision` gates the
 	// single-use image deletion on the same fact (the host exists).
-	ctx.Export("ip", pulumi.String(host.AnsibleHost))
+	ctx.Export("ip", pulumi.String(spec.IP))
 	ctx.Export("domain", dom.Name)
 	ctx.Export("volume", vol.Name)
 	return nil
-}
-
-// parseSize reads the inventory's disk_size ("80G", "512M") as bytes.
-func parseSize(s string) (int, error) {
-	s = strings.TrimSpace(strings.ToUpper(s))
-	mult := 1
-	switch {
-	case strings.HasSuffix(s, "G"):
-		mult, s = 1<<30, strings.TrimSuffix(s, "G")
-	case strings.HasSuffix(s, "M"):
-		mult, s = 1<<20, strings.TrimSuffix(s, "M")
-	default:
-		return 0, fmt.Errorf("%q: want <n>G or <n>M", s)
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 {
-		return 0, fmt.Errorf("%q: want <n>G or <n>M", s)
-	}
-	return n * mult, nil
 }
 
 // qcow2DriverXSLT rewrites every disk device's driver type to qcow2 —

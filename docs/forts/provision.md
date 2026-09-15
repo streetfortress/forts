@@ -9,7 +9,7 @@ fort adopt    <host>
 `provision` is `pulumi up -s <host>` with the credentials, backend and
 image lifecycle handled for you, and nothing hidden: the stock CLI runs
 with inherited stdio, you read the preview and type `yes`. The program
-(`forts/pulumi`) realises the inventory entry through a per-provider
+(`forts/pulumi`) realises the [manifest](manifest.md) through a per-provider
 backend — `linode` for cloud forts, `libvirt` for the lab (soundship's
 `images` pool) — and the stack is named after the host, so `pulumi
 <anything> -s <host>` from `forts/pulumi` under the same environment is
@@ -27,7 +27,7 @@ apply:
 
 1. **Stage.** linode: upload the `.img.gz` through the Images API and
    wait until it is usable. libvirt: `qemu-img resize` the `.qcow2` to
-   the inventory's `disk_size` (the provider refuses `size` next to
+   the manifest's `[shape] disk` (the provider refuses `size` next to
    `source`, so the growth happens before upload; the root fs
    auto-resizes on first boot) — the file's absolute path is the id.
 2. **Record** the id as the stack's `forts:imageId` config — committed
@@ -81,7 +81,7 @@ The read-only half: `pulumi preview -s <host> --diff`, same environment.
   OK      luxor
   OK      sfi-prod-439bf72
   DRIFT   staging-k3s
-  PENDING web3   destroy pending: state without inventory — fort destroy web3
+  PENDING web3   destroy pending: state without a manifest — fort destroy web3
   ```
 
   `just iac-drift` = `--all --refresh --expect-no-changes`, the fleet
@@ -90,7 +90,7 @@ The read-only half: `pulumi preview -s <host> --diff`, same environment.
 ## adopt
 
 ```
-fort adopt <host>          # inventory: provider: libvirt, no stack yet
+fort adopt <host>          # a [libvirt] manifest, no stack yet
 ```
 
 Brings a lab VM that predates the backend under it **without a repave**:
@@ -111,14 +111,14 @@ born through `provision --image` like a cloud one.
 
 ## What the backends realise
 
-**linode** (`provider: linode`, `region`, `instance_type`, `dns_zone`,
-`dns_name`): the instance created unbooted, root + swap disks from the
+**linode** (`[linode]` `region` + `type`, `[dns]` `zone` + `name`): the
+instance created unbooted, root + swap disks from the
 uploaded image, the boot config (grub2, the two disks) which is what
 boots it, a firewall (default-deny in, 80/443 + wireguard), the A record
-and a wildcard `*.<dns_name>` in the zone. `fort destroy` powers the
+and a wildcard `*.<dns.name>` in the zone. `fort destroy` powers the
 instance off first: Linode refuses disk deletion on a running instance.
 
-**libvirt** (`provider: libvirt`, `vcpus`, `memory`, `disk_size`): a
+**libvirt** (`[libvirt]` `ip`, `[shape]` `vcpus` / `memory` / `disk`): a
 qcow2 volume in soundship's `images` pool streamed from the injected
 image through the libvirt API (no root hop), and a domain in the lab's
 fixed shape — host-passthrough CPU, virtio file disk on the volume's

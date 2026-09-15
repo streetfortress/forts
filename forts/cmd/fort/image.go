@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"github.com/linode/linodego"
 )
 
@@ -20,7 +20,7 @@ type imageFlow interface {
 	// Stage makes the artifact available and returns the value recorded
 	// as forts:imageId. It must leave the artifact retrievable if the
 	// apply then fails (the retry runs without --image).
-	Stage(ctx context.Context, entry inventory.Host, host, path string) (id string, err error)
+	Stage(ctx context.Context, entry manifest.Host, host, path string) (id string, err error)
 	// Release deletes the single-use artifact after a confirmed birth:
 	// provider-side where one exists, then the local injected copy.
 	Release(ctx context.Context, id, path string) error
@@ -38,7 +38,7 @@ var imageFlows = map[string]imageFlow{
 // it is usable, and deletes it provider-side once the instance exists.
 type linodeImage struct{ client linodego.Client }
 
-func (l *linodeImage) Stage(ctx context.Context, entry inventory.Host, host, path string) (string, error) {
+func (l *linodeImage) Stage(ctx context.Context, entry manifest.Host, host, path string) (string, error) {
 	c, err := linodego.NewClientFromEnv(nil) // LINODE_TOKEN
 	if err != nil {
 		return "", err
@@ -49,9 +49,9 @@ func (l *linodeImage) Stage(ctx context.Context, entry inventory.Host, host, pat
 		return "", err
 	}
 	defer f.Close()
-	fmt.Printf("uploading %s → %s (%s)…\n", path, host+"-bootstrap", entry.Region)
+	fmt.Printf("uploading %s → %s (%s)…\n", path, host+"-bootstrap", entry.Linode().Region)
 	img, err := l.client.UploadImage(ctx, linodego.ImageUploadOptions{
-		Region: entry.Region,
+		Region: entry.Linode().Region,
 		Label:  host + "-bootstrap",
 		Image:  f,
 	})
@@ -83,14 +83,14 @@ func (l *linodeImage) Leftover(id string) string {
 // libvirtImage: nothing to upload ahead of time — the pulumi program's
 // Volume streams the qcow2 into the hypervisor's pool through the
 // libvirt API, so the artifact's absolute path IS the id. Stage grows
-// the qcow2's virtual size to the inventory's disk_size first (the
+// the qcow2's virtual size to the manifest's [shape] disk first (the
 // provider refuses `size` next to `source`; the volume takes the
 // image's virtual size — the playbook's order, kept). The volume becomes the
 // root disk (not consumed), so Release removes only the local copy; the
 // program ignores later changes to the source.
 type libvirtImage struct{}
 
-func (l *libvirtImage) Stage(ctx context.Context, entry inventory.Host, host, path string) (string, error) {
+func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
@@ -101,10 +101,7 @@ func (l *libvirtImage) Stage(ctx context.Context, entry inventory.Host, host, pa
 	if filepath.Ext(abs) != ".qcow2" {
 		return "", fmt.Errorf("%s: the libvirt backend takes the injected qcow2 (inject-host-key.sh %s result/nixos.qcow2)", path, host)
 	}
-	size := entry.DiskSize
-	if size == "" {
-		size = "40G" // the lab default (was create-nixos default_vm_spec)
-	}
+	size := entry.Shape.WithLabDefaults().Disk
 	fmt.Printf("growing %s to %s (qemu-img resize; the root fs autoResizes on first boot)…\n", abs, size)
 	if err := qemuImg("resize", abs, size); err != nil {
 		return "", fmt.Errorf("qemu-img resize: %w", err)

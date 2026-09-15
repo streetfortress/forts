@@ -21,7 +21,7 @@ that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.m
 |---|---|---|
 | app, namespace, release, dir | the chart's name | `--name` |
 | the Secret the chart consumes | `<app>-env` in namespace `<app>` | the contract's `secret.values` names the values path |
-| hostname | `<app>.<fort>.<zone>` — zone = the inventory's `dns_zone` on a cloud fort, `lofi` in the lab | `--hostname` |
+| hostname | `<app>.<fort>.<zone>` — zone = the manifest's `[dns] zone` on a cloud fort, `lofi` in the lab | `--hostname` |
 | issuer | `letsencrypt` on a cloud fort, `step-ca` in the lab | — |
 | version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts | `--chart-dir` reads a local chart (tests, chart authors) |
 | optional providers | provisioned — the out-of-the-box result is the full topology | `--without valkey` drops an *optional* requirement; a required one is refused |

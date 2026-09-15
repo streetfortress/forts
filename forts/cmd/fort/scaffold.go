@@ -9,14 +9,14 @@ import (
 	"strings"
 	"text/template"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 //go:embed templates/scaffold
 var scaffoldTemplates embed.FS
 
 // hostView is the template context for one host's generated files —
-// inventory facts plus the lab defaults the create-nixos playbook used, so
+// manifest facts plus the lab defaults the create-nixos playbook used, so
 // hosts scaffolded before and after it agree.
 type hostView struct {
 	Hostname     string
@@ -24,13 +24,13 @@ type hostView struct {
 	Production   bool
 	FluxCluster  bool
 	HasWg        bool
-	WgVpnIP      string
+	MeshIP       string
 	LanPrefix    int
 	LanGateway   string
 	LanDNS       []string
 	StateVersion string
 	ClusterInit  bool
-	// Cloud hosts (inventory `provider`): the linode-runtime shape —
+	// Cloud hosts (a cloud provider table): the linode-runtime shape —
 	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
 	Cloud        bool
 	Provider     string
@@ -45,12 +45,12 @@ type scaffoldFile struct {
 	note    string
 }
 
-// scaffold renders a host's generated surface from its inventory entry:
+// scaffold renders a host's generated surface from its manifest:
 // the nix host dir (default.nix in the lab or cloud shape, secrets.nix)
 // and, for a flux cluster, fleet/clusters/<host>/ + the apps root
 // kustomization — the files the playbook-era cluster-init laid down for
 // lab VMs, one generator for lab and cloud now. Pure
-// generator with force-no semantics per file: inventory seeds the host
+// generator with force-no semantics per file: the manifest seeds the host
 // once, hand refinements live in the files and are never clobbered; a
 // re-run fills gaps only. The identity half (keys, sops rules, deploy
 // key, canary) is `fort mint`, run after this.
@@ -72,7 +72,7 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return err
 	}
@@ -103,21 +103,21 @@ func scaffold(args []string) error {
 		return nil
 	}
 	fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
-	switch {
-	case entry.Cloud():
+	if entry.Cloud() {
 		fmt.Printf("then PR → merge → nix build ./nixos#%s-linode → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
-	case entry.Provider == "libvirt":
+	} else {
 		fmt.Printf("then PR → merge → nix build ./nixos#%s-qcow → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
-	default:
-		fmt.Printf("then set `provider: libvirt` in inventory before fort mint — nothing raises a provider-less host\n")
 	}
 	return nil
 }
 
-func scaffoldShape(e inventory.Host) string {
+func scaffoldShape(e manifest.Host) string {
 	s := "lab VM"
 	if e.Cloud() {
-		s = e.Provider + " " + e.Region + " " + e.InstanceType
+		s = e.Provider
+		if l := e.Linode(); l != nil {
+			s += " " + l.Region + " " + l.Type
+		}
 	}
 	if e.FluxCluster {
 		s += ", flux cluster"
@@ -128,15 +128,14 @@ func scaffoldShape(e inventory.Host) string {
 	return s
 }
 
-// renderScaffold is the pure half: inventory entry → files.
-func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
+// renderScaffold is the pure half: manifest → files.
+func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	view := hostView{
 		Hostname:     host,
-		IP:           entry.AnsibleHost,
 		Production:   entry.Production,
 		FluxCluster:  entry.FluxCluster,
-		HasWg:        entry.WgVpnIP != "",
-		WgVpnIP:      entry.WgVpnIP,
+		HasWg:        entry.MeshIP != "",
+		MeshIP:       entry.MeshIP,
 		LanPrefix:    24,
 		LanGateway:   "10.0.0.1",
 		LanDNS:       []string{"10.0.0.2", "8.8.8.8"},
@@ -144,17 +143,21 @@ func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 		ClusterInit:  true,
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
-		Region:       entry.Region,
-		InstanceType: entry.InstanceType,
 	}
-	if entry.LanPrefix != nil {
-		view.LanPrefix = *entry.LanPrefix
+	if l := entry.Libvirt(); l != nil {
+		view.IP = l.IP
+		if l.LanPrefix != 0 {
+			view.LanPrefix = l.LanPrefix
+		}
+		if l.LanGateway != "" {
+			view.LanGateway = l.LanGateway
+		}
+		if len(l.LanDNS) > 0 {
+			view.LanDNS = l.LanDNS
+		}
 	}
-	if entry.LanGateway != "" {
-		view.LanGateway = entry.LanGateway
-	}
-	if len(entry.LanDNS) > 0 {
-		view.LanDNS = entry.LanDNS
+	if l := entry.Linode(); l != nil {
+		view.Region, view.InstanceType = l.Region, l.Type
 	}
 	if entry.StateVersion != "" {
 		view.StateVersion = entry.StateVersion
@@ -164,9 +167,10 @@ func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 	}
 	if view.FluxCluster && !view.HasWg {
 		// cluster-vars.yaml's MESH_IP is mandatory (#99): every flux
-		// cluster is a mesh member — a production host without wg_vpn_ip
-		// has no login path at all.
-		return nil, fmt.Errorf("%s: flux_cluster without wg_vpn_ip — every flux cluster is a mesh member", host)
+		// cluster is a mesh member — a production host without mesh_ip
+		// has no login path at all. (manifest.Validate says so first; this
+		// covers hosts built in memory.)
+		return nil, fmt.Errorf("%s: flux_cluster without mesh_ip — every flux cluster is a mesh member", host)
 	}
 
 	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/*.gotpl", "templates/scaffold/fleet/*.gotpl")
@@ -193,7 +197,7 @@ func renderScaffold(host string, entry inventory.Host) ([]scaffoldFile, error) {
 			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path fleet/clusters/" + host},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
-			struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.WgVpnIP},
+			struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.MeshIP},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
 			struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
 			struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},

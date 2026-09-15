@@ -5,16 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
-// The two shapes from the fixture inventory: a lab VM (qcow runtime,
+// The two shapes from the fixture manifests: a lab VM (qcow runtime,
 // static LAN) and a cloud fort (linode runtime, split DNS over the mesh,
 // zram, no LAN block) — both flux clusters, so both get the fleet dirs.
 func TestRenderScaffold(t *testing.T) {
-	hosts, err := inventory.Load("testdata/inventory.yaml")
-	if err != nil {
-		t.Fatal(err)
+	hosts, problems, err := manifest.LoadAll("testdata")
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
 	}
 	byPath := func(files []scaffoldFile) map[string]string {
 		m := map[string]string{}
@@ -89,18 +89,16 @@ func TestRenderScaffold(t *testing.T) {
 		t.Errorf("cloud MESH_IP wrong")
 	}
 
-	// provider: libvirt is still the lab shape (fort adopt, the libvirt backend)
-	h2 := hosts["lab-fort"]
-	h2.Provider = "libvirt"
-	if got := string(render(t, "lab-fort", h2)[0].content); !strings.Contains(got, "qcow-runtime") || strings.Contains(got, "linode") {
+	// a [libvirt] host is the lab shape (fort adopt, the libvirt backend)
+	if got := lab["nixos/hosts/lab-fort/default.nix"]; !strings.Contains(got, "qcow-runtime") || strings.Contains(got, "linode") {
 		t.Errorf("libvirt host should render the lab shape")
 	}
 
 	// a flux cluster off the mesh is refused (MESH_IP is mandatory, #99)
 	h := hosts["lab-fort"]
-	h.WgVpnIP = ""
+	h.MeshIP = ""
 	if _, err := renderScaffold("lab-fort", h); err == nil {
-		t.Errorf("flux_cluster without wg_vpn_ip should be refused")
+		t.Errorf("flux_cluster without mesh_ip should be refused")
 	}
 }
 
@@ -112,14 +110,14 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	hosts, err := inventory.Load(filepath.Join(repo, "provisioning/inventory.yaml"))
-	if err != nil {
-		t.Fatal(err)
+	hosts, problems, err := manifest.LoadAll(repo)
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
 	}
 	for name, h := range hosts {
 		// luxor was bootstrapped by hand and carries a bespoke apps layer
-		// (databasus-configs) and pre-module comments — the exception the
-		// inventory comment records, not a template drift.
+		// (databasus-configs) and pre-module comments — the exception its
+		// manifest's header records, not a template drift.
 		if !h.FluxCluster || name == "luxor" {
 			continue
 		}
@@ -134,7 +132,7 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	}
 }
 
-func render(t *testing.T, host string, h inventory.Host) []scaffoldFile {
+func render(t *testing.T, host string, h manifest.Host) []scaffoldFile {
 	t.Helper()
 	files, err := renderScaffold(host, h)
 	if err != nil {

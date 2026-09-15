@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,7 +47,7 @@ func TestMint(t *testing.T) {
 	}
 	const host = "mint-fort"
 	tmp := t.TempDir()
-	files := []string{"provisioning/inventory.yaml", ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
 		"fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
 	for _, rel := range files {
 		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
@@ -59,8 +60,7 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("provisioning/inventory.yaml", strings.TrimRight(original["provisioning/inventory.yaml"], "\n")+"\n"+
-		"        "+host+":\n          provider: linode\n          region: us-sea\n          instance_type: g6-standard-2\n          dns_zone: example.cloud\n          dns_name: "+host+"\n          production: true\n          flux_cluster: true\n          wg_vpn_ip: 10.1.0.97\n")
+	write(manifest.Path(host), "production = true\nflux_cluster = true\nmesh_ip = \"10.1.0.97\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
@@ -221,13 +221,13 @@ func TestMint(t *testing.T) {
 			t.Errorf("%s after mint+dismantle differs from the original", rel)
 		}
 	}
-	if got := strings.TrimSpace(readFile(t, filepath.Join(tmp, "provisioning/inventory.yaml"))); got != strings.TrimSpace(original["provisioning/inventory.yaml"]) {
-		t.Error("inventory after mint+dismantle differs from the original")
+	if exists(tmp, manifest.Path(host)) {
+		t.Error("manifest still exists after dismantle")
 	}
 }
 
 // A lab host that is not a flux cluster: host key, wg key, k3s token,
-// the nixos rule and the peer (endpoint from inventory) — no cluster
+// the nixos rule and the peer (endpoint = the lab address) — no cluster
 // key, no fleet rule, no canary, no gitea.
 func TestMintLabHost(t *testing.T) {
 	const host = "lab-plain"
@@ -236,7 +236,7 @@ func TestMintLabHost(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("provisioning/inventory.yaml", "all:\n  children:\n    nixos:\n      hosts:\n        "+host+":\n          ansible_host: 10.0.0.77\n          wg_vpn_ip: 10.1.0.77\n          wg_endpoint_ip: 10.0.0.77\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.77\"\n[libvirt]\nip = \"10.0.0.77\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - age1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # admin\n")
 	write("wireguard/peers.json", "{\n  \"peers\": {}\n}\n")
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
@@ -256,7 +256,7 @@ func TestMintLabHost(t *testing.T) {
 		t.Errorf("fresh config: the catch-all's recipients + the host:\n%s", nixos)
 	}
 	if peers := readFile(t, filepath.Join(tmp, "wireguard/peers.json")); !strings.Contains(peers, `"wg_endpoint_ip": "10.0.0.77"`) {
-		t.Errorf("peer endpoint from inventory:\n%s", peers)
+		t.Errorf("peer endpoint from the lab address:\n%s", peers)
 	}
 	var have map[string]string
 	if err := yamlUnmarshalFile(filepath.Join(tmp, "nixos/secrets", host+".yaml"), &have); err != nil {
@@ -328,7 +328,7 @@ func TestMintFluxNeedsGitea(t *testing.T) {
 		t.Skip("not inside the deployments checkout")
 	}
 	tmp := t.TempDir()
-	copyFile(t, filepath.Join(repo, "provisioning/inventory.yaml"), filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
 	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
 		t.Errorf("flux cluster without a client: want refusal, got %v", err)
 	}

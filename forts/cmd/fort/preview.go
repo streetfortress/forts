@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // preview is the read-only half of provision: the stock `pulumi preview`
@@ -16,12 +16,12 @@ import (
 // provisioning/secrets.yaml). Day-2 edits (firewall, DNS) get read here
 // before `fort provision` applies them; `--refresh` is the drift check
 // (program vs provider, not program vs state). `--all` walks every cloud
-// host in inventory — with --refresh --expect-no-changes that is the
+// host with a manifest — with --refresh --expect-no-changes that is the
 // fleet drift check (`just iac-drift`), one summary line per host and a
 // nonzero exit if any stack proposed a change or failed to preview.
 func preview(args []string) error {
 	fs := flag.NewFlagSet("preview", flag.ContinueOnError)
-	all := fs.Bool("all", false, "every cloud host in inventory")
+	all := fs.Bool("all", false, "every host with a manifest")
 	refresh := fs.Bool("refresh", false, "refresh state from the provider before diffing (drift)")
 	expectNone := fs.Bool("expect-no-changes", false, "exit nonzero if the preview proposes any change")
 	var host string
@@ -39,29 +39,35 @@ func preview(args []string) error {
 	if err != nil {
 		return err
 	}
-	hosts, err := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml"))
-	if err != nil {
-		return err
-	}
 	var targets []string
+	hosts := map[string]manifest.Host{}
 	if *all {
-		for name, h := range hosts {
-			if h.Provider != "" {
-				targets = append(targets, name)
+		loaded, problems, err := manifest.LoadAll(root)
+		if err != nil {
+			return err
+		}
+		if len(problems) > 0 {
+			var bad []string
+			for name := range problems {
+				bad = append(bad, name)
 			}
+			sort.Strings(bad)
+			return fmt.Errorf("bad manifest(s): %s — fort check --all says why", strings.Join(bad, ", "))
+		}
+		hosts = loaded
+		for name := range hosts {
+			targets = append(targets, name)
 		}
 		sort.Strings(targets)
 		if len(targets) == 0 {
-			return fmt.Errorf("no cloud hosts in inventory (no provider: set)")
+			return fmt.Errorf("no manifests in %s", manifest.Dir)
 		}
 	} else {
-		entry, ok := hosts[host]
-		if !ok {
-			return fmt.Errorf("host %q not in provisioning/inventory.yaml", host)
+		entry, err := manifest.Load(root, host)
+		if err != nil {
+			return err
 		}
-		if entry.Provider == "" {
-			return fmt.Errorf("host %q has no provider — set `provider: libvirt` (lab) or a cloud provider; nothing raises a provider-less host any more", host)
-		}
+		hosts[host] = entry
 		targets = []string{host}
 	}
 
@@ -97,13 +103,13 @@ func preview(args []string) error {
 		results = append(results, fmt.Sprintf("%-6s %s", verdict, name))
 	}
 	if *all {
-		// State without inventory means destroy pending (#217): the
+		// State without a manifest means destroy pending (#217): the
 		// dismantle PR merged, `fort destroy` has not run. Say so rather
-		// than silently skipping a stack inventory no longer names.
+		// than silently skipping a stack no manifest names.
 		for _, name := range stacksInState(filepath.Join(root, "forts", "pulumi")) {
 			if _, ok := hosts[name]; !ok {
 				failed++
-				results = append(results, fmt.Sprintf("%-6s %s   destroy pending: state without inventory — fort destroy %s", "PENDING", name, name))
+				results = append(results, fmt.Sprintf("%-6s %s   destroy pending: state without a manifest — fort destroy %s", "PENDING", name, name))
 			}
 		}
 	}

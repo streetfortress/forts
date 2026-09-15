@@ -160,7 +160,7 @@ secret:
    (`fort add --dedicated postgres`). web3's old shape.
 3. `{fort: db-fort, service: sites-db}` — **another fort's instance over
    the mesh**, for the dedicated-DB-fort + scattered web/cache forts
-   topology. Host resolves from inventory `wg_vpn_ip` plus the service's
+   topology. Host resolves from the manifest's `mesh_ip` plus the service's
    mesh port; credentials come in as cross-fort `sops:` refs, which the
    seeder already supports (admin key decrypts the source, output
    encrypts to *this* fort's recipients — how sfi-prod was seeded from
@@ -172,7 +172,7 @@ secret:
 
 `fort add <fort> <oci-ref>[:<version>] [--name <app>] [--hostname <fqdn>] [--dedicated <type>...] [--without <type>...]`
 
-Pure generator: reads the chart's contract, `provisioning/inventory.yaml`,
+Pure generator: reads the chart's contract, the fort's manifest,
 and the existing fort tree; writes **new files** and **appends lines to
 kustomization resource/patch lists**; never rewrites an existing file.
 Refuses if `fleet/apps/<fort>/<app>/` exists (scaffold's force-no
@@ -470,7 +470,7 @@ optional ones, each with the chart's description of where it comes from.
 `fort seed sfi-fort-e33e2d5 symbology --set STRIPE_SECRET_KEY` adds one.
 The PR's CI: kustomize builds (every listed sops file exists now); the
 contract gate pulls 0.1.3 and finds three required keys missing. The
-drill fort is `production: true` in inventory (hardened host profile),
+drill fort is `production = true` in its manifest (hardened host profile),
 so that is a **failure**, not a warning — the rehearsal is held to the
 production bar, and test values go in with `--set` before the PR is
 mergeable. Only a non-production fort gets the warning.
@@ -606,7 +606,7 @@ behind the publication milestone (#160).
 7. **`fort rotate`** (+ the break-glass roll in its report).
 8. **s3**: bucket + the per-app credential decision.
 9. **Remote providers** (`provider.fort`): mesh exposure of `-rw`
-   Services, inventory-derived hosts.
+   Services, manifest-derived hosts.
 
 `fort remove <fort> <app>` (the inverse of add) and `fort dismantle` /
 `fort destroy` (#217) follow once the add shape has produced one real

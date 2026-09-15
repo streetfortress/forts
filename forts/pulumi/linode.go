@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"github.com/pulumi/pulumi-linode/sdk/v4/go/linode"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
@@ -62,12 +62,10 @@ type Linode struct{}
 
 const swapMB = 512
 
-func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host) error {
-	if host.Region == "" || host.InstanceType == "" {
-		return fmt.Errorf("host %q: linode requires region and instance_type in inventory", name)
-	}
-	if host.DNSZone != "" && host.DNSName == "" {
-		return fmt.Errorf("host %q: dns_zone without dns_name — an apex record must be asked for explicitly", name)
+func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host) error {
+	spec := host.Linode()
+	if spec == nil {
+		return fmt.Errorf("host %q: no [linode] table", name)
 	}
 
 	// Set by `fort provision --image` after uploading the injected
@@ -79,7 +77,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 	// the instance: an un-gated firewall delete would strip provider-side
 	// filtering from a running host. `pulumi destroy` refuses until each
 	// resource is explicitly unprotected — the "gated manual delete".
-	// Inventory removal alone never reaches this state at all.
+	// Deleting the manifest alone never reaches this state at all.
 	var opts []pulumi.ResourceOption
 	if host.Production {
 		opts = append(opts, pulumi.Protect(true))
@@ -127,15 +125,15 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 	// framework says read-only: price/addons), and nixpkgs pulumi-bin's
 	// ambient v6 plugin mis-shapes the result (Disk=0). Revisit on the
 	// next provider major bump.
-	diskMB, err := linodePlanDiskMB(host.InstanceType)
+	diskMB, err := linodePlanDiskMB(spec.Type)
 	if err != nil {
 		return err
 	}
 
 	instance, err := linode.NewInstance(ctx, name, &linode.InstanceArgs{
 		Label:          pulumi.String(name),
-		Region:         pulumi.String(host.Region),
-		Type:           pulumi.String(host.InstanceType),
+		Region:         pulumi.String(spec.Region),
+		Type:           pulumi.String(spec.Type),
 		FirewallId:     firewall.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput),
 		PrivateIp:      pulumi.Bool(false),
 		BackupsEnabled: pulumi.Bool(false), // backups are #47's job, not the provider's
@@ -202,14 +200,14 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 	}
 
 	// Public DNS for the production hostname → the new instance (#87).
-	if host.DNSZone != "" {
-		domain, err := linode.LookupDomain(ctx, &linode.LookupDomainArgs{Domain: &host.DNSZone})
+	if host.DNS.Zone != "" {
+		domain, err := linode.LookupDomain(ctx, &linode.LookupDomainArgs{Domain: &host.DNS.Zone})
 		if err != nil {
 			return err
 		}
 		_, err = linode.NewDomainRecord(ctx, name+"-dns", &linode.DomainRecordArgs{
 			DomainId:   pulumi.Int(*domain.Id),
-			Name:       pulumi.String(host.DNSName),
+			Name:       pulumi.String(host.DNS.Name),
 			RecordType: pulumi.String("A"),
 			Target:     instance.IpAddress,
 		}, opts...)
@@ -222,7 +220,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 		// Certificate are already keyed that way in fleet/apps/<host>.
 		_, err = linode.NewDomainRecord(ctx, name+"-dns-wildcard", &linode.DomainRecordArgs{
 			DomainId:   pulumi.Int(*domain.Id),
-			Name:       pulumi.String("*." + host.DNSName),
+			Name:       pulumi.String("*." + host.DNS.Name),
 			RecordType: pulumi.String("A"),
 			Target:     instance.IpAddress,
 		}, opts...)
@@ -232,6 +230,6 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host inventory.Host
 	}
 
 	ctx.Export("ip", instance.IpAddress)
-	ctx.Export("mesh_ip", pulumi.String(host.WgVpnIP))
+	ctx.Export("mesh_ip", pulumi.String(host.MeshIP))
 	return nil
 }

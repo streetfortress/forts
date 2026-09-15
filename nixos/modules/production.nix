@@ -1,6 +1,6 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
 # Imported by hosts/<name>/default.nix — scaffolded automatically when the host
-# sets `production: true` in provisioning/inventory.yaml (and dotfiles.nix +
+# sets `production = true` in provisioning/forts/<name>.toml (and dotfiles.nix +
 # interactive.nix are dropped from the same scaffold; the profiles are mutually
 # exclusive).
 #

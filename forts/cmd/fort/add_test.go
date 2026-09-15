@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -28,11 +29,11 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	const fort = "sfi-fort-e33e2d5"
 	golden := filepath.Join(repo, "fleet/apps", fort)
 
-	// Pre-add state: inventory, the CA, the fort's root kustomization as
+	// Pre-add state: the manifest, the CA, the fort's root kustomization as
 	// it was before #230, sops-canary + the whole sites-db dir as-is
 	// (the symbology tenant already existed from the restore drill).
 	tmp := t.TempDir()
-	copyFile(t, filepath.Join(repo, "provisioning/inventory.yaml"), filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, repo, tmp, fort)
 	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, filepath.Join("testdata/forts", fort, "kustomization.yaml"), filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "fleet/apps", fort, "sops-canary.yaml"))
@@ -184,6 +185,13 @@ func readFile(t *testing.T, p string) string {
 	return string(b)
 }
 
+// copyManifest copies one host's manifest from a repo/fixture root
+// (testdata, or the checkout) into a scratch root.
+func copyManifest(t *testing.T, srcRoot, dstRoot, host string) {
+	t.Helper()
+	copyFile(t, filepath.Join(srcRoot, manifest.Path(host)), filepath.Join(dstRoot, manifest.Path(host)))
+}
+
 func copyFile(t *testing.T, src, dst string) {
 	b, err := os.ReadFile(src)
 	if err != nil {
@@ -239,9 +247,9 @@ func TestAddFreshCloudFort(t *testing.T) {
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	const fort = "cloud-fort" // testdata/inventory.yaml: linode, dns_zone example.cloud
+	const fort = "cloud-fort" // testdata manifest: linode, dns zone example.cloud
 	tmp := t.TempDir()
-	copyFile(t, "testdata/inventory.yaml", filepath.Join(tmp, "provisioning/inventory.yaml"))
+	copyManifest(t, "testdata", tmp, fort)
 	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
 

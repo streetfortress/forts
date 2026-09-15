@@ -19,7 +19,7 @@ dismantle sfi-x   (cloud: linode)
 ✗ fleet/clusters/sfi-x
 ✗ nixos/hosts/sfi-x
 ✗ nixos/secrets/sfi-x.yaml
-○ provisioning/inventory.yaml    - sfi-x entry (with its attached comment)
+✗ provisioning/forts/sfi-x.toml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
 ○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared fleet/infrastructure rule
 ◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)

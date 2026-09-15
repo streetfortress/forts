@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,7 +54,7 @@ func mint(args []string) error {
 	// The deploy key is a flux cluster's; a lab-only host needs no
 	// gitea credential (the token lives in sops — not every operator
 	// has it, and the retired script never asked either).
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ const (
 
 type mintPlan struct {
 	root, host string
-	entry      inventory.Host
+	entry      manifest.Host
 	endpoint   string // wireguard endpoint, "" = none (a peer others dial out to is optional)
 
 	// The identity. Private halves live here until apply encrypts them.
@@ -122,7 +122,7 @@ type giteaDeployKeys struct {
 }
 
 func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*mintPlan, error) {
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
 	}
@@ -130,12 +130,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 		return nil, fmt.Errorf("host %q is a flux cluster: its deploy key needs the gitea client", host)
 	}
 	p := &mintPlan{root: root, host: host, entry: entry, have: map[string]string{}, admins: map[string][]string{}}
-	switch {
-	case entry.WgEndpointIP != "":
-		p.endpoint = entry.WgEndpointIP
-	case entry.DNSName != "" && entry.DNSZone != "":
-		p.endpoint = entry.DNSName + "." + entry.DNSZone
-	}
+	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
 	// flake would not see the host.
@@ -181,7 +176,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	} else if p.k3sToken, err = newToken(); err != nil {
 		return nil, err
 	}
-	if entry.WgVpnIP != "" {
+	if entry.MeshIP != "" {
 		if v, ok := take(keyWgPrivate); ok {
 			p.wg, err = wgKeyFrom(v)
 		} else {
@@ -246,7 +241,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 		p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", fmt.Sprintf("+ rule secrets/%s.yaml → %d shared recipient(s) + host %s", host, len(recips)-1, p.hostRecip),
 			func(s string) (string, error) { return addHostRule(s, host, recips) }})
 	}
-	if entry.WgVpnIP != "" {
+	if entry.MeshIP != "" {
 		peers, err := os.ReadFile(filepath.Join(root, "wireguard/peers.json"))
 		if err != nil {
 			return nil, err
@@ -256,12 +251,12 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 				return nil, fmt.Errorf("wireguard/peers.json already lists %s with a public key that is not the one %s derives — the real wireguard key is not in the secrets file, or the peer is stale; a re-key is a deliberate act", host, keyWgPrivate)
 			}
 		} else {
-			note := "+ .peers." + host + " (" + entry.WgVpnIP
+			note := "+ .peers." + host + " (" + entry.MeshIP
 			if p.endpoint != "" {
 				note += ", endpoint " + p.endpoint
 			}
 			p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
-				func(s string) (string, error) { return addPeer(s, host, entry.WgVpnIP, p.endpoint, p.wg.public) }})
+				func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
 		}
 	}
 	if entry.FluxCluster {
@@ -434,19 +429,16 @@ func (p *mintPlan) value(key string) string {
 
 func (p *mintPlan) report(w io.Writer, written bool) {
 	facts := []string{}
-	switch {
-	case p.entry.Cloud():
+	if p.entry.Cloud() {
 		facts = append(facts, "cloud: "+p.entry.Provider)
-	case p.entry.Provider == "libvirt":
+	} else {
 		facts = append(facts, "lab: libvirt backend")
-	default:
-		facts = append(facts, "lab: playbook-era")
 	}
 	if p.entry.FluxCluster {
 		facts = append(facts, "flux cluster")
 	}
-	if p.entry.WgVpnIP != "" {
-		facts = append(facts, "mesh "+p.entry.WgVpnIP)
+	if p.entry.MeshIP != "" {
+		facts = append(facts, "mesh "+p.entry.MeshIP)
 	}
 	fmt.Fprintf(w, "mint %s   (%s)\n", p.host, strings.Join(facts, " · "))
 	fmt.Fprintf(w, "  host age recipient %s\n", p.hostRecip)

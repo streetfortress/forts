@@ -3,7 +3,7 @@
 # image variant) it is built for. Set by modules/qcow-runtime.nix
 # ("qemu" → `<host>-qcow`) and modules/linode-runtime.nix ("linode" →
 # `<host>-linode`); `fort scaffold` renders the matching import from the
-# inventory's `provider`. No default on purpose: a host dir that imports
+# manifest's provider table ([libvirt] → qemu, [linode] → linode). No default on purpose: a host dir that imports
 # neither runtime module has no root filesystem either, and the eval
 # should say so here rather than deep in the bootloader config.
 { lib, ... }:

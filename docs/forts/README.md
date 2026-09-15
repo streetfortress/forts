@@ -39,8 +39,8 @@ Every fort change follows the same beat, and the reasons are the rules.
    provider), the fleet kustomize build (a listed-but-unseeded Secret fails
    it — that red X is the guard working), and `nix eval` of every host.
 3. **Apply from merged main.** `provision` and `destroy` run against what
-   main says. `destroy` refuses outright unless the host is *absent* from
-   `origin/main`'s inventory — the merged dismantle PR is the deliberate
+   main says. `destroy` refuses outright unless the host's manifest is
+   *absent* from `origin/main` — the merged dismantle PR is the deliberate
    act `protect: true` was guarding for.
 4. **Commit the pulumi state as its own PR.** Apply verbs write the file
    backend under `forts/pulumi/state/` and stage it. That PR carries no
@@ -54,9 +54,8 @@ checkpoint in git history is an audit trail no backend gives you for free.
 ## Birth of a fort
 
 ```
-provisioning/inventory.yaml   ← add the entry by hand (provider, region/type or
-                                vcpus/memory/disk_size, wg_vpn_ip, flux_cluster,
-                                production)
+provisioning/forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
+                                 mesh_ip, [dns], the provider table; fort check --all
 fort scaffold <host> --write  ← nixos/hosts/<host>/, fleet/clusters/<host>/, apps root
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
                               → PR → merge
@@ -80,11 +79,11 @@ for the image and the host side.
 ## Day 2
 
 - **A provider-side edit** (firewall rule, DNS record, a resize): change
-  the program or inventory, `fort preview <host>` to read the diff, PR,
+  the program or the manifest, `fort preview <host>` to read the diff, PR,
   merge, `fort provision <host>` to apply, commit the state.
 - **Drift:** `just iac-drift` = `fort preview --all --refresh
   --expect-no-changes`, one `OK` / `DRIFT` / `FAILED` / `PENDING` line per
-  stack. `PENDING` means state without inventory: a dismantle merged and
+  stack. `PENDING` means state without a manifest: a dismantle merged and
   `fort destroy` has not run. The `--refresh` block above the program diff
   compares the provider with the *checkpoint*, not the program — birth-time
   outputs (status, disks, firewall devices) look stale there until a
@@ -98,7 +97,7 @@ for the image and the host side.
 ## Retirement
 
 ```
-fort dismantle <host> --write   ← inventory entry, nix host dir + secrets, both
+fort dismantle <host> --write   ← the manifest, nix host dir + secrets, both
                                   sops rules (+ updatekeys), the peer, both fleet
                                   trees; prints the residue to triage → PR → merge
 fort destroy <host>             ← gated on that merge: power off, refresh,
@@ -128,7 +127,8 @@ with `--yes` under the same environment, then stage `forts/pulumi`.
 
 ## Pages
 
-- [scaffold](scaffold.md) — the host's generated surface, from inventory
+- [manifest](manifest.md) — the fort's declaration: neutral intent + one provider table
+- [scaffold](scaffold.md) — the host's generated surface, from its manifest
 - [mint](mint.md) — the host's identity, sops-encrypted in-repo
 - [provision](provision.md) — birth and day-2 applies; `preview`, `adopt`
 - [add](add.md) — a chart's fort-side tree, from its contract

@@ -1,7 +1,8 @@
 // fort — manage forts: the codegen and lifecycle half of the
 // provisioning story (#42/#87). A fort is one host: base image + flux
-// workloads, keyed by its inventory hostname everywhere (nix host dir,
-// pulumi stack, peers.json, sops).
+// workloads, declared by its manifest (provisioning/forts/<host>.toml)
+// and keyed by that hostname everywhere (nix host dir, pulumi stack,
+// peers.json, sops).
 //
 // Scaffolding writes source of truth into this repo (nix host files, flux
 // cluster dirs, sops rules, wg peers) — it is a code generator, reviewed
@@ -21,8 +22,8 @@
 //
 // The create-nixos / delete playbooks that raised lab VMs on soundship
 // are gone: scaffold + mint cover their Phase A and cluster-init, the
-// libvirt backend their VM half, destroy their delete. Every host in
-// inventory names a provider (fort check --all enforces it).
+// libvirt backend their VM half, destroy their delete. Every manifest
+// names exactly one provider table (fort check --all validates them).
 package main
 
 import (
@@ -82,13 +83,13 @@ func usage() {
   read    check, preview
 
   scaffold <host> [--write]
-      render the host's generated surface from provisioning/inventory.yaml:
-      nixos/hosts/<host>/{default.nix,secrets.nix} in the lab shape (qcow
-      runtime, static LAN) or, when the entry has a provider, the cloud
-      shape (linode runtime, split DNS over the mesh, zram); for a flux
+      render the host's generated surface from its manifest,
+      provisioning/forts/<host>.toml: nixos/hosts/<host>/{default.nix,
+      secrets.nix} in the lab shape (qcow runtime, static LAN) or, with a
+      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); for a flux
       cluster also fleet/clusters/<host>/ (6 files) and the apps root
       kustomization. Prints the marked tree; --write lays it down, never
-      overwriting a file that exists (a re-run fills gaps) — inventory
+      overwriting a file that exists (a re-run fills gaps) — the manifest
       seeds the host, you refine it in place. Then fort mint.
 
   mint <host> [--write]
@@ -114,8 +115,7 @@ func usage() {
       local copy) (#42).
 
   adopt <host>
-      bring a playbook-era lab VM (inventory: provider: libvirt, no stack
-      yet) under the backend WITHOUT a repave: rescan the pool, import the
+      bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a repave: rescan the pool, import the
       live domain + volume into a new stack (reads the hypervisor, writes
       local state only), preview the program against them and refuse
       unless the only changes are live properties (autostart, running),
@@ -126,7 +126,7 @@ func usage() {
       the read-only half: 'pulumi preview -s <host> --diff'. --refresh
       reconciles state with the provider first (drift); --expect-no-changes
       turns any proposed change into a nonzero exit. --all walks every
-      cloud host in inventory, one OK/DRIFT/FAILED line per stack — with
+      host with a manifest, one OK/DRIFT/FAILED line per stack — with
       --refresh --expect-no-changes that is 'just iac-drift'.
 
   add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
@@ -163,7 +163,7 @@ func usage() {
 
   dismantle <host> [--write]
       the inverse of scaffold + mint, as a repo mutation
-      staged for a PR (#217): removes the inventory entry, nixos/hosts/
+      staged for a PR (#217): removes the manifest, nixos/hosts/
       <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
       shared-infrastructure recipient (then sops updatekeys on the files
       that lost it), the wireguard peer, fleet/clusters/<host> and
@@ -175,17 +175,17 @@ func usage() {
 
   destroy <host>
       the half with side effects outside git, gated on the merge: refuses
-      unless the host is ABSENT from origin/main's inventory (and the
-      working tree's), the tree is clean, and the stack exists. Then, with
+      unless the host's manifest is ABSENT from origin/main (and the
+      working tree), the tree is clean, and the stack exists. Then, with
       inherited stdio (you confirm each pulumi step): power the instance
       off (linode), pulumi refresh, state unprotect --all (only ever
       right before the destroy), destroy, stack rm; clears the file
       backend's residue (.bak, history, backups), revokes the flux-<host>
       deploy key on gitea, stages the state removal for its own PR. A
       failure mid-way leaves the unprotected state in the tree and says
-      "rerun". Provider comes from the checkpoint, not inventory.
+      "rerun". Provider comes from the checkpoint, not the manifest.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.
-  provider: libvirt hosts reach soundship over ssh (LIBVIRT_DEFAULT_URI).`)
+  [libvirt] hosts reach soundship over ssh (LIBVIRT_DEFAULT_URI).`)
 }

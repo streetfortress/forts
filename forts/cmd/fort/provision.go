@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // provision is the birth flow (#42): the secret-bearing single-use image
@@ -37,12 +37,9 @@ func provision(args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := inventory.LoadHost(filepath.Join(root, "provisioning/inventory.yaml"), host)
+	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return err
-	}
-	if entry.Provider == "" {
-		return fmt.Errorf("host %q has no provider — set `provider: libvirt` for the lab backend (the playbook path is gone)", host)
 	}
 	if _, err := os.Stat(filepath.Join(root, "nixos/hosts", host, "default.nix")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)

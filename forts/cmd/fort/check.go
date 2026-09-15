@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/contract"
-	"gitea.zen.lofi/sfi/deployments/forts/internal/inventory"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 // check is the merge gate (docs/forts/fort-configuration-contracts.md, "The gate is the
@@ -27,7 +27,7 @@ import (
 // anywhere, extras and missing optional keys are warnings.
 func check(args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	all := fs.Bool("all", false, "every flux_cluster host in inventory")
+	all := fs.Bool("all", false, "every flux_cluster host with a manifest")
 	chartDir := fs.String("chart-dir", "", "read every chart's contract from this local dir instead of pulling (tests)")
 	var forts []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -41,11 +41,13 @@ func check(args []string) error {
 	if err != nil {
 		return err
 	}
+	var problems map[string]error
 	if *all {
-		hosts, err := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml"))
+		hosts, p, err := manifest.LoadAll(root)
 		if err != nil {
 			return err
 		}
+		problems = p
 		forts = nil
 		for name, h := range hosts {
 			if h.FluxCluster {
@@ -54,7 +56,7 @@ func check(args []string) error {
 		}
 		sort.Strings(forts)
 	}
-	if len(forts) == 0 {
+	if len(forts) == 0 && !*all {
 		return fmt.Errorf("usage: fort check (<fort>... | --all)")
 	}
 	o := checkOpts{root: root, chartDir: *chartDir, charts: map[string]pulledChart{}, annotate: os.Getenv("GITEA_ACTIONS") != "" || os.Getenv("GITHUB_ACTIONS") != ""}
@@ -65,8 +67,7 @@ func check(args []string) error {
 	}()
 	errors := 0
 	if *all {
-		hosts, _ := inventory.Load(filepath.Join(root, "provisioning/inventory.yaml"))
-		errors += reportFindings(os.Stdout, "inventory", providerFindings(hosts), o.annotate)
+		errors += reportFindings(os.Stdout, manifest.Dir, manifestFindings(problems), o.annotate)
 	}
 	for _, fort := range forts {
 		findings, err := checkFort(o, fort)
@@ -82,18 +83,17 @@ func check(args []string) error {
 	return nil
 }
 
-// providerFindings: every host names the backend that raises it. The
-// create-nixos playbook that took provider-less hosts is gone, so an
-// entry without one is inert — nothing provisions, previews or destroys
-// it — and that is an error, not a lab default.
-func providerFindings(hosts map[string]inventory.Host) []finding {
+// manifestFindings: every manifest parses and validates — exactly one
+// provider table, the neutral fields consistent, the table complete
+// (manifest.Validate). A host with a bad manifest is inert — nothing
+// provisions, previews or destroys it — and that is an error, not a lab
+// default.
+func manifestFindings(problems map[string]error) []finding {
 	var out []finding
-	for name, h := range hosts {
-		if h.Provider == "" {
-			out = append(out, finding{"error", "provisioning/inventory.yaml", name + ": no provider — set `provider: libvirt` (lab) or a cloud provider; nothing raises a provider-less host"})
-		}
+	for name, err := range problems {
+		out = append(out, finding{"error", manifest.Path(name), strings.TrimPrefix(err.Error(), manifest.Path(name)+": ")})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].msg < out[j].msg })
+	sort.Slice(out, func(i, j int) bool { return out[i].dir < out[j].dir })
 	return out
 }
 
@@ -111,7 +111,7 @@ type finding struct {
 
 // checkFort evaluates every contract-bearing dir of one fort.
 func checkFort(o checkOpts, fort string) ([]finding, error) {
-	if _, err := inventory.LoadHost(filepath.Join(o.root, "provisioning/inventory.yaml"), fort); err != nil {
+	if _, err := manifest.Load(o.root, fort); err != nil {
 		return nil, err
 	}
 	apps := filepath.Join("fleet/apps", fort)
