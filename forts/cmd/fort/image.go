@@ -99,7 +99,7 @@ func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, pat
 		return "", err
 	}
 	if filepath.Ext(abs) != ".qcow2" {
-		return "", fmt.Errorf("%s: the libvirt backend takes the injected qcow2 (inject-host-key.sh %s result/nixos.qcow2)", path, host)
+		return "", fmt.Errorf("%s: the libvirt backend takes the injected qcow2 (fort image %s)", path, host)
 	}
 	size := entry.Shape.WithLabDefaults().Disk
 	fmt.Printf("growing %s to %s (qemu-img resize; the root fs autoResizes on first boot)…\n", abs, size)
@@ -110,7 +110,7 @@ func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, pat
 }
 
 // qemuImg runs qemu-img from PATH, else from nixpkgs (the same fallback
-// inject-host-key.sh uses for guestfish).
+// fort image uses for guestfish).
 func qemuImg(args ...string) error {
 	var cmd *exec.Cmd
 	if _, err := exec.LookPath("qemu-img"); err == nil {

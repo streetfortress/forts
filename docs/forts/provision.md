@@ -18,8 +18,8 @@ always a first-class escape hatch.
 ## The image is a birth input, not a resource
 
 The host boots from a single-use image that already carries its ssh host
-key (injected by `provisioning/inject-host-key.sh` from the sops file
-[`mint`](mint.md) wrote), so the host can decrypt its secrets on first
+key (grafted in by `fort image` from the sops file [`mint`](mint.md)
+wrote), so the host can decrypt its secrets on first
 boot. That image is deliberately **not** a pulumi resource: pulumi owns
 only the durable surface (instance, disks, boot config, firewall, DNS;
 or volume + domain in the lab). `--image` runs the birth flow around the
@@ -51,14 +51,14 @@ every fort) from that point until [`destroy`](destroy.md).
 ## Building the image
 
 ```
-nix build ./nixos#<host>-qcow      # lab (libvirt): result/nixos.qcow2
-nix build ./nixos#<host>-linode    # cloud: result/*.img.gz
-./provisioning/inject-host-key.sh <host> result/nixos.qcow2   # or the .img.gz
-fort provision <host> --image <injected path>
+fort image <host>                              # nix build ./nixos#<host>-{qcow|linode} + the graft
+fort image <host> --from result/nixos.qcow2    # an image built by hand; skips the build
+fort provision <host> --image ~/.cache/forts/<host>-nixos.qcow2   # or .img.gz
 ```
 
 Any x86_64 Nix host with KVM builds it (devbox does; soundship needs no
-shell). The flake picks the variant from the runtime module the host file
+shell); `fort image` needs `nix` and `sops` on PATH and takes `guestfish`
+from PATH or, failing that, from nixpkgs. The flake picks the variant from the runtime module the host file
 imports, so scaffold's choice of shape is the only switch. Details in
 [`docs/nixos/operations.md`](../nixos/operations.md).
 

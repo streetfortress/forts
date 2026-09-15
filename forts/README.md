@@ -88,8 +88,7 @@ hatch) sets qcow2. The uploaded volume IS the root disk: not consumed,
 (`pulumi destroy` + provision), never an in-place change.
 
 ```
-nix build ./nixos#lab1-qcow                          # KVM: devbox or soundship
-./provisioning/inject-host-key.sh lab1 result/nixos.qcow2
+fort image lab1                                      # nix build (KVM: devbox) + the host-key graft
 fort provision lab1 --image ~/.cache/forts/lab1-nixos.qcow2
 ```
 

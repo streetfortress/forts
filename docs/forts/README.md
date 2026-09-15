@@ -60,8 +60,8 @@ provisioning/forts/<host>.toml ← the manifest (manifest.md): copy a sibling's,
 fort scaffold <host> --write  ← nixos/hosts/<host>/, fleet/clusters/<host>/, apps root
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
                               → PR → merge
-nix build ./nixos#<host>-qcow (lab) | #<host>-linode (cloud)
-./provisioning/inject-host-key.sh <host> result/nixos.qcow2
+fort image <host>             ← nix build (the variant from the manifest) + the host
+                                 key grafted in → ~/.cache/forts/<host>-nixos.{qcow2,img.gz}
 fort provision <host> --image <path>   ← pulumi up, you confirm; the single-use
                                           image is released; state staged
                               → "<host>: provisioned" PR (state only) → merge
@@ -73,8 +73,8 @@ fort check <host>             ← what CI will say
 
 `add` and `seed` can run before the host exists — they are pure repo
 mutations — and usually do, so the first flux sync already finds the
-workloads. The image build happens on any x86_64 Nix host with KVM (devbox
-does it; soundship needs no shell). See [`docs/nixos/operations.md`](../nixos/operations.md)
+workloads. `fort image` runs on any x86_64 Nix host with KVM and guestfish
+(devbox; soundship needs no shell). See [`docs/nixos/operations.md`](../nixos/operations.md)
 for the image and the host side.
 
 ## Day 2

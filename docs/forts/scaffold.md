@@ -82,7 +82,7 @@ fort.
 ```
 fort scaffold web3 --write
 fort mint web3 --write        # identity
-# PR → merge → nix build ./nixos#web3-linode → inject-host-key.sh → fort provision web3 --image …
+# PR → merge → fort image web3 → fort provision web3 --image …
 ```
 
 `nix` reads only tracked or staged paths, so the scaffold stages what it

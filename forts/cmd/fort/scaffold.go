@@ -101,9 +101,9 @@ func scaffold(args []string) error {
 	}
 	fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
 	if entry.Cloud() {
-		fmt.Printf("then PR → merge → nix build ./nixos#%s-linode → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
+		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
 	} else {
-		fmt.Printf("then PR → merge → nix build ./nixos#%s-qcow → inject-host-key.sh → fort provision %s --image <path>\n", host, host)
+		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
 	}
 	return nil
 }

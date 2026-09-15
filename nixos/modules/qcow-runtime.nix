@@ -8,7 +8,7 @@
 #      layers virtualisation/disk-image.nix onto this config via
 #      extendModules. The variant owns the disk layout (msdos, single
 #      root partition sda1, ext4 labeled `nixos` — mirrored by
-#      inject-host-key.sh's guestfish root device) but omits the
+#      fort image's guestfish root device) but omits the
 #      qemu-guest profile, console=ttyS0, and a grub timeout; this module
 #      supplies them. Without the profile's virtio initrd modules the
 #      image can't find /dev/vda at boot.

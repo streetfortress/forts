@@ -11,7 +11,7 @@
 // image's whole lifecycle around it. The full flow:
 //
 //	fort scaffold web3                  # render files → branch → PR
-//	                                    # (merge; build + inject the image)
+//	fort image web3                     # (after the merge) nix build + host-key graft
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
@@ -40,6 +40,8 @@ func main() {
 	switch os.Args[1] {
 	case "scaffold":
 		err = scaffold(os.Args[2:])
+	case "image":
+		err = image(os.Args[2:])
 	case "provision":
 		err = provision(os.Args[2:])
 	case "adopt":
@@ -78,7 +80,7 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  scaffold, mint, add, seed, dismantle
+  author  scaffold, mint, image, add, seed, dismantle
   apply   provision, adopt, destroy
   read    check, preview
 
@@ -102,6 +104,18 @@ func usage() {
       side effect. Runs after scaffold --write, before add. Prints the
       plan; --write mints, encrypts, registers, stages. fort dismantle is
       the inverse.
+
+  image <host> [--from <built image>] [--out <dir>]
+      build the host's bootstrap image and graft its ssh identity in:
+      nix build ./nixos#<host>-{qcow|linode} (the variant from the
+      manifest's provider table; --from skips the build), then guestfish
+      uploads ssh-host-key + .pub from nixos/secrets/<host>.yaml into
+      /etc/ssh — the key that decrypts the host's secrets on first boot
+      must never enter the nix store. Linode images get the 6 GiB raw /
+      5 GiB gzip caps asserted. Output: ~/.cache/forts/<host>-nixos.
+      {qcow2,img.gz}, the SECRET-BEARING single-use artifact provision
+      --image consumes and deletes; the work dir is shredded. guestfish
+      comes from PATH, else nixpkgs; nix and sops must be on PATH.
 
   provision <host> [--image <path>]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
