@@ -124,6 +124,38 @@ let
       cfg.includePatterns}
   '';
 
+  # ExecCondition gate: a fort with no PVCs has nothing to protect, and
+  # that is neither success nor failure. Without this, restic exits
+  # "Fatal: nothing to backup" and the unit goes red — on EVERY newly
+  # raised fort, until its first stateful workload lands (sfi-fort-d54d5b3,
+  # 2026-09-16). A permanently red backup unit on a fresh fort is how you
+  # learn to ignore red backup units.
+  #
+  # systemd's own vocabulary says it properly (auto-rebuild.nix uses the
+  # same gate): exit 1 is a clean "condition failed" skip, not a failure.
+  #
+  # It also publishes the path COUNT, which is what lets an alert tell
+  # "nothing to back up yet" apart from "backups are broken" — the
+  # freshness metric alone cannot, because a skipped run writes no
+  # timestamp and looks exactly like a stuck one.
+  condition = name: pkgs.writeShellScript "pv-backup-condition-${name}" ''
+    set -eu
+    n=$(${pathScript} | ${pkgs.coreutils}/bin/wc -l)
+    dir=/var/lib/node-exporter-textfiles
+    tmp=$(${pkgs.coreutils}/bin/mktemp "$dir/.pv-backup-paths-${name}.prom.XXXXXX")
+    {
+      echo "# HELP node_pv_backup_paths PVC directories this target would include."
+      echo "# TYPE node_pv_backup_paths gauge"
+      echo "node_pv_backup_paths{target=\"${name}\"} $n"
+    } > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+    ${pkgs.coreutils}/bin/mv "$tmp" "$dir/pv-backup-paths-${name}.prom"
+    if [ "$n" -eq 0 ]; then
+      echo "no PVC directories under ${cfg.storagePath} — nothing to back up yet, skipping"
+      exit 1
+    fi
+  '';
+
   # The cheap detector the strategy calls for: freshness, published to
   # the textfile collector so a stale repo alerts like anything else.
   # Silent failure is the default state of every backup system, and the
@@ -356,7 +388,10 @@ in
     systemd.services = builtins.listToAttrs (map
       (target: {
         name = "restic-backups-pv-${target.name}";
-        value.serviceConfig.ExecStartPost = toString (freshness target.name);
+        value.serviceConfig = {
+          ExecCondition = toString (condition target.name);
+          ExecStartPost = toString (freshness target.name);
+        };
       })
       targets);
   };
