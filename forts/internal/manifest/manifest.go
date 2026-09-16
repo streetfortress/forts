@@ -51,8 +51,9 @@ type Host struct {
 	// StateVersion seeds system.stateVersion at scaffold time.
 	StateVersion string `toml:"nixos_state_version"`
 
-	Shape Shape `toml:"shape"`
-	DNS   DNS   `toml:"dns"`
+	Shape   Shape   `toml:"shape"`
+	DNS     DNS     `toml:"dns"`
+	Backups Backups `toml:"backups"`
 
 	// Provider is the one provider table present; Spec its decoded form.
 	Provider string `toml:"-"`
@@ -67,6 +68,35 @@ type Shape struct {
 	Memory int    `toml:"memory"` // GiB
 	Disk   string `toml:"disk"`   // "80G"
 }
+
+// Backups is the host's PV-backup intent (docs/infra/backups.md). The
+// first real second variant the manifest has met (#272 kept toggles out
+// until one existed): every other standard component is per-fort
+// identical, but where a fort's volumes land is not — a lab fort is
+// reproducible and keeps one local copy, a production fort's offsite
+// copy must not depend on the lab being reachable.
+//
+// `profile` names a DESTINATION SET, never individual targets: there are
+// exactly two object stores at fleet level, and enumerating endpoints
+// per fort is how they drift. scaffold renders `sfi.pv-backup` from it.
+type Backups struct {
+	// Profile is "lab", "production", or "none". Required, with no
+	// default: a production fort silently inheriting lab-only backups is
+	// the failure worth one line of typing, and it cannot be inferred
+	// from the provider table (staging-k3s is a lab VM that may want
+	// covering; a Linode drill fort should not pay for B2).
+	//
+	// "none" is a positive declaration, not an omission — luxor is the
+	// hub of copies and an origin of nothing, so backing its volumes up
+	// to its own rustfs would be circular.
+	Profile string `toml:"profile"`
+}
+
+// Profiles are the accepted values of [backups] profile.
+var Profiles = []string{"lab", "production", "none"}
+
+// Backed reports whether this host's volumes are backed up at all.
+func (b Backups) Backed() bool { return b.Profile != "" && b.Profile != "none" }
 
 // DNS is the host's public name: <name>.<zone>, realized by the cloud
 // backend (A + wildcard) and the mesh peer's default endpoint.
@@ -255,6 +285,13 @@ func (h Host) Validate(host string) error {
 	}
 	if h.Shape.Vcpus < 0 || h.Shape.Memory < 0 {
 		return fail("[shape] vcpus/memory: want positive")
+	}
+	switch h.Backups.Profile {
+	case "lab", "production", "none":
+	case "":
+		return fail("[backups] profile is required — one of %s. A fort that does not say silently gets nothing backed up; \"none\" says so out loud (docs/infra/backups.md)", strings.Join(Profiles, ", "))
+	default:
+		return fail("[backups] profile %q: want one of %s", h.Backups.Profile, strings.Join(Profiles, ", "))
 	}
 	if err := h.Spec.Validate(host, h); err != nil {
 		return fail("[%s]: %v", h.Provider, err)

@@ -40,6 +40,10 @@ func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
 // checks every artifact against the shape preseed-identity produced,
 // re-runs (a no-op that restores the identity from the secrets file),
 // then dismantles and expects the original files back byte-for-byte.
+// The fixture declares profile "none": TestMint is about the identity,
+// and every other profile pulls fleet credentials out of
+// provisioning/secrets.yaml through sops, which a tmpdir has no age key
+// for. The backup half's pure logic is covered in mintbackup_test.go.
 func TestMint(t *testing.T) {
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
@@ -60,19 +64,19 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
 	gitea, registered := fakeGitea(t, nil)
-	if _, err := planMint(tmp, host, tool, gitea); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
+	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
 	write("fleet/apps/"+host+"/kustomization.yaml", "resources: []\n")
 	write("fleet/clusters/"+host+"/apps.yaml", "kind: Kustomization\n")
 
-	p, err := planMint(tmp, host, tool, gitea)
+	p, err := planMint(tmp, host, tool, gitea, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +148,7 @@ func TestMint(t *testing.T) {
 		after[rel] = readFile(t, filepath.Join(tmp, rel))
 	}
 	tool2 := &fakeTool{encrypted: tool.encrypted}
-	p2, err := planMint(tmp, host, tool2, gitea)
+	p2, err := planMint(tmp, host, tool2, gitea, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +172,7 @@ func TestMint(t *testing.T) {
 
 	// a stale key on gitea refuses before anything is written
 	(*registered)[0].Key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGx6GXsI2LCgCru4Jm5qAV4xKqMfWHKrmW2pVHvG6GGa stale"
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "differs") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "differs") {
 		t.Errorf("stale gitea key: want refusal, got %v", err)
 	}
 
@@ -181,28 +185,28 @@ func TestMint(t *testing.T) {
 	doc[keySSHHost], doc[keySSHHostPub] = other.private, other.public
 	out, _ := yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "host recipient is not the one") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "host recipient is not the one") {
 		t.Errorf("foreign host key: want refusal, got %v", err)
 	}
 	delete(doc, keySSHHost)
 	delete(doc, keySSHHostPub)
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "real ssh key is not in the secrets file") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "real ssh key is not in the secrets file") {
 		t.Errorf("missing host key under an existing rule: want refusal, got %v", err)
 	}
 	yaml.Unmarshal([]byte(keep), &doc)
 	doc[keyAge] = "AGE-SECRET-KEY-104U5P2EWFVZE2WA8X3AZLTY5YQKPD782FPYSLD0FEQFJFS6EJ7VS3FZH2S"
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "cluster recipient is not the one") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "cluster recipient is not the one") {
 		t.Errorf("foreign cluster key: want refusal, got %v", err)
 	}
 	yaml.Unmarshal([]byte(keep), &doc)
 	doc[keyWgPrivate] = "dwdtDXMYpX08FsFyUbJmRd9MLofrwJkqsXf7pR25LCo="
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "peers.json already lists") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "peers.json already lists") {
 		t.Errorf("foreign wireguard key: want refusal, got %v", err)
 	}
 	os.WriteFile(secrets, []byte(keep), 0o600)
@@ -233,7 +237,7 @@ func TestMintNeedsGitea(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
-	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
+	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
 		t.Errorf("without a client: want refusal, got %v", err)
 	}
 }

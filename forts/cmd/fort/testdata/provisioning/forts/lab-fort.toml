@@ -4,5 +4,8 @@
 # replay against COMMITTED trees keep the real ones.
 mesh_ip = "10.1.0.99"
 
+[backups]
+profile = "lab"
+
 [libvirt]
 ip = "10.0.0.99"

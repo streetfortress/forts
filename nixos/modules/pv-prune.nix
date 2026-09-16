@@ -41,11 +41,11 @@ let
   cfg = config.sfi.pv-prune;
 
   defaultTiers = {
-    # luxor's own rustfs, over the mesh NodePort. Short window: the local
+    # luxor's rustfs-central, over the mesh NodePort. Short window: the local
     # tier is the operational-recovery copy, and its disk is the fleet's
     # real constraint.
     rustfs = {
-      endpoint = "http://10.1.0.5:30900";
+      endpoint = "http://10.1.0.5:30901";
       keep = [ "--keep-last 3" "--keep-daily 7" "--keep-weekly 4" ];
       schedule = "Sun *-*-* 02:00:00";
     };
@@ -186,7 +186,9 @@ in
             defaultText = lib.literalExpression ''config.sops.secrets."restic-prune-s3-env-<tier>".path'';
             description = ''
               AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for the tier's
-              DELETE-capable identity — the one credential per tier that
+              DELETE-capable identity — `prune` on rustfs (declared in
+              luxor's provider contract, scoped to sfi-pv-backups and
+              every fort's prefix in it) and sfi-b2-pruning-key on B2 — the one credential per tier that
               holds `deleteFiles`, and the reason this module belongs on
               one host.
             '';

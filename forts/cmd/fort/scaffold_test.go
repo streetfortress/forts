@@ -95,6 +95,26 @@ func TestRenderScaffold(t *testing.T) {
 	}
 
 	// a fort off the mesh is refused (MESH_IP is mandatory, #99)
+	// The profile reaches the host file as a declaration, not a toggle —
+	// and "none" leaves no trace at all, so a host that is not an origin
+	// reads as one rather than as a disabled module.
+	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
+		got := m["nixos/hosts/"+name+"/default.nix"]
+		want := map[string]string{"cloud-fort": "production", "lab-fort": "lab"}[name]
+		if !strings.Contains(got, "../../modules/pv-backup.nix") {
+			t.Errorf("%s: no pv-backup import", name)
+		}
+		if !strings.Contains(got, `profile = "`+want+`";`) {
+			t.Errorf("%s: want sfi.pv-backup profile %q", name, want)
+		}
+	}
+	none := hosts["lab-fort"]
+	none.Backups.Profile = "none"
+	nf := byPath(render(t, "lab-fort", none))["nixos/hosts/lab-fort/default.nix"]
+	if strings.Contains(nf, "pv-backup") {
+		t.Errorf(`profile "none" must render no pv-backup wiring at all:\n%s`, nf)
+	}
+
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
 	if _, err := renderScaffold("lab-fort", h); err == nil {

@@ -45,10 +45,50 @@ Consequences worth knowing:
 | ○ | `.sops.yaml` — the fleet rule for `fleet/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `fleet/infrastructure` rule | always |
 | ◆ | `fleet/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `fleet/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
-| · | gitea deploy key `flux-<host>`, read-only, on `sfi/deployments` — **the one call outside the tree** | always; registered under `--write` only |
+| ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
+| · | gitea deploy key `flux-<host>`, read-only, on `sfi/deployments` | always; registered under `--write` only |
+| · | B2 application key `fort-<host>` — both backup buckets, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
+
+**The two calls outside the tree** are the gitea deploy key and — on a
+`production` fort — the B2 application key. Both are registered only
+under `--write`, both are reported without printing a value, and both are
+revoked by `fort destroy`.
+
+**Where the backup credentials come from** is the design, not a detail
+(docs/infra/backups.md):
+
+- `restic-password` is a **fleet** secret, copied from
+  `provisioning/secrets.yaml`, never generated per host. The central
+  pruner on luxor opens every fort's repo; per-host passwords would mean
+  a keyring there.
+- `restic-s3-env-rustfs` is built from the rustfs credentials in the same
+  file (the instance's root pair today — per-consumer rustfs IAM is the
+  `s3` provider's own piece of work).
+- `restic-s3-env-b2` is **minted against the B2 API**, and the credential
+  that mints it is an **operational input**: `B2_KEY_ID` / `B2_APP_KEY`
+  in the environment, from the password manager, for the moment of a
+  raise. It is deliberately not in `provisioning/secrets.yaml` beside
+  `linode-token` — B2 does not enforce capability subsetting, so a key
+  that can mint keys can mint one that deletes backups, and that really
+  deletes (verified, #291). A credential which can destroy the recovery
+  path does not get to sit where every `fort` invocation, and eventually
+  a CI recipient (#284), can read it.
+
+**The B2 guard is not the deploy key's.** A deploy key has a public half
+to compare; a B2 key's secret is shown exactly once and never again. So
+the recorded `AWS_ACCESS_KEY_ID` — which *is* the application key id — is
+checked against `b2_list_keys`, along with the restrictions: two buckets,
+this fort's prefix, and no `deleteFiles`. That catches a key edited in
+the console into holding delete rights, which a name comparison never
+would. A same-named key whose id is not the repo's is refused by id, for
+a deliberate deletion — exactly as a mismatched deploy key is.
+
+Without `B2_KEY_ID` / `B2_APP_KEY`, a re-mint that needs to create
+nothing says so (`NOT verified`) and proceeds; a raise that must mint
+refuses and names the credential.
 
 **The shared admin set is read from the configs, not hardcoded**: the
 recipient lines every existing host rule shares ("readable by whoever can
@@ -102,6 +142,10 @@ check after importing a key by hand.
 
 The admin age key (to encrypt and to read the existing file), and for a
 flux cluster the `gitea-token` in `provisioning/secrets.yaml`. A lab-only
-host needs no gitea credential. `jq` (the peers file is edited through it
+host needs no gitea credential. A fort with a `[backups]` profile needs
+`restic-password` and the `rustfs-access-key` / `rustfs-secret-key` pair
+in that same file; a `production` one additionally needs `B2_KEY_ID` /
+`B2_APP_KEY` exported in the environment, and only when the key it would
+mint does not exist yet. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it).

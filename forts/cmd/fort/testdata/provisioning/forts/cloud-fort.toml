@@ -1,6 +1,9 @@
 # Test fixture: a cloud host (see lab-fort.toml).
 mesh_ip = "10.1.0.98"
 
+[backups]
+profile = "production"
+
 [dns]
 zone = "example.cloud"
 name = "cloud-fort"

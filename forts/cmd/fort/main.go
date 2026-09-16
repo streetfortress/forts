@@ -54,6 +54,8 @@ func main() {
 		err = seed(os.Args[2:])
 	case "mint":
 		err = mint(os.Args[2:])
+	case "b2-key":
+		err = b2Key(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "dismantle":
@@ -81,6 +83,7 @@ func usage() {
   (observed, from the live host) — are spec and status (#224).
 
   author  scaffold, mint, image, add, seed, dismantle
+  keys    b2-key (the fleet's two hand-held B2 credentials)
   apply   provision, adopt, destroy
   read    check, preview
 
@@ -104,6 +107,20 @@ func usage() {
       side effect. Runs after scaffold --write, before add. Prints the
       plan; --write mints, encrypts, registers, stages. fort dismantle is
       the inverse.
+
+  b2-key <minting|pruning> [--write]
+      mint one of the two B2 credentials no verb may create for itself,
+      because both live outside the repo and the web console cannot
+      express their capability sets. minting (sfi-b2-key-minting-key)
+      is what fort mint exports to create per-fort keys: writeKeys, no
+      deleteFiles. pruning (sfi-b2-pruning-key) is the fleet's ONLY
+      delete-capable credential, scoped to sfi-pv-backups, and belongs in
+      luxor's host secrets for sfi.pv-prune. Needs the account master key
+      as B2_KEY_ID / B2_APP_KEY. Prints the plan and the grant; --write
+      creates it and prints the secret ONCE — the only verb that prints a
+      value, because there is nowhere else for it to go. An existing key
+      is never replaced (its secret is unrecoverable) and any drift from
+      the role's grant is named.
 
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image and graft its ssh identity in:

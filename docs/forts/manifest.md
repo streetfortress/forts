@@ -16,6 +16,9 @@ k3s_cluster_init = false     # optional scaffold seed: sqlite datastore, not etc
 zone = "streetfortress.cloud" # and the mesh peer's default endpoint
 name = "sfi-prod-439bf72"
 
+[backups]                    # where this fort's volumes land (required)
+profile = "production"       # lab | production | none
+
 [linode]                     # THE provider table — exactly one per fort
 region = "us-sea"
 type = "g6-standard-2"
@@ -25,6 +28,9 @@ type = "g6-standard-2"
 # staging-k3s — the staging fort, on the lab hypervisor.
 mesh_ip = "10.1.0.13"
 k3s_cluster_init = false
+
+[backups]
+profile = "lab"
 
 [shape]                      # what libvirt realizes (lab defaults 2 / 4 / 40G)
 vcpus = 2
@@ -36,7 +42,7 @@ ip = "10.0.0.40"             # the static LAN address baked into the image
 ```
 
 **The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
-`nixos_state_version`, `[shape]`, `[dns]` — this is what scaffold, mint,
+`nixos_state_version`, `[shape]`, `[dns]`, `[backups]` — this is what scaffold, mint,
 add, check, the pulumi program and the mesh read. Every consumer reads the
 same Go struct (`forts/internal/manifest`), so the generators cannot drift.
 
@@ -77,22 +83,46 @@ imperative, and provider dirs arrive on first need. A checked `[[apps]]`
 membership was designed and parked (#269) until a sibling cut shows the
 tree copy is the pain.
 
-No toggles for the standard components (monitoring, backups) either: the
-shared infrastructure layer is per-fort identical by design, and per-app
-monitoring is contract-driven. The first toggle arrives with the first real
-second variant.
+No toggles for the standard components either — with one exception that
+earned its way in. Monitoring stays per-fort identical (the shared
+infrastructure layer is, by design, and per-app monitoring is
+contract-driven), but **`[backups] profile` is the first real second
+variant**: every fort's volumes are backed up the same *way* and not to
+the same *places*. A lab fort is reproducible and keeps one local copy;
+a production fort's offsite copy must not depend on the lab being
+reachable (docs/infra/backups.md).
+
+```toml
+[backups]
+profile = "production"   # luxor's rustfs AND B2
+profile = "lab"          # luxor's rustfs only
+profile = "none"         # nothing — a positive declaration, not an omission
+```
+
+**Required, with no default**, and that is the point: a production fort
+silently inheriting lab-only backups is the failure worth one line of
+typing, and it cannot be inferred from the provider table (staging-k3s
+is a lab VM that may want covering; a Linode drill fort should not pay
+for B2). `none` is how luxor says what it is — the hub of copies and an
+origin of nothing, so backing its volumes up to its own rustfs would be
+circular. It renders no `sfi.pv-backup` wiring at all, rather than an
+imported module sitting disabled.
+
+The profile names a DESTINATION SET, never individual targets: there are
+exactly two object stores at fleet level, and enumerating endpoints per
+fort is how they drift.
 
 ## Who reads it
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, `mesh_ip` → `MESH_IP`, the seeds |
-| `mint` | `mesh_ip` (wg key, peer), the endpoint; the cluster key, deploy key and canary always |
+| `scaffold` | everything: the provider table picks the host shape, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the cluster key, deploy key and canary always; `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
-| `destroy` | the gate: no manifest on `origin/main` and none in the working tree |
+| `destroy` | the gate: no manifest on `origin/main` and none in the working tree (so it revokes the B2 key by name, not by profile — there is no manifest left to read) |
 | `check --all` (fleet half), the nix-eval job | the list of hosts |
 
 ## History

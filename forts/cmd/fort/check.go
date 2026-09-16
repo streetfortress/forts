@@ -43,12 +43,13 @@ func check(args []string) error {
 		return err
 	}
 	var problems map[string]error
+	var parsed map[string]manifest.Host
 	if *all {
 		hosts, p, err := manifest.LoadAll(root)
 		if err != nil {
 			return err
 		}
-		problems = p
+		problems, parsed = p, hosts
 		forts = nil
 		for name := range hosts {
 			forts = append(forts, name)
@@ -78,6 +79,12 @@ func check(args []string) error {
 		known[f] = true
 	}
 	shared := checkFleetShared(root, known, *all)
+	// Cross-fort providers are a fleet-wide invariant, not a per-fort
+	// one: the declaration lives in luxor's tree, so it can only be
+	// traced with every manifest in hand (--all).
+	if *all {
+		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
+	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {
 		findings := checkFleetFort(root, fort, shared)
@@ -385,6 +392,13 @@ func reportFindings(w io.Writer, fort string, findings []finding, annotate bool)
 			if annotate {
 				fmt.Fprintf(w, "::error::%s: %s\n", f.dir, f.msg)
 			}
+		default:
+			// A typo'd level used to vanish here — the finding was
+			// computed, then silently dropped by the switch (cost an
+			// hour, 2026-09-16). A gate that loses findings quietly is
+			// the one failure it must not have.
+			errors++
+			fmt.Fprintf(w, "  ✗ %s: %s [unknown finding level %q — this is a bug in the check]\n", f.dir, f.msg, f.level)
 		}
 	}
 	return errors

@@ -56,7 +56,7 @@ func mint(args []string) error {
 	if err != nil {
 		return err
 	}
-	p, err := planMint(root, host, tool, gitea)
+	p, err := planMint(root, host, tool, gitea, *write)
 	if err != nil {
 		return err
 	}
@@ -103,6 +103,17 @@ type mintPlan struct {
 	admins     map[string][]string
 	deployKey  string // gitea status line; "" = not a flux cluster
 	registerOn bool   // apply must POST the deploy key
+
+	write bool // --write: the plan may be applied, so a missing credential is fatal now rather than later
+
+	// The backup credentials a [backups] profile implies (mintbackup.go).
+	resticPassword string
+	resticRustfs   string
+	rustfsUser     string // the fort's rustfs identity (= its access key)
+	rustfsSecret   string // "" unless apply must declare it on luxor
+	resticB2       string
+	b2Status       string // "" = no B2 key in this fort's shape
+	b2Mint         bool   // apply must create it
 }
 
 // giteaDeployKeys is the deploy-key API shared with fort destroy. A
@@ -113,7 +124,7 @@ type giteaDeployKeys struct {
 	token  string
 }
 
-func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*mintPlan, error) {
+func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write bool) (*mintPlan, error) {
 	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
@@ -121,7 +132,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 	if gitea == nil {
 		return nil, fmt.Errorf("host %q: the flux deploy key needs the gitea client", host)
 	}
-	p := &mintPlan{root: root, host: host, entry: entry, have: map[string]string{}, admins: map[string][]string{}}
+	p := &mintPlan{root: root, host: host, entry: entry, write: write, have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
@@ -204,6 +215,13 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys) (*min
 		p.deploy, err = newSSHKey("flux-" + host)
 	}
 	if err != nil {
+		return nil, err
+	}
+
+	// 2b. the backup credentials the manifest's [backups] profile
+	// implies — restored where the file has them, sourced or minted
+	// where not.
+	if err := p.planBackups(take); err != nil {
 		return nil, err
 	}
 
@@ -309,6 +327,30 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 			return err
 		}
 	}
+	// Before the secrets file: b2_create_key returns the secret half
+	// exactly once, so it must be in hand before anything renders it. A
+	// write that fails after this leaves a live key the re-mint guard
+	// refuses to shadow — it names the id and asks for a deliberate delete.
+	if p.b2Mint {
+		if err := p.mintB2Key(); err != nil {
+			return err
+		}
+	}
+
+	// Registering with luxor's rustfs-central: this fort's identity is
+	// declared in that fort's tree, because luxor hosts the backup
+	// destination. `fort check` traces it both ways, so the two halves
+	// cannot drift unnoticed, and dismantle withdraws it.
+	if p.rustfsSecret != "" {
+		full := filepath.Join(p.root, rustfsUsers)
+		if err := tool.SetWith(filepath.Join(p.root, ".sops.yaml"), full, `["stringData"]["`+p.rustfsUser+`"]`, p.rustfsSecret); err != nil {
+			return fmt.Errorf("declaring %s in %s: %w", p.rustfsUser, rustfsUsers, err)
+		}
+		if err := tool.GitAdd(rustfsUsers); err != nil {
+			return err
+		}
+	}
+
 	nixosConfig := filepath.Join(p.root, "nixos/.sops.yaml")
 	fleetConfig := filepath.Join(p.root, ".sops.yaml")
 
@@ -403,6 +445,12 @@ func (p *mintPlan) value(key string) string {
 		return p.cluster.identity
 	case keyDeploy:
 		return p.deploy.private
+	case keyResticPassword:
+		return p.resticPassword
+	case keyResticRustfs:
+		return p.resticRustfs
+	case keyResticB2:
+		return p.resticB2
 	}
 	return ""
 }
@@ -446,6 +494,19 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	if p.deployKey != "" {
 		fmt.Fprintf(w, "· gitea deploy key flux-%s: %s\n", p.host, p.deployKey)
+	}
+	if p.b2Status != "" {
+		fmt.Fprintf(w, "· b2 application key %s\n", p.b2Status)
+	}
+	if p.rustfsUser != "" {
+		verb := "declared in"
+		if p.rustfsSecret == "" {
+			verb = "already in"
+		}
+		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsers, p.host)
+	}
+	if p.entry.Backups.Backed() {
+		fmt.Fprintf(w, "· backups: profile %q — %s\n", p.entry.Backups.Profile, backupDestinations(p.entry.Backups.Profile))
 	}
 	fmt.Fprintln(w)
 	if !written {

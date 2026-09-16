@@ -60,6 +60,7 @@ type dismantlePlan struct {
 	removes    []string // repo-relative paths (files or dirs)
 	edits      []dEdit
 	rekey      []string // sops files under the shared infrastructure rule
+	rustfsUser string   // the fort's identity to withdraw from luxor's provider contract
 	residue    []string // "path: N mention(s)"
 	crossRefs  []string // other forts' contracts sourcing from this fort
 	notes      []string
@@ -134,12 +135,31 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if entry.Provider == "" {
 		p.notes = append(p.notes, "no provider: nothing raised this host through the CLI, so nothing destroys it — the VM (if any) goes by hand on the hypervisor (`virsh destroy` + `virsh undefine --remove-all-storage`).")
 	}
+	// The registration with luxor's rustfs-central lives in luxor's
+	// tree, because that fort hosts the backup destination.
+	// Withdrawing it is what makes the credential go away
+	// — the IAM reconciler removes any user the contract no longer
+	// declares, so an orphaned identity cannot outlive its fort.
+	if entry.Backups.Backed() && secretHasKey(root, rustfsUsers, rustfsPVUser(host)) {
+		p.rustfsUser = rustfsPVUser(host)
+	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
+	if p.entry.Backups.Profile == "production" {
+		p.notes = append(p.notes, "the B2 application key `"+b2KeyName(host)+"` stays live until fort destroy revokes it; its snapshots age out on the bucket's retention.")
+	}
 	sort.Strings(p.removes)
 	return p, nil
 }
 
 func (p *dismantlePlan) apply(tool secretsTool) error {
+	if p.rustfsUser != "" {
+		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, rustfsUsers), `["stringData"]["`+p.rustfsUser+`"]`); err != nil {
+			return fmt.Errorf("withdrawing %s from %s: %w", p.rustfsUser, rustfsUsers, err)
+		}
+		if err := tool.GitAdd(rustfsUsers); err != nil {
+			return err
+		}
+	}
 	for _, e := range p.edits {
 		full := filepath.Join(p.root, e.path)
 		raw, err := os.ReadFile(full)

@@ -27,6 +27,11 @@ type hostView struct {
 	LanDNS       []string
 	StateVersion string
 	ClusterInit  bool
+	// BackupProfile is [backups] profile from the manifest. Empty when
+	// the manifest says "none": the host then imports no pv-backup module
+	// and declares nothing, rather than importing it disabled — a host
+	// that is not an origin should read as one.
+	BackupProfile string
 	// Cloud hosts (a cloud provider table): the linode-runtime shape —
 	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
 	Cloud        bool
@@ -131,6 +136,9 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		ClusterInit:  true,
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
+	}
+	if entry.Backups.Backed() {
+		view.BackupProfile = entry.Backups.Profile
 	}
 	if l := entry.Libvirt(); l != nil {
 		view.IP = l.IP

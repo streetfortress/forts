@@ -45,9 +45,10 @@ let
   # enumerating them per host is how they drift. Overridable for a
   # rehearsal against a scratch endpoint.
   defaultEndpoints = {
-    # luxor's rustfs, NodePort 30900 opened on wg0 only — plain HTTP over
+    # luxor's rustfs-central — the fleet backup destination, NodePort 30901
+    # opened on wg0 only. Plain HTTP over
     # the mesh, path-style (docs/infra/providers.md).
-    rustfs = "http://10.1.0.5:30900";
+    rustfs = "http://10.1.0.5:30901";
     b2 = "https://s3.us-west-004.backblazeb2.com";
   };
 

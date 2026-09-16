@@ -84,6 +84,7 @@ type fakeTool struct {
 	encrypted []string
 	sets      [][3]string
 	added     []string
+	unset     []string
 	rekeyed   []string
 }
 
@@ -116,6 +117,10 @@ func (f *fakeTool) EncryptWith(config, path string) error {
 }
 func (f *fakeTool) SetWith(config, path, jsonPath, value string) error {
 	f.sets = append(f.sets, [3]string{path, jsonPath, value})
+	return nil
+}
+func (f *fakeTool) UnsetWith(config, path, jsonPath string) error {
+	f.unset = append(f.unset, path+" "+jsonPath)
 	return nil
 }
 func (f *fakeTool) GitAdd(path string) error { f.added = append(f.added, path); return nil }

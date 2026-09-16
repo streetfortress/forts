@@ -10,6 +10,9 @@ import (
 const lab = `mesh_ip = "10.1.0.15"
 k3s_cluster_init = false
 
+[backups]
+profile = "lab"
+
 [shape]
 vcpus = 2
 memory = 4
@@ -20,6 +23,9 @@ ip = "10.0.0.41"
 `
 
 const cloud = `mesh_ip = "10.1.0.54"
+
+[backups]
+profile = "production"
 
 [dns]
 zone = "streetfortress.cloud"
@@ -37,6 +43,12 @@ func TestParse(t *testing.T) {
 	}
 	if h.Provider != "libvirt" || h.Cloud() || h.Libvirt() == nil || h.Libvirt().IP != "10.0.0.41" || h.Linode() != nil {
 		t.Errorf("lab: %+v", h)
+	}
+	if h.Backups.Profile != "lab" || !h.Backups.Backed() {
+		t.Errorf("lab backups: %+v", h.Backups)
+	}
+	if (Backups{Profile: "none"}).Backed() {
+		t.Error(`"none" is a declaration that nothing is backed up, not a profile that backs up`)
 	}
 	if h.Endpoint() != "10.0.0.41" || h.Shape.Disk != "80G" || h.ClusterInit == nil || *h.ClusterInit {
 		t.Errorf("lab derived: endpoint %q shape %+v init %v", h.Endpoint(), h.Shape, h.ClusterInit)
@@ -70,8 +82,13 @@ func TestParseRefuses(t *testing.T) {
 		{"unknown table", "[hetzner]\nx = 1\n", "unknown key hetzner"},
 		{"no mesh", "[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip is required"},
 		{"bad mesh ip", "mesh_ip = \"lol\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip"},
-		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
-		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
+		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
+		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
+		// The variant the manifest exists to make un-forgettable: silence
+		// is not "lab", and a typo is not a default.
+		{"no backups profile", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[backups] profile is required"},
+		{"bad backups profile", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"offsite\"\n[libvirt]\nip = \"10.0.0.1\"\n", "want one of lab, production, none"},
+		{"unknown backups key", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\nhour = 5\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key"},
 		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
 		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
 		{"wrong type", "k3s_cluster_init = \"yes\"\nmesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "k3s_cluster_init"},

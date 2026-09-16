@@ -121,6 +121,18 @@ func destroy(args []string) error {
 		fmt.Println("  deploy key:", msg)
 	}
 
+	// …and its B2 application key, the other off-repo identity. Warned
+	// rather than fatal: the minting credential is an operational input
+	// (docs/infra/backups.md), and a destroy must not be blocked waiting
+	// for it. The key is scoped to this fort's prefix, so what it can
+	// still reach is only the backups that are about to age out — but it
+	// is live until someone removes it.
+	if msg, err := revokeB2Key(host); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete the key named %s by hand\n", err, b2KeyName(host))
+	} else {
+		fmt.Println("  b2 key:", msg)
+	}
+
 	// 6. stage the state removal; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
 	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()

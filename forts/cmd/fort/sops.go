@@ -23,6 +23,10 @@ type secretsTool interface {
 	// the fleet one for the canary — and a caller-supplied key path.
 	EncryptWith(config, path string) error
 	SetWith(config, path, jsonPath, value string) error
+	// UnsetWith removes one key — the inverse of SetWith, and the only
+	// way a cross-fort declaration (a fort's rustfs identity in luxor's
+	// provider contract) can be withdrawn by `fort dismantle`.
+	UnsetWith(config, path, jsonPath string) error
 }
 
 type sopsCLI struct{ root string }
@@ -66,6 +70,15 @@ func (s sopsCLI) SetWith(config, path, jsonPath, value string) error {
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops set %s %s: %s", path, jsonPath, lastLine(string(out)))
+	}
+	return nil
+}
+
+func (s sopsCLI) UnsetWith(config, path, jsonPath string) error {
+	cmd := exec.Command("sops", "--config", config, "unset", path, jsonPath)
+	cmd.Dir = s.root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("sops unset %s %s: %s", path, jsonPath, lastLine(string(out)))
 	}
 	return nil
 }

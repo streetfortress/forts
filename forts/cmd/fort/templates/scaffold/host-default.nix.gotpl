@@ -35,7 +35,10 @@
     # flux-git-deploy-key into this host's sops file.
     ../../modules/flux-bootstrap.nix
     ../../modules/auto-rebuild.nix # pull-based OS updates (#93)
-  ];
+{{ if .BackupProfile }}    # restic PV backups (docs/infra/backups.md). CNPG owns the database
+    # layer and databasus the logical one; this is every other volume.
+    ../../modules/pv-backup.nix
+{{ end }}  ];
 
   networking.hostName = "{{ .Hostname }}";
 
@@ -47,7 +50,16 @@
   # Watch main; a changed host config lands within ~6h — or now, via
   # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
-
+{{ if .BackupProfile }}
+  # [backups] profile = "{{ .BackupProfile }}" in this fort's manifest. The
+  # profile names a destination set, not targets: `lab` is luxor's rustfs
+  # alone, `production` adds B2 so the offsite copy does not depend on the
+  # lab being reachable. `fort mint` seeds the credentials it implies.
+  sfi.pv-backup = {
+    enable = true;
+    profile = "{{ .BackupProfile }}";
+  };
+{{ end }}
   # Static address on the hypervisor's LAN bridge — matches [libvirt] ip in
   # provisioning/forts/{{ .Hostname }}.toml.
   networking.useDHCP = false;
