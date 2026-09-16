@@ -145,7 +145,11 @@ let
   '';
 in
 {
-  imports = [ ./textfile-metrics.nix ];
+  # The ops verbs come with the layer: a fort that backs up gets
+  # `sfi-backup-now` and `sfi-backup-status` on the intervention ladder,
+  # because the alternative is console break-glass to answer "did it run"
+  # (found on the sfi-fort-d54d5b3 drill).
+  imports = [ ./textfile-metrics.nix ./ops/backups.nix ];
 
   options.sfi.pv-backup = {
     enable = lib.mkEnableOption "restic backups of k3s persistent volumes";
