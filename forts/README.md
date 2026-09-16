@@ -115,6 +115,43 @@ written. Running pulumi by hand still honours whatever `pulumi login`
 last recorded: prefer `fort preview` / `fort provision`, or export
 `PULUMI_BACKEND_URL` yourself.
 
+## The B2 spike (`cmd/b2probe`, `internal/b2`)
+
+`internal/b2` is the Backblaze client the B2 half of `fort mint` will use
+(docs/infra/backups.md, "Minting keys"): authorize, list buckets, and
+create / list / delete application keys against the v4 API, hand-rolled
+on net/http the way the gitea deploy-key client in `mint.go` is. Its
+`Minting` / `Writer` / `Pruning` capability sets are the design's three
+credential roles spelled once.
+
+`cmd/b2probe` is the throwaway half — a one-shot verification, against a
+real account, of the three things the API reference does not state and
+that decide the shape: whether a **non-master** key may create keys at
+all, whether a new key's capabilities must be a **subset** of the
+creator's, and whether `bucketIds` really takes an **array**. It also
+proves the guard mint will use (`b2_list_keys` echoes the restrictions,
+so a recorded keyID can be checked against its *authority*, not just its
+existence) and, with `--data-plane`, that a writer key cannot write
+outside its prefix or delete at all.
+
+```
+sops --config .sops.yaml set provisioning/secrets.yaml '["b2-key-id"]' '"<keyID>"'
+sops --config .sops.yaml set provisioning/secrets.yaml '["b2-app-key"]' '"<applicationKey>"'
+go run ./cmd/b2probe [--data-plane <scratch bucket>]
+```
+
+Credentials come from `B2_KEY_ID` / `B2_APP_KEY` when set, else from
+`b2-key-id` / `b2-app-key` in `provisioning/secrets.yaml` — the
+precedence `cloudEnv` gives `LINODE_TOKEN` and the gitea token. The real
+minting credential is *not* a master key; that the scoped one works is
+the thing the probe is verifying, so the master key is the first run's
+exception and should be replaced once it answers.
+
+Every key it makes is named `b2probe-*`, expires in an hour, and is
+deleted before exit; it never touches a bucket. It exits non-zero if an
+assumption did not hold, and the report says what each one decides.
+Delete the command once the findings are recorded — `internal/b2` stays.
+
 ## Status
 
 Demonstration shape (#87 decision PR): everything compiles against the
