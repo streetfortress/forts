@@ -122,9 +122,10 @@ every verb, so a `pulumi login` elsewhere can never redirect state into
 another worktree. The stock `pulumi … -s <host>` from `forts/pulumi` under
 the same environment is always a first-class escape hatch.
 
-**Without a TTY** (an agent, a script) the apply verbs stop at pulumi's
-non-interactive guard after the safe part: run the confirming step by hand
-with `--yes` under the same environment, then stage `forts/pulumi`.
+**Without a TTY** (an agent, a script, CI) pass `--yes` to the apply
+verbs: it is pulumi's own `--yes --non-interactive`, and the merge that
+put the manifest on main is the confirmation. Without a TTY and without
+`--yes` the verb refuses up front, before it stages anything.
 
 ## Pages
 

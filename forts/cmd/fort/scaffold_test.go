@@ -56,12 +56,12 @@ func TestRenderScaffold(t *testing.T) {
 		}
 	}
 	l := lab["nixos/hosts/lab-fort/default.nix"]
-	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.99", "services.k3s.clusterInit = true"} {
+	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.99", "services.k3s.clusterInit = true", "zramSwap"} {
 		if !strings.Contains(l, s) {
 			t.Errorf("lab default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"linode-runtime", "zramSwap", "../../modules/interactive.nix", "../../modules/dotfiles.nix"} {
+	for _, s := range []string{"linode-runtime", "../../modules/interactive.nix", "../../modules/dotfiles.nix"} {
 		if strings.Contains(l, s) {
 			t.Errorf("lab default.nix should not carry %q", s)
 		}

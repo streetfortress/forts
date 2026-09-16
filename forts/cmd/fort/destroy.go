@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,10 +30,18 @@ import (
 // mid-way leaves the (partly deleted, unprotected) state in the working
 // tree — the right place for it — and the rerun picks up where it was.
 func destroy(args []string) error {
-	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort destroy <host>")
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("usage: fort destroy <host> [--yes]")
 	}
 	host := args[0]
+	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "confirm the pulumi refresh and destroy without a prompt")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := needsTTYOrYes("destroy", *yes); err != nil {
+		return err
+	}
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -78,7 +87,7 @@ func destroy(args []string) error {
 	// 1. refresh, so the destroy works from truth (anything removed by
 	// hand is dropped from state instead of failing the destroy).
 	fmt.Println("== pulumi refresh")
-	if err := runPulumi(pulumiDir, "refresh", "--stack", host); err != nil {
+	if err := runPulumi(pulumiDir, append([]string{"refresh", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		return rerun("refresh", err)
 	}
 	// 2. unprotect — state-only, reversible, and only ever right here.
@@ -88,7 +97,7 @@ func destroy(args []string) error {
 	}
 	// 3. destroy — you read the deletes and confirm.
 	fmt.Println("== pulumi destroy")
-	if err := runPulumi(pulumiDir, "destroy", "--stack", host); err != nil {
+	if err := runPulumi(pulumiDir, append([]string{"destroy", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		return rerun("destroy", err)
 	}
 	// 4. stack rm refuses while any resource remains — that is the

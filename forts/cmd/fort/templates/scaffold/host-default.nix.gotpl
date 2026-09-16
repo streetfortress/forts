@@ -59,10 +59,35 @@
     dns = [ {{ range $i, $d := .LanDNS }}{{ if $i }} {{ end }}"{{ $d }}"{{ end }} ];
   };
 
+{{- if .ClusterInit }}
   # Single-node server with embedded etcd (server config and the k3s-token
   # requirement come from modules/k3s-server.nix). Set k3s_cluster_init =
   # false in the manifest for a lean sqlite datastore instead.
-  services.k3s.clusterInit = {{ if .ClusterInit }}true{{ else }}false{{ end }};
+  services.k3s.clusterInit = true;
+{{- else }}
+  # Single-node server on the sqlite datastore (k3s_cluster_init = false
+  # in the manifest): a single node buys nothing from etcd, and k3s-server
+  # with etcd was a third of a 4 GB node (#163/#164). Server config and
+  # the k3s-token requirement come from modules/k3s-server.nix.
+  services.k3s.clusterInit = false;
+{{- end }}
+
+  # zram swap (#163): swapless 4 GB nodes hit page-cache thrash as a
+  # cliff (memory PSI full-stalls while the kernel re-reads evicted
+  # program text; kubelet never sees MemoryPressure). Compressed swap in
+  # RAM makes it gradual and observable. The lab shape has no disk swap
+  # tier: zram is all there is.
+  zramSwap = {
+    enable = true;
+    memoryPercent = 50;
+  };
+  boot.kernel.sysctl = {
+    # swap is now cheaper than a disk round-trip, so swap aggressively
+    # instead of shredding page cache…
+    "vm.swappiness" = 180;
+    # …and don't readahead swap pages (no seek penalty on zram).
+    "vm.page-cluster" = 0;
+  };
 
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host key

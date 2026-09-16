@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,10 +24,18 @@ import (
 // the playbook never set. Provenance: forts:imageId records the
 // adoption, not an image. After this, `fort destroy` is the VM's exit.
 func adopt(args []string) error {
-	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort adopt <host>")
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("usage: fort adopt <host> [--yes]")
 	}
 	host := args[0]
+	fs := flag.NewFlagSet("adopt", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "confirm the converging pulumi up without a prompt")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := needsTTYOrYes("adopt", *yes); err != nil {
+		return err
+	}
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -92,7 +101,7 @@ func adopt(args []string) error {
 		return fmt.Errorf("%w\nthe stack is left in place for inspection (`fort preview %s`); `pulumi stack rm --force -s %s` to undo the adoption", err, host, host)
 	}
 	fmt.Println("   only live properties differ (autostart/running) — converging them; you confirm:")
-	if err := runPulumi(pulumiDir, "up", "--stack", host); err != nil {
+	if err := runPulumi(pulumiDir, append([]string{"up", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		return err
 	}
 	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()

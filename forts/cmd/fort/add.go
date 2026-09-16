@@ -64,6 +64,11 @@ func add(args []string) error {
 		if err := p.apply(); err != nil {
 			return err
 		}
+		// Author verbs stage what they generate (mint and seed do; the
+		// handbook says so): the new dirs and the appended lists.
+		if err := (sopsCLI{root: o.root}).GitAdd(filepath.Join("fleet/apps", o.fort)); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: git add fleet/apps/%s: %v\n", o.fort, err)
+		}
 	}
 	p.report(os.Stdout, o.write)
 	return nil
@@ -586,7 +591,7 @@ func (p *plan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing written (add --write).")
 		return
 	}
-	fmt.Fprintf(w, "next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
+	fmt.Fprintf(w, "staged. next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
 	if len(p.externals) > 0 {
 		fmt.Fprintln(w, "external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):")
 		for _, k := range p.externals {

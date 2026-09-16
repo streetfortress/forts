@@ -416,8 +416,17 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	facts = append(facts, "mesh "+p.entry.MeshIP)
 	fmt.Fprintf(w, "mint %s   (%s)\n", p.host, strings.Join(facts, " · "))
-	fmt.Fprintf(w, "  host age recipient %s\n", p.hostRecip)
-	fmt.Fprintf(w, "  cluster recipient  %s\n", p.cluster.recipient)
+	// A dry run mints in memory and discards: a recipient derived from a
+	// key that does not exist yet is a throwaway, and printing it bare
+	// invites copying it somewhere. Say so; --write prints the real one.
+	throwaway := func(key string) string {
+		if !written && hasKey(p.missing, key) {
+			return "   (dry run: minted in memory and discarded — --write prints the real one)"
+		}
+		return ""
+	}
+	fmt.Fprintf(w, "  host age recipient %s%s\n", p.hostRecip, throwaway(keySSHHost))
+	fmt.Fprintf(w, "  cluster recipient  %s%s\n", p.cluster.recipient, throwaway(keyAge))
 	switch {
 	case p.newFile:
 		fmt.Fprintf(w, "● %-36s %s — minted, sops-encrypted (host key doubles as its age identity)\n", p.secretsPath, strings.Join(p.missing, ", "))
@@ -696,4 +705,13 @@ func registerDeployKey(g *giteaDeployKeys, host, pub string) (string, error) {
 		return "", fmt.Errorf("registering flux-%s: %s", host, resp.Status)
 	}
 	return "registered flux-" + host + " (read-only)", nil
+}
+
+func hasKey(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

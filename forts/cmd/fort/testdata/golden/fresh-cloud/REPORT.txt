@@ -26,7 +26,7 @@ fleet/apps/cloud-fort/   (chart 0.3.0)
   ◆ secrets-sfi-website.sops.yaml seeded
   ● secrets.contract.yaml        secrets-backup (luxor rustfs creds) + secrets-sfi-website
 
-next: seed the ◆ files (dependency order is derived):
+staged. next: seed the ◆ files (dependency order is derived):
   fort seed cloud-fort --write
 external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):
   RESEND_API_KEY           Resend → API keys (re_) (optional)

@@ -1,14 +1,15 @@
 # fort destroy — the side-effects half, gated on the merge
 
 ```
-fort destroy <host>
+fort destroy <host> [--yes]
 ```
 
 `destroy` is everything about retiring a fort that happens outside git,
 and it refuses to start until git says the host is gone. The steps are
 the web3 runbook (the first Linode fort's retirement, done by hand) as
 one verb, each pulumi step with inherited stdio so you read and confirm
-exactly as by hand.
+exactly as by hand — or `--yes` confirms them all (an agent, a script,
+CI); without a TTY and without `--yes` it refuses up front.
 
 ## Gates — the inverse of every other verb's
 

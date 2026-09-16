@@ -29,7 +29,11 @@ func provision(args []string) error {
 	host := args[0]
 	fs := flag.NewFlagSet("provision", flag.ContinueOnError)
 	imagePath := fs.String("image", "", "injected bootstrap image (linode: .img.gz to upload; libvirt: the .qcow2 the volume is streamed from); deleted locally on success")
+	yes := fs.Bool("yes", false, "confirm the pulumi apply without a prompt (an agent, a script, CI)")
 	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if err := needsTTYOrYes("provision", *yes); err != nil {
 		return err
 	}
 
@@ -84,7 +88,7 @@ func provision(args []string) error {
 		}
 	}
 
-	if err := runPulumi(pulumiDir, "up", "--stack", host); err != nil {
+	if err := runPulumi(pulumiDir, append([]string{"up", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		if flow != nil {
 			fmt.Fprintf(os.Stderr, "pulumi up failed — image %s left in place; rerun WITHOUT --image to retry (imageId is already set)\n", imageID)
 		}
@@ -109,6 +113,31 @@ func provision(args []string) error {
 		fmt.Printf("single-use image %s released (provider-side where applicable, and local)\n", imageID)
 	}
 	return nil
+}
+
+// confirmArgs is the --yes passthrough: pulumi's non-interactive guard
+// is a default for humans at a TTY, and `--yes` on merge is how pulumi
+// itself expects to be driven from CI. Under a TTY without --yes the
+// stock prompt stands: you read the preview and type yes.
+func confirmArgs(yes bool) []string {
+	if yes {
+		return []string{"--yes", "--non-interactive"}
+	}
+	return nil
+}
+
+// needsTTYOrYes fails an apply verb up front when nothing could confirm
+// it: no TTY on stdin and no --yes. Before this the verb ran its safe
+// part, then pulumi's guard refused and the message read as a failure
+// (drill finding 12 — "pulumi up failed" when only the guard fired).
+func needsTTYOrYes(verb string, yes bool) error {
+	if yes {
+		return nil
+	}
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		return nil
+	}
+	return fmt.Errorf("fort %s: no TTY to confirm the pulumi apply — pass --yes (an agent, a script, CI), or run it from a terminal", verb)
 }
 
 // hasStack reports whether the file backend holds a checkpoint for host —

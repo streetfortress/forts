@@ -1,9 +1,9 @@
 # fort provision — birth and day-2 applies
 
 ```
-fort provision <host> [--image <path>]
+fort provision <host> [--image <path>] [--yes]
 fort preview  (<host> | --all) [--refresh] [--expect-no-changes]
-fort adopt    <host>
+fort adopt    <host> [--yes]
 ```
 
 `provision` is `pulumi up -s <host>` with the credentials, backend and
@@ -144,6 +144,7 @@ environment, else sops-decrypted from `provisioning/secrets.yaml`.
 `~/.ssh/id_ed25519` in the URI — the provider carries its own ssh client
 and reads neither `~/.ssh/config` nor an agent.
 
-Without a TTY, `pulumi up` stops at its non-interactive guard after the
-stage step; replay it as `pulumi up --yes -s <host>` under the same
-environment, then stage `forts/pulumi`.
+`--yes` passes pulumi's `--yes --non-interactive` through: the apply
+runs unprompted (an agent, a script, CI). Without a TTY and without
+`--yes`, provision refuses before staging anything — no half-run to
+replay.

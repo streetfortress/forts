@@ -117,9 +117,10 @@ func usage() {
       --image consumes and deletes; the work dir is shredded. guestfish
       comes from PATH, else nixpkgs; nix and sops must be on PATH.
 
-  provision <host> [--image <path>]
+  provision <host> [--image <path>] [--yes]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
-      the preview). With --image, the birth: create the stack if the host
+      the preview, or --yes confirms it — an agent, a script, CI; without
+      a TTY and without --yes the verb refuses up front). With --image, the birth: create the stack if the host
       has none, stage the injected single-use bootstrap image and record
       it as the stack's forts:imageId — linode: upload the .img.gz;
       libvirt: grow the .qcow2 to disk_size, the program streams it into
@@ -128,12 +129,12 @@ func usage() {
       --image a host with no stack is refused. The state (and at birth
       Pulumi.<host>.yaml) is staged for its own PR.
 
-  adopt <host>
+  adopt <host> [--yes]
       bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a repave: rescan the pool, import the
       live domain + volume into a new stack (reads the hypervisor, writes
       local state only), preview the program against them and refuse
       unless the only changes are live properties (autostart, running),
-      then one 'pulumi up' (you confirm) converges those. Stages the new
+      then one 'pulumi up' (you confirm, or --yes) converges those. Stages the new
       stack for its own PR.
 
   preview (<host> | --all) [--refresh] [--expect-no-changes]
@@ -193,11 +194,11 @@ func usage() {
       no pulumi state: fort destroy is the second, gated step after the
       merge.
 
-  destroy <host>
+  destroy <host> [--yes]
       the half with side effects outside git, gated on the merge: refuses
       unless the host's manifest is ABSENT from origin/main (and the
       working tree), the tree is clean, and the stack exists. Then, with
-      inherited stdio (you confirm each pulumi step): power the instance
+      inherited stdio (you confirm each pulumi step, or --yes): power the instance
       off (linode), pulumi refresh, state unprotect --all (only ever
       right before the destroy), destroy, stack rm; clears the file
       backend's residue (.bak, history, backups), revokes the flux-<host>
