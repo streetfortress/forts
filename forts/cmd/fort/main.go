@@ -108,14 +108,18 @@ func usage() {
       plan; --write mints, encrypts, registers, stages. fort dismantle is
       the inverse.
 
-  b2-key <minting|pruning> [--write]
+  b2-key <minting|pruning|writer <host>> [--write]
       mint one of the two B2 credentials no verb may create for itself,
       because both live outside the repo and the web console cannot
       express their capability sets. minting (sfi-b2-key-minting-key)
       is what fort mint exports to create per-fort keys: writeKeys, no
       deleteFiles. pruning (sfi-b2-pruning-key) is the fleet's ONLY
       delete-capable credential, scoped to sfi-pv-backups, and belongs in
-      luxor's host secrets for sfi.pv-prune. Needs the account master key
+      luxor's host secrets for sfi.pv-prune. writer <host> is a backup
+      credential for a host with NO fort manifest (zenbook): both backup
+      buckets, namePrefix <host>/, no deleteFiles — the same grant fort
+      mint gives a fort, and refused for a host that HAS a manifest,
+      whose key is mint's to create and record. Needs the account master key
       as B2_KEY_ID / B2_APP_KEY. Prints the plan and the grant; --write
       creates it and prints the secret ONCE — the only verb that prints a
       value, because there is nowhere else for it to go. An existing key

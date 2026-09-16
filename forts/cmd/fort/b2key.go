@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/b2"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
-// `fort b2-key <role>` mints the fleet's two hand-held B2 credentials —
-// the ones no verb may create for itself, and that the B2 web console
-// cannot create correctly.
+// `fort b2-key <role>` mints the B2 credentials no other verb creates:
+// the fleet's two hand-held ones, and a backup credential for a host
+// that has no fort manifest. None of them can be made correctly in the
+// B2 web console.
 //
 // WHY IT EXISTS. The console's key form offers a coarse permission
 // picker; the capability sets this design depends on are not expressible
@@ -43,6 +45,11 @@ type b2Role struct {
 	caps    []string
 	// buckets restricts the key; empty = every bucket.
 	buckets []string
+	// prefix restricts it to one namePrefix; empty = the whole bucket.
+	prefix string
+	// host is set only by writerRole — the host this credential is for,
+	// which is also what the manifest guard checks.
+	host string
 	// why explains the shape, printed in the plan so the operator can
 	// check the grant before it is made.
 	why string
@@ -85,22 +92,64 @@ var b2Roles = map[string]b2Role{
 // slice would leave `--write` sitting as a second positional and report a
 // usage error for a correct command line.
 func parseB2KeyArgs(args []string) (b2Role, bool, error) {
+	usage := fmt.Errorf("usage: fort b2-key <%s|writer <host>> [--write]", strings.Join(b2RoleNames(), "|"))
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return b2Role{}, false, fmt.Errorf("usage: fort b2-key <%s> [--write]", strings.Join(b2RoleNames(), "|"))
+		return b2Role{}, false, usage
 	}
-	role, ok := b2Roles[args[0]]
-	if !ok {
-		return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s", args[0], strings.Join(b2RoleNames(), ", "))
+	rest := args[1:]
+
+	var role b2Role
+	switch {
+	case args[0] == "writer":
+		// The one role that takes an argument: the host it is for.
+		if len(rest) < 1 || strings.HasPrefix(rest[0], "-") {
+			return b2Role{}, false, fmt.Errorf("writer needs a host: fort b2-key writer <host> [--write]")
+		}
+		host := rest[0]
+		rest = rest[1:]
+		if err := b2.ValidName(b2KeyName(host)); err != nil {
+			return b2Role{}, false, err
+		}
+		role = writerRole(host)
+	default:
+		r, ok := b2Roles[args[0]]
+		if !ok {
+			return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s, writer", args[0], strings.Join(b2RoleNames(), ", "))
+		}
+		role = r
 	}
+
 	fs := flag.NewFlagSet("b2-key", flag.ContinueOnError)
 	write := fs.Bool("write", false, "actually create the key and print its secret once")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return b2Role{}, false, err
 	}
 	if fs.NArg() != 0 {
-		return b2Role{}, false, fmt.Errorf("unexpected argument %q — usage: fort b2-key <%s> [--write]", fs.Arg(0), strings.Join(b2RoleNames(), "|"))
+		return b2Role{}, false, fmt.Errorf("unexpected argument %q — %v", fs.Arg(0), usage)
 	}
 	return role, *write, nil
+}
+
+// writerRole is a backup credential for a host that is NOT a fort —
+// zenbook today, any hand-managed mesh member later. The grant is
+// hostKeySpec's, the same one `fort mint` gives a fort, so a key made
+// here and a key made there are indistinguishable and the mint-time
+// guard accepts either.
+func writerRole(host string) b2Role {
+	return b2Role{
+		name:    b2KeyName(host),
+		host:    host,
+		summary: "backups for " + host + " (a host with no fort manifest)",
+		caps:    b2.Writer,
+		buckets: []string{b2PVBucket, b2DBBucket},
+		prefix:  host + "/",
+		why: "list/read/write on both backup buckets, restricted to " + host + "/, and NO\n" +
+			"    deleteFiles — the same grant `fort mint` gives a fort, so a compromised\n" +
+			"    host can write its own backups and erase nobody's. Use this only for a\n" +
+			"    host WITHOUT a manifest: for a fort, `fort mint` creates the key and\n" +
+			"    records its id, and a key made behind mint's back is one it will refuse\n" +
+			"    to shadow.",
+	}
 }
 
 func b2Key(args []string) error {
@@ -109,9 +158,20 @@ func b2Key(args []string) error {
 		return err
 	}
 
+	// A fort's key is mint's to create: it records the id in the host's
+	// secrets file and refuses to shadow a same-named key it has no
+	// secret for. Hand-minting one here would produce exactly that
+	// standoff, so refuse before the call rather than after.
+	if role.host != "" {
+		root, err := repoRoot()
+		if err == nil && exists(root, manifest.Path(role.host)) {
+			return fmt.Errorf("%s has a fort manifest (%s) — its B2 key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
+		}
+	}
+
 	c, err := b2Session()
 	if err != nil {
-		return fmt.Errorf("%w\n\nThis verb needs the ACCOUNT MASTER key, which is the one credential that\ncan create these two. Export it for this command and put it back afterwards", err)
+		return fmt.Errorf("%w\n\nThis verb needs the ACCOUNT MASTER key, which is the one credential that\ncan create these. Export it for this command and put it back afterwards", err)
 	}
 	ctx := context.Background()
 
@@ -147,7 +207,11 @@ func b2Key(args []string) error {
 	} else {
 		fmt.Printf("  buckets       every bucket (minting resolves both backup buckets by name)\n")
 	}
-	fmt.Printf("  prefix        none — the whole bucket\n")
+	if role.prefix != "" {
+		fmt.Printf("  prefix        %s\n", role.prefix)
+	} else {
+		fmt.Printf("  prefix        none — the whole bucket\n")
+	}
 	fmt.Printf("\n  %s\n\n", role.why)
 
 	// Already there: the secret half is gone for good, so this never
@@ -173,7 +237,7 @@ above matters, delete it in the console deliberately and re-run.
 		return nil
 	}
 
-	key, err := c.CreateKey(ctx, b2.KeySpec{Name: role.name, Capabilities: role.caps, BucketIDs: ids})
+	key, err := c.CreateKey(ctx, b2.KeySpec{Name: role.name, Capabilities: role.caps, BucketIDs: ids, NamePrefix: role.prefix})
 	if err != nil {
 		return fmt.Errorf("creating %s: %w", role.name, err)
 	}
@@ -199,11 +263,14 @@ func (r b2Role) followUp() string {
 	case "sfi-b2-key-minting-key":
 		return "Next: export it as B2_KEY_ID / B2_APP_KEY when running `fort mint <host> --write`\n" +
 			"for a fort whose manifest says [backups] profile = \"production\". Nothing else reads it."
-	default:
+	case "sfi-b2-pruning-key":
 		return "Next: it belongs in luxor's host secrets as the env file sfi.pv-prune sources —\n" +
 			"  sops --config nixos/.sops.yaml set nixos/secrets/luxor.yaml \\\n" +
 			"    '[\"restic-prune-s3-env-b2\"]' \"\\\"AWS_ACCESS_KEY_ID=<id>\\nAWS_SECRET_ACCESS_KEY=<secret>\\n\\\"\"\n" +
 			"and nowhere else. It is the only credential in the fleet that deletes backups."
+	default:
+		return "Next: it belongs in that host's own secrets as the env file its restic\n" +
+			"units source (restic-s3-env-b2), and nowhere else."
 	}
 }
 
@@ -231,8 +298,16 @@ func roleDrift(k b2.Key, role b2Role, wantBuckets []string) string {
 	if len(k.BucketIDs) != len(wantBuckets) {
 		notes = append(notes, fmt.Sprintf("restricted to %d bucket(s), want %d", len(k.BucketIDs), len(wantBuckets)))
 	}
-	if k.NamePrefix != nil && *k.NamePrefix != "" {
-		notes = append(notes, fmt.Sprintf("namePrefix %q, want none", *k.NamePrefix))
+	have := ""
+	if k.NamePrefix != nil {
+		have = *k.NamePrefix
+	}
+	if have != role.prefix {
+		want := role.prefix
+		if want == "" {
+			want = "none"
+		}
+		notes = append(notes, fmt.Sprintf("namePrefix %q, want %s", have, want))
 	}
 	if len(notes) == 0 {
 		return ""

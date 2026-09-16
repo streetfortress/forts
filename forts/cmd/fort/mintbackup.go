@@ -214,36 +214,59 @@ func b2Restrictions(k b2.Key, host string) string {
 // mintB2Key is the write half, run from apply before the secrets file is
 // composed — the secret comes back exactly once, so it must reach
 // p.resticB2 before anything renders it.
+// resolveBuckets maps the backup buckets' names to their ids.
+func resolveBuckets(ctx context.Context, c *b2.Client, want []string) ([]string, error) {
+	buckets, err := c.ListBuckets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing B2 buckets: %w", err)
+	}
+	var ids []string
+	for _, name := range want {
+		id := ""
+		for _, b := range buckets {
+			if b.Name == name {
+				id = b.ID
+			}
+		}
+		if id == "" {
+			return nil, fmt.Errorf("no B2 bucket named %s — create the backup buckets first (docs/infra/backups.md)", name)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// hostKeySpec is THE grant a host's backup credential gets: both backup
+// buckets, its own prefix, and no deleteFiles so it cannot erase the
+// offsite copy. One definition, because `fort mint` creates these for
+// forts, `fort b2-key writer` creates them for hosts that are not forts,
+// and b2Restrictions checks live keys against exactly this shape — three
+// places that must not drift apart.
+func hostKeySpec(ctx context.Context, c *b2.Client, host string) (b2.KeySpec, error) {
+	ids, err := resolveBuckets(ctx, c, []string{b2PVBucket, b2DBBucket})
+	if err != nil {
+		return b2.KeySpec{}, err
+	}
+	return b2.KeySpec{
+		Name:         b2KeyName(host),
+		Capabilities: b2.Writer,
+		BucketIDs:    ids,
+		NamePrefix:   host + "/",
+	}, nil
+}
+
 func (p *mintPlan) mintB2Key() error {
 	c, err := b2Session()
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
-	buckets, err := c.ListBuckets(ctx)
+	spec, err := hostKeySpec(ctx, c, p.host)
 	if err != nil {
-		return fmt.Errorf("listing B2 buckets: %w", err)
-	}
-	var ids []string
-	for _, want := range []string{b2PVBucket, b2DBBucket} {
-		id := ""
-		for _, b := range buckets {
-			if b.Name == want {
-				id = b.ID
-			}
-		}
-		if id == "" {
-			return fmt.Errorf("no B2 bucket named %s — create the backup buckets before minting fort keys (docs/infra/backups.md)", want)
-		}
-		ids = append(ids, id)
+		return err
 	}
 
-	key, err := c.CreateKey(ctx, b2.KeySpec{
-		Name:         b2KeyName(p.host),
-		Capabilities: b2.Writer, // no deleteFiles: a fort must not be able to erase the offsite copy
-		BucketIDs:    ids,
-		NamePrefix:   p.host + "/",
-	})
+	key, err := c.CreateKey(ctx, spec)
 	if err != nil {
 		return fmt.Errorf("minting %s: %w", b2KeyName(p.host), err)
 	}
