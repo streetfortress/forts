@@ -93,3 +93,40 @@ func TestKustomizeBuild(t *testing.T) {
 		t.Errorf("bad: %v", err)
 	}
 }
+
+// Shell parameter expansion is still a ${VAR} reference as far as flux's
+// envsubst is concerned, and strict mode fails the WHOLE layer on the
+// unset name. The gate used to require `}` immediately after the name,
+// so a CronJob whose script said ${f##*/} passed here and then stopped
+// luxor's apps kustomization with `variable not set (strict mode): "f"`
+// (2026-09-16). Every form below is one the shipped script used.
+func TestEnvsubstFindsShellParameterExpansion(t *testing.T) {
+	built := `apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reconciler
+spec:
+  script: |
+    user=${f##*/}
+    host=${user#fort-}; host=${host%-pv}
+    keep=${CLUSTER_NAME}
+`
+	got := envsubstFindings("fleet/apps/a", "a", built, map[string]bool{"CLUSTER_NAME": true})
+	if len(got) != 1 || got[0].level != "error" {
+		t.Fatalf("findings: %+v", got)
+	}
+	// Named, so the operator can see which token to exempt or rename.
+	for _, want := range []string{"f", "host", "user"} {
+		if !strings.Contains(got[0].msg, want) {
+			t.Errorf("want %q named in %q", want, got[0].msg)
+		}
+	}
+	// The escape hatch still works — this resource references no cluster
+	// vars, so exemption is the right answer rather than renaming shell
+	// locals to please a substituter that should not be reading them.
+	exempt := strings.Replace(built, "  name: reconciler\n",
+		"  name: reconciler\n  annotations:\n    kustomize.toolkit.fluxcd.io/substitute: disabled\n", 1)
+	if got := envsubstFindings("fleet/apps/a", "a", exempt, map[string]bool{}); len(got) != 0 {
+		t.Errorf("annotated resource should be exempt: %+v", got)
+	}
+}

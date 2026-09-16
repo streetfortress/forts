@@ -36,7 +36,13 @@ var infraLayers = []string{"fleet/infrastructure/controllers", "fleet/infrastruc
 // ${VAR} tokens flux's post-build envsubst substitutes. Resources annotated
 // kustomize.toolkit.fluxcd.io/substitute: disabled are exempt (the grafana
 // dashboards ConfigMap carries Grafana's own ${DS_...} vars).
-var varRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+// varRE matches what flux's envsubst will try to substitute. The
+// trailing [^}]* is load-bearing: shell parameter expansion — ${f##*/},
+// ${user#fort-}, ${host%-pv} — is still a ${VAR} reference to envsubst,
+// and strict mode fails the whole layer on the unset name. Requiring `}`
+// immediately after the name made the gate blind to exactly that, and a
+// CronJob shipped through it and stopped luxor's apps layer (2026-09-16).
+var varRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}`)
 
 const substituteDisabled = "kustomize.toolkit.fluxcd.io/substitute"
 
