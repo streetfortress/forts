@@ -113,14 +113,16 @@ func checkFleetFort(root, fort string, shared fleetShared) []finding {
 			out = append(out, finding{"error", layer, err.Error()})
 			continue
 		}
-		if ff := envsubstFindings(layer, fort, built, vars); len(ff) > 0 {
+		ff := append(namespaceFindings(layer, fort, built), envsubstFindings(layer, fort, built, vars)...)
+		if len(ff) > 0 {
 			out = append(out, ff...)
 		} else {
-			out = append(out, finding{"ok", layer, fmt.Sprintf("kustomize build + strict envsubst (%d cluster vars)", len(vars))})
+			out = append(out, finding{"ok", layer, fmt.Sprintf("kustomize build + namespaces + strict envsubst (%d cluster vars)", len(vars))})
 		}
 	}
 	for _, layer := range infraLayers {
 		if built, ok := shared.infra[layer]; ok {
+			out = append(out, namespaceFindings(layer, fort, built)...)
 			out = append(out, envsubstFindings(layer, fort, built, vars)...)
 		}
 	}
@@ -162,6 +164,56 @@ func kustomizeBuild(root, rel string) (string, error) {
 }
 
 var docSep = regexp.MustCompile(`(?m)^---\s*$`)
+
+// clusterScoped are the kinds that legitimately carry no namespace.
+// A deny-list rather than API discovery: the gate runs offline in CI
+// against a stream, not a cluster. It errs loud — an unlisted
+// cluster-scoped kind is reported and added here, which beats the
+// alternative of missing a namespaced resource that has none.
+var clusterScoped = map[string]bool{
+	"Namespace": true, "Node": true, "PersistentVolume": true,
+	"StorageClass": true, "CustomResourceDefinition": true,
+	"ClusterRole": true, "ClusterRoleBinding": true,
+	"ClusterIssuer": true, "IngressClass": true, "GatewayClass": true,
+	"PriorityClass": true, "APIService": true,
+	"ValidatingWebhookConfiguration": true, "MutatingWebhookConfiguration": true,
+	"RuntimeClass": true, "CSIDriver": true, "VolumeSnapshotClass": true,
+	// Gateway API's admission policies, vendored with the CRDs.
+	"ValidatingAdmissionPolicy": true, "ValidatingAdmissionPolicyBinding": true,
+}
+
+// namespaceFindings: every namespaced resource in the built stream
+// declares one. kustomize does NOT inherit a namespace into generated
+// resources — a configMapGenerator entry without `namespace:` emits a
+// bare ConfigMap, the apply fails with "namespace not specified: the
+// server could not find the requested resource", and flux stops the
+// WHOLE layer on it. That took luxor's apps kustomization down (and
+// databasus-configs with it, as a dependency) the day rustfs-central
+// landed, which is the same blast radius as the envsubst trap below and
+// deserves the same gate.
+func namespaceFindings(layer, fort, built string) []finding {
+	var out []finding
+	for _, chunk := range docSep.Split(built, -1) {
+		if strings.TrimSpace(chunk) == "" {
+			continue
+		}
+		var doc struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Name      string `yaml:"name"`
+				Namespace string `yaml:"namespace"`
+			} `yaml:"metadata"`
+		}
+		if err := yaml.Unmarshal([]byte(chunk), &doc); err != nil {
+			continue // envsubstFindings reports the unparseable ones
+		}
+		if doc.Kind == "" || clusterScoped[doc.Kind] || doc.Metadata.Namespace != "" {
+			continue
+		}
+		out = append(out, finding{"error", layer, fmt.Sprintf("(%s): %s/%s has no namespace — the apply fails with \"namespace not specified\" and stops the whole layer (a generator does not inherit one; set `namespace:` on its entry)", fort, doc.Kind, doc.Metadata.Name)})
+	}
+	return out
+}
 
 // envsubstFindings: every ${VAR} in the built stream's non-exempt
 // resources is a cluster-vars key — one stray token fails the whole

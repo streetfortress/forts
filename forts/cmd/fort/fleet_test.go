@@ -130,3 +130,51 @@ spec:
 		t.Errorf("annotated resource should be exempt: %+v", got)
 	}
 }
+
+// kustomize does not inherit a namespace into GENERATED resources: a
+// configMapGenerator entry without `namespace:` emits a bare ConfigMap,
+// the apply fails with "namespace not specified", and flux stops the
+// whole layer on it — which took luxor's apps kustomization down, and
+// databasus-configs with it, the day rustfs-central landed (2026-09-16).
+func TestNamespaceFindings(t *testing.T) {
+	built := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: rustfs-central
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rustfs-policies-ccmc29c59f
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fine
+  namespace: rustfs-central
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: step-ca
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: safe-upgrades.gateway.networking.k8s.io
+`
+	got := namespaceFindings("fleet/apps/luxor", "luxor", built)
+	if len(got) != 1 || got[0].level != "error" {
+		t.Fatalf("exactly the generated ConfigMap should be flagged: %+v", got)
+	}
+	if !strings.Contains(got[0].msg, "ConfigMap/rustfs-policies-ccmc29c59f") {
+		t.Errorf("finding names the wrong resource: %s", got[0].msg)
+	}
+	// Cluster-scoped kinds carry no namespace by definition; flagging them
+	// would make the gate noise, and noise is how a gate stops being read.
+	for _, kind := range []string{"Namespace", "ClusterIssuer", "ValidatingAdmissionPolicy"} {
+		if !clusterScoped[kind] {
+			t.Errorf("%s must be exempt", kind)
+		}
+	}
+}
