@@ -108,7 +108,7 @@ func usage() {
       plan; --write mints, encrypts, registers, stages. fort dismantle is
       the inverse.
 
-  b2-key <minting|pruning|writer <host>|reader <host>> [--write]
+  b2-key <minting|pruning|writer <host>|logical <host>|reader <host>> [--write]
       mint a B2 credential no verb may create for itself, because these
       live outside the repo and the web console cannot express their
       capability sets. minting (sfi-b2-key-minting-key)
@@ -119,15 +119,19 @@ func usage() {
       credential for a host with NO fort manifest (zenbook): both backup
       buckets, namePrefix <host>/, no deleteFiles — the same grant fort
       mint gives a fort, and refused for a host that HAS a manifest,
-      whose key is mint's to create and record. reader <host>
+      whose key is mint's to create and record. logical <host>
+      (logical-<host>) is what a databasus instance writes that host's
+      dumps with: sfi-db-logical-backups alone, namePrefix <host>/ — a
+      bucket the host's own key deliberately does not cover. reader <host>
       (restore-<host>) is the credential a RESTORE runs with: list/read
-      on both backup buckets under namePrefix <host>/ and nothing that
+      on all three backup buckets under namePrefix <host>/ and nothing that
       writes. It is the one grant that crosses a prefix, because the
       machine restoring a host is never that host; unlike writer it is
       NOT refused for a fort, and it belongs in the password manager for
       the length of the restore, not in any host's secrets.
-      Needs the account master key
-      as B2_KEY_ID / B2_APP_KEY. Prints the plan and the grant; --write
+      Prompts for the credential it needs, or reads B2_KEY_ID /
+      B2_APP_KEY: the account master key for minting, and
+      sfi-b2-key-minting-key for everything else. Prints the plan and the grant; --write
       creates it and prints the secret ONCE — the only verb that prints a
       value, because there is nowhere else for it to go. An existing key
       is never replaced (its secret is unrecoverable) and any drift from

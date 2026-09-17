@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/b2"
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
@@ -33,8 +31,8 @@ import (
 // holding deleteFiles, and that key really deletes — so the minting
 // credential is a delete-capable credential one call away and does NOT
 // live in provisioning/secrets.yaml beside the others. It is an
-// operational input: B2_KEY_ID / B2_APP_KEY in the environment, from the
-// password manager, for the moment of a raise and no longer.
+// operational input: from the password manager, for the moment of a raise
+// and no longer — prompted for, or B2_KEY_ID / B2_APP_KEY (b2session.go).
 const (
 	keyResticPassword = "restic-password"
 	keyResticRustfs   = "restic-s3-env-rustfs"
@@ -44,8 +42,12 @@ const (
 	// an array, so a fort needs one credential rather than one per
 	// bucket; the db bucket is included now because the barman plugin
 	// migration will write there under the same key.
-	b2PVBucket = "sfi-pv-backups"
-	b2DBBucket = "sfi-db-backups"
+	b2PVBucket       = "sfi-pv-backups"
+	b2PhysicalBucket = "sfi-db-physical-backups"
+	// Logical dumps get a bucket of their own, laid out <host>/… like the
+	// other two. NOT part of a host's key: databasus writes here, under
+	// logicalRole's key, and a host's key stays unable to.
+	b2LogicalBucket = "sfi-db-logical-backups"
 
 	// luxor's backup-destination instance (docs/infra/providers.md).
 	// S3 is a per-fort battery; what is particular is luxor's ROLE as
@@ -146,22 +148,26 @@ func (p *mintPlan) planB2Key() error {
 	recorded := envKeyID(p.resticB2)
 	name := b2KeyName(p.host)
 
-	c, err := b2Session()
-	if err != nil {
+	// Without the credential in the environment, only a --write that has
+	// a key to mint is worth stopping to ask for one.
+	if !b2EnvSet() {
 		switch {
 		case recorded != "":
 			// Nothing to mint, so the credential is optional: say the
-			// check was skipped rather than refusing a day-2 re-mint.
+			// check was skipped rather than nagging a day-2 re-mint.
 			p.b2Status = fmt.Sprintf("%s recorded (id %s) — NOT verified: B2_KEY_ID / B2_APP_KEY unset", name, recorded)
+			return nil
 		case !p.write:
 			// A dry run is where you read the plan BEFORE deciding to
-			// export a credential that can mint a key which deletes
-			// backups. Refusing to plan without it inverts that.
-			p.b2Status, p.b2Mint = "would mint — NOT verified (B2_KEY_ID / B2_APP_KEY unset; --write needs them)", true
-		default:
-			return fmt.Errorf("minting %s needs B2 credentials: %w", name, err)
+			// hand over a credential that can mint a key which deletes
+			// backups. Asking for it to plan inverts that.
+			p.b2Status, p.b2Mint = "would mint — NOT verified (B2_KEY_ID / B2_APP_KEY unset; --write will ask for them)", true
+			return nil
 		}
-		return nil
+	}
+	c, err := b2Session(needMinting, "Minting "+name)
+	if err != nil {
+		return fmt.Errorf("minting %s needs B2 credentials: %w", name, err)
 	}
 
 	keys, err := c.ListKeys(context.Background())
@@ -190,7 +196,13 @@ func (p *mintPlan) planB2Key() error {
 		if found == nil {
 			return fmt.Errorf("B2 key %s exists (id %s) but is not the one %s records (id %s) — delete the stale key deliberately, then re-run", name, ids(live), p.secretsPath, recorded)
 		}
-		if problem := b2Restrictions(*found, p.host); problem != "" {
+		// By id, not by count: B2 cannot rename a bucket, so a key minted
+		// before a bucket was replaced still names two — the wrong two.
+		want, err := resolveBuckets(context.Background(), c, writerRole(p.host).buckets)
+		if err != nil {
+			return err
+		}
+		if problem := b2Restrictions(*found, p.host, want); problem != "" {
 			return fmt.Errorf("B2 key %s (id %s) %s — the authority drifted from what mint grants; delete it and re-run to mint a correct one", name, recorded, problem)
 		}
 		p.b2Status = fmt.Sprintf("%s registered (id %s, restrictions verified)", name, recorded)
@@ -201,9 +213,9 @@ func (p *mintPlan) planB2Key() error {
 // b2Restrictions checks a live key against what mint grants: both backup
 // buckets, this fort's prefix, and no deleteFiles. Returns "" when it
 // matches.
-func b2Restrictions(k b2.Key, host string) string {
-	if len(k.BucketIDs) != 2 {
-		return fmt.Sprintf("is restricted to %d bucket(s), want 2", len(k.BucketIDs))
+func b2Restrictions(k b2.Key, host string, wantBuckets []string) string {
+	if problem := bucketDrift(k.BucketIDs, wantBuckets); problem != "" {
+		return "is " + problem
 	}
 	want := host + "/"
 	if k.NamePrefix == nil || *k.NamePrefix != want {
@@ -217,9 +229,6 @@ func b2Restrictions(k b2.Key, host string) string {
 	return ""
 }
 
-// mintB2Key is the write half, run from apply before the secrets file is
-// composed — the secret comes back exactly once, so it must reach
-// p.resticB2 before anything renders it.
 // resolveBuckets maps the backup buckets' names to their ids.
 func resolveBuckets(ctx context.Context, c *b2.Client, want []string) ([]string, error) {
 	buckets, err := c.ListBuckets(ctx)
@@ -244,25 +253,23 @@ func resolveBuckets(ctx context.Context, c *b2.Client, want []string) ([]string,
 
 // hostKeySpec is THE grant a host's backup credential gets: both backup
 // buckets, its own prefix, and no deleteFiles so it cannot erase the
-// offsite copy. One definition, because `fort mint` creates these for
-// forts, `fort b2-key writer` creates them for hosts that are not forts,
-// and b2Restrictions checks live keys against exactly this shape — three
-// places that must not drift apart.
+// offsite copy. The shape itself is writerRole's — `fort mint` creates it
+// for forts, `fort b2-key writer` for hosts that are not forts, and
+// b2Restrictions checks live keys against it, so it is spelled once.
 func hostKeySpec(ctx context.Context, c *b2.Client, host string) (b2.KeySpec, error) {
-	ids, err := resolveBuckets(ctx, c, []string{b2PVBucket, b2DBBucket})
+	role := writerRole(host)
+	ids, err := resolveBuckets(ctx, c, role.buckets)
 	if err != nil {
 		return b2.KeySpec{}, err
 	}
-	return b2.KeySpec{
-		Name:         b2KeyName(host),
-		Capabilities: b2.Writer,
-		BucketIDs:    ids,
-		NamePrefix:   host + "/",
-	}, nil
+	return role.spec(ids), nil
 }
 
+// mintB2Key is the write half, run from apply before the secrets file is
+// composed — the secret comes back exactly once, so it must reach
+// p.resticB2 before anything renders it.
 func (p *mintPlan) mintB2Key() error {
-	c, err := b2Session()
+	c, err := b2Session(needMinting, "Minting "+b2KeyName(p.host))
 	if err != nil {
 		return err
 	}
@@ -281,20 +288,18 @@ func (p *mintPlan) mintB2Key() error {
 	return nil
 }
 
-// b2Session authorizes from the environment. Deliberately NOT from
-// provisioning/secrets.yaml: see the package comment above.
-func b2Session() (*b2.Client, error) {
-	id, appKey := os.Getenv("B2_KEY_ID"), os.Getenv("B2_APP_KEY")
-	if id == "" || appKey == "" {
-		return nil, fmt.Errorf("B2_KEY_ID / B2_APP_KEY unset — the minting credential is an operational input, not a repo secret (it can mint a key that deletes backups). Export the key-minting pair from the password manager for this command")
+// bucketDrift compares a live key's bucket restriction with the ids a
+// role resolves to today. "" when they are the same set.
+func bucketDrift(have, want []string) string {
+	if len(have) != len(want) {
+		return fmt.Sprintf("restricted to %d bucket(s), want %d", len(have), len(want))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	c, err := b2.Authorize(ctx, "", id, appKey)
-	if err != nil {
-		return nil, fmt.Errorf("B2 authorize: %w", err)
+	for _, id := range have {
+		if !hasKey(want, id) {
+			return fmt.Sprintf("restricted to bucket id %s, which is none of %s — minted before a bucket was replaced?", id, strings.Join(want, ", "))
+		}
 	}
-	return c, nil
+	return ""
 }
 
 func ids(keys []b2.Key) string {
@@ -322,7 +327,7 @@ func deref(s *string) string {
 // Absent credentials are reported, not fatal: a destroy must not be
 // blocked on an operational input, and the caller prints what is left.
 func revokeB2Key(host string) (string, error) {
-	c, err := b2Session()
+	c, err := b2Session(needMinting, "Revoking "+b2KeyName(host))
 	if err != nil {
 		return "", fmt.Errorf("B2 key %s NOT revoked: %w", b2KeyName(host), err)
 	}

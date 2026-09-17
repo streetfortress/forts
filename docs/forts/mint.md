@@ -68,9 +68,9 @@ revoked by `fort destroy`.
   file (the instance's root pair today — per-consumer rustfs IAM is the
   `s3` provider's own piece of work).
 - `restic-s3-env-b2` is **minted against the B2 API**, and the credential
-  that mints it is an **operational input**: `B2_KEY_ID` / `B2_APP_KEY`
-  in the environment, from the password manager, for the moment of a
-  raise. It is deliberately not in `provisioning/secrets.yaml` beside
+  that mints it is an **operational input**: from the password
+  manager, for the moment of a raise — `fort mint --write` prompts for
+  it (id echoed, key not), or reads `B2_KEY_ID` / `B2_APP_KEY` when set. It is deliberately not in `provisioning/secrets.yaml` beside
   `linode-token` — B2 does not enforce capability subsetting, so a key
   that can mint keys can mint one that deletes backups, and that really
   deletes (verified, #291). A credential which can destroy the recovery
@@ -87,8 +87,10 @@ would. A same-named key whose id is not the repo's is refused by id, for
 a deliberate deletion — exactly as a mismatched deploy key is.
 
 Without `B2_KEY_ID` / `B2_APP_KEY`, a re-mint that needs to create
-nothing says so (`NOT verified`) and proceeds; a raise that must mint
-refuses and names the credential.
+nothing says so (`NOT verified`) and proceeds, and a dry run plans
+without asking; only a `--write` that must mint prompts for
+`sfi-b2-key-minting-key` — or, with no terminal to ask on, refuses and
+names it.
 
 **The shared admin set is read from the configs, not hardcoded**: the
 recipient lines every existing host rule shares ("readable by whoever can
@@ -144,8 +146,8 @@ The admin age key (to encrypt and to read the existing file), and for a
 flux cluster the `gitea-token` in `provisioning/secrets.yaml`. A lab-only
 host needs no gitea credential. A fort with a `[backups]` profile needs
 `restic-password` and the `rustfs-access-key` / `rustfs-secret-key` pair
-in that same file; a `production` one additionally needs `B2_KEY_ID` /
-`B2_APP_KEY` exported in the environment, and only when the key it would
+in that same file; a `production` one additionally needs the B2 minting key
+(prompted, or `B2_KEY_ID` / `B2_APP_KEY`), and only when the key it would
 mint does not exist yet. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it).

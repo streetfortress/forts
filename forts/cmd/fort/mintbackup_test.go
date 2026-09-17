@@ -43,7 +43,8 @@ func TestB2KeyNameIsLegal(t *testing.T) {
 func TestB2Restrictions(t *testing.T) {
 	prefix := "sfi-fort-abc/"
 	ok := b2.Key{BucketIDs: []string{"a", "b"}, NamePrefix: &prefix, Capabilities: b2.Writer}
-	if got := b2Restrictions(ok, "sfi-fort-abc"); got != "" {
+	wantIDs := []string{"a", "b"}
+	if got := b2Restrictions(ok, "sfi-fort-abc", wantIDs); got != "" {
 		t.Errorf("a correct key should pass: %s", got)
 	}
 
@@ -52,12 +53,15 @@ func TestB2Restrictions(t *testing.T) {
 		"is restricted to 1 bucket(s)": {BucketIDs: []string{"a"}, NamePrefix: &prefix, Capabilities: b2.Writer},
 		"has namePrefix":               {BucketIDs: []string{"a", "b"}, NamePrefix: &wrongPrefix, Capabilities: b2.Writer},
 		"want \"sfi-fort-abc/\"":       {BucketIDs: []string{"a", "b"}, NamePrefix: nil, Capabilities: b2.Writer},
+		// Two buckets, but not THE two: B2 cannot rename a bucket, so a
+		// key minted before one was replaced passes a count and fails here.
+		"none of a, b": {BucketIDs: []string{"a", "old"}, NamePrefix: &prefix, Capabilities: b2.Writer},
 		// The one the guard exists for: a key edited in the console into
 		// holding deleteFiles still carries the right name and prefix.
 		"holds deleteFiles": {BucketIDs: []string{"a", "b"}, NamePrefix: &prefix, Capabilities: b2.Pruning},
 	}
 	for want, k := range cases {
-		got := b2Restrictions(k, "sfi-fort-abc")
+		got := b2Restrictions(k, "sfi-fort-abc", wantIDs)
 		if !strings.Contains(got, want) {
 			t.Errorf("want %q in the complaint, got %q", want, got)
 		}
@@ -67,9 +71,15 @@ func TestB2Restrictions(t *testing.T) {
 func TestB2SessionRefusesWithoutTheOperationalInput(t *testing.T) {
 	t.Setenv("B2_KEY_ID", "")
 	t.Setenv("B2_APP_KEY", "")
-	_, err := b2Session()
+	stdinIsTTY = func() bool { return false }
+	_, err := b2Session(needMaster, "Minting sfi-b2-key-minting-key")
 	if err == nil || !strings.Contains(err.Error(), "operational input") {
 		t.Fatalf("want a refusal naming the credential's home, got %v", err)
+	}
+	// No terminal is the scripted case: the refusal has to say WHICH of
+	// the two hand-held credentials to export.
+	if !strings.Contains(err.Error(), "ACCOUNT MASTER") {
+		t.Errorf("the refusal should name the credential it wants, got %v", err)
 	}
 }
 
@@ -100,7 +110,7 @@ func TestB2RolesAreTheDesignsCapabilitySets(t *testing.T) {
 		t.Errorf("pruning buckets = %v, want just %s", pruning.buckets, b2PVBucket)
 	}
 	if len(minting.buckets) != 0 {
-		t.Errorf("minting must not be bucket-restricted: it resolves %s and %s by name", b2PVBucket, b2DBBucket)
+		t.Errorf("minting must not be bucket-restricted: it resolves %s and %s by name", b2PVBucket, b2PhysicalBucket)
 	}
 }
 

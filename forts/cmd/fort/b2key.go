@@ -13,8 +13,9 @@ import (
 
 // `fort b2-key <role>` mints the B2 credentials no other verb creates:
 // the fleet's two hand-held ones, a backup credential for a host that
-// has no fort manifest, and the read-only credential a restore runs
-// with. None of them can be made correctly in the B2 web console.
+// has no fort manifest, the one a databasus instance writes logical
+// dumps with, and the read-only credential a restore runs with. None of
+// them can be made correctly in the B2 web console.
 //
 // WHY IT EXISTS. The console's key form offers a coarse permission
 // picker; the capability sets this design depends on are not expressible
@@ -35,11 +36,13 @@ import (
 // of that being deliberate rather than casual: dry run by default, a
 // refusal when the key already exists, and one loud banner.
 //
-// The master key is the operational input, the same B2_KEY_ID /
-// B2_APP_KEY pair every B2-touching verb reads. It is needed for exactly
-// this command and then goes back in the password manager.
+// The credential it runs with is prompted for, or read from B2_KEY_ID /
+// B2_APP_KEY (b2session.go). Only `minting` needs the account master key:
+// B2 does not enforce capability subsetting (#291), so the minting key
+// creates every other shape and the master key stays in the password
+// manager after day one.
 
-// b2Role is one of the two credentials this mints.
+// b2Role is one credential shape this mints.
 type b2Role struct {
 	name    string
 	summary string
@@ -52,9 +55,11 @@ type b2Role struct {
 	// is for (writer), or the host whose repo it may read (reader).
 	host string
 	// kind is the word the operator typed for a host-bearing role —
-	// "writer" or "reader" — and empty for the two fixed roles. It
-	// selects the manifest guard, which applies to writer alone.
+	// "writer", "logical" or "reader" — and empty for the two fixed
+	// roles. It selects the manifest guard, which applies to writer alone.
 	kind string
+	// master: only the account master key can create this one.
+	master bool
 	// why explains the shape, printed in the plan so the operator can
 	// check the grant before it is made.
 	why string
@@ -69,6 +74,7 @@ var b2Roles = map[string]b2Role{
 		name:    "sfi-b2-key-minting-key",
 		summary: "mints per-fort keys (fort mint)",
 		caps:    b2.Minting,
+		master:  true,
 		why: "writeKeys + deleteKeys so `fort mint` and `fort destroy` can manage fort keys;\n" +
 			"    list/read/write files so it can grant them; NO deleteFiles and no bucket\n" +
 			"    writes, so the credential itself cannot remove a backup object. Note that\n" +
@@ -97,7 +103,7 @@ var b2Roles = map[string]b2Role{
 // slice would leave `--write` sitting as a second positional and report a
 // usage error for a correct command line.
 func parseB2KeyArgs(args []string) (b2Role, bool, error) {
-	usage := fmt.Errorf("usage: fort b2-key <%s|writer <host>|reader <host>> [--write]", strings.Join(b2RoleNames(), "|"))
+	usage := fmt.Errorf("usage: fort b2-key <%s|%s <host>> [--write]", strings.Join(b2RoleNames(), "|"), strings.Join(b2HostRoleNames(), " <host>|"))
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return b2Role{}, false, usage
 	}
@@ -105,29 +111,25 @@ func parseB2KeyArgs(args []string) (b2Role, bool, error) {
 
 	var role b2Role
 	switch {
-	case args[0] == "writer", args[0] == "reader":
-		// The two roles that take an argument: the host the credential
-		// backs up, or the host whose backups it may read.
+	case b2HostRoles[args[0]] != nil:
+		// The roles that take an argument: the host the credential backs
+		// up, dumps for, or whose backups it may read.
 		kind := args[0]
 		if len(rest) < 1 || strings.HasPrefix(rest[0], "-") {
 			return b2Role{}, false, fmt.Errorf("%s needs a host: fort b2-key %s <host> [--write]", kind, kind)
 		}
 		host := rest[0]
 		rest = rest[1:]
-		if kind == "writer" {
-			role = writerRole(host)
-		} else {
-			role = readerRole(host)
-		}
-		// The two roles spell the name differently, so validate the one
-		// the role actually chose rather than re-deriving it here.
+		role = b2HostRoles[kind](host)
+		// Each role spells the name differently, so validate the one the
+		// role actually chose rather than re-deriving it here.
 		if err := b2.ValidName(role.name); err != nil {
 			return b2Role{}, false, err
 		}
 	default:
 		r, ok := b2Roles[args[0]]
 		if !ok {
-			return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s, writer <host>, reader <host>", args[0], strings.Join(b2RoleNames(), ", "))
+			return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s, %s <host>", args[0], strings.Join(b2RoleNames(), ", "), strings.Join(b2HostRoleNames(), " <host>, "))
 		}
 		role = r
 	}
@@ -143,11 +145,18 @@ func parseB2KeyArgs(args []string) (b2Role, bool, error) {
 	return role, *write, nil
 }
 
+// b2HostRoles are the roles that take a host, by the word typed.
+var b2HostRoles = map[string]func(host string) b2Role{
+	"writer":  writerRole,
+	"logical": logicalRole,
+	"reader":  readerRole,
+}
+
 // writerRole is a backup credential for a host that is NOT a fort —
-// zenbook today, any hand-managed mesh member later. The grant is
-// hostKeySpec's, the same one `fort mint` gives a fort, so a key made
-// here and a key made there are indistinguishable and the mint-time
-// guard accepts either.
+// zenbook today, any hand-managed mesh member later. It is also THE
+// definition of a host's grant: hostKeySpec builds `fort mint`'s key from
+// it, so a key made here and a key made there are indistinguishable and
+// the mint-time guard accepts either.
 func writerRole(host string) b2Role {
 	return b2Role{
 		name:    b2KeyName(host),
@@ -155,7 +164,7 @@ func writerRole(host string) b2Role {
 		kind:    "writer",
 		summary: "backups for " + host + " (a host with no fort manifest)",
 		caps:    b2.Writer,
-		buckets: []string{b2PVBucket, b2DBBucket},
+		buckets: []string{b2PVBucket, b2PhysicalBucket},
 		prefix:  host + "/",
 		why: "list/read/write on both backup buckets, restricted to " + host + "/, and NO\n" +
 			"    deleteFiles — the same grant `fort mint` gives a fort, so a compromised\n" +
@@ -166,6 +175,36 @@ func writerRole(host string) b2Role {
 	}
 }
 
+// logicalRole is what a databasus instance writes <host>'s logical dumps
+// with: sfi-db-logical-backups/<host>/<db>/… (docs/infra/backups.md,
+// "Buckets"). Dumps have their own bucket so that every bucket is laid
+// out `<host>/…` — they began as a `logical/<host>/` prefix inside
+// sfi-db-physical-backups, the one path in the layout that was not, and zenbook's
+// databasus met a 401 there with a key scoped to `zenbook/`.
+//
+// The bucket is deliberately NOT added to the host's own key. databasus
+// is an app holding a credential in its own database, and this one
+// cannot touch the host's restic repo or barman lineage, only its dumps. No
+// deleteFiles, like every writer: on B2 dumps expire by lifecycle rule,
+// so databasus's own retention must be off for this storage or its
+// deletes will fail.
+func logicalRole(host string) b2Role {
+	return b2Role{
+		name:    "logical-" + host,
+		host:    host,
+		kind:    "logical",
+		summary: "databasus logical dumps for " + host,
+		caps:    b2.Writer,
+		buckets: []string{b2LogicalBucket},
+		prefix:  host + "/",
+		why: "list/read/write on " + b2LogicalBucket + " alone, restricted to " + host + "/, and\n" +
+			"    NO deleteFiles. The host's own key does not cover this bucket, so it cannot\n" +
+			"    write here; this one cannot write anywhere else — not the restic repo, not\n" +
+			"    the barman lineage. Retention is the bucket's lifecycle rule — turn databasus's own\n" +
+			"    retention off for this storage, its deletes would be refused.",
+	}
+}
+
 // readerRole is the credential a RESTORE runs with. It is the one grant
 // in the design that deliberately crosses a prefix boundary: every other
 // key is scoped to the host holding it, which is correct for writing and
@@ -173,6 +212,9 @@ func writerRole(host string) b2Role {
 // reading `zenbook/` from a machine whose own key may only touch
 // `sfi-fort-.../`, and until this role existed there was no credential in
 // the fleet that could do it — the gap the 2026-09-16 restore drill found.
+//
+// All three buckets, which the uniform `<host>/` layout makes one prefix:
+// a restore reads the PVCs, the barman lineage AND the logical dumps.
 //
 // Read-only, and scoped to the source host rather than the whole bucket,
 // because a restore reads one host's repo: the credential names whose
@@ -189,9 +231,9 @@ func readerRole(host string) b2Role {
 		kind:    "reader",
 		summary: "restoring " + host + "'s backups onto another host",
 		caps:    b2.Reader,
-		buckets: []string{b2PVBucket, b2DBBucket},
+		buckets: []string{b2PVBucket, b2PhysicalBucket, b2LogicalBucket},
 		prefix:  host + "/",
-		why: "list/read on both backup buckets, restricted to " + host + "/, and NOTHING that\n" +
+		why: "list/read on all three backup buckets, restricted to " + host + "/, and NOTHING that\n" +
 			"    writes: no writeFiles, no deleteFiles, no key capabilities. This is the\n" +
 			"    only credential that reads a prefix other than its holder's, so it is the\n" +
 			"    one to mint late, use, and revoke — not to leave standing.",
@@ -215,29 +257,22 @@ func b2Key(args []string) error {
 		}
 	}
 
-	c, err := b2Session()
+	// Only the create itself needs the master key; the plan and the drift
+	// report are a key listing, which the minting key does as well.
+	need := needMinting
+	if role.master && write {
+		need = needMaster
+	}
+	c, err := b2Session(need, "Minting "+role.name)
 	if err != nil {
-		return fmt.Errorf("%w\n\nThis verb needs the ACCOUNT MASTER key, which is the one credential that\ncan create these. Export it for this command and put it back afterwards", err)
+		return err
 	}
 	ctx := context.Background()
 
 	var ids []string
 	if len(role.buckets) > 0 {
-		buckets, err := c.ListBuckets(ctx)
-		if err != nil {
-			return fmt.Errorf("listing buckets: %w", err)
-		}
-		for _, want := range role.buckets {
-			id := ""
-			for _, b := range buckets {
-				if b.Name == want {
-					id = b.ID
-				}
-			}
-			if id == "" {
-				return fmt.Errorf("no bucket named %s — create the backup buckets first (docs/infra/backups.md)", want)
-			}
-			ids = append(ids, id)
+		if ids, err = resolveBuckets(ctx, c, role.buckets); err != nil {
+			return err
 		}
 	}
 
@@ -283,8 +318,11 @@ above matters, delete it in the console deliberately and re-run.
 		return nil
 	}
 
-	key, err := c.CreateKey(ctx, b2.KeySpec{Name: role.name, Capabilities: role.caps, BucketIDs: ids, NamePrefix: role.prefix})
+	key, err := c.CreateKey(ctx, role.spec(ids))
 	if err != nil {
+		if b2.Unauthorized(err) && !c.Master() {
+			return fmt.Errorf("creating %s: %w — B2 refused this credential; retry with the account master key", role.name, err)
+		}
 		return fmt.Errorf("creating %s: %w", role.name, err)
 	}
 
@@ -302,9 +340,20 @@ above matters, delete it in the console deliberately and re-run.
 	return nil
 }
 
+// spec is the role as b2_create_key takes it, given its buckets' ids.
+func (r b2Role) spec(bucketIDs []string) b2.KeySpec {
+	return b2.KeySpec{Name: r.name, Capabilities: r.caps, BucketIDs: bucketIDs, NamePrefix: r.prefix}
+}
+
 // followUp says where the value belongs, which differs per role: one is
 // exported for a raise, the other is sops-set into luxor's host secrets.
 func (r b2Role) followUp() string {
+	if r.kind == "logical" {
+		return "Next: paste it into the databasus S3 storage for " + r.host + " — endpoint from\n" +
+			"docs/infra/backups.md, bucket " + b2LogicalBucket + ", prefix " + r.prefix + " — and keep a\n" +
+			"copy in the password manager. A UI-configured databasus keeps it in its own\n" +
+			"database, so it belongs in no host's sops file."
+	}
 	if r.kind == "reader" {
 		return "Next: it is an OPERATIONAL INPUT like the minting key — password manager,\n" +
 			"exported as B2_KEY_ID / B2_APP_KEY for the restore that needs it, and deleted\n" +
@@ -348,8 +397,8 @@ func roleDrift(k b2.Key, role b2Role, wantBuckets []string) string {
 	if len(extra) > 0 {
 		notes = append(notes, "ALSO holds "+strings.Join(extra, " "))
 	}
-	if len(k.BucketIDs) != len(wantBuckets) {
-		notes = append(notes, fmt.Sprintf("restricted to %d bucket(s), want %d", len(k.BucketIDs), len(wantBuckets)))
+	if problem := bucketDrift(k.BucketIDs, wantBuckets); problem != "" {
+		notes = append(notes, problem)
 	}
 	have := ""
 	if k.NamePrefix != nil {
@@ -373,6 +422,15 @@ func bucketNote(k b2.Key) string {
 		return ", every bucket"
 	}
 	return fmt.Sprintf(", %d bucket(s)", len(k.BucketIDs))
+}
+
+func b2HostRoleNames() []string {
+	names := make([]string, 0, len(b2HostRoles))
+	for n := range b2HostRoles {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func b2RoleNames() []string {

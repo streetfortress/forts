@@ -24,7 +24,7 @@ const authV4 = `{
       "downloadUrl": "https://f004.backblazeb2.com",
       "allowed": {
         "capabilities": ["listBuckets","listKeys","writeKeys","deleteKeys","listFiles","readFiles","writeFiles"],
-        "buckets": [{"id":"b1","name":"sfi-db-backups"}],
+        "buckets": [{"id":"b1","name":"sfi-db-physical-backups"}],
         "namePrefix": "sfi-prod-439bf72/"
       }
     }

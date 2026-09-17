@@ -36,8 +36,9 @@ const AuthURL = "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"
 
 // Capabilities the design uses by name, so callers do not spell them.
 //
-//	Minting  — what `provisioning/secrets.yaml` holds: it can mint and
-//	           revoke fort credentials and cannot remove a backup object.
+//	Minting  — the hand-held credential `fort mint` runs with (never in
+//	           the repo): it can mint and revoke fort credentials and
+//	           cannot itself remove a backup object.
 //	Writer   — what a fort's key gets: no deleteFiles, so a compromised
 //	           fort cannot erase the offsite copy.
 //	Pruning  — the delete-capable set, which lives only on the host that

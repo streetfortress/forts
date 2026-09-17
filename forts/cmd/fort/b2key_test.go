@@ -30,8 +30,8 @@ func TestReaderRoleCannotWrite(t *testing.T) {
 	if role.name == b2KeyName("zenbook") {
 		t.Error("reader and writer key names collide")
 	}
-	if len(role.buckets) != 2 {
-		t.Errorf("buckets %v — a restore may need either backup bucket", role.buckets)
+	if len(role.buckets) != 3 {
+		t.Errorf("buckets %v — a restore may need any of the three backup buckets", role.buckets)
 	}
 }
 
@@ -119,5 +119,48 @@ func TestRoleDriftSpotsAWritingReader(t *testing.T) {
 	clean := b2.Key{ApplicationKeyID: "x", Capabilities: b2.Reader, BucketIDs: []string{"a", "b"}, NamePrefix: &prefix}
 	if drift := roleDrift(clean, readerRole("zenbook"), []string{"a", "b"}); drift != "" {
 		t.Errorf("a correct key reported drift: %q", drift)
+	}
+}
+
+// The role zenbook's databasus needed: dumps live in their own bucket,
+// laid out <host>/ like the others, which a host's own key does not cover.
+func TestLogicalRoleIsItsOwnBucket(t *testing.T) {
+	logical, writer := logicalRole("zenbook"), writerRole("zenbook")
+	if logical.prefix != "zenbook/" {
+		t.Errorf("prefix = %q, want <host>/ — every bucket is laid out the same way", logical.prefix)
+	}
+	if len(logical.buckets) != 1 || logical.buckets[0] != b2LogicalBucket {
+		t.Errorf("buckets = %v, want just %s: dumps never go near the restic repo", logical.buckets, b2LogicalBucket)
+	}
+	// The separation is the bucket now, so it has to hold both ways.
+	if hasKey(writer.buckets, b2LogicalBucket) {
+		t.Errorf("the host's own key must not reach %s — databasus holds the other one", b2LogicalBucket)
+	}
+	// A restore reads dumps too, and one <host>/ prefix now spans them.
+	if !hasKey(readerRole("zenbook").buckets, b2LogicalBucket) {
+		t.Errorf("the restore key should read %s", b2LogicalBucket)
+	}
+	if hasKey(logical.caps, "deleteFiles") {
+		t.Error("no writer deletes on B2; dumps expire by lifecycle rule")
+	}
+	if logical.name == writer.name {
+		t.Error("the two keys must be tellable apart in b2_list_keys")
+	}
+	if logical.master {
+		t.Error("the minting key is enough for this one")
+	}
+}
+
+func TestOnlyTheMintingRoleNeedsTheMasterKey(t *testing.T) {
+	if !b2Roles["minting"].master {
+		t.Error("nothing but the master key can bootstrap the minting key")
+	}
+	if b2Roles["pruning"].master {
+		t.Error("B2 does not enforce subsetting (#291): the minting key creates the pruning key")
+	}
+	for kind, mk := range b2HostRoles {
+		if mk("zenbook").master {
+			t.Errorf("%s should not ask for the master key", kind)
+		}
 	}
 }
