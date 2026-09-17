@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/b2"
@@ -11,9 +12,9 @@ import (
 )
 
 // `fort b2-key <role>` mints the B2 credentials no other verb creates:
-// the fleet's two hand-held ones, and a backup credential for a host
-// that has no fort manifest. None of them can be made correctly in the
-// B2 web console.
+// the fleet's two hand-held ones, a backup credential for a host that
+// has no fort manifest, and the read-only credential a restore runs
+// with. None of them can be made correctly in the B2 web console.
 //
 // WHY IT EXISTS. The console's key form offers a coarse permission
 // picker; the capability sets this design depends on are not expressible
@@ -47,9 +48,13 @@ type b2Role struct {
 	buckets []string
 	// prefix restricts it to one namePrefix; empty = the whole bucket.
 	prefix string
-	// host is set only by writerRole — the host this credential is for,
-	// which is also what the manifest guard checks.
+	// host is set by the roles that take one: the host this credential
+	// is for (writer), or the host whose repo it may read (reader).
 	host string
+	// kind is the word the operator typed for a host-bearing role —
+	// "writer" or "reader" — and empty for the two fixed roles. It
+	// selects the manifest guard, which applies to writer alone.
+	kind string
 	// why explains the shape, printed in the plan so the operator can
 	// check the grant before it is made.
 	why string
@@ -92,7 +97,7 @@ var b2Roles = map[string]b2Role{
 // slice would leave `--write` sitting as a second positional and report a
 // usage error for a correct command line.
 func parseB2KeyArgs(args []string) (b2Role, bool, error) {
-	usage := fmt.Errorf("usage: fort b2-key <%s|writer <host>> [--write]", strings.Join(b2RoleNames(), "|"))
+	usage := fmt.Errorf("usage: fort b2-key <%s|writer <host>|reader <host>> [--write]", strings.Join(b2RoleNames(), "|"))
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return b2Role{}, false, usage
 	}
@@ -100,21 +105,29 @@ func parseB2KeyArgs(args []string) (b2Role, bool, error) {
 
 	var role b2Role
 	switch {
-	case args[0] == "writer":
-		// The one role that takes an argument: the host it is for.
+	case args[0] == "writer", args[0] == "reader":
+		// The two roles that take an argument: the host the credential
+		// backs up, or the host whose backups it may read.
+		kind := args[0]
 		if len(rest) < 1 || strings.HasPrefix(rest[0], "-") {
-			return b2Role{}, false, fmt.Errorf("writer needs a host: fort b2-key writer <host> [--write]")
+			return b2Role{}, false, fmt.Errorf("%s needs a host: fort b2-key %s <host> [--write]", kind, kind)
 		}
 		host := rest[0]
 		rest = rest[1:]
-		if err := b2.ValidName(b2KeyName(host)); err != nil {
+		if kind == "writer" {
+			role = writerRole(host)
+		} else {
+			role = readerRole(host)
+		}
+		// The two roles spell the name differently, so validate the one
+		// the role actually chose rather than re-deriving it here.
+		if err := b2.ValidName(role.name); err != nil {
 			return b2Role{}, false, err
 		}
-		role = writerRole(host)
 	default:
 		r, ok := b2Roles[args[0]]
 		if !ok {
-			return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s, writer", args[0], strings.Join(b2RoleNames(), ", "))
+			return b2Role{}, false, fmt.Errorf("unknown role %q — one of %s, writer <host>, reader <host>", args[0], strings.Join(b2RoleNames(), ", "))
 		}
 		role = r
 	}
@@ -139,6 +152,7 @@ func writerRole(host string) b2Role {
 	return b2Role{
 		name:    b2KeyName(host),
 		host:    host,
+		kind:    "writer",
 		summary: "backups for " + host + " (a host with no fort manifest)",
 		caps:    b2.Writer,
 		buckets: []string{b2PVBucket, b2DBBucket},
@@ -152,6 +166,38 @@ func writerRole(host string) b2Role {
 	}
 }
 
+// readerRole is the credential a RESTORE runs with. It is the one grant
+// in the design that deliberately crosses a prefix boundary: every other
+// key is scoped to the host holding it, which is correct for writing and
+// useless for recovery. Restoring zenbook's gitea onto a drill fort means
+// reading `zenbook/` from a machine whose own key may only touch
+// `sfi-fort-.../`, and until this role existed there was no credential in
+// the fleet that could do it — the gap the 2026-09-16 restore drill found.
+//
+// Read-only, and scoped to the source host rather than the whole bucket,
+// because a restore reads one host's repo: the credential names whose
+// data is about to be read, and cannot write a byte back into the repo it
+// is reading — a restoring host must not be able to corrupt its source.
+//
+// Unlike writer, this role is NOT refused for a host with a fort
+// manifest. Reading a fort's repo is the common case: the machine that
+// restores a dead fort is, by definition, not that fort.
+func readerRole(host string) b2Role {
+	return b2Role{
+		name:    b2RestoreKeyName(host),
+		host:    host,
+		kind:    "reader",
+		summary: "restoring " + host + "'s backups onto another host",
+		caps:    b2.Reader,
+		buckets: []string{b2PVBucket, b2DBBucket},
+		prefix:  host + "/",
+		why: "list/read on both backup buckets, restricted to " + host + "/, and NOTHING that\n" +
+			"    writes: no writeFiles, no deleteFiles, no key capabilities. This is the\n" +
+			"    only credential that reads a prefix other than its holder's, so it is the\n" +
+			"    one to mint late, use, and revoke — not to leave standing.",
+	}
+}
+
 func b2Key(args []string) error {
 	role, write, err := parseB2KeyArgs(args)
 	if err != nil {
@@ -162,7 +208,7 @@ func b2Key(args []string) error {
 	// secrets file and refuses to shadow a same-named key it has no
 	// secret for. Hand-minting one here would produce exactly that
 	// standoff, so refuse before the call rather than after.
-	if role.host != "" {
+	if role.kind == "writer" {
 		root, err := repoRoot()
 		if err == nil && exists(root, manifest.Path(role.host)) {
 			return fmt.Errorf("%s has a fort manifest (%s) — its B2 key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
@@ -259,6 +305,13 @@ above matters, delete it in the console deliberately and re-run.
 // followUp says where the value belongs, which differs per role: one is
 // exported for a raise, the other is sops-set into luxor's host secrets.
 func (r b2Role) followUp() string {
+	if r.kind == "reader" {
+		return "Next: it is an OPERATIONAL INPUT like the minting key — password manager,\n" +
+			"exported as B2_KEY_ID / B2_APP_KEY for the restore that needs it, and deleted\n" +
+			"in the console when that restore is done. It belongs in no host's secrets:\n" +
+			"nothing runs on a schedule with it, and a standing credential that can read\n" +
+			"every backup of a host is a different risk from one that writes its own."
+	}
 	switch r.name {
 	case "sfi-b2-key-minting-key":
 		return "Next: export it as B2_KEY_ID / B2_APP_KEY when running `fort mint <host> --write`\n" +
@@ -327,10 +380,9 @@ func b2RoleNames() []string {
 	for n := range b2Roles {
 		names = append(names, n)
 	}
-	// Stable for the usage string.
-	if len(names) == 2 && names[0] == "pruning" {
-		names[0], names[1] = names[1], names[0]
-	}
+	// Stable for the usage string, whatever the map iteration order and
+	// however many fixed roles there come to be.
+	sort.Strings(names)
 	return names
 }
 
@@ -341,6 +393,11 @@ func roleArg(role b2Role) string {
 		if r.name == role.name {
 			return name
 		}
+	}
+	// A host-bearing role is two words, and the dry-run hint has to be
+	// copy-pasteable or it is worse than nothing.
+	if role.kind != "" {
+		return role.kind + " " + role.host
 	}
 	return "<role>"
 }

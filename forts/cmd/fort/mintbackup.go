@@ -65,6 +65,12 @@ func rustfsPVUser(host string) string { return "fort-" + host + "-pv" }
 // underscore would not.
 func b2KeyName(host string) string { return "fort-" + host }
 
+// b2RestoreKeyName is the read-only key for reading <host>'s repo from
+// somewhere that is not <host>. Deliberately NOT `fort-<host>`: a restore
+// credential and a fort's own backup credential must never be mistaken
+// for one another in `b2_list_keys`, which is where an audit looks.
+func b2RestoreKeyName(host string) string { return "restore-" + host }
+
 // s3Env is the environment file the restic units source.
 func s3Env(id, secret string) string {
 	return fmt.Sprintf("AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n", id, secret)

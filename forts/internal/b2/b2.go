@@ -42,10 +42,16 @@ const AuthURL = "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"
 //	           fort cannot erase the offsite copy.
 //	Pruning  — the delete-capable set, which lives only on the host that
 //	           runs `restic forget --prune`.
+//	Reader   — what a RESTORE needs and nothing more: it can read another
+//	           host's repo and cannot write a byte into it. Restoring host
+//	           A onto host B is the one operation that must cross a
+//	           prefix, and Writer would let the restoring host corrupt the
+//	           source it is reading from.
 var (
 	Minting = []string{"listBuckets", "listKeys", "writeKeys", "deleteKeys", "listFiles", "readFiles", "writeFiles"}
 	Writer  = []string{"listBuckets", "listFiles", "readFiles", "writeFiles"}
 	Pruning = []string{"listBuckets", "listFiles", "readFiles", "writeFiles", "deleteFiles"}
+	Reader  = []string{"listBuckets", "listFiles", "readFiles"}
 )
 
 // Client is an authorized session. Zero value is unusable; call Authorize.
