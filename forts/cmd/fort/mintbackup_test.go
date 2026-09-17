@@ -42,23 +42,24 @@ func TestB2KeyNameIsLegal(t *testing.T) {
 
 func TestB2Restrictions(t *testing.T) {
 	prefix := "sfi-fort-abc/"
-	ok := b2.Key{BucketIDs: []string{"a", "b"}, NamePrefix: &prefix, Capabilities: b2.Writer}
-	wantIDs := []string{"a", "b"}
+	ok := b2.Key{BucketIDs: []string{"a"}, NamePrefix: &prefix, Capabilities: b2.Writer}
+	wantIDs := []string{"a"}
 	if got := b2Restrictions(ok, "sfi-fort-abc", wantIDs); got != "" {
 		t.Errorf("a correct key should pass: %s", got)
 	}
 
 	wrongPrefix := "someone-else/"
 	cases := map[string]b2.Key{
-		"is restricted to 1 bucket(s)": {BucketIDs: []string{"a"}, NamePrefix: &prefix, Capabilities: b2.Writer},
-		"has namePrefix":               {BucketIDs: []string{"a", "b"}, NamePrefix: &wrongPrefix, Capabilities: b2.Writer},
-		"want \"sfi-fort-abc/\"":       {BucketIDs: []string{"a", "b"}, NamePrefix: nil, Capabilities: b2.Writer},
-		// Two buckets, but not THE two: B2 cannot rename a bucket, so a
+		// The two-bucket era's grant: a PV key must not also open the db bucket.
+		"is restricted to 2 bucket(s)": {BucketIDs: []string{"a", "b"}, NamePrefix: &prefix, Capabilities: b2.Writer},
+		"has namePrefix":               {BucketIDs: []string{"a"}, NamePrefix: &wrongPrefix, Capabilities: b2.Writer},
+		"want \"sfi-fort-abc/\"":       {BucketIDs: []string{"a"}, NamePrefix: nil, Capabilities: b2.Writer},
+		// One bucket, but not THE one: B2 cannot rename a bucket, so a
 		// key minted before one was replaced passes a count and fails here.
-		"none of a, b": {BucketIDs: []string{"a", "old"}, NamePrefix: &prefix, Capabilities: b2.Writer},
+		"none of a": {BucketIDs: []string{"old"}, NamePrefix: &prefix, Capabilities: b2.Writer},
 		// The one the guard exists for: a key edited in the console into
 		// holding deleteFiles still carries the right name and prefix.
-		"holds deleteFiles": {BucketIDs: []string{"a", "b"}, NamePrefix: &prefix, Capabilities: b2.Pruning},
+		"holds deleteFiles": {BucketIDs: []string{"a"}, NamePrefix: &prefix, Capabilities: b2.Pruning},
 	}
 	for want, k := range cases {
 		got := b2Restrictions(k, "sfi-fort-abc", wantIDs)

@@ -145,7 +145,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
 	if p.entry.Backups.Profile == "production" {
-		p.notes = append(p.notes, "the B2 application key `"+b2KeyName(host)+"` stays live until fort destroy revokes it; its snapshots age out on the bucket's retention.")
+		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
 	}
 	sort.Strings(p.removes)
 	return p, nil

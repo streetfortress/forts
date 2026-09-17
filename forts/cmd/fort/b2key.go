@@ -12,9 +12,9 @@ import (
 )
 
 // `fort b2-key <role>` mints the B2 credentials no other verb creates:
-// the fleet's two hand-held ones, a backup credential for a host that
-// has no fort manifest, the one a databasus instance writes logical
-// dumps with, and the read-only credential a restore runs with. None of
+// the fleet's two hand-held ones, a host's per-bucket writer keys (its
+// restic repo, its barman lineage, its logical dumps), and the read-only
+// credential a restore runs with. None of
 // them can be made correctly in the B2 web console.
 //
 // WHY IT EXISTS. The console's key form offers a coarse permission
@@ -54,9 +54,9 @@ type b2Role struct {
 	// host is set by the roles that take one: the host this credential
 	// is for (writer), or the host whose repo it may read (reader).
 	host string
-	// kind is the word the operator typed for a host-bearing role —
-	// "writer", "logical" or "reader" — and empty for the two fixed
-	// roles. It selects the manifest guard, which applies to writer alone.
+	// kind is the word the operator typed for a host-bearing role (a
+	// b2HostRoles key) and empty for the two fixed roles. It selects the
+	// manifest guard, which applies to pv alone.
 	kind string
 	// master: only the account master key can create this one.
 	master bool
@@ -145,90 +145,113 @@ func parseB2KeyArgs(args []string) (b2Role, bool, error) {
 	return role, *write, nil
 }
 
-// b2HostRoles are the roles that take a host, by the word typed.
+// b2HostRoles are the roles that take a host, by the word typed. Each
+// word is its key's stem — `pv` mints sfi-pv-<host> on sfi-pv-backups —
+// so the command, the key in b2_list_keys and the bucket it opens read
+// as one thing.
 var b2HostRoles = map[string]func(host string) b2Role{
-	"writer":  writerRole,
-	"logical": logicalRole,
-	"reader":  readerRole,
+	"pv":          pvRole,
+	"db-physical": physicalRole,
+	"db-logical":  logicalRole,
+	"restore":     restoreRole,
 }
 
-// writerRole is a backup credential for a host that is NOT a fort —
-// zenbook today, any hand-managed mesh member later. It is also THE
-// definition of a host's grant: hostKeySpec builds `fort mint`'s key from
-// it, so a key made here and a key made there are indistinguishable and
-// the mint-time guard accepts either.
-func writerRole(host string) b2Role {
+// ONE KEY PER HOST PER BUCKET. b2_create_key takes bucketIds as an array
+// and a host's key briefly used that to span the PV and db buckets; it
+// was split again because the holders are different trust domains. The
+// PV key sits in the host's own secrets, read by root for the restic
+// units. The barman key is a Kubernetes Secret beside the postgres pods.
+// databasus keeps its key in its own database. And "no deleteFiles" is a
+// weaker boundary than it reads: overwriting an object hides the old
+// version, and the bucket's daysFromHidingToDeleting then deletes it —
+// so any writer can destroy what it can reach, a week late. What a key
+// can reach is therefore the whole of the boundary, and an in-cluster
+// credential must not reach the restic repo.
+
+// pvRole is a host's restic credential. For a fort it is `fort mint`'s to
+// create and record — hostKeySpec builds mint's key from this same role,
+// so there is one definition — and this verb is for a host with no
+// manifest: zenbook today, any hand-managed mesh member later.
+func pvRole(host string) b2Role {
 	return b2Role{
 		name:    b2KeyName(host),
 		host:    host,
-		kind:    "writer",
-		summary: "backups for " + host + " (a host with no fort manifest)",
+		kind:    "pv",
+		summary: "restic PV backups for " + host,
 		caps:    b2.Writer,
-		buckets: []string{b2PVBucket, b2PhysicalBucket},
+		buckets: []string{b2PVBucket},
 		prefix:  host + "/",
-		why: "list/read/write on both backup buckets, restricted to " + host + "/, and NO\n" +
-			"    deleteFiles — the same grant `fort mint` gives a fort, so a compromised\n" +
-			"    host can write its own backups and erase nobody's. Use this only for a\n" +
-			"    host WITHOUT a manifest: for a fort, `fort mint` creates the key and\n" +
-			"    records its id, and a key made behind mint's back is one it will refuse\n" +
-			"    to shadow.",
+		why: "list/read/write on " + b2PVBucket + " alone, restricted to " + host + "/, and NO\n" +
+			"    deleteFiles: pruning is luxor's job, under the one key that deletes. For a\n" +
+			"    fort, `fort mint` creates this key and records its id; a key made behind\n" +
+			"    mint's back is one it will refuse to shadow, so this verb refuses a host\n" +
+			"    that has a manifest.",
+	}
+}
+
+// physicalRole is what a host's CNPG cluster ships barman backups with.
+// It lives in the cluster, not on the host, which is the reason it is not
+// the PV key. Nothing writes barman to B2 yet, so nothing mints this by
+// default: a credential nobody uses is only a liability.
+func physicalRole(host string) b2Role {
+	return b2Role{
+		name:    "sfi-db-physical-" + host,
+		host:    host,
+		kind:    "db-physical",
+		summary: "CNPG barman backups for " + host,
+		caps:    b2.Writer,
+		buckets: []string{b2PhysicalBucket},
+		prefix:  host + "/",
+		why: "list/read/write on " + b2PhysicalBucket + " alone, restricted to " + host + "/, and\n" +
+			"    NO deleteFiles — drop retentionPolicy on a B2-backed cluster; the bucket's\n" +
+			"    lifecycle rule expires by age. Held in-cluster beside postgres, so it\n" +
+			"    reaches the barman lineage and nothing else.",
 	}
 }
 
 // logicalRole is what a databasus instance writes <host>'s logical dumps
 // with: sfi-db-logical-backups/<host>/<db>/… (docs/infra/backups.md,
-// "Buckets"). Dumps have their own bucket so that every bucket is laid
-// out `<host>/…` — they began as a `logical/<host>/` prefix inside
-// sfi-db-physical-backups, the one path in the layout that was not, and zenbook's
-// databasus met a 401 there with a key scoped to `zenbook/`.
-//
-// The bucket is deliberately NOT added to the host's own key. databasus
-// is an app holding a credential in its own database, and this one
-// cannot touch the host's restic repo or barman lineage, only its dumps. No
-// deleteFiles, like every writer: on B2 dumps expire by lifecycle rule,
-// so databasus's own retention must be off for this storage or its
-// deletes will fail.
+// "Buckets"). No deleteFiles, like every writer: dumps expire by
+// lifecycle rule, so databasus's own retention must be off for this
+// storage or its deletes will fail.
 func logicalRole(host string) b2Role {
 	return b2Role{
-		name:    "logical-" + host,
+		name:    "sfi-db-logical-" + host,
 		host:    host,
-		kind:    "logical",
+		kind:    "db-logical",
 		summary: "databasus logical dumps for " + host,
 		caps:    b2.Writer,
 		buckets: []string{b2LogicalBucket},
 		prefix:  host + "/",
 		why: "list/read/write on " + b2LogicalBucket + " alone, restricted to " + host + "/, and\n" +
-			"    NO deleteFiles. The host's own key does not cover this bucket, so it cannot\n" +
-			"    write here; this one cannot write anywhere else — not the restic repo, not\n" +
-			"    the barman lineage. Retention is the bucket's lifecycle rule — turn databasus's own\n" +
-			"    retention off for this storage, its deletes would be refused.",
+			"    NO deleteFiles. Held by databasus in its own database, so it reaches the\n" +
+			"    dumps and nothing else. Retention is the bucket's lifecycle rule — turn\n" +
+			"    databasus's own retention off for this storage, its deletes would be refused.",
 	}
 }
 
-// readerRole is the credential a RESTORE runs with. It is the one grant
-// in the design that deliberately crosses a prefix boundary: every other
-// key is scoped to the host holding it, which is correct for writing and
-// useless for recovery. Restoring zenbook's gitea onto a drill fort means
-// reading `zenbook/` from a machine whose own key may only touch
-// `sfi-fort-.../`, and until this role existed there was no credential in
-// the fleet that could do it — the gap the 2026-09-16 restore drill found.
+// restoreRole is the credential a RESTORE runs with. It is the one grant
+// that crosses both boundaries the others keep: it reads a prefix its
+// holder does not own, and it spans all three buckets — a restore reads
+// the PVCs, the barman lineage and the dumps, and the uniform `<host>/`
+// layout makes that one prefix. Restoring zenbook's gitea onto a drill
+// fort means reading `zenbook/` from a machine whose own keys may only
+// touch `sfi-fort-.../`, and until this role existed no credential in the
+// fleet could — the gap the 2026-09-16 restore drill found.
 //
-// All three buckets, which the uniform `<host>/` layout makes one prefix:
-// a restore reads the PVCs, the barman lineage AND the logical dumps.
+// Read-only, and scoped to the source host rather than the whole bucket:
+// the credential names whose data is about to be read, and cannot write a
+// byte back — a restoring host must not be able to corrupt its source.
 //
-// Read-only, and scoped to the source host rather than the whole bucket,
-// because a restore reads one host's repo: the credential names whose
-// data is about to be read, and cannot write a byte back into the repo it
-// is reading — a restoring host must not be able to corrupt its source.
-//
-// Unlike writer, this role is NOT refused for a host with a fort
-// manifest. Reading a fort's repo is the common case: the machine that
-// restores a dead fort is, by definition, not that fort.
-func readerRole(host string) b2Role {
+// NOT refused for a host with a fort manifest. Reading a fort's repo is
+// the common case: the machine that restores a dead fort is, by
+// definition, not that fort. For the same reason `fort destroy` leaves it
+// alone.
+func restoreRole(host string) b2Role {
 	return b2Role{
 		name:    b2RestoreKeyName(host),
 		host:    host,
-		kind:    "reader",
+		kind:    "restore",
 		summary: "restoring " + host + "'s backups onto another host",
 		caps:    b2.Reader,
 		buckets: []string{b2PVBucket, b2PhysicalBucket, b2LogicalBucket},
@@ -250,10 +273,10 @@ func b2Key(args []string) error {
 	// secrets file and refuses to shadow a same-named key it has no
 	// secret for. Hand-minting one here would produce exactly that
 	// standoff, so refuse before the call rather than after.
-	if role.kind == "writer" {
+	if role.kind == "pv" {
 		root, err := repoRoot()
 		if err == nil && exists(root, manifest.Path(role.host)) {
-			return fmt.Errorf("%s has a fort manifest (%s) — its B2 key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
+			return fmt.Errorf("%s has a fort manifest (%s) — its PV key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
 		}
 	}
 
@@ -348,13 +371,18 @@ func (r b2Role) spec(bucketIDs []string) b2.KeySpec {
 // followUp says where the value belongs, which differs per role: one is
 // exported for a raise, the other is sops-set into luxor's host secrets.
 func (r b2Role) followUp() string {
-	if r.kind == "logical" {
+	if r.kind == "db-physical" {
+		return "Next: it belongs in the cluster, as the Secret " + r.host + "'s CNPG backup\n" +
+			"configuration references — seeded through that tree's secrets contract, not\n" +
+			"pasted. It belongs in no host's nixos secrets: the host never uses it."
+	}
+	if r.kind == "db-logical" {
 		return "Next: paste it into the databasus S3 storage for " + r.host + " — endpoint from\n" +
 			"docs/infra/backups.md, bucket " + b2LogicalBucket + ", prefix " + r.prefix + " — and keep a\n" +
 			"copy in the password manager. A UI-configured databasus keeps it in its own\n" +
 			"database, so it belongs in no host's sops file."
 	}
-	if r.kind == "reader" {
+	if r.kind == "restore" {
 		return "Next: it is an OPERATIONAL INPUT like the minting key — password manager,\n" +
 			"exported as B2_KEY_ID / B2_APP_KEY for the restore that needs it, and deleted\n" +
 			"in the console when that restore is done. It belongs in no host's secrets:\n" +

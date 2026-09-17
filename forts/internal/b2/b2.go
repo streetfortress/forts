@@ -285,7 +285,7 @@ func (c *Client) DeleteKey(ctx context.Context, id string) (*Key, error) {
 }
 
 // ValidName enforces b2_create_key's documented keyName rule up front —
-// letters, digits and hyphens, 100 max — so `fort-<host>` is checked
+// letters, digits and hyphens, 100 max — so `sfi-pv-<host>` is checked
 // against it here rather than discovered at the API.
 func ValidName(name string) error {
 	if name == "" || len(name) > 100 {

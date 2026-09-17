@@ -31,7 +31,7 @@ func TestBucketDeclarationsHoldTheDocsRules(t *testing.T) {
 		}
 	}
 	// Every bucket a key role can name must be one this verb makes.
-	for _, role := range []b2Role{writerRole("h"), logicalRole("h"), readerRole("h"), b2Roles["pruning"]} {
+	for _, role := range []b2Role{pvRole("h"), physicalRole("h"), logicalRole("h"), restoreRole("h"), b2Roles["pruning"]} {
 		for _, b := range role.buckets {
 			if !seen[b] {
 				t.Errorf("%s names bucket %s, which b2-buckets does not declare", role.name, b)

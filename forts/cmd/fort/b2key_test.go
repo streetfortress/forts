@@ -12,7 +12,7 @@ import (
 // of it. Asserted against the capability list rather than the role's
 // prose, because the prose is not what B2 is handed.
 func TestReaderRoleCannotWrite(t *testing.T) {
-	role := readerRole("zenbook")
+	role := restoreRole("zenbook")
 	for _, cap := range role.caps {
 		if strings.HasPrefix(cap, "write") || strings.HasPrefix(cap, "delete") {
 			t.Errorf("reader holds %q — a restore credential must not mutate its source", cap)
@@ -24,7 +24,7 @@ func TestReaderRoleCannotWrite(t *testing.T) {
 	if role.prefix != "zenbook/" {
 		t.Errorf("prefix %q — a restore credential is scoped to the host it reads", role.prefix)
 	}
-	if role.name != "restore-zenbook" {
+	if role.name != "sfi-restore-zenbook" {
 		t.Errorf("name %q — must not be mistakable for the fort's own key in b2_list_keys", role.name)
 	}
 	if role.name == b2KeyName("zenbook") {
@@ -35,14 +35,56 @@ func TestReaderRoleCannotWrite(t *testing.T) {
 	}
 }
 
-// writer keeps its manifest guard; reader deliberately does not, because
-// the host restoring a dead fort is never that fort.
+// pv keeps its manifest guard; restore deliberately does not, because the
+// host restoring a dead fort is never that fort. A role's kind is the
+// word that selects it, or the dry-run hint is not copy-pasteable.
 func TestHostRoleKinds(t *testing.T) {
-	if got := writerRole("zenbook").kind; got != "writer" {
-		t.Errorf("writer kind %q — the manifest guard keys off this", got)
+	if got := pvRole("zenbook").kind; got != "pv" {
+		t.Errorf("pv kind %q — the manifest guard keys off this", got)
 	}
-	if got := readerRole("zenbook").kind; got != "reader" {
-		t.Errorf("reader kind %q", got)
+	for word, mk := range b2HostRoles {
+		if got := mk("zenbook").kind; got != word {
+			t.Errorf("role %q has kind %q", word, got)
+		}
+	}
+}
+
+// One key per host per bucket, each named for its bucket: sfi-pv-backups
+// is opened by sfi-pv-<host>. The name is the audit trail in b2_list_keys.
+func TestWriterKeysAreOneBucketEachAndNamedForIt(t *testing.T) {
+	seen := map[string]string{}
+	for _, role := range []b2Role{pvRole("zenbook"), physicalRole("zenbook"), logicalRole("zenbook")} {
+		if len(role.buckets) != 1 {
+			t.Fatalf("%s spans %v — an in-cluster credential must not reach the restic repo, nor the reverse", role.name, role.buckets)
+		}
+		stem := strings.TrimSuffix(role.buckets[0], "-backups")
+		if role.name != stem+"-zenbook" {
+			t.Errorf("key %q on bucket %q — want %s-<host>", role.name, role.buckets[0], stem)
+		}
+		if role.prefix != "zenbook/" {
+			t.Errorf("%s: prefix %q, want <host>/", role.name, role.prefix)
+		}
+		if hasKey(role.caps, "deleteFiles") {
+			t.Errorf("%s holds deleteFiles", role.name)
+		}
+		if other, dup := seen[role.buckets[0]]; dup {
+			t.Errorf("%s and %s share a bucket", role.name, other)
+		}
+		seen[role.buckets[0]] = role.name
+	}
+}
+
+// destroy revokes what a fort wrote with, including a key from the
+// two-bucket era, and leaves the one that reads its backups.
+func TestDestroyRevokesWritersAndLeavesTheRestoreKey(t *testing.T) {
+	names := b2HostKeyNames("sfi-fort-x")
+	for _, want := range []string{"sfi-pv-sfi-fort-x", "sfi-db-physical-sfi-fort-x", "sfi-db-logical-sfi-fort-x", "fort-sfi-fort-x"} {
+		if !hasKey(names, want) {
+			t.Errorf("destroy would leave %s live", want)
+		}
+	}
+	if hasKey(names, b2RestoreKeyName("sfi-fort-x")) {
+		t.Error("restoring a dead fort is what the restore key is for")
 	}
 }
 
@@ -56,9 +98,9 @@ func TestParseB2KeyHostRoles(t *testing.T) {
 		name  string
 		write bool
 	}{
-		{[]string{"reader", "zenbook"}, "restore-zenbook", false},
-		{[]string{"reader", "zenbook", "--write"}, "restore-zenbook", true},
-		{[]string{"writer", "zenbook"}, "fort-zenbook", false},
+		{[]string{"restore", "zenbook"}, "sfi-restore-zenbook", false},
+		{[]string{"restore", "zenbook", "--write"}, "sfi-restore-zenbook", true},
+		{[]string{"pv", "zenbook"}, "sfi-pv-zenbook", false},
 	} {
 		role, write, err := parseB2KeyArgs(tc.args)
 		if err != nil || role.name != tc.name || write != tc.write {
@@ -67,12 +109,12 @@ func TestParseB2KeyHostRoles(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"reader"},                 // host is not optional
-		{"reader", "--write"},      // a flag is not a host
-		{"writer"},                 // same rule, unchanged
-		{"restorer", "zenbook"},    // not a role
-		{"reader", "zen_book"},     // B2 rejects underscores in key names
-		{"reader", "zenbook", "x"}, // stray positional
+		{"restore"},                 // host is not optional
+		{"restore", "--write"},      // a flag is not a host
+		{"pv"},                      // same rule, unchanged
+		{"restorer", "zenbook"},     // not a role
+		{"restore", "zen_book"},     // B2 rejects underscores in key names
+		{"restore", "zenbook", "x"}, // stray positional
 	} {
 		if _, _, err := parseB2KeyArgs(args); err == nil {
 			t.Errorf("%v: accepted, want an error", args)
@@ -82,7 +124,7 @@ func TestParseB2KeyHostRoles(t *testing.T) {
 
 // The dry-run hint is copy-pasteable only if a two-word role round-trips.
 func TestRoleArgRoundTrip(t *testing.T) {
-	for _, want := range []string{"minting", "pruning", "writer zenbook", "reader zenbook"} {
+	for _, want := range []string{"minting", "pruning", "pv zenbook", "db-physical zenbook", "db-logical zenbook", "restore zenbook"} {
 		role, _, err := parseB2KeyArgs(strings.Fields(want))
 		if err != nil {
 			t.Fatalf("%s: %v", want, err)
@@ -109,15 +151,15 @@ func TestRoleDriftSpotsAWritingReader(t *testing.T) {
 	k := b2.Key{
 		ApplicationKeyID: "x",
 		Capabilities:     append(append([]string{}, b2.Reader...), "writeFiles"),
-		BucketIDs:        []string{"a", "b"},
+		BucketIDs:        []string{"a", "b", "c"},
 		NamePrefix:       &prefix,
 	}
-	drift := roleDrift(k, readerRole("zenbook"), []string{"a", "b"})
+	drift := roleDrift(k, restoreRole("zenbook"), []string{"a", "b", "c"})
 	if !strings.Contains(drift, "writeFiles") {
 		t.Errorf("drift %q — must name the extra capability", drift)
 	}
-	clean := b2.Key{ApplicationKeyID: "x", Capabilities: b2.Reader, BucketIDs: []string{"a", "b"}, NamePrefix: &prefix}
-	if drift := roleDrift(clean, readerRole("zenbook"), []string{"a", "b"}); drift != "" {
+	clean := b2.Key{ApplicationKeyID: "x", Capabilities: b2.Reader, BucketIDs: []string{"a", "b", "c"}, NamePrefix: &prefix}
+	if drift := roleDrift(clean, restoreRole("zenbook"), []string{"a", "b", "c"}); drift != "" {
 		t.Errorf("a correct key reported drift: %q", drift)
 	}
 }
@@ -125,7 +167,7 @@ func TestRoleDriftSpotsAWritingReader(t *testing.T) {
 // The role zenbook's databasus needed: dumps live in their own bucket,
 // laid out <host>/ like the others, which a host's own key does not cover.
 func TestLogicalRoleIsItsOwnBucket(t *testing.T) {
-	logical, writer := logicalRole("zenbook"), writerRole("zenbook")
+	logical, writer := logicalRole("zenbook"), pvRole("zenbook")
 	if logical.prefix != "zenbook/" {
 		t.Errorf("prefix = %q, want <host>/ — every bucket is laid out the same way", logical.prefix)
 	}
@@ -137,7 +179,7 @@ func TestLogicalRoleIsItsOwnBucket(t *testing.T) {
 		t.Errorf("the host's own key must not reach %s — databasus holds the other one", b2LogicalBucket)
 	}
 	// A restore reads dumps too, and one <host>/ prefix now spans them.
-	if !hasKey(readerRole("zenbook").buckets, b2LogicalBucket) {
+	if !hasKey(restoreRole("zenbook").buckets, b2LogicalBucket) {
 		t.Errorf("the restore key should read %s", b2LogicalBucket)
 	}
 	if hasKey(logical.caps, "deleteFiles") {

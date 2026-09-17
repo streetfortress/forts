@@ -128,7 +128,7 @@ func destroy(args []string) error {
 	// still reach is only the backups that are about to age out — but it
 	// is live until someone removes it.
 	if msg, err := revokeB2Key(host); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete the key named %s by hand\n", err, b2KeyName(host))
+		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
 	} else {
 		fmt.Println("  b2 key:", msg)
 	}

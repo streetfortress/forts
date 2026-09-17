@@ -38,16 +38,13 @@ const (
 	keyResticRustfs   = "restic-s3-env-rustfs"
 	keyResticB2       = "restic-s3-env-b2"
 
-	// Buckets the fort's one key covers. b2_create_key takes bucketIds as
-	// an array, so a fort needs one credential rather than one per
-	// bucket; the db bucket is included now because the barman plugin
-	// migration will write there under the same key.
+	// The backup buckets, one per data class, each laid out <host>/… and
+	// each opened by its own key (b2key.go, "ONE KEY PER HOST PER
+	// BUCKET"). mint creates the PV key alone: it is the one the HOST
+	// holds.
 	b2PVBucket       = "sfi-pv-backups"
 	b2PhysicalBucket = "sfi-db-physical-backups"
-	// Logical dumps get a bucket of their own, laid out <host>/… like the
-	// other two. NOT part of a host's key: databasus writes here, under
-	// logicalRole's key, and a host's key stays unable to.
-	b2LogicalBucket = "sfi-db-logical-backups"
+	b2LogicalBucket  = "sfi-db-logical-backups"
 
 	// luxor's backup-destination instance (docs/infra/providers.md).
 	// S3 is a per-fort battery; what is particular is luxor's ROLE as
@@ -62,16 +59,22 @@ const (
 // audit, and in the repository URL that uses it.
 func rustfsPVUser(host string) string { return "fort-" + host + "-pv" }
 
-// b2KeyName is the fort's application key. Letters, digits and hyphens
-// only — B2's own keyName rule, which `fort-<host>` satisfies and an
-// underscore would not.
-func b2KeyName(host string) string { return "fort-" + host }
+// b2KeyName is a host's restic key — what restic-s3-env-b2 holds. Every
+// host key is `sfi-<bucket stem>-<host>`, so b2_list_keys reads as the
+// bucket list does and says at a glance what this system made. Letters,
+// digits and hyphens only: B2's own keyName rule.
+func b2KeyName(host string) string { return "sfi-pv-" + host }
+
+// b2LegacyKeyName is what a host's key was called while one key spanned
+// the PV and db buckets. Known only so a key minted then is named for
+// what it is and revoked with its fort; nothing creates one.
+func b2LegacyKeyName(host string) string { return "fort-" + host }
 
 // b2RestoreKeyName is the read-only key for reading <host>'s repo from
-// somewhere that is not <host>. Deliberately NOT `fort-<host>`: a restore
-// credential and a fort's own backup credential must never be mistaken
+// somewhere that is not <host>. Deliberately not a bucket stem: a restore
+// credential and a host's own backup credential must never be mistaken
 // for one another in `b2_list_keys`, which is where an audit looks.
-func b2RestoreKeyName(host string) string { return "restore-" + host }
+func b2RestoreKeyName(host string) string { return "sfi-restore-" + host }
 
 // s3Env is the environment file the restic units source.
 func s3Env(id, secret string) string {
@@ -185,6 +188,13 @@ func (p *mintPlan) planB2Key() error {
 		// unaccounted for — the deploy key's stale-key refusal.
 		return fmt.Errorf("B2 already has a key named %s (id %s) and %s holds no secret for it — the secret half is unrecoverable, so delete that key deliberately, then re-run", name, ids(live), p.secretsPath)
 	case len(live) == 0:
+		// Recorded, and live under the OLD name: a key from when one key
+		// spanned two buckets. Say that, rather than "revoked".
+		for _, k := range b2.KeyNamed(keys, b2LegacyKeyName(p.host)) {
+			if k.ApplicationKeyID == recorded {
+				return fmt.Errorf("%s records the legacy key %s (id %s), which spans the PV and db buckets — a host's key is now %s, on %s alone. Delete %s in the B2 console, remove %s from the secrets file, and re-run to mint it", p.secretsPath, k.KeyName, recorded, name, b2PVBucket, k.KeyName, keyResticB2)
+			}
+		}
 		return fmt.Errorf("%s records B2 key %s (id %s) but no such key exists on the account — it was revoked out of band; remove the key from the secrets file to mint a fresh one", p.secretsPath, name, recorded)
 	default:
 		var found *b2.Key
@@ -198,7 +208,7 @@ func (p *mintPlan) planB2Key() error {
 		}
 		// By id, not by count: B2 cannot rename a bucket, so a key minted
 		// before a bucket was replaced still names two — the wrong two.
-		want, err := resolveBuckets(context.Background(), c, writerRole(p.host).buckets)
+		want, err := resolveBuckets(context.Background(), c, pvRole(p.host).buckets)
 		if err != nil {
 			return err
 		}
@@ -210,8 +220,8 @@ func (p *mintPlan) planB2Key() error {
 	return nil
 }
 
-// b2Restrictions checks a live key against what mint grants: both backup
-// buckets, this fort's prefix, and no deleteFiles. Returns "" when it
+// b2Restrictions checks a live key against what mint grants: the PV
+// bucket, this fort's prefix, and no deleteFiles. Returns "" when it
 // matches.
 func b2Restrictions(k b2.Key, host string, wantBuckets []string) string {
 	if problem := bucketDrift(k.BucketIDs, wantBuckets); problem != "" {
@@ -251,13 +261,13 @@ func resolveBuckets(ctx context.Context, c *b2.Client, want []string) ([]string,
 	return ids, nil
 }
 
-// hostKeySpec is THE grant a host's backup credential gets: both backup
-// buckets, its own prefix, and no deleteFiles so it cannot erase the
-// offsite copy. The shape itself is writerRole's — `fort mint` creates it
-// for forts, `fort b2-key writer` for hosts that are not forts, and
+// hostKeySpec is THE grant a host's restic credential gets: the PV
+// bucket, its own prefix, and no deleteFiles so it cannot erase the
+// offsite copy. The shape itself is pvRole's — `fort mint` creates it
+// for forts, `fort b2-key pv` for hosts that are not forts, and
 // b2Restrictions checks live keys against it, so it is spelled once.
 func hostKeySpec(ctx context.Context, c *b2.Client, host string) (b2.KeySpec, error) {
-	role := writerRole(host)
+	role := pvRole(host)
 	ids, err := resolveBuckets(ctx, c, role.buckets)
 	if err != nil {
 		return b2.KeySpec{}, err
@@ -317,37 +327,50 @@ func deref(s *string) string {
 	return *s
 }
 
-// revokeB2Key deletes the fort's application key; `fort destroy` calls it
+// b2HostKeyNames is every key a destroyed fort must not leave behind:
+// its three writers, and the legacy two-bucket key. NOT the restore key —
+// restoring a dead fort is what that one is for.
+func b2HostKeyNames(host string) []string {
+	return []string{b2KeyName(host), physicalRole(host).name, logicalRole(host).name, b2LegacyKeyName(host)}
+}
+
+// revokeB2Key deletes the fort's application keys; `fort destroy` calls it
 // beside revokeDeployKey. It takes only the host name on purpose: by
 // destroy time the manifest is gone (that absence is the gate), so the
 // profile cannot be consulted. Listing by name covers every case — a lab
-// fort simply has no such key, and a fort whose profile changed still
-// gets the key it actually has revoked.
+// fort simply has no such keys, and a fort whose profile changed still
+// gets the keys it actually has revoked.
 //
 // Absent credentials are reported, not fatal: a destroy must not be
 // blocked on an operational input, and the caller prints what is left.
 func revokeB2Key(host string) (string, error) {
-	c, err := b2Session(needMinting, "Revoking "+b2KeyName(host))
+	names := b2HostKeyNames(host)
+	c, err := b2Session(needMinting, "Revoking "+host+"'s B2 keys")
 	if err != nil {
-		return "", fmt.Errorf("B2 key %s NOT revoked: %w", b2KeyName(host), err)
+		return "", fmt.Errorf("B2 keys NOT revoked (%s): %w", strings.Join(names, ", "), err)
 	}
 	ctx := context.Background()
 	keys, err := c.ListKeys(ctx)
 	if err != nil {
 		return "", err
 	}
-	live := b2.KeyNamed(keys, b2KeyName(host))
-	if len(live) == 0 {
-		return b2KeyName(host) + " not registered (nothing to revoke)", nil
-	}
 	var revoked []string
-	for _, k := range live {
-		if _, err := c.DeleteKey(ctx, k.ApplicationKeyID); err != nil {
-			return "", fmt.Errorf("revoking %s (id %s): %w", k.KeyName, k.ApplicationKeyID, err)
+	for _, name := range names {
+		for _, k := range b2.KeyNamed(keys, name) {
+			if _, err := c.DeleteKey(ctx, k.ApplicationKeyID); err != nil {
+				return "", fmt.Errorf("revoking %s (id %s): %w", k.KeyName, k.ApplicationKeyID, err)
+			}
+			revoked = append(revoked, fmt.Sprintf("%s (id %s)", k.KeyName, k.ApplicationKeyID))
 		}
-		revoked = append(revoked, k.ApplicationKeyID)
 	}
-	return fmt.Sprintf("revoked %s (id %s)", b2KeyName(host), strings.Join(revoked, ", ")), nil
+	msg := "no keys registered (nothing to revoke)"
+	if len(revoked) > 0 {
+		msg = "revoked " + strings.Join(revoked, ", ")
+	}
+	if standing := b2.KeyNamed(keys, b2RestoreKeyName(host)); len(standing) > 0 {
+		msg += fmt.Sprintf("; %s (id %s) left standing — it is how this fort's backups get read; delete it when no restore needs it", b2RestoreKeyName(host), ids(standing))
+	}
+	return msg, nil
 }
 
 // backupDestinations is the one-line reminder of what a profile means,
