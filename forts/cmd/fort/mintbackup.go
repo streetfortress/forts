@@ -244,7 +244,7 @@ func resolveBuckets(ctx context.Context, c *b2.Client, want []string) ([]string,
 			}
 		}
 		if id == "" {
-			return nil, fmt.Errorf("no B2 bucket named %s — create the backup buckets first (docs/infra/backups.md)", name)
+			return nil, fmt.Errorf("no B2 bucket named %s — create the backup buckets first: fort b2-buckets --write", name)
 		}
 		ids = append(ids, id)
 	}

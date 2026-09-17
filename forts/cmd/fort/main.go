@@ -56,6 +56,8 @@ func main() {
 		err = mint(os.Args[2:])
 	case "b2-key":
 		err = b2Key(os.Args[2:])
+	case "b2-buckets":
+		err = b2BucketsCmd(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "dismantle":
@@ -136,6 +138,18 @@ func usage() {
       value, because there is nowhere else for it to go. An existing key
       is never replaced (its secret is unrecoverable) and any drift from
       the role's grant is named.
+
+  b2-buckets [--write]
+      reconcile the B2 backup buckets with their declaration: each
+      exists, is allPrivate, and carries exactly one lifecycle rule in
+      the API's raw fields — daysFromHidingToDeleting on all three,
+      daysFromUploadingToHiding on the two append-only db buckets and
+      NEVER on sfi-pv-backups, where it would shred a restic repo. The
+      console's lifecycle presets abstract over those two fields, which
+      is why this is a verb. Rules are replaced wholesale; buckets it
+      does not declare are reported and never touched. The plan runs on
+      the minting key; --write needs the account master key
+      (writeBuckets), prompted for or from B2_KEY_ID / B2_APP_KEY.
 
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image and graft its ssh identity in:

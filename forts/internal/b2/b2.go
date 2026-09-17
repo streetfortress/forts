@@ -111,12 +111,17 @@ type KeySpec struct {
 	ValidFor     time.Duration
 }
 
-// Bucket is the subset of b2_list_buckets a key spec needs.
+// Bucket is the subset of b2_list_buckets a key spec and the bucket
+// reconcile need.
 type Bucket struct {
-	ID   string `json:"bucketId"`
-	Name string `json:"bucketName"`
-	Type string `json:"bucketType"`
+	ID             string          `json:"bucketId"`
+	Name           string          `json:"bucketName"`
+	Type           string          `json:"bucketType"`
+	LifecycleRules []LifecycleRule `json:"lifecycleRules"`
 }
+
+// Private is the only bucketType a backup bucket may have.
+const Private = "allPrivate"
 
 // APIError carries B2's own error shape so callers can assert on the
 // *reason* a call was refused — the probe distinguishes "this credential
@@ -403,21 +408,13 @@ type LifecycleRule struct {
 	DaysFromUploadingToHiding *int   `json:"daysFromUploadingToHiding"`
 }
 
-type bucketDetail struct {
-	ID             string          `json:"bucketId"`
-	Name           string          `json:"bucketName"`
-	LifecycleRules []LifecycleRule `json:"lifecycleRules"`
-}
-
 // BucketRules reads back what a bucket's lifecycle rules actually are.
 func (c *Client) BucketRules(ctx context.Context, name string) ([]LifecycleRule, error) {
-	var out struct {
-		Buckets []bucketDetail `json:"buckets"`
-	}
-	if err := c.call(ctx, "b2_list_buckets", map[string]any{"accountId": c.AccountID}, &out); err != nil {
+	buckets, err := c.ListBuckets(ctx)
+	if err != nil {
 		return nil, err
 	}
-	for _, b := range out.Buckets {
+	for _, b := range buckets {
 		if b.Name == name {
 			return b.LifecycleRules, nil
 		}
@@ -432,6 +429,30 @@ func (c *Client) SetBucketRules(ctx context.Context, bucketID string, rules []Li
 	}
 	return c.call(ctx, "b2_update_bucket", map[string]any{
 		"accountId": c.AccountID, "bucketId": bucketID, "lifecycleRules": rules,
+	}, nil)
+}
+
+// CreateBucket makes a private bucket carrying its lifecycle rules from
+// the first moment, so there is no window in which it exists without them.
+func (c *Client) CreateBucket(ctx context.Context, name string, rules []LifecycleRule) (*Bucket, error) {
+	if rules == nil {
+		rules = []LifecycleRule{}
+	}
+	var out Bucket
+	err := c.call(ctx, "b2_create_bucket", map[string]any{
+		"accountId": c.AccountID, "bucketName": name, "bucketType": Private, "lifecycleRules": rules,
+	}, &out)
+	return &out, err
+}
+
+// SetBucket brings an existing bucket to private + these rules in one
+// call. Rules are replaced wholesale, as with SetBucketRules.
+func (c *Client) SetBucket(ctx context.Context, bucketID string, rules []LifecycleRule) error {
+	if rules == nil {
+		rules = []LifecycleRule{}
+	}
+	return c.call(ctx, "b2_update_bucket", map[string]any{
+		"accountId": c.AccountID, "bucketId": bucketID, "bucketType": Private, "lifecycleRules": rules,
 	}, nil)
 }
 
