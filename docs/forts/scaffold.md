@@ -45,9 +45,11 @@ fleet/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
 ```
 
-Manifest fields it reads: the provider table (`[libvirt]` `ip` — the lab
-static IP — and its optional `lan_prefix`, `lan_gateway`, `lan_dns`;
-`[linode]` `region` + `type` for the header comment), `mesh_ip`, and the
+Manifest fields it reads: the provider table (`[libvirt]` or
+`[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
+`lan_gateway`, `lan_dns`; `[baremetal]` `mac`, which turns the LAN
+block's `en*` name match into a MAC match; `[linode]` `region` + `type`
+for the header comment), `mesh_ip`, and the
 optional seeds `nixos_state_version`,
 `k3s_cluster_init`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version

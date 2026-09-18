@@ -132,8 +132,8 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("forts/pulumi/state/.pulumi/stacks/forts", host+".json")) {
 		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (docs/forts/destroy.md). `just iac-drift` is red for it in between, which is the correct signal.")
 	}
-	if entry.Provider == "" {
-		p.notes = append(p.notes, "no provider: nothing raised this host through the CLI, so nothing destroys it — the VM (if any) goes by hand on the hypervisor (`virsh destroy` + `virsh undefine --remove-all-storage`).")
+	if !entry.Realized() {
+		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack — after this merges, `fort destroy "+host+" --no-stack` revokes the deploy key and B2 keys mint made; the machine itself is powered off and its disk wiped by hand (docs/forts/baremetal.md).")
 	}
 	// The registration with luxor's rustfs-central lives in luxor's
 	// tree, because that fort hosts the backup destination.
@@ -200,6 +200,9 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 
 func (p *dismantlePlan) report(w io.Writer, written bool) {
 	kind := "lab: libvirt backend (fort destroy)"
+	if !p.entry.Realized() {
+		kind = "lab hardware: no backend (the machine goes by hand)"
+	}
 	if p.entry.Cloud() {
 		kind = "cloud: " + p.entry.Provider
 	}

@@ -23,6 +23,10 @@ func TestImageVariant(t *testing.T) {
 	if cloud.variant != "linode" || cloud.attr != "./nixos#cloud-fort-linode" || cloud.rootDev != "/dev/sda" || cloud.ext() != ".img.gz" {
 		t.Errorf("cloud: %+v", cloud)
 	}
+	metal := imageVariant("metal-fort", hosts["metal-fort"])
+	if metal.variant != "baremetal" || metal.attr != "./nixos#metal-fort-baremetal" || metal.rootDev != "/dev/sda2" || metal.ext() != ".img" {
+		t.Errorf("metal: %+v", metal)
+	}
 	s := guestfishScript("/dev/sda1", "/w")
 	for _, want := range []string{"run\nmount /dev/sda1 /\n", "upload /w/key /etc/ssh/ssh_host_ed25519_key\n", "upload /w/key.pub /etc/ssh/ssh_host_ed25519_key.pub\n", "chmod 0600 /etc/ssh/ssh_host_ed25519_key\n"} {
 		if !strings.Contains(s, want) {

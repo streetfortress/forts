@@ -73,6 +73,44 @@ func TestParse(t *testing.T) {
 	}
 }
 
+const metal = `mesh_ip = "10.1.0.6"
+
+[backups]
+profile = "production"
+
+[baremetal]
+ip = "10.0.0.6"
+mac = "f8:ce:72:02:05:07"
+disk = "/dev/nvme0n1"
+`
+
+// A [baremetal] host is a lab host (LAN address, .lofi names, lab
+// issuer) that no backend realizes: the verbs that would apply refuse.
+func TestParseBaremetal(t *testing.T) {
+	h, err := Parse("metal", []byte(metal))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Provider != "baremetal" || h.Cloud() || h.Realized() || h.Baremetal() == nil || h.Libvirt() != nil || h.Linode() != nil {
+		t.Errorf("metal: %+v", h)
+	}
+	if h.Baremetal().MAC != "f8:ce:72:02:05:07" || h.Baremetal().Disk != "/dev/nvme0n1" || h.LanIP() != "10.0.0.6" || h.Endpoint() != "10.0.0.6" {
+		t.Errorf("metal derived: %+v endpoint %q", h.Baremetal(), h.Endpoint())
+	}
+	l, _ := Parse("lab", []byte(lab))
+	if !l.Realized() || l.LanIP() != "10.0.0.41" {
+		t.Errorf("lab: realized %v lan %q", l.Realized(), l.LanIP())
+	}
+	c, _ := Parse("cloud", []byte(cloud))
+	if !c.Realized() || c.LanIP() != "" {
+		t.Errorf("cloud: realized %v lan %q", c.Realized(), c.LanIP())
+	}
+	// mac is optional: one wired NIC matches en* like a VM
+	if _, err := Parse("m", []byte("mesh_ip = \"10.1.0.6\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.6\"\n")); err != nil {
+		t.Errorf("mac should be optional: %v", err)
+	}
+}
+
 func TestParseRefuses(t *testing.T) {
 	for _, tc := range []struct{ name, text, want string }{
 		{"no provider", "mesh_ip = \"10.1.0.1\"\n", "no provider table"},
@@ -92,6 +130,12 @@ func TestParseRefuses(t *testing.T) {
 		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
 		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
 		{"wrong type", "k3s_cluster_init = \"yes\"\nmesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "k3s_cluster_init"},
+		{"baremetal missing ip", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nmac = \"f8:ce:72:02:05:07\"\n", "[baremetal]: ip is required"},
+		{"baremetal bad mac", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"f8ce.7202.0507x\"\n", "[baremetal]: mac"},
+		{"baremetal upper mac", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"F8:CE:72:02:05:07\"\n", "lowercase"},
+		{"baremetal bad disk", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\ndisk = \"nvme0n1\"\n", "[baremetal]: disk"},
+		{"baremetal with shape", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[shape]\nvcpus = 4\n[baremetal]\nip = \"10.0.0.1\"\n", "[shape] is meaningless"},
+		{"baremetal unknown key", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nbmc = \"x\"\n", "[baremetal]: unknown key bmc"},
 	} {
 		_, err := Parse("h", []byte(tc.text))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

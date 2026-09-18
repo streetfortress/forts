@@ -39,7 +39,7 @@ func preview(args []string) error {
 	if err != nil {
 		return err
 	}
-	var targets []string
+	var targets, skipped []string
 	hosts := map[string]manifest.Host{}
 	if *all {
 		loaded, problems, err := manifest.LoadAll(root)
@@ -55,7 +55,14 @@ func preview(args []string) error {
 			return fmt.Errorf("bad manifest(s): %s — fort check --all says why", strings.Join(bad, ", "))
 		}
 		hosts = loaded
-		for name := range hosts {
+		for name, h := range hosts {
+			if !h.Realized() {
+				// nothing in forts/pulumi to diff against: a [baremetal]
+				// host has no stack by design (docs/forts/baremetal.md).
+				// Listed in the summary so the walk is visibly complete.
+				skipped = append(skipped, name)
+				continue
+			}
 			targets = append(targets, name)
 		}
 		sort.Strings(targets)
@@ -66,6 +73,9 @@ func preview(args []string) error {
 		entry, err := manifest.Load(root, host)
 		if err != nil {
 			return err
+		}
+		if !entry.Realized() {
+			return fmt.Errorf("host %q is [%s]: no backend, no stack, nothing to preview (docs/forts/baremetal.md)", host, entry.Provider)
 		}
 		hosts[host] = entry
 		targets = []string{host}
@@ -103,6 +113,10 @@ func preview(args []string) error {
 		results = append(results, fmt.Sprintf("%-6s %s", verdict, name))
 	}
 	if *all {
+		sort.Strings(skipped)
+		for _, name := range skipped {
+			results = append(results, fmt.Sprintf("%-6s %s   [%s]: no stack by design", "SKIP", name, hosts[name].Provider))
+		}
 		// State without a manifest means destroy pending (#217): the
 		// dismantle PR merged, `fort destroy` has not run. Say so rather
 		// than silently skipping a stack no manifest names.

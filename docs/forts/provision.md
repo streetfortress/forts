@@ -13,7 +13,9 @@ with inherited stdio, you read the preview and type `yes`. The program
 backend — `linode` for cloud forts, `libvirt` for the lab (soundship's
 `images` pool) — and the stack is named after the host, so `pulumi
 <anything> -s <host>` from `forts/pulumi` under the same environment is
-always a first-class escape hatch.
+always a first-class escape hatch. A `[baremetal]` host has no backend
+and is refused here: its image is written by hand
+([baremetal.md](baremetal.md)).
 
 ## The image is a birth input, not a resource
 
@@ -56,7 +58,7 @@ every fort) from that point until [`destroy`](destroy.md).
 ## Building the image
 
 ```
-fort image <host>                              # nix build ./nixos#<host>-{qcow|linode} + the graft
+fort image <host>                              # nix build ./nixos#<host>-{qcow|linode|baremetal} + the graft
 fort image <host> --from result/nixos.qcow2    # an image built by hand; skips the build
 fort provision <host> --image ~/.cache/forts/<host>-nixos.qcow2   # or .img.gz
 ```

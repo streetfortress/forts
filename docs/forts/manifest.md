@@ -41,6 +41,21 @@ disk = "80G"
 ip = "10.0.0.40"             # the static LAN address baked into the image
 ```
 
+```toml
+# sfi-fort-zenbook — gitea's home, on lab hardware (a laptop on a dock).
+mesh_ip = "10.1.0.6"
+k3s_cluster_init = false
+
+[backups]
+profile = "production"
+
+[baremetal]                  # no [shape]: the machine is the shape
+ip = "10.0.0.6"
+mac = "f8:ce:72:02:05:07"    # the NIC the address goes on — a dock's USB NIC
+                             # is renamed whenever it moves ports
+disk = "/dev/nvme0n1"        # the writer's target (docs/forts/baremetal.md)
+```
+
 **The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
 `nixos_state_version`, `[shape]`, `[dns]`, `[backups]` — this is what scaffold, mint,
 add, check, the pulumi program and the mesh read. Every consumer reads the
@@ -53,14 +68,25 @@ same Go struct (`forts/internal/manifest`), so the generators cannot drift.
 `protect: true` on its stack, and `mesh_ip` is required. A different shape
 (#273) will be a positive declaration, not the absence of flux.
 
-**One provider table, opaque to everyone but its backend.** `[linode]` and
-`[libvirt]` are decoded by their own Go types (`LinodeSpec`, `LibvirtSpec`),
-each with a `Validate` that runs on every load — so `fort check --all`
-refuses a bad table without running pulumi, and a `Provision` never sees
-one. Adding a provider = one file in `internal/manifest` + one backend in
+**One provider table, opaque to everyone but its backend.** `[linode]`,
+`[libvirt]` and `[baremetal]` are decoded by their own Go types
+(`LinodeSpec`, `LibvirtSpec`, `BaremetalSpec`), each with a `Validate`
+that runs on every load — so `fort check --all` refuses a bad table
+without running pulumi, and a `Provision` never sees one. Adding a
+provider = one file in `internal/manifest` + one backend in
 `forts/pulumi`; the shared struct never grows a column. The table's fields
 are the provider's own words (`type`, not a neutral "size"): the plan is a
 pricing decision made in the PR, and catalogs don't align.
+
+**`[baremetal]` is the one table with no backend behind it** (#287,
+[baremetal.md](baremetal.md)). The machine exists; the image is written
+to its disk by a human. The loader treats it as a lab host (LAN address,
+`.lofi` names, the lab issuer — `Cloud()` is false) that nothing
+realizes (`Realized()` is false): `provision` refuses it by name,
+`preview --all` lists it as `SKIP`, `destroy --no-stack` revokes its
+identities without a stack. `mac` is the one field with no VM analogue
+— the NIC's burned-in address, matched instead of a name that a dock
+or USB port rewrites.
 
 **Strict.** An unknown key anywhere — `productoin`, `ansible_host`, a
 second provider table, none at all — is an error naming the file. A typo'd
@@ -119,7 +145,7 @@ fort is how they drift.
 | `scaffold` | everything: the provider table picks the host shape, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the cluster key, deploy key and canary always; `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
-| `provision`, `preview`, `adopt` | the provider table (which backend, its credentials) |
+| `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
 | `destroy` | the gate: no manifest on `origin/main` and none in the working tree (so it revokes the B2 key by name, not by profile — there is no manifest left to read) |

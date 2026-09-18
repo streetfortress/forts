@@ -29,13 +29,21 @@ import (
 // obstacle: the provider comes from the checkpoint. A failure
 // mid-way leaves the (partly deleted, unprotected) state in the working
 // tree — the right place for it — and the rerun picks up where it was.
+//
+// A [baremetal] host has no stack by design (#287): `--no-stack` skips
+// the pulumi steps and does only what is left — the off-repo identities
+// mint registered (deploy key, B2 keys). The machine itself goes by hand
+// (docs/forts/baremetal.md). The flag is a declaration, not a detection:
+// with the manifest gone nothing says whether "no stack" meant hardware
+// or a host never born, and only a human knows which.
 func destroy(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort destroy <host> [--yes]")
+		return fmt.Errorf("usage: fort destroy <host> [--yes] [--no-stack]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "confirm the pulumi refresh and destroy without a prompt")
+	noStack := fs.Bool("no-stack", false, "a [baremetal] host: no pulumi stack to destroy — revoke the deploy key and B2 keys only")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -59,13 +67,24 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-	provider, problems := destroyGates(root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0)
-	fmt.Printf("%s   (provider %s, from the checkpoint)\n", host, provider)
+	provider, problems := destroyGates(root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0, *noStack)
+	if *noStack {
+		fmt.Printf("%s   (no stack: a [baremetal] host, the machine goes by hand)\n", host)
+	} else {
+		fmt.Printf("%s   (provider %s, from the checkpoint)\n", host, provider)
+	}
 	if len(problems) > 0 {
 		for _, p := range problems {
 			fmt.Printf("  ✗ %s\n", p)
 		}
 		return fmt.Errorf("refusing: %d gate(s) not met", len(problems))
+	}
+	if *noStack {
+		fmt.Println("  ✓ no manifest on origin/main or in the working tree; no stack")
+		revokeIdentities(root, host)
+		fmt.Printf("\n== done. Nothing to commit: the host had no state. Power the machine off and wipe its disk (docs/forts/baremetal.md).\n")
+		fmt.Println("   Off-repo residue to check: the .files wireguard copy (ubuntu mesh members).")
+		return nil
 	}
 	fmt.Println("  ✓ no manifest on origin/main or in the working tree; tree clean; stack exists")
 
@@ -113,25 +132,8 @@ func destroy(args []string) error {
 	}
 	os.Remove(filepath.Join(pulumiDir, "Pulumi."+host+".yaml"))
 
-	// 5. the deploy key fort mint registered — the one off-repo
-	// identity; the flux age identity died with the sops rule.
-	if msg, err := revokeDeployKey(root, host); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
-	} else {
-		fmt.Println("  deploy key:", msg)
-	}
-
-	// …and its B2 application key, the other off-repo identity. Warned
-	// rather than fatal: the minting credential is an operational input
-	// (docs/infra/backups.md), and a destroy must not be blocked waiting
-	// for it. The key is scoped to this fort's prefix, so what it can
-	// still reach is only the backups that are about to age out — but it
-	// is live until someone removes it.
-	if msg, err := revokeB2Key(host); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
-	} else {
-		fmt.Println("  b2 key:", msg)
-	}
+	// 5. the off-repo identities mint registered.
+	revokeIdentities(root, host)
 
 	// 6. stage the state removal; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
@@ -141,12 +143,35 @@ func destroy(args []string) error {
 	return nil
 }
 
+// revokeIdentities: the deploy key fort mint registered — the one
+// off-repo identity of the flux half (the flux age identity died with
+// the sops rule) — and the B2 application keys. Both warned rather than
+// fatal: the minting credential is an operational input
+// (docs/infra/backups.md), and a destroy must not be blocked waiting for
+// it. A B2 key is scoped to its fort's prefix, so what it can still
+// reach is only the backups that are about to age out — but it is live
+// until someone removes it.
+func revokeIdentities(root, host string) {
+	if msg, err := revokeDeployKey(root, host); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
+	} else {
+		fmt.Println("  deploy key:", msg)
+	}
+	if msg, err := revokeB2Key(host); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
+	} else {
+		fmt.Println("  b2 key:", msg)
+	}
+}
+
 // destroyGates: the inverse of every other verb's precondition. The
 // host's manifest must be gone from origin/main (the dismantle PR
 // merged) and from the working tree, the tree clean (so the state
 // removal lands as its own commit), and the stack must exist — a host
-// nothing raised through the CLI has none and goes by hand.
-func destroyGates(root, host string, onMain, clean bool) (provider string, problems []string) {
+// nothing raised through the CLI has none and goes by hand. With
+// noStack the last gate inverts: a stack that DOES exist means the
+// flag is wrong, and the pulumi path must run instead.
+func destroyGates(root, host string, onMain, clean, noStack bool) (provider string, problems []string) {
 	if onMain {
 		problems = append(problems, "still declared on origin/main ("+manifest.Path(host)+") — merge the `fort dismantle "+host+"` PR first (this refuses to unprotect a declared host)")
 	}
@@ -158,8 +183,14 @@ func destroyGates(root, host string, onMain, clean bool) (provider string, probl
 	}
 	state := filepath.Join(root, "forts/pulumi/state/.pulumi/stacks/forts", host+".json")
 	raw, err := os.ReadFile(state)
+	if noStack {
+		if err == nil {
+			problems = append(problems, "stack "+host+" exists in forts/pulumi/state — this host was raised by a backend; drop --no-stack")
+		}
+		return "", problems
+	}
 	if err != nil {
-		problems = append(problems, "no stack "+host+" in forts/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor)")
+		problems = append(problems, "no stack "+host+" in forts/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/forts/baremetal.md)")
 		return "", problems
 	}
 	provider, err = providerFromState(raw)

@@ -1,0 +1,12 @@
+# Test fixture: a lab host on hardware — [baremetal] with the NIC named
+# by MAC (a laptop on a dock: the interface name is not a fact).
+mesh_ip = "10.1.0.97"
+k3s_cluster_init = false
+
+[backups]
+profile = "production"
+
+[baremetal]
+ip = "10.0.0.97"
+mac = "f8:ce:72:02:05:07"
+disk = "/dev/nvme0n1"

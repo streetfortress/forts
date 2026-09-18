@@ -23,13 +23,16 @@ import (
 // material at rest anywhere). guestfish mounts the root explicitly (not
 // virt-customize: libguestfs OS inspection cannot identify a NixOS
 // guest): /dev/sda for the linode variant's raw non-partitioned ext4,
-// /dev/sda1 for the qcow variant's single msdos partition.
+// /dev/sda1 for the qcow variant's single msdos partition, /dev/sda2 for
+// the baremetal variant's GPT (the ESP is partition 1).
 //
-// The output — ~/.cache/forts/<host>-nixos.{img.gz,qcow2} — is the
+// The output — ~/.cache/forts/<host>-nixos.{img.gz,qcow2,img} — is the
 // SECRET-BEARING, single-use artifact `fort provision <host> --image`
-// consumes and deletes on success. Linode images also get the #42 size
-// caps asserted (custom-image upload limits). An author-side verb: it
-// touches no provider.
+// consumes and deletes on success — or, for a [baremetal] host, the one
+// a human writes to the machine's disk and then deletes
+// (docs/forts/baremetal.md). Linode images also get the #42 size caps
+// asserted (custom-image upload limits). An author-side verb: it touches
+// no provider.
 //
 // Tools: nix (the build; skipped with --from), sops, and guestfish —
 // from PATH, else nixpkgs' copy (ensureTool, as for virsh / xsltproc /
@@ -40,7 +43,7 @@ func image(args []string) error {
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("image", flag.ContinueOnError)
-	from := fs.String("from", "", "an already-built image (result/nixos.qcow2, result/*.img.gz) — skips the nix build")
+	from := fs.String("from", "", "an already-built image (result/nixos.qcow2, result/*.img.gz, result/nixos.img) — skips the nix build")
 	outDir := fs.String("out", "", "where the injected artifact goes (default ~/.cache/forts)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -161,6 +164,16 @@ func image(args []string) error {
 		}
 	}
 	fmt.Printf("== done. Single-use secret-bearing artifact: %s\n", out)
+	if b := entry.Baremetal(); b != nil {
+		// No provider consumes this one: the writer is a human at the
+		// machine, and the artifact's deletion is a step of the runbook.
+		disk := b.Disk
+		if disk == "" {
+			disk = "<disk>"
+		}
+		fmt.Printf("== next: write it to %s from a live ISO (docs/forts/baremetal.md), then delete it — no provider consumes it\n", disk)
+		return nil
+	}
 	fmt.Printf("== next: fort provision %s --image %s   (deletes it on success)\n", host, out)
 	return nil
 }
@@ -179,15 +192,22 @@ type variantSpec struct {
 }
 
 func imageVariant(host string, h manifest.Host) variantSpec {
-	if h.Cloud() {
+	switch {
+	case h.Cloud():
 		return variantSpec{host, "linode", "./nixos#" + host + "-linode", "/dev/sda"}
+	case h.Baremetal() != nil:
+		// the raw-efi variant: GPT, ESP first, root second (#287)
+		return variantSpec{host, "baremetal", "./nixos#" + host + "-baremetal", "/dev/sda2"}
 	}
 	return variantSpec{host, "qcow", "./nixos#" + host + "-qcow", "/dev/sda1"}
 }
 
 func (v variantSpec) ext() string {
-	if v.variant == "linode" {
+	switch v.variant {
+	case "linode":
 		return ".img.gz"
+	case "baremetal":
+		return ".img"
 	}
 	return ".qcow2"
 }

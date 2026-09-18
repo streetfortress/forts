@@ -45,6 +45,9 @@ func provision(args []string) error {
 	if err != nil {
 		return err
 	}
+	if !entry.Realized() {
+		return fmt.Errorf("host %q is [%s]: no backend raises it — `fort image %s`, then write the image to the machine by hand (docs/forts/baremetal.md)", host, entry.Provider, host)
+	}
 	if _, err := os.Stat(filepath.Join(root, "nixos/hosts", host, "default.nix")); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)
 	}

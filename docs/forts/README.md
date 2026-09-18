@@ -61,10 +61,12 @@ fort scaffold <host> --write  ← nixos/hosts/<host>/, fleet/clusters/<host>/, a
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
                               → PR → merge
 fort image <host>             ← nix build (the variant from the manifest) + the host
-                                 key grafted in → ~/.cache/forts/<host>-nixos.{qcow2,img.gz}
+                                 key grafted in → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
 fort provision <host> --image <path>   ← pulumi up, you confirm; the single-use
                                           image is released; state staged
                               → "<host>: provisioned" PR (state only) → merge
+                                 (a [baremetal] host: no provision — you write
+                                  the image to the disk, baremetal.md)
 fort add <host> oci://…/<chart> --version X --write   ← per workload
 fort seed <host> --write      ← the sops Secrets
 fort check <host>             ← what CI will say
@@ -133,6 +135,7 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [scaffold](scaffold.md) — the host's generated surface, from its manifest
 - [mint](mint.md) — the host's identity, sops-encrypted in-repo
 - [provision](provision.md) — birth and day-2 applies; `preview`, `adopt`
+- [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the hand-written birth
 - [add](add.md) — a chart's fort-side tree, from its contract
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement

@@ -38,6 +38,11 @@ type hostView struct {
 	Provider     string
 	Region       string
 	InstanceType string
+	// Baremetal hosts ([baremetal]): the lab shape on a physical machine
+	// — baremetal-runtime instead of qcow-runtime, the LAN block matched
+	// by MAC when the manifest names one (#287).
+	Baremetal bool
+	MAC       string
 }
 
 // scaffoldFile is one rendered file: repo-relative path + content.
@@ -105,16 +110,19 @@ func scaffold(args []string) error {
 		return nil
 	}
 	fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
-	if entry.Cloud() {
+	if entry.Realized() {
 		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
 	} else {
-		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
+		fmt.Printf("then PR → merge → fort image %s → write it to the machine by hand (docs/forts/baremetal.md)\n", host)
 	}
 	return nil
 }
 
 func scaffoldShape(e manifest.Host) string {
 	s := "lab VM"
+	if e.Baremetal() != nil {
+		s = "lab hardware"
+	}
 	if e.Cloud() {
 		s = e.Provider
 		if l := e.Linode(); l != nil {
@@ -140,17 +148,25 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile
 	}
+	// The lab LAN block, from whichever lab table the host carries.
+	lan := func(ip string, prefix int, gw string, dns []string) {
+		view.IP = ip
+		if prefix != 0 {
+			view.LanPrefix = prefix
+		}
+		if gw != "" {
+			view.LanGateway = gw
+		}
+		if len(dns) > 0 {
+			view.LanDNS = dns
+		}
+	}
 	if l := entry.Libvirt(); l != nil {
-		view.IP = l.IP
-		if l.LanPrefix != 0 {
-			view.LanPrefix = l.LanPrefix
-		}
-		if l.LanGateway != "" {
-			view.LanGateway = l.LanGateway
-		}
-		if len(l.LanDNS) > 0 {
-			view.LanDNS = l.LanDNS
-		}
+		lan(l.IP, l.LanPrefix, l.LanGateway, l.LanDNS)
+	}
+	if b := entry.Baremetal(); b != nil {
+		lan(b.IP, b.LanPrefix, b.LanGateway, b.LanDNS)
+		view.Baremetal, view.MAC = true, b.MAC
 	}
 	if l := entry.Linode(); l != nil {
 		view.Region, view.InstanceType = l.Region, l.Type
@@ -179,6 +195,13 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		return b.Bytes(), err
 	}
 	hostTpl, hostNote := "host-default.nix.gotpl", "lab VM shape (qcow runtime, static LAN)"
+	if view.Baremetal {
+		hostNote = "lab hardware shape (baremetal runtime, static LAN"
+		if view.MAC != "" {
+			hostNote += " by MAC"
+		}
+		hostNote += ")"
+	}
 	if view.Cloud {
 		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, split DNS over the mesh, zram)"
 	}

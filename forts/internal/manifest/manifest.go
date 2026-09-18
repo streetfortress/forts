@@ -7,11 +7,13 @@
 // mint, flux, the mesh: mesh_ip, [shape], [dns]. What a fort IS is not a
 // key: every fort is the hardened host profile, flux-managed, a mesh
 // member (#272) — a different shape will be a positive declaration.
-// Exactly one provider table ([linode], [libvirt]) names the backend that
-// raises the host; it is decoded by that provider's own Spec type and is
-// opaque to everything else. Adding a provider = one file in this package
-// (its Spec + Validate) and one entry in providers; the shared struct
-// never grows a column.
+// Exactly one provider table ([linode], [libvirt], [baremetal]) names the
+// backend that raises the host; it is decoded by that provider's own Spec
+// type and is opaque to everything else. Adding a provider = one file in
+// this package (its Spec + Validate) and one entry in providers; the
+// shared struct never grows a column. [baremetal] is the one table with
+// no backend behind it: the machine exists, a human writes the image
+// (#287), and the verbs that would apply refuse by name.
 //
 // The playbook-era inventory.yaml this replaces (#252) was one flat map
 // serving three vocabularies; the Ansible nesting and field names
@@ -122,14 +124,23 @@ type Spec interface {
 
 // providers: table name → a fresh Spec to decode it into.
 var providers = map[string]func() Spec{
-	"linode":  func() Spec { return &LinodeSpec{} },
-	"libvirt": func() Spec { return &LibvirtSpec{} },
+	"linode":    func() Spec { return &LinodeSpec{} },
+	"libvirt":   func() Spec { return &LibvirtSpec{} },
+	"baremetal": func() Spec { return &BaremetalSpec{} },
 }
 
-// Cloud says whether a host is realized by a cloud backend — a provider
-// other than the lab hypervisor. Lab facts (step-ca issuer, .lofi
-// hostnames, the qcow host shape) follow from !Cloud().
-func (h Host) Cloud() bool { return h.Provider != "" && h.Provider != "libvirt" }
+// ProviderTables lists the accepted tables, for error text.
+const ProviderTables = "[libvirt] (lab VM), [baremetal] (lab hardware) or [linode]"
+
+// Cloud says whether a host is realized by a cloud backend — off the lab
+// LAN. Lab facts (step-ca issuer, .lofi hostnames, the static LAN block)
+// follow from !Cloud(); a physical machine on the LAN is a lab host too.
+func (h Host) Cloud() bool { return h.Provider == "linode" }
+
+// Realized says whether a backend in forts/pulumi raises and destroys
+// this host. False for [baremetal]: the apply verbs refuse, preview
+// skips, and the image is written by hand (docs/forts/baremetal.md).
+func (h Host) Realized() bool { return h.Provider != "" && h.Provider != "baremetal" }
 
 // Linode is the decoded [linode] table, nil for any other provider.
 func (h Host) Linode() *LinodeSpec { s, _ := h.Spec.(*LinodeSpec); return s }
@@ -137,15 +148,30 @@ func (h Host) Linode() *LinodeSpec { s, _ := h.Spec.(*LinodeSpec); return s }
 // Libvirt is the decoded [libvirt] table, nil for any other provider.
 func (h Host) Libvirt() *LibvirtSpec { s, _ := h.Spec.(*LibvirtSpec); return s }
 
+// Baremetal is the decoded [baremetal] table, nil for any other provider.
+func (h Host) Baremetal() *BaremetalSpec { s, _ := h.Spec.(*BaremetalSpec); return s }
+
+// LanIP is the static LAN address a lab host bakes into its image —
+// [libvirt] ip or [baremetal] ip; "" for a cloud host.
+func (h Host) LanIP() string {
+	switch {
+	case h.Libvirt() != nil:
+		return h.Libvirt().IP
+	case h.Baremetal() != nil:
+		return h.Baremetal().IP
+	}
+	return ""
+}
+
 // Endpoint is where the other mesh peers dial this host: mesh_endpoint
-// when set, else the lab VM's static LAN address, else the public DNS
+// when set, else a lab host's static LAN address, else the public DNS
 // name — "" for a host reachable only by its own dial-out.
 func (h Host) Endpoint() string {
 	switch {
 	case h.MeshEndpoint != "":
 		return h.MeshEndpoint
-	case h.Libvirt() != nil:
-		return h.Libvirt().IP
+	case h.LanIP() != "":
+		return h.LanIP()
 	default:
 		return h.DNS.FQDN()
 	}
@@ -227,7 +253,7 @@ func Parse(host string, raw []byte) (Host, error) {
 	switch len(tables) {
 	case 1:
 	case 0:
-		return Host{}, fmt.Errorf("%s: no provider table — add [libvirt] (lab) or [linode]; nothing raises a provider-less host", Path(host))
+		return Host{}, fmt.Errorf("%s: no provider table — add %s; nothing raises a provider-less host", Path(host), ProviderTables)
 	default:
 		sort.Strings(tables)
 		return Host{}, fmt.Errorf("%s: %d provider tables (%s) — a fort has exactly one", Path(host), len(tables), strings.Join(tables, ", "))
@@ -265,7 +291,7 @@ func (h Host) Validate(host string) error {
 		return fmt.Errorf("%s: %s", Path(host), fmt.Sprintf(format, a...))
 	}
 	if h.Spec == nil || h.Provider == "" {
-		return fail("no provider table — add [libvirt] (lab) or [linode]; nothing raises a provider-less host")
+		return fail("no provider table — add %s; nothing raises a provider-less host", ProviderTables)
 	}
 	if h.MeshIP == "" {
 		// cluster-vars.yaml's MESH_IP is mandatory (#99): every fort is a

@@ -120,6 +120,34 @@ func TestRenderScaffold(t *testing.T) {
 	if _, err := renderScaffold("lab-fort", h); err == nil {
 		t.Errorf("a manifest without mesh_ip should be refused")
 	}
+
+	// a [baremetal] host is the lab shape on hardware (#287): the
+	// baremetal runtime instead of qcow, the LAN block matched by MAC
+	// when the manifest names one, everything else as the lab VM.
+	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
+	m := metal["nixos/hosts/metal-fort/default.nix"]
+	for _, s := range []string{"../../modules/baremetal-runtime.nix", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.97", "services.k3s.clusterInit = false", "zramSwap", `profile = "production";`, "docs/forts/baremetal.md"} {
+		if !strings.Contains(m, s) {
+			t.Errorf("metal default.nix lacks %q", s)
+		}
+	}
+	for _, s := range []string{"qcow-runtime", "-qcow", `matchConfig.Name`, "linode", "hypervisor's LAN bridge"} {
+		if strings.Contains(m, s) {
+			t.Errorf("metal default.nix should not carry %q", s)
+		}
+	}
+	if len(metal) != len(lab) {
+		t.Errorf("metal renders %d files, lab %d — the fleet half is the same for every fort", len(metal), len(lab))
+	}
+	// without a mac the block matches en* like a lab VM's
+	noMAC := hosts["metal-fort"]
+	spec := *noMAC.Baremetal()
+	spec.MAC = ""
+	noMAC.Spec = &spec
+	nm := byPath(render(t, "metal-fort", noMAC))["nixos/hosts/metal-fort/default.nix"]
+	if !strings.Contains(nm, `matchConfig.Name = "en*"`) || strings.Contains(nm, "MACAddress") {
+		t.Errorf("metal without mac should match en*:\n%s", nm)
+	}
 }
 
 // The committed fleet/clusters dirs are what the templates render — the

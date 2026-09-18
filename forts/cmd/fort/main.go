@@ -159,14 +159,16 @@ func usage() {
 
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image and graft its ssh identity in:
-      nix build ./nixos#<host>-{qcow|linode} (the variant from the
-      manifest's provider table; --from skips the build), then guestfish
+      nix build ./nixos#<host>-{qcow|linode|baremetal} (the variant from
+      the manifest's provider table; --from skips the build), then guestfish
       uploads ssh-host-key + .pub from nixos/secrets/<host>.yaml into
       /etc/ssh — the key that decrypts the host's secrets on first boot
       must never enter the nix store. Linode images get the 6 GiB raw /
       5 GiB gzip caps asserted. Output: ~/.cache/forts/<host>-nixos.
-      {qcow2,img.gz}, the SECRET-BEARING single-use artifact provision
-      --image consumes and deletes; the work dir is shredded. guestfish
+      {qcow2,img.gz,img}, the SECRET-BEARING single-use artifact provision
+      --image consumes and deletes — or, for a [baremetal] host, the one
+      you write to the machine's disk from a live ISO and then delete
+      (docs/forts/baremetal.md); the work dir is shredded. guestfish
       comes from PATH, else nixpkgs; nix and sops must be on PATH.
 
   provision <host> [--image <path>] [--yes]
@@ -179,7 +181,8 @@ func usage() {
       the pool as the root disk — and once the host exists, release it
       (provider-side where applicable, and the local copy) (#42). Without
       --image a host with no stack is refused. The state (and at birth
-      Pulumi.<host>.yaml) is staged for its own PR.
+      Pulumi.<host>.yaml) is staged for its own PR. A [baremetal] host is
+      refused outright: no backend raises it.
 
   adopt <host> [--yes]
       bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a repave: rescan the pool, import the
@@ -193,8 +196,9 @@ func usage() {
       the read-only half: 'pulumi preview -s <host> --diff'. --refresh
       reconciles state with the provider first (drift); --expect-no-changes
       turns any proposed change into a nonzero exit. --all walks every
-      host with a manifest, one OK/DRIFT/FAILED line per stack — with
-      --refresh --expect-no-changes that is 'just iac-drift'.
+      host with a manifest, one OK/DRIFT/FAILED line per stack (SKIP for
+      a [baremetal] host: no stack by design) — with --refresh
+      --expect-no-changes that is 'just iac-drift'.
 
   add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
       [--hostname fqdn] [--without type,...] [--chart-dir path] [--write]
@@ -246,7 +250,7 @@ func usage() {
       no pulumi state: fort destroy is the second, gated step after the
       merge.
 
-  destroy <host> [--yes]
+  destroy <host> [--yes] [--no-stack]
       the half with side effects outside git, gated on the merge: refuses
       unless the host's manifest is ABSENT from origin/main (and the
       working tree), the tree is clean, and the stack exists. Then, with
@@ -257,6 +261,9 @@ func usage() {
       deploy key on gitea, stages the state removal for its own PR. A
       failure mid-way leaves the unprotected state in the tree and says
       "rerun". Provider comes from the checkpoint, not the manifest.
+      --no-stack is for a [baremetal] host, which has no stack by design:
+      the same gates minus the stack, then only the identities (deploy
+      key, B2 keys); the machine goes by hand (docs/forts/baremetal.md).
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.

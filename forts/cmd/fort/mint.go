@@ -457,9 +457,12 @@ func (p *mintPlan) value(key string) string {
 
 func (p *mintPlan) report(w io.Writer, written bool) {
 	facts := []string{}
-	if p.entry.Cloud() {
+	switch {
+	case p.entry.Cloud():
 		facts = append(facts, "cloud: "+p.entry.Provider)
-	} else {
+	case !p.entry.Realized():
+		facts = append(facts, "lab hardware: no backend")
+	default:
 		facts = append(facts, "lab: libvirt backend")
 	}
 	facts = append(facts, "mesh "+p.entry.MeshIP)
