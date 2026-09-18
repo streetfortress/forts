@@ -1,0 +1,29 @@
+# CNPG-I barman-cloud plugin: the supported home of object-store backups
+# since the in-tree `backup.barmanObjectStore` was deprecated (CNPG 1.26).
+# Installing it changes nothing by itself — a Cluster opts in with
+# `spec.plugins` and an `ObjectStore` CR in its own namespace (#48), and
+# until then every cluster keeps archiving exactly as it does today.
+#
+# Same Helm repository as the operator; same namespace, so the plugin's
+# service is where the operator looks for it (barman-cloud:9090). Its
+# mTLS certificates come from cert-manager (a self-signed issuer the
+# chart creates), hence the second dependency.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plugin-barman-cloud
+  namespace: cnpg-system
+spec:
+  interval: 1h
+  dependsOn:
+    - name: cnpg
+    - name: cert-manager
+      namespace: cert-manager
+  chart:
+    spec:
+      chart: plugin-barman-cloud
+      version: 0.8.0 # plugin v0.15.0
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+        namespace: flux-system
