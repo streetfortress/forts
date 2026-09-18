@@ -16,6 +16,7 @@ import (
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/contract"
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -62,22 +63,20 @@ func seed(args []string) error {
 		return err
 	}
 	o.root, o.dirs, o.tool = root, dirs, sopsCLI{root: root}
-	if o.setKey != "" {
-		if len(dirs) != 1 {
-			return fmt.Errorf("--set wants exactly one <dir>")
-		}
-		v, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return err
-		}
-		o.setValue = strings.TrimRight(string(v), "\r\n")
-		if o.setValue == "" {
-			return fmt.Errorf("--set %s: empty value on stdin", o.setKey)
-		}
+	if o.setKey != "" && len(dirs) != 1 {
+		return fmt.Errorf("--set wants exactly one <dir>")
 	}
+	// Plan BEFORE taking the value: a key the contract does not declare
+	// (or a checkout whose contract does not declare it yet) is refused
+	// by name here, not after the operator has pasted a secret into it.
 	plans, err := planSeed(o)
 	if err != nil {
 		return err
+	}
+	if o.setKey != "" && o.write {
+		if o.setValue, err = readSetValue(o.setKey, setTarget(plans)); err != nil {
+			return err
+		}
 	}
 	for _, p := range plans {
 		if o.write {
@@ -97,9 +96,11 @@ type seedOpts struct {
 	root, fort, chartDir string
 	dirs                 []string // repo-relative app dirs; empty = every contract dir of the fort
 	setKey, setValue     string
-	write                bool
-	tool                 secretsTool
-	charts               map[string]pulledChart // optional pull cache (fort check); nil = pull + discard per dir
+	// setValue is filled after planning (see seed), and only for --write:
+	// a dry run reports what --set would touch without asking for it.
+	write  bool
+	tool   secretsTool
+	charts map[string]pulledChart // optional pull cache (fort check); nil = pull + discard per dir
 }
 
 type pulledChart struct{ dir, version string }
@@ -788,4 +789,40 @@ func names(specs []NamedSpec) []string {
 		out = append(out, s.Name)
 	}
 	return out
+}
+
+// setTarget names the file a --set will write, for the prompt.
+func setTarget(plans []*seedPlan) string {
+	for _, p := range plans {
+		for _, f := range p.files {
+			if f.set != nil {
+				return f.path
+			}
+		}
+	}
+	return ""
+}
+
+// readSetValue takes --set's value the way b2Session takes a credential
+// (b2session.go): prompted without echo on a terminal, from stdin
+// otherwise, so a script can still pipe it in. The prompt names the key
+// and the file so that what is about to be encrypted is unambiguous.
+func readSetValue(key, file string) (string, error) {
+	var raw []byte
+	var err error
+	if stdinIsTTY() {
+		fmt.Fprintf(os.Stderr, "Setting %s in %s.\n  Paste the value (not echoed): ", key, file)
+		raw, err = term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr)
+	} else {
+		raw, err = io.ReadAll(os.Stdin)
+	}
+	if err != nil {
+		return "", fmt.Errorf("--set %s: reading the value: %w", key, err)
+	}
+	v := strings.TrimRight(string(raw), "\r\n")
+	if v == "" {
+		return "", fmt.Errorf("--set %s: empty value", key)
+	}
+	return v, nil
 }

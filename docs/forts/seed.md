@@ -24,7 +24,7 @@ keys, each key one of:
 | `generate` | mints a random value (passwords, tokens) |
 | `literal` | writes the given value (usernames, non-secret config) |
 | `sops: [file, path]` | copies a value from another sops file — a provider's output (`sites-db/secrets-<app>.sops.yaml` `stringData.password`), or a sibling fort's file (`../../<fort>/…`, the drill-fort precedent for cloning staging) |
-| `external` | leaves the key **absent until set** — an API key from a third party; `--set KEY` reads one value from stdin |
+| `external` | leaves the key **absent until set** — an API key from a third party; `--set KEY` prompts for one value (or reads stdin) |
 
 Providers come first: `sites-db` and `valkey` dirs are seeded before the
 apps whose `sops:` refs point into them, and the order is derived from
@@ -54,9 +54,15 @@ dry run — nothing seeded (seed --write).
   present stays as it is — `rotation is deliberate: fort rotate` (not
   built yet). Extra keys the contract does not name are left alone and
   reported by `check` as a warning (a migration superset).
-- **`--set KEY`** takes exactly one `<dir>` and the value from stdin —
-  `fort seed sfi-x symbology --set STRIPE_SECRET_KEY < key.txt` — for an
-  external key or a deliberate replacement.
+- **`--set KEY`** takes exactly one `<dir>`. With `--write` it asks for
+  the value — prompted without echo on a terminal, naming the key and the
+  file; read from stdin otherwise, so `fort seed sfi-x symbology --set
+  STRIPE_SECRET_KEY --write < key.txt` still works in a script. The plan
+  runs first: a key no Secret in `<dir>` declares is refused by name
+  before anything is pasted (the usual cause is a checkout whose contract
+  does not carry the key yet). Without `--write` it only reports what
+  `--set` would touch and asks for nothing. For an `external` key, or a
+  deliberate replacement of any other key.
 - Decrypted material flows through memory only; the report shows key
   names, never values.
 

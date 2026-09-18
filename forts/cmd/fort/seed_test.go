@@ -406,3 +406,35 @@ func TestAppDir(t *testing.T) {
 		}
 	}
 }
+
+// --set's value comes after the plan, and from stdin when there is no
+// terminal — the scripted path, which must keep working.
+func TestReadSetValueFromStdin(t *testing.T) {
+	stdinIsTTY = func() bool { return false }
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = old })
+	w.WriteString("sk_test_x\n")
+	w.Close()
+	v, err := readSetValue("STRIPE_KEY", "fleet/apps/x/app/secrets.sops.yaml")
+	if err != nil || v != "sk_test_x" {
+		t.Fatalf("got %q, %v", v, err)
+	}
+}
+
+func TestReadSetValueRefusesEmpty(t *testing.T) {
+	stdinIsTTY = func() bool { return false }
+	r, w, _ := os.Pipe()
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = old })
+	w.WriteString("\n")
+	w.Close()
+	if _, err := readSetValue("K", "f"); err == nil {
+		t.Fatal("an empty value must be refused, not encrypted")
+	}
+}
