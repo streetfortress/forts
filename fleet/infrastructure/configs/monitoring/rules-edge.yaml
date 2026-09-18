@@ -148,3 +148,88 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }}: wireguard.prom not updated for >15m — wireguard-metrics timer dead"
+
+    # Backup freshness (#323). Two silent failures found on 2026-09-17: an
+    # offsite leg refused by B2 (account caps, a wrong key) while the
+    # local leg stays green, and a writer that quietly stops under the
+    # db buckets' 90 d age-based expiry, which cannot tell a dead fort's
+    # lineage from a broken job — only freshness can. Every rule here reads
+    # a metric a unit already publishes; none reaches B2 (the ground-truth
+    # listing is #323's second half).
+    - name: backups
+      rules:
+        # restic PV backups: one series per destination (target=rustfs|b2)
+        # from the textfile the unit writes on success. Joined to the path
+        # count so "nothing to back up yet" (paths=0, the unit skips and
+        # writes no timestamp) is not "backups are broken". 36 h: daily is
+        # the slowest schedule and the timers carry jitter.
+        - alert: PVBackupStale
+          expr: >-
+            (time() - node_pv_backup_last_success_seconds) > 36 * 3600
+              and on (instance, target) node_pv_backup_paths > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: no successful restic backup to {{ $labels.target }} in >36h"
+
+        # Paths to back up, and no success EVER for that destination: the
+        # unit is failing from the start (a bad key, a capped account, a
+        # missing bucket). 12 h covers a fresh fort's first scheduled run.
+        - alert: PVBackupNeverSucceeded
+          expr: >-
+            node_pv_backup_paths > 0
+              unless on (instance, target) node_pv_backup_last_success_seconds
+          for: 12h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: restic target {{ $labels.target }} has paths to back up and has never succeeded"
+
+        # CNPG base backups through the barman-cloud plugin, which
+        # publishes its own timestamps (the in-tree
+        # cnpg_collector_last_available_backup_timestamp does NOT see
+        # plugin backups). A cluster with no backup yet reports 0, i.e. an
+        # age of "now": right for a cluster that should have one, so the
+        # `for` is what lets a fresh cutover take its first base backup.
+        - alert: CNPGBaseBackupStale
+          expr: (time() - barman_cloud_cloudnative_pg_io_last_available_backup_timestamp) > 36 * 3600
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cluster }}: no successful base backup in >36h (plugin)"
+
+        - alert: CNPGBackupFailed
+          expr: >-
+            barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp
+              > barman_cloud_cloudnative_pg_io_last_available_backup_timestamp
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cluster }}: the latest base backup attempt failed"
+
+        # WAL archiving, scoped to clusters that archive somewhere (the
+        # plugin series exists): a lab cluster's archiver has nowhere to
+        # go and must not page. CNPG switches a segment at least every
+        # archive_timeout (5 m default), so an hour without one is stuck.
+        - alert: CNPGWALArchivingStale
+          expr: >-
+            cnpg_pg_stat_archiver_seconds_since_last_archival > 3600
+              and on (namespace, job) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cluster }}: no WAL segment archived in >1h — PITR window is not advancing"
+
+        - alert: CNPGWALArchiveFailing
+          expr: >-
+            cnpg_pg_stat_archiver_last_failed_time > cnpg_pg_stat_archiver_last_archived_time
+              and on (namespace, job) barman_cloud_cloudnative_pg_io_last_available_backup_timestamp
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG {{ $labels.namespace }}/{{ $labels.cluster }}: WAL archive_command failing (last failure newer than last success)"
