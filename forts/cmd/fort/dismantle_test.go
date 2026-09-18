@@ -8,9 +8,11 @@ import (
 	"testing"
 )
 
-// Replays dismantle on a copy of the real tree's relevant files for the
-// drill fort (lab) and the production fort (cloud) with a fake sops tool, and checks that exactly the
-// generated surface goes and everything else survives.
+// Replays dismantle on a copy of the real tree's relevant files for a
+// lab fort and the production fort (cloud) with a fake sops tool, and
+// checks that exactly the generated surface goes and everything else
+// survives. luxor is the bystander whose manifest, sops blocks and a
+// tree (rustfs-central) must come through untouched.
 func TestDismantle(t *testing.T) {
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
@@ -21,16 +23,16 @@ func TestDismantle(t *testing.T) {
 		cloud     bool
 		recipient int // `# cluster:` lines in the shared rule
 	}{
-		{"sfi-fort-e33e2d5", false, 2}, // the stale re-preseed line too
+		{"sfi-fort-d54d5b3", false, 1},
 		{"sfi-prod-439bf72", true, 1},
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			tmp := t.TempDir()
-			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), manifest.Path("staging-k3s"), ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json", "README.md",
+			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
 				"nixos/secrets/" + tc.host + ".yaml", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
-			for _, rel := range []string{"nixos/hosts/" + tc.host, "fleet/clusters/" + tc.host, "fleet/apps/" + tc.host, "fleet/apps/staging-k3s/sites-db"} {
+			for _, rel := range []string{"nixos/hosts/" + tc.host, "fleet/clusters/" + tc.host, "fleet/apps/" + tc.host, "fleet/apps/luxor/rustfs-central"} {
 				copyTree(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
 			// a contract on another fort sourcing from this one
@@ -38,6 +40,8 @@ func TestDismantle(t *testing.T) {
 				os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 				os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 			}
+			// a doc that names the host, so residue reporting has something to find
+			write("README.md", "# fleet\n\nthe fort "+tc.host+" is mentioned here\n")
 			write("fleet/apps/luxor/app/secrets.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/sites-db/secrets-db.sops.yaml, stringData.password]}\n")
 
 			p, err := planDismantle(tmp, tc.host)
@@ -57,7 +61,7 @@ func TestDismantle(t *testing.T) {
 					t.Errorf("%s still exists", rel)
 				}
 			}
-			for _, rel := range []string{"fleet/apps/staging-k3s/sites-db/cluster.yaml", "nixos/secrets/", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+			for _, rel := range []string{"fleet/apps/luxor/rustfs-central/release.yaml", "nixos/secrets/", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				if _, err := os.Stat(filepath.Join(tmp, rel)); err != nil {
 					t.Errorf("%s was removed", rel)
 				}
@@ -65,7 +69,7 @@ func TestDismantle(t *testing.T) {
 			if exists(tmp, manifest.Path(tc.host)) {
 				t.Errorf("manifest %s still exists", manifest.Path(tc.host))
 			}
-			for _, other := range []string{"luxor", "staging-k3s"} {
+			for _, other := range []string{"luxor"} {
 				if !exists(tmp, manifest.Path(other)) {
 					t.Errorf("manifest %s was removed", other)
 				}
@@ -75,7 +79,7 @@ func TestDismantle(t *testing.T) {
 				if strings.Contains(s, "sops rule: "+tc.host) || strings.Contains(s, "# cluster: "+tc.host) {
 					t.Errorf("%s still names %s", f, tc.host)
 				}
-				if !strings.Contains(s, "sops rule: luxor") || !strings.Contains(s, "sops rule: staging-k3s") {
+				if !strings.Contains(s, "sops rule: luxor") {
 					t.Errorf("%s lost another host's block", f)
 				}
 			}

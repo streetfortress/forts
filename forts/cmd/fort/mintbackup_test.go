@@ -33,7 +33,7 @@ func TestB2KeyNameIsLegal(t *testing.T) {
 	// B2's keyName rule is letters, digits and hyphens. Generated fort
 	// names satisfy it; a name that did not would be refused at the API
 	// after the identity had already been staged.
-	for _, host := range []string{"sfi-prod-439bf72", "sfi-fort-c0db879", "staging-k3s"} {
+	for _, host := range []string{"sfi-prod-439bf72", "sfi-fort-c0db879", "sfi-fort-d54d5b3"} {
 		if err := b2.ValidName(b2KeyName(host)); err != nil {
 			t.Errorf("%s: %v", host, err)
 		}

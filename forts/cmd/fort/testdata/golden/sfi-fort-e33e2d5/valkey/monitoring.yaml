@@ -1,0 +1,37 @@
+# Scrape wiring for the cache-duty valkey — apps own their monitors
+# beside the HelmRelease (#53); the edge Prometheus scrapes PodMonitors
+# and remote-writes centrally. CACHE DUTY: evictions are the design
+# (maxmemory 96mb + allkeys-lru) and consumers fall back to Postgres, so
+# no eviction alert here — the hit-ratio/eviction panels on the valkey
+# dashboard are the read. Down still warrants a soft signal: the app
+# stays correct but the capacity knee drops back to the uncached rung.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: valkey
+  namespace: valkey
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+      app.kubernetes.io/instance: valkey
+  podMetricsEndpoints:
+    - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: valkey
+  namespace: valkey
+spec:
+  groups:
+    - name: valkey-cache-duty
+      rules:
+        - alert: ValkeyDown
+          expr: absent(redis_up{job="valkey/valkey"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cache-duty valkey is down or unscraped"
+            description: "Consumers fall back to Postgres (best-effort client posture) — correctness holds, capacity degrades to the uncached baseline."

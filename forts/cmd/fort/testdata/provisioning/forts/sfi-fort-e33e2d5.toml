@@ -1,0 +1,22 @@
+# sfi-fort-e33e2d5 — the fort CLI's test environment, on the lab hypervisor.
+#
+# Born as the CNPG backup-drill fort (generated-name convention): seed the
+# sites-db monolith from db2, barman-archive to luxor's rustfs (mesh NodePort
+# 30900), repave, restore via bootstrap.recovery — proving repaves ride the
+# physical path. Same SKU as staging so the restore-vs-import timing is
+# honest. Disposable by design. Adopted under the libvirt backend 2026-09-14
+# (fort adopt: imported, no repave) — the first of the playbook-era VMs to
+# move.
+mesh_ip = "10.1.0.15"
+k3s_cluster_init = false
+
+[backups]
+profile = "lab"   # luxor's rustfs only — reproducible, and not an original
+
+[shape]
+vcpus = 2
+memory = 4
+disk = "80G"
+
+[libvirt]
+ip = "10.0.0.41"

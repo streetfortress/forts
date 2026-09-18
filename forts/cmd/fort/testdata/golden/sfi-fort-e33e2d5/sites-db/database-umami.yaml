@@ -1,0 +1,10 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: umami
+  namespace: sites-db
+spec:
+  name: umami
+  owner: deployer
+  cluster:
+    name: sites-db

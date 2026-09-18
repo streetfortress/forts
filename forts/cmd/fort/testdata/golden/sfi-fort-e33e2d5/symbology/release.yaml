@@ -1,0 +1,64 @@
+# Symbology app workloads: UI + workers + the alembic pre-install/pre-upgrade
+# hook Job + the inference Service. The database is NOT in the chart: it
+# is a tenant of the shared sites-db CNPG cluster (../sites-db/, Database
+# CR database-symbology.yaml + managed role), reconciled in parallel.
+#
+# Values are what `fort add` renders from the chart's contract
+# (`wire:` paths filled from the providers' conventional outputs, retry
+# forever) plus the hand refinements the post-add report calls for:
+# inference.address, ui.env, replicas for the 4 GB shape.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: symbology
+  namespace: symbology
+spec:
+  interval: 1h
+  releaseName: symbology
+  chartRef:
+    kind: OCIRepository
+    name: symbology
+    namespace: flux-system
+  install:
+    # The migration hook races the database and (preview pin) the
+    # per-commit images landing after the chart — retry until ready,
+    # never park on a failed release waiting for an ops nudge.
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1
+  values:
+    existingSecret: symbology-env
+    # requires.postgres.db → the fort's shared sites-db, tenant `symbology`
+    # (contract wire: database.*). DATABASE_PASSWORD rides the Secret.
+    database:
+      host: sites-db-rw.sites-db.svc.cluster.local
+      port: "5432"
+      name: symbology
+      user: symbology
+    # requires.valkey.cache → the fort's shared valkey, ACL user
+    # `symbology`, db0 (contract wire: cache.*). CACHE_PASSWORD rides the
+    # Secret, same value as valkey-users/symbology.
+    cache:
+      host: valkey.valkey.svc.cluster.local
+      port: "6379"
+      db: "0"
+      user: symbology
+    inference:
+      # soundship's mesh IP (wireguard/peers.json): DNAT to LM Studio on
+      # the win11 VM. Best-effort by policy — workers back off when it is
+      # away (symbology#146).
+      address: 10.1.0.1
+    # One replica per component on the 4 GB single node (#155/#162).
+    ui:
+      replicas: 1
+      # Non-secret env is chart values by the contract's rule (a change
+      # rolls pods); the Secret carries only the secret-typed keys.
+      env:
+        PUBLIC_ENVIRONMENT: staging
+        BETTER_AUTH_URL: https://symbology.sfi-fort-e33e2d5.lofi
+        RESEND_EMAIL_FROM: "Symbology <noreply@send.symbology.online>"
+        RESEND_EMAIL_REPLY_TO: "Symbology Support <support@streetfortress.com>"
+    worker:
+      replicas: 1

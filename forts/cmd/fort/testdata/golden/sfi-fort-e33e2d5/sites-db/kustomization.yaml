@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - cluster.yaml
+  # The seed loader, suspended until the cluster is recreated empty.
+  - seed-restore-job.yaml
+  - database-sfi-website.yaml
+  - database-dial-in.yaml
+  - database-umami.yaml
+  - database-symbology.yaml
+  # All three seeded from secrets.contract.yaml; listed-but-absent = the
+  # pre-merge kustomize guard. secrets-seed carries the shared
+  # sfi-seeds-reader identity on luxor's rustfs-central.
+  - secrets-db.sops.yaml
+  - secrets-symbology.sops.yaml
+  - secrets-seed.sops.yaml
+
+configMapGenerator:
+  - name: seed-restore-scripts
+    namespace: sites-db
+    options:
+      annotations:
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+    files:
+      - seed-restore.sh

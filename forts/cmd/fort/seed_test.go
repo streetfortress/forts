@@ -247,14 +247,10 @@ secrets:
 // hand-written drill fort contract has (minus its migration-era
 // ADMIN_EMAILS), with the same provider vars.
 func TestSeedFromChartContract(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
-	const fort = "sfi-fort-e33e2d5"
+	const fort = "sfi-fort-e33e2d5" // the testdata/golden snapshot; the fort itself is gone (#348)
 	tmp := t.TempDir()
-	copyManifest(t, repo, tmp, fort)
-	golden := filepath.Join(repo, "fleet/apps", fort)
+	copyManifest(t, "testdata", tmp, fort)
+	golden := filepath.Join("testdata/golden", fort)
 	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/secrets.contract.yaml", "valkey/secrets.contract.yaml"} {
 		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "fleet/apps", fort, rel))
 	}

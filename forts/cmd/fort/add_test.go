@@ -13,7 +13,10 @@ import (
 
 // The golden tree: fleet/apps/sfi-fort-e33e2d5 was laid down by hand
 // (#230, #232) as what fort add is specified to render for symbology
-// from the sfi/symbology#189 preview chart. This test replays the add
+// from the sfi/symbology#189 preview chart. The fort was dismantled on
+// 2026-09-18 (#348); its tree and manifest live on as a snapshot under
+// testdata/golden/sfi-fort-e33e2d5 + testdata/provisioning, so the test
+// no longer depends on a fort that exists. This test replays the add
 // against the fort's pre-add state and compares.
 //
 // Byte-exact for everything the generator owns outright; structural for
@@ -27,13 +30,13 @@ func TestAddReproducesDrillFort(t *testing.T) {
 		t.Skip("not inside the deployments checkout")
 	}
 	const fort = "sfi-fort-e33e2d5"
-	golden := filepath.Join(repo, "fleet/apps", fort)
+	golden := filepath.Join("testdata/golden", fort)
 
 	// Pre-add state: the manifest, the CA, the fort's root kustomization as
 	// it was before #230, sops-canary + the whole sites-db dir as-is
 	// (the symbology tenant already existed from the restore drill).
 	tmp := t.TempDir()
-	copyManifest(t, repo, tmp, fort)
+	copyManifest(t, "testdata", tmp, fort)
 	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, filepath.Join("testdata/forts", fort, "kustomization.yaml"), filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "fleet/apps", fort, "sops-canary.yaml"))
