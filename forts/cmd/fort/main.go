@@ -110,14 +110,17 @@ func usage() {
       plan; --write mints, encrypts, registers, stages. fort dismantle is
       the inverse.
 
-  b2-key <minting|pruning|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
+  b2-key <minting|pruning|audit|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
       mint a B2 credential no verb may create for itself, because these
       live outside the repo and the web console cannot express their
       capability sets. minting (sfi-b2-key-minting-key)
       is what fort mint exports to create per-fort keys: writeKeys, no
       deleteFiles. pruning (sfi-b2-pruning-key) is the fleet's ONLY
       delete-capable credential, scoped to sfi-pv-backups, and belongs in
-      luxor's host secrets for sfi.pv-prune. The host roles are ONE KEY
+      luxor's host secrets for sfi.pv-prune. audit (sfi-b2-audit-key)
+      is the s3-exporter's: list on all three backup buckets, no
+      readFiles — the one key that stands in a Secret for good, because
+      it reads nothing. The host roles are ONE KEY
       PER HOST PER BUCKET, namePrefix <host>/, no deleteFiles, the role
       word being the key's stem and the bucket's: pv (sfi-pv-<host>) is
       the restic credential the HOST holds — the grant fort mint gives a

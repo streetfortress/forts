@@ -48,11 +48,16 @@ const AuthURL = "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"
 //	           A onto host B is the one operation that must cross a
 //	           prefix, and Writer would let the restoring host corrupt the
 //	           source it is reading from.
+//	Auditor  — what MONITORING needs: names, sizes and dates of objects,
+//	           across every host. No readFiles: it cannot fetch a byte of
+//	           anyone's backup, which makes it the one credential that can
+//	           stand in a scrape target's Secret indefinitely.
 var (
 	Minting = []string{"listBuckets", "listKeys", "writeKeys", "deleteKeys", "listFiles", "readFiles", "writeFiles"}
 	Writer  = []string{"listBuckets", "listFiles", "readFiles", "writeFiles"}
 	Pruning = []string{"listBuckets", "listFiles", "readFiles", "writeFiles", "deleteFiles"}
 	Reader  = []string{"listBuckets", "listFiles", "readFiles"}
+	Auditor = []string{"listBuckets", "listFiles"}
 )
 
 // Client is an authorized session. Zero value is unusable; call Authorize.

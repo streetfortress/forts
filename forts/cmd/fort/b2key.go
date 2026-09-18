@@ -95,6 +95,20 @@ var b2Roles = map[string]b2Role{
 			"    prefix: it must reach every fort's repo, and nothing else. It holds no key\n" +
 			"    capabilities, so it cannot mint its way anywhere.",
 	},
+	// The listing-only credential the s3-exporter on luxor scrapes B2
+	// with (#323): freshness and size of every host's backups, seen from
+	// the bucket rather than from the unit that claims to have written
+	// them. It is the one key that legitimately stands in a Secret for
+	// good, and it can afford to because it reads nothing.
+	"audit": {
+		name:    "sfi-b2-audit-key",
+		summary: "bucket-side backup freshness (s3-exporter on luxor)",
+		caps:    b2.Auditor,
+		buckets: []string{b2PVBucket, b2PhysicalBucket, b2LogicalBucket},
+		why: "listBuckets + listFiles on all three backup buckets, no prefix — it must see\n" +
+			"    every host — and NO readFiles: names, sizes and dates only. A leak of this\n" +
+			"    key shows what backups exist and when; it cannot fetch one.",
+	},
 }
 
 // parseB2KeyArgs takes the role positionally and the flags after it —
@@ -393,6 +407,11 @@ func (r b2Role) followUp() string {
 	case "sfi-b2-key-minting-key":
 		return "Next: export it as B2_KEY_ID / B2_APP_KEY when running `fort mint <host> --write`\n" +
 			"for a fort whose manifest says [backups] profile = \"production\". Nothing else reads it."
+	case "sfi-b2-audit-key":
+		return "Next: it belongs in luxor's monitoring-central tree as the Secret the\n" +
+			"s3-exporter reads (fleet/apps/luxor/monitoring/secrets.contract.yaml):\n" +
+			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_ACCESS_KEY_ID --write\n" +
+			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_SECRET_ACCESS_KEY --write"
 	case "sfi-b2-pruning-key":
 		return "Next: it belongs in luxor's host secrets as the env file sfi.pv-prune sources —\n" +
 			"  sops --config nixos/.sops.yaml set nixos/secrets/luxor.yaml \\\n" +

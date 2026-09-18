@@ -206,3 +206,20 @@ func TestOnlyTheMintingRoleNeedsTheMasterKey(t *testing.T) {
 		}
 	}
 }
+
+// The monitoring credential reads nothing: a leaked audit key shows what
+// backups exist, never their contents.
+func TestAuditRoleCannotReadOrWrite(t *testing.T) {
+	role := b2Roles["audit"]
+	for _, c := range role.caps {
+		if c != "listBuckets" && c != "listFiles" {
+			t.Errorf("audit holds %s — listing only", c)
+		}
+	}
+	if len(role.buckets) != 3 || role.prefix != "" {
+		t.Errorf("audit must see every host in every backup bucket: buckets %v, prefix %q", role.buckets, role.prefix)
+	}
+	if role.master {
+		t.Error("the minting key is enough")
+	}
+}
