@@ -64,6 +64,11 @@ rules:
   - apiGroups: [postgresql.cnpg.io]
     resources: [clusters, databases, backups, scheduledbackups, poolers, publications, subscriptions, imagecatalogs, clusterimagecatalogs]
     verbs: [get, list, watch]
+  # The barman-cloud plugin's CR (#48): where a cluster's archive goes,
+  # and its status is where a failing object store says why.
+  - apiGroups: [barmancloud.cnpg.io]
+    resources: [objectstores]
+    verbs: [get, list, watch]
   - apiGroups: [traefik.io]
     resources: [middlewares]
     verbs: [get, list, watch]
