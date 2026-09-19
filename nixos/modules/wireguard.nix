@@ -90,6 +90,25 @@ in
       ++ (lib.mapAttrsToList mkClientPeer clients);
   };
 
+  # A peer whose endpoint is a DNS NAME (a cloud fort's public FQDN in
+  # peers.json — sfi-prod's is one) makes `wg addconf` a DNS client at
+  # boot, and a name that does not resolve is a "configuration parsing
+  # error": wg-quick tears wg0 down and exits 1, and the unit does not
+  # retry. A fort that boots while DNS is not yet answering has no mesh,
+  # therefore no SSH and no rebuild, until a human reboots it again —
+  # the interim at 02:48 on 2026-09-19, mid router reboot (#350): k3s
+  # and gitea came up, every fort's gitea pin pointed at a mesh address
+  # that never answered. Retry until it works: DNS availability is the
+  # only thing the unit is waiting on, and nothing else on the host can
+  # stand in for the mesh.
+  systemd.services.wg-quick-wg0 = {
+    unitConfig.StartLimitIntervalSec = 0;
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = "15s";
+    };
+  };
+
   # If wg0 is down the run fails and the file freezes — covered by the
   # WireGuardMetricsStale alert on node_textfile_mtime_seconds rather than
   # retried into journal spam.
