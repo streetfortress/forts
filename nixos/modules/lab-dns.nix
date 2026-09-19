@@ -41,9 +41,9 @@ in
   options.sfi.lab-dns = {
     giteaAddress = lib.mkOption {
       type = lib.types.str;
-      # Hop one (#350): the interim. Merged and rolled while zenbook
-      # still serves — see the header for why the order matters.
-      default = "10.1.0.16";
+      # Hop two (#350): sfi-fort-zenbook. Merged and rolled while the
+      # interim still serves — see the header for why the order matters.
+      default = "10.1.0.4";
       description = "gitea.zen.lofi's mesh address — one constant, not per cluster; moves with gitea.";
     };
   };
