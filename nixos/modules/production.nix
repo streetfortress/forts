@@ -1,7 +1,7 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
 # Imported by every fort's hosts/<name>/default.nix (`fort scaffold` renders it
 # unconditionally — a fort is always this profile, #272; dotfiles.nix +
-# interactive.nix are for hand-managed hosts like zenbook, the profiles are
+# interactive.nix are for hand-managed lab hosts; the profiles are
 # mutually exclusive).
 #
 # Relative to the lab VM shape this changes:

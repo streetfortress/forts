@@ -16,10 +16,10 @@
 #     sops key names all follow; a fort declares intent and nothing else.
 #
 #   sfi.pv-backup.targets = [ … ]
-#     A hand-configured host. zenbook is neither profile: it is the lab's
-#     crown jewel (gitea's repo PVC and databasus' dumps) rather than a
-#     fort, and it alternates its two targets 12h apart. The list stays
-#     the primitive; `profile` is sugar that fills it.
+#     A hand-configured host that is neither profile — the pre-fort
+#     zenbook was one, naming its own two targets 12h apart. Every host
+#     in the fleet is a fort today, but the list stays the primitive;
+#     `profile` is sugar that fills it.
 #
 # THE PRUNE GAP, on purpose. A fort's B2 credential deliberately holds no
 # `deleteFiles` (docs/infra/backups.md: a compromised fort must not be
@@ -235,7 +235,7 @@ in
         Globs matched against PVC directory names. EMPTY MEANS EVERY PVC,
         which is the intended posture on a fort: opting in by name is how
         a new stateful workload ends up silently unprotected. Set it only
-        where the host's job is to back up specific volumes (zenbook).
+        where the host's job is to back up specific volumes.
         `exclude` applies either way.
       '';
     };
@@ -302,7 +302,7 @@ in
           };
           repository = lib.mkOption {
             type = lib.types.str;
-            example = "s3:https://s3.zen.lofi/sfi-pv-backups/zenbook";
+            example = "s3:http://10.1.0.5:30901/sfi-pv-backups/sfi-fort-zenbook";
             description = "restic S3 repository URL.";
           };
           environmentFile = lib.mkOption {

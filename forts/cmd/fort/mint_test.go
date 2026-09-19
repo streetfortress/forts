@@ -115,7 +115,7 @@ func TestMint(t *testing.T) {
 	// rules: the shared admin set + the host / cluster recipient, above the anchors
 	nixos := readFile(t, filepath.Join(tmp, "nixos/.sops.yaml"))
 	block := markerBlock(nixos, host)
-	if strings.Count(block, "- age1") != 4 || !strings.Contains(block, p.hostRecip) || !strings.Contains(block, "path_regex: secrets/"+host+"\\.yaml$") {
+	if strings.Count(block, "- age1") != len(sharedRecipients(original["nixos/.sops.yaml"]))+1 || !strings.Contains(block, p.hostRecip) || !strings.Contains(block, "path_regex: secrets/"+host+"\\.yaml$") {
 		t.Errorf("nixos rule:\n%s", block)
 	}
 	if strings.Index(nixos, "sops rule: "+host) > strings.Index(nixos, "path_regex: secrets/.*") {

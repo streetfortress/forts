@@ -3,9 +3,6 @@
 # wireguard/peers.json can import this. Requires the sops secret
 # `wireguard-private-key` (declared in the host's secrets module).
 #
-# Hosts that route the k8s LAN into the mesh (the bridge host) additionally
-# import ./wireguard-lan-gateway.nix.
-#
 # Mesh observability (#121): a root-side timer exports per-peer WireGuard
 # state (`wg show wg0 dump`) as node_exporter textfile metrics — the
 # deployer-safe replacement for `sudo wg show`, which no longer exists on

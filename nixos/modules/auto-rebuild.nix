@@ -278,7 +278,7 @@ in
     # gitea reached BY ADDRESS, bypassing the name. The name is pinned in
     # /etc/hosts (lab-dns.nix) and moves with gitea; a fort pinned to a
     # host that is gone — the interim never came up, or the flip has to
-    # be rolled back to zenbook — cannot fetch the config that would
+    # be rolled back to the previous host — cannot fetch the config that would
     # re-pin it, and without this verb the only way forward is the
     # provider console. The source is still authenticated: the deploy
     # key dials `git@<ip>:30022` with HostKeyAlias set to the pinned

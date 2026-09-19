@@ -24,10 +24,10 @@ import (
 // host dir with no manifest (a retired or renamed host's lingering config
 // — a warning, so a dismantle in flight does not go red on its residue).
 
-// orphanAllowlist: host dirs allowed to exist without a manifest. zenbook
-// is the physical gitea host — hand-managed, predates the manifests, and
-// deliberately not fort-managed until its flux adoption (Phase 3).
-var orphanAllowlist = map[string]bool{"zenbook": true}
+// orphanAllowlist: host dirs allowed to exist without a manifest. Empty
+// since zenbook — the hand-managed gitea laptop that predated the
+// manifests — was repaved as a fort (#338); every host has a manifest.
+var orphanAllowlist = map[string]bool{}
 
 // The shared layers every cluster reconciles; built once per run and
 // substitution-checked once per cluster (each carries its own vars).

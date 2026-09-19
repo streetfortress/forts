@@ -26,7 +26,6 @@ func TestFleetTree(t *testing.T) {
 	}
 
 	mk("nixos/hosts/zz")
-	mk("nixos/hosts/zenbook")
 	mk("fleet/apps/old")
 	orphans := orphanFindings(root, map[string]bool{"a": true})
 	if len(orphans) != 2 || orphans[0].dir != "nixos/hosts/zz" || orphans[1].dir != "fleet/apps/old" || orphans[0].level != "warning" {

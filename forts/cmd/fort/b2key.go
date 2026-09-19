@@ -185,7 +185,7 @@ var b2HostRoles = map[string]func(host string) b2Role{
 // pvRole is a host's restic credential. For a fort it is `fort mint`'s to
 // create and record — hostKeySpec builds mint's key from this same role,
 // so there is one definition — and this verb is for a host with no
-// manifest: zenbook today, any hand-managed mesh member later.
+// manifest — the pre-fort zenbook was one; none exist today.
 func pvRole(host string) b2Role {
 	return b2Role{
 		name:    b2KeyName(host),

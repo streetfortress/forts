@@ -29,7 +29,7 @@
 # BEFORE the old host goes down — a fort still pinned to a host that
 # is gone cannot fetch the config that would unpin it.
 #
-#   2026-09-13 → 10.1.0.6   zenbook
+#   2026-09-13 → 10.1.0.6   zenbook (the laptop, pre-fort; retired)
 #   hop one    → 10.1.0.16  sfi-fort-d54d5b3, the interim
 #   hop two    → 10.1.0.4   sfi-fort-zenbook
 { config, lib, ... }:
