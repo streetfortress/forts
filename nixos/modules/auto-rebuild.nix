@@ -273,9 +273,55 @@ in
     # blocks through eval+switch and the exit status reflects the unit's
     # result (fire-and-forget `start` reported nothing, which read as
     # success even when the unit failed).
+    #
+    # `--from <ip>` is the hatch under the hatch: pull and switch from a
+    # gitea reached BY ADDRESS, bypassing the name. The name is pinned in
+    # /etc/hosts (lab-dns.nix) and moves with gitea; a fort pinned to a
+    # host that is gone — the interim never came up, or the flip has to
+    # be rolled back to zenbook — cannot fetch the config that would
+    # re-pin it, and without this verb the only way forward is the
+    # provider console. The source is still authenticated: the deploy
+    # key dials `git@<ip>:30022` with HostKeyAlias set to the pinned
+    # known_hosts entry, so any address may be named but only the real
+    # gitea's host key passes (an alias is matched verbatim, brackets
+    # and port included — checked against gitea 2026-09-18). `--ref`
+    # takes a branch so a fix can be tried before it is on main; the
+    # next timer run converges back to main regardless.
     sfi.ops.commands.nixos-rebuild = {
-      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service";
+      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> [--ref <branch>] pulls from a gitea by address (the name is pinned and moves with gitea)";
       script = ''
+        from="" ref=main
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --from) from=$2; shift 2 ;;
+            --ref) ref=$2; shift 2 ;;
+            *) echo "usage: sfi-nixos-rebuild [--from <ip> [--ref <branch>]]" >&2; exit 2 ;;
+          esac
+        done
+        if [ -n "$from" ]; then
+          case "$from" in
+            *[!0-9.]*|"") echo "--from: want an IPv4 address, got '$from'" >&2; exit 2 ;;
+          esac
+          case "$ref" in
+            *[!A-Za-z0-9._/-]*|"") echo "--ref: want a branch name, got '$ref'" >&2; exit 2 ;;
+          esac
+          url="ssh://git@$from:30022/sfi/deployments"
+          echo "pulling $ref from $url (host key checked as [gitea.zen.lofi]:30022) and switching..."
+          export GIT_SSH_COMMAND="${lib.concatStringsSep " " [
+            "${pkgs.openssh}/bin/ssh"
+            "-i ${config.sops.secrets.flux-git-deploy-key.path}"
+            "-o UserKnownHostsFile=${knownHostsFile}"
+            "-o IdentitiesOnly=yes"
+            "-o HostKeyAlias=[gitea.zen.lofi]:30022"
+          ]}"
+          ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh \
+            --flake "git+$url?ref=$ref&dir=nixos#${config.networking.hostName}"
+          echo "switched from $from ($ref); the timer converges back to main from wherever gitea.zen.lofi now points"
+          exit 0
+        fi
+        if [ "$ref" != main ]; then
+          echo "--ref needs --from (the unit pulls main by name)" >&2; exit 2
+        fi
         marker=/var/lib/sfi-auto-rebuild/last-attempted-rev
         if [ -e "$marker" ]; then
           echo "cleared last-attempted marker ($(${pkgs.coreutils}/bin/cat "$marker")) — the gate will report 'none' and rebuild"
