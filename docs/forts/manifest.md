@@ -120,8 +120,8 @@ reachable (docs/infra/backups.md).
 
 ```toml
 [backups]
-profile = "production"   # luxor's rustfs AND B2
-profile = "lab"          # luxor's rustfs only
+profile = "production"   # luxor's rustfs-central AND B2
+profile = "lab"          # luxor's rustfs-central only
 profile = "none"         # nothing — a positive declaration, not an omission
 ```
 
