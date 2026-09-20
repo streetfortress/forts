@@ -43,10 +43,13 @@ let
   defaultTiers = {
     # luxor's rustfs-central, over the mesh NodePort. Short window: the local
     # tier is the operational-recovery copy, and its disk is the fleet's
-    # real constraint.
+    # real constraint. Production forts write here WEEKLY (pv-backup.nix's
+    # production profile — B2 carries their RPO), so the dailies only ever
+    # matter for lab forts, which are reproducible; three is enough to
+    # step back over a bad day. `--keep-last` stays the floor.
     rustfs = {
       endpoint = "http://10.1.0.5:30901";
-      keep = [ "--keep-last 3" "--keep-daily 7" "--keep-weekly 4" ];
+      keep = [ "--keep-last 3" "--keep-daily 3" "--keep-weekly 4" ];
       schedule = "Sun *-*-* 02:00:00";
     };
     # Offsite carries the tail.

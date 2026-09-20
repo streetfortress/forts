@@ -9,11 +9,14 @@
 #
 #   sfi.pv-backup.profile = "lab" | "production"
 #     A fort. The profile names a DESTINATION SET, not a target list —
-#     `lab` is luxor's rustfs alone (a lab fort is reproducible; it is
-#     not an original), `production` is luxor plus B2 (restic is the one
-#     layer that fans out natively, so a production fort's offsite copy
-#     does not depend on the lab being up). Endpoints, bucket and the
-#     sops key names all follow; a fort declares intent and nothing else.
+#     `lab` is luxor's rustfs-central alone, every 6 h (a lab fort is
+#     reproducible; it is not an original, and the local copy is its
+#     only one), `production` is B2 every 6 h — the RPO — plus a WEEKLY
+#     copy to rustfs-central for LAN-speed restore and the day B2 is
+#     unreachable (restic is the one layer that fans out natively, so a
+#     production fort's offsite copy does not depend on the lab being
+#     up). Endpoints, bucket and the sops key names all follow; a fort
+#     declares intent and nothing else.
 #
 #   sfi.pv-backup.targets = [ … ]
 #     A hand-configured host that is neither profile — the pre-fort
@@ -69,6 +72,17 @@ let
         name = "rustfs";
         repository = repo cfg.endpoints.rustfs;
         environmentFile = config.sops.secrets.restic-s3-env-rustfs.path;
+        # Weekly, not the 6-hourly default: B2 holds the RPO for a
+        # production fort, and this copy exists for restore at LAN
+        # speed and for a B2 outage — a week-old local snapshot serves
+        # both. Sunday 00:30, before pv-prune's rustfs tier (Sun 02:00)
+        # walks the repo and clear of the barman base-backup hours. It
+        # also halves the read load the two targets put on the PVCs.
+        timerConfig = {
+          OnCalendar = "Sun *-*-* 00:30:00";
+          Persistent = "true";
+          RandomizedDelaySec = toString cfg.randomizedDelaySec;
+        };
       }
       {
         name = "b2";
