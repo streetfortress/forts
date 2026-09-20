@@ -1,0 +1,22 @@
+# Redirect HTTP -> HTTPS for all hostnames — part of the gateway template
+# (every fort's edge carries it; staging/prod keep it inline in
+# gateway.yaml, here it is its own file so the template stays
+# new-files-only). cert-manager ACME challenge routes also attach to the
+# http listener with an exact path match, so they take precedence over
+# this catch-all.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-to-https
+  namespace: traefik
+spec:
+  parentRefs:
+    - name: homelab
+      namespace: traefik
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301

@@ -84,6 +84,7 @@ func check(args []string) error {
 	// traced with every manifest in hand (--all).
 	if *all {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
+		shared.findings = append(shared.findings, clusterMonitoringFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {

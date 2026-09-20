@@ -34,28 +34,19 @@ spec:
   enableSuperuserAccess: false
 
   # Continuous archiving from day one, so the fort is born on the
-  # physical-restore path. Cloud fort caveat on record: base backups
-  # transit the WAN tunnel to luxor's rustfs; pointing cloud forts at B2
-  # directly is the #47-adjacent follow-up if the nightly cost bites.
-  # serverName is versioned for the restore cycle: a repave that
-  # recovers FROM v1 archives as v2.
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://cnpg/cloud-fort
-      endpointURL: http://10.1.0.5:30900
-      serverName: sites-db-v1
-      s3Credentials:
-        accessKeyId:
-          name: sites-db-backup-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: sites-db-backup-credentials
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-    retentionPolicy: "7d"
+  # physical-restore path: base backups + WAL to B2 through the
+  # barman-cloud plugin — objectstore.yaml carries the destination and
+  # the fort's own key (the in-tree barmanObjectStore is deprecated and
+  # pointed every fort at luxor's rustfs until 2026-09-18). serverName
+  # is versioned for the restore cycle: a repave that recovers FROM v1
+  # archives as v2. No retentionPolicy: the fort's key cannot delete,
+  # the bucket's lifecycle rule is the retention (objectstore.yaml).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: b2
+        serverName: sites-db-v1
 
   monitoring:
     enablePodMonitor: true

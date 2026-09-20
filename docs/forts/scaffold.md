@@ -43,7 +43,26 @@ fleet/clusters/<host>/
 ● apps.yaml                                  → fleet/apps/<host>
 fleet/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
+fleet/apps/luxor/monitoring/
+● clusters/<host>.yaml                       dead man's switch (metrics, logs), edge Alertmanager datasource[, PVBackupNotConfigured]
+○ kustomization.yaml                         + clusters/<host>.yaml
 ```
+
+The last two are the one place scaffold reaches outside the host's own
+paths, and they are why nothing about a cluster lives outside a
+`<host>`-keyed file (#288): the central layer has to know each cluster
+by name — `absent(up{cluster="<host>"})` is the only expression that
+can fire when a cluster goes silent, its log analog the same, and its
+edge Alertmanager has to be a Grafana datasource for silences to be
+managed from one pane. Those used to be hand-edited hunks in shared
+files, and forts joined without them (the production fort had no dead
+man's switch until 2026-09-20). Now they are one file per cluster on the
+hub, rendered here, removed by [`dismantle`](dismantle.md), and required
+by `fort check --all` — a flux cluster with no file, or a file with no
+manifest, is an error. The kustomization line is a text-level append,
+idempotent, so a re-run reports `○ exists — kept (already listed)`.
+`PVBackupNotConfigured` is rendered only where the profile promises the
+leg (`production`).
 
 Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,

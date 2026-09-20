@@ -1,0 +1,33 @@
+# Where this cluster's barman archive goes: B2, sfi-db-physical-backups,
+# under the fort's own prefix (docs/infra/backups.md, "Buckets"). The
+# credential is sfi-db-physical-cloud-fort (`fort b2-key db-physical
+# cloud-fort --write`, then `fort seed cloud-fort sites-db --set`):
+# list/read/write on that one bucket and prefix, NO deleteFiles — which
+# is why there is deliberately no retentionPolicy on the Cluster. CNPG
+# enforces retention by deleting, this key cannot, and the bucket's
+# lifecycle rule (90 d upload→hide, 7 d hide→delete, set by `fort
+# b2-buckets`) is the retention instead. The fort's key can write its
+# own backups and erase nobody's, including its own.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: b2
+  namespace: sites-db
+spec:
+  configuration:
+    destinationPath: s3://sfi-db-physical-backups/cloud-fort
+    endpointURL: https://s3.us-west-004.backblazeb2.com
+    s3Credentials:
+      accessKeyId:
+        name: sites-db-backup-credentials
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: sites-db-backup-credentials
+        key: ACCESS_SECRET_KEY
+      region:
+        name: sites-db-backup-credentials
+        key: REGION
+    wal:
+      compression: gzip
+    data:
+      compression: gzip

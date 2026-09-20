@@ -3,13 +3,22 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - cluster.yaml
+{{- if .Archive }}
+  - objectstore.yaml
   - scheduled-backup.yaml
+{{- end }}
   - database-{{ .App }}.yaml
-  # Seeded from secrets.contract.yaml (secrets-backup carries luxor's
-  # rustfs credentials for the barman archive path; secrets-<app> each
-  # tenant's role password); listed-but-absent = the pre-merge
+{{- if .Archive }}
+  # Seeded from secrets.contract.yaml (secrets-backup carries the fort's
+  # own B2 key for the barman archive, objectstore.yaml; secrets-<app>
+  # each tenant's role password); listed-but-absent = the pre-merge
   # kustomize guard.
   - secrets-backup.sops.yaml
+{{- else }}
+  # Seeded from secrets.contract.yaml (secrets-<app>: each tenant's role
+  # password); listed-but-absent = the pre-merge kustomize guard. No
+  # secrets-backup: this fort's profile renders no archive (cluster.yaml).
+{{- end }}
   - secrets-{{ .App }}.sops.yaml
 {{ .SitesDBPatchesComment -}}
 patches:

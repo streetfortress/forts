@@ -16,18 +16,21 @@ fleet/apps/cloud-fort/   (chart 0.3.0)
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
 ● sites-db/
-  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to luxor's rustfs, roles via patches
+  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches
   ● database-sfi-website.yaml    Database CR
   ● kustomization.yaml           patches: role-sfi-website.yaml
   ● namespace.yaml               
+  ● objectstore.yaml             ObjectStore b2: s3://sfi-db-physical-backups/cloud-fort, the fort's own key
   ● role-sfi-website.yaml        JSON6902 add /spec/managed/roles/-
-  ● scheduled-backup.yaml        nightly base backup (stagger the hour by hand)
+  ● scheduled-backup.yaml        nightly base backup via the plugin (stagger the hour by hand)
   ◆ secrets-backup.sops.yaml     seeded
   ◆ secrets-sfi-website.sops.yaml seeded
-  ● secrets.contract.yaml        secrets-backup (luxor rustfs creds) + secrets-sfi-website
+  ● secrets.contract.yaml        secrets-backup (the fort's B2 db-physical key, external) + secrets-sfi-website
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed cloud-fort --write
 external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):
   RESEND_API_KEY           Resend → API keys (re_) (optional)
+  ACCESS_KEY_ID            sites-db: `fort b2-key db-physical cloud-fort --write`, then `fort seed cloud-fort sites-db --set ACCESS_KEY_ID --write`
+  ACCESS_SECRET_KEY        sites-db: the same mint; `fort seed cloud-fort sites-db --set ACCESS_SECRET_KEY --write`
 then: review, commit, PR — flux applies on merge.

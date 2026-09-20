@@ -111,6 +111,16 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 			p.removes = append(p.removes, rel)
 		}
 	}
+	// The cluster's monitoring on the hub (#288): scaffold's file and its
+	// line in the hub's kustomization — a retired cluster's dead man's
+	// switch would otherwise page forever.
+	if rel := clusterMonitoringPath(host); exists(root, rel) {
+		p.removes = append(p.removes, rel)
+		p.edits = append(p.edits, dEdit{clusterMonitoringKustomization, "- clusters/" + host + ".yaml", func(s string) (string, error) {
+			s, _ = removeLinesContaining(s, "clusters/"+host+".yaml")
+			return s, nil
+		}})
+	}
 
 	// 4. wireguard peer
 	p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
@@ -410,7 +420,7 @@ func residueTag(rel string) string {
 	case strings.HasSuffix(rel, ".md"):
 		return "   (doc)"
 	case strings.HasPrefix(rel, "fleet/apps/luxor/monitoring/"):
-		return "   (central monitoring — per-cluster rule/datasource/dashboard)"
+		return "   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)"
 	}
 	return ""
 }

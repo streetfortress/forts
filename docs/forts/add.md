@@ -44,15 +44,16 @@ fleet/apps/sfi-x/   (chart 0.1.9)
   ● redirect-https.yaml          catch-all http→https 301
 ○ kustomization.yaml             + gateway, sites-db, valkey, symbology
 ● sites-db/
-  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to luxor's rustfs, roles via patches
+  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches
   ● database-symbology.yaml      Database CR (extensions: vector)
   ● kustomization.yaml           patches: role-symbology.yaml
   ● namespace.yaml
+  ● objectstore.yaml             ObjectStore b2: s3://sfi-db-physical-backups/sfi-x, the fort's own key
   ● role-symbology.yaml          JSON6902 add /spec/managed/roles/-
-  ● scheduled-backup.yaml        nightly base backup (stagger the hour by hand)
+  ● scheduled-backup.yaml        nightly base backup via the plugin (stagger the hour by hand)
   ◆ secrets-backup.sops.yaml     seeded
   ◆ secrets-symbology.sops.yaml  seeded
-  ● secrets.contract.yaml        secrets-backup (luxor rustfs creds) + secrets-symbology
+  ● secrets.contract.yaml        secrets-backup (the fort's B2 db-physical key, external) + secrets-symbology
 ● symbology/
   ● kustomization.yaml
   ● monitoring.yaml              PodMonitor symbology-worker (rules are policy: by hand)
@@ -111,7 +112,17 @@ can never reach `step-ca.lofi` and a `Ready=False` issuer wedged web3's
 infrastructure health checks for hours.
 
 **Providers.** Rendered on first need from `templates/add/{postgres,valkey}`,
-then registered per tenant: a `Database` CR, a JSON6902 patch adding the
+then registered per tenant. The postgres instance's archive follows the
+manifest's `[backups] profile`: `production` renders the barman-cloud
+plugin with an `ObjectStore` on B2 (`s3://sfi-db-physical-backups/<fort>`),
+the nightly `ScheduledBackup`, and a `secrets-backup` contract entry whose
+two keys are `external` — the fort's own `sfi-db-physical-<fort>` key,
+minted by `fort b2-key db-physical <fort> --write` and set with
+`fort seed <fort> sites-db --set`. `lab` (and `none`) render **no archive**
+and say so in `cluster.yaml`: no lab fort ships barman anywhere, and a
+cluster silently born archiving into nothing is the failure the backups
+design refuses ([`docs/infra/backups.md`](../infra/backups.md)). Tenants
+are then registered the same way on either: a `Database` CR, a JSON6902 patch adding the
 role to `spec.managed.roles` (kept an empty list in the template so the
 patch has a target), and the tenant's credentials Secret in the
 provider's own contract; for valkey an ACL user patch and a key in
@@ -160,6 +171,8 @@ next: seed the ◆ files (dependency order is derived):
   fort seed sfi-x --write
 external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):
   STRIPE_SECRET_KEY   Stripe → API keys
+  ACCESS_KEY_ID       sites-db: `fort b2-key db-physical sfi-x --write`, then `fort seed sfi-x sites-db --set ACCESS_KEY_ID --write`
+  ACCESS_SECRET_KEY   sites-db: the same mint; `fort seed sfi-x sites-db --set ACCESS_SECRET_KEY --write`
 then: review, commit, PR — flux applies on merge.
 ```
 
@@ -171,6 +184,10 @@ then: review, commit, PR — flux applies on merge.
   node shape, `fullnameOverride` where the chart's `http.service` assumes
   it, the app's public URL (`BETTER_AUTH_URL`, `PUBLIC_*`) as `env:` in
   values — never in the Secret.
+- **The archive key** on a production fort is the one external `add`
+  lists that no chart asked for: mint it, seed it, and only then merge —
+  the `ObjectStore` with an empty Secret is a cluster that archives
+  nothing while its manifest says `production`.
 - **A fort born from a backup** flips the greenfield `sites-db` cluster
   to `bootstrap.recovery` by hand before the first apply; initdb and
   recovery run at creation only, so it is a repave, never a live edit.

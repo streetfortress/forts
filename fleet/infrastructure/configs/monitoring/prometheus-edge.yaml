@@ -69,6 +69,16 @@ spec:
   externalLabels:
     cluster: ${CLUSTER_NAME}
 
+  # Explicit, and the same as central's (#379): nobody is what the image
+  # already runs as and what the TSDB on local-path is owned by, so this
+  # changes nothing today — it pins the uid so an image change cannot
+  # strand the data. No sidecar here, so no hard-link problem to fix.
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+
   # Central Prometheus on luxor (wireguard/peers.json), NodePort 30990 —
   # fleet/apps/luxor/monitoring/mesh-services.yaml. Mesh IP, not luxor.lofi:
   # the name is a dual A record and only survives here because Go's dialer

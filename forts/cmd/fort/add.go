@@ -101,18 +101,24 @@ type plan struct {
 type view struct {
 	Fort, App, Hostname, Zone, Issuer, SecretName string
 	Lab                                           bool
-	ChartURL, ChartRepo, Version, PR              string
-	HTTP                                          *contract.HTTP
-	Metrics                                       *contract.Metrics
-	Component                                     string
-	SelectorLines                                 []string
-	Postgres                                      *pgTenant
-	Valkey                                        *vkTenant
-	ValuesYAML                                    string
-	Vars                                          []ctrVar
-	Keys                                          []NamedSpec
-	GatewayPatchesComment, ValkeyPatchesComment   string
-	SitesDBPatchesComment, TenantContractEntry    string
+	// Archive: the sites-db instance ships base backups + WAL to B2 —
+	// the production profile. Lab and none render no archive at all,
+	// and say so in cluster.yaml (docs/infra/backups.md: no lab fort
+	// archives physically anywhere; "none, documented" is honest).
+	Archive                                     bool
+	BackupProfile                               string
+	ChartURL, ChartRepo, Version, PR            string
+	HTTP                                        *contract.HTTP
+	Metrics                                     *contract.Metrics
+	Component                                   string
+	SelectorLines                               []string
+	Postgres                                    *pgTenant
+	Valkey                                      *vkTenant
+	ValuesYAML                                  string
+	Vars                                        []ctrVar
+	Keys                                        []NamedSpec
+	GatewayPatchesComment, ValkeyPatchesComment string
+	SitesDBPatchesComment, TenantContractEntry  string
 }
 
 type pgTenant struct {
@@ -181,10 +187,12 @@ func planAdd(o addOpts) (*plan, error) {
 	repoPath := strings.SplitN(strings.TrimPrefix(o.ref, "oci://"), ":", 2)[0]
 	v := view{
 		Fort: o.fort, App: app, SecretName: app + "-env",
-		Lab:       !entry.Cloud(),
-		ChartURL:  "oci://" + repoPath,
-		ChartRepo: strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
-		Version:   resolved, PR: o.followPR,
+		Lab:           !entry.Cloud(),
+		Archive:       entry.Backups.Profile == "production",
+		BackupProfile: entry.Backups.Profile,
+		ChartURL:      "oci://" + repoPath,
+		ChartRepo:     strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
+		Version:       resolved, PR: o.followPR,
 		HTTP: c.HTTP, Metrics: c.Metrics,
 		GatewayPatchesComment: gatewayPatchesComment,
 		ValkeyPatchesComment:  valkeyPatchesComment,
@@ -252,6 +260,10 @@ func planAdd(o addOpts) (*plan, error) {
 	values := map[string]any{c.Secret.Values: v.SecretName}
 	outputs := map[string]map[string]string{} // "type.handle" → non-secret outputs
 	passwordVar := map[string]ctrVar{}        // "type.handle" → var
+	// The sites-db archive key, when this add creates the instance on a
+	// production fort: listed with the chart's externals so the report
+	// says what to mint and how to set it.
+	var dbExternals []contract.Key
 	for _, r := range c.Instances() {
 		if o.without[r.Type] {
 			if !r.Instance.Optional {
@@ -281,11 +293,26 @@ func planAdd(o addOpts) (*plan, error) {
 				// this tenant already registered in its kustomization
 				// and contract (the same shape a later append produces).
 				p.add(action{path: filepath.Join(dbDir, "namespace.yaml"), mark: '●', content: static("postgres/namespace.yaml")})
-				p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, barman archive to luxor's rustfs, roles via patches", content: render("postgres/cluster.yaml.gotpl")})
-				p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
-				p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
-				p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-backup (luxor rustfs creds) + secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
-				p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
+				if v.Archive {
+					// The archive is the profile's: production ships to
+					// B2 through the barman-cloud plugin with the fort's
+					// own key, which the report lists as the external it
+					// is (mint, then seed --set). Lab renders none.
+					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "objectstore.yaml"), mark: '●', note: "ObjectStore b2: s3://sfi-db-physical-backups/" + o.fort + ", the fort's own key", content: render("postgres/objectstore.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup via the plugin (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
+					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-backup (the fort's B2 db-physical key, external) + secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
+					dbExternals = []contract.Key{
+						{Name: "ACCESS_KEY_ID", External: "sites-db: `fort b2-key db-physical " + o.fort + " --write`, then `fort seed " + o.fort + " sites-db --set ACCESS_KEY_ID --write`"},
+						{Name: "ACCESS_SECRET_KEY", External: "sites-db: the same mint; `fort seed " + o.fort + " sites-db --set ACCESS_SECRET_KEY --write`"},
+					}
+				} else {
+					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, NO archive (profile " + v.BackupProfile + "), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
+				}
 				tenant()
 				rootAdds = append(rootAdds, "sites-db")
 			case exists(o.root, filepath.Join(dbDir, "database-"+app+".yaml")):
@@ -367,7 +394,7 @@ func planAdd(o addOpts) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	v.Vars, v.Keys, p.externals = vars, keys, externals
+	v.Vars, v.Keys, p.externals = vars, keys, append(externals, dbExternals...)
 	sort.Slice(v.Vars, func(i, j int) bool { return v.Vars[i].Name < v.Vars[j].Name })
 
 	// --- release values

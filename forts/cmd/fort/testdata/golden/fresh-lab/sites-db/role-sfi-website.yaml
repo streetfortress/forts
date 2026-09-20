@@ -1,0 +1,11 @@
+# sfi-website's login role on the shared sites-db cluster — appended to
+# managed.roles by the patch entry in kustomization.yaml; the password
+# is sites-db-sfi-website-credentials (secrets-sfi-website.sops.yaml).
+- op: add
+  path: /spec/managed/roles/-
+  value:
+    name: sfi-website
+    ensure: present
+    login: true
+    passwordSecret:
+      name: sites-db-sfi-website-credentials

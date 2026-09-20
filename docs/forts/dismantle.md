@@ -20,13 +20,15 @@ dismantle sfi-x   (cloud: linode)
 ✗ nixos/hosts/sfi-x
 ✗ nixos/secrets/sfi-x.yaml
 ✗ provisioning/forts/sfi-x.toml
+✗ fleet/apps/luxor/monitoring/clusters/sfi-x.yaml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
 ○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared fleet/infrastructure rule
 ◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
+○ fleet/apps/luxor/monitoring/kustomization.yaml   - clusters/sfi-x.yaml
 ○ wireguard/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
 ! residue — 3 file(s) still mention sfi-x; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):
     README.md: 2 mention(s)   (doc)
-    fleet/apps/luxor/monitoring/rules/sfi-x.yaml   (central monitoring — per-cluster rule/datasource/dashboard)
+    fleet/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
     forts/cmd/fort/testdata/forts/sfi-x/…   (CLI test fixture / golden — keep)
 · pulumi stack `sfi-x` still exists — untouched by design; `fort destroy sfi-x` after this merges. `just iac-drift` is red for it in between, which is the correct signal.
 · the gitea deploy key `flux-sfi-x` stays registered until fort destroy revokes it.
@@ -43,8 +45,12 @@ Two things deserve the explanation:
   retired host loses access in the same PR.
 - **The residue is a report, not an action.** Everything outside the
   generated surface that still names the host is listed with a triage
-  hint: docs and CLI fixtures are usually kept (history, goldens), the
-  central monitoring's per-cluster rule or dashboard usually goes.
+  hint: docs and CLI fixtures are usually kept (history, goldens); the
+  cluster's own file on the hub (`clusters/<host>.yaml`, its dead man's
+  switch and datasource) is part of the generated surface and goes with
+  the plan, so anything else under central monitoring that names the
+  host is hand-written — an s3-exporter target, a dashboard — and
+  usually goes too.
   Cross-fort `sops:` refs *into* this fort are called out separately —
   those contracts lose their source and `fort check` will fail them, so
   re-point them in the same PR.

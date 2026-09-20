@@ -43,13 +43,21 @@ type hostView struct {
 	// by MAC when the manifest names one (#287).
 	Baremetal bool
 	MAC       string
+	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
+	// is reached by cluster DNS rather than over the mesh.
+	Hub bool
 }
 
-// scaffoldFile is one rendered file: repo-relative path + content.
+// scaffoldFile is one rendered file: repo-relative path + content — or,
+// when edit is set, an append to a file that already exists (the hub's
+// monitoring kustomization gaining the cluster's line). Appends are
+// text-level so comments survive, and idempotent: a line already there
+// is kept, never doubled.
 type scaffoldFile struct {
 	path    string
 	content []byte
 	note    string
+	edit    func(string) (string, error)
 }
 
 // scaffold renders a host's generated surface from its manifest:
@@ -92,7 +100,25 @@ func scaffold(args []string) error {
 	written := 0
 	for _, f := range files {
 		mark, status := '●', f.note
-		if exists(root, f.path) {
+		if f.edit != nil {
+			mark = '○'
+			raw, err := os.ReadFile(filepath.Join(root, f.path))
+			if err != nil {
+				return err
+			}
+			out, err := f.edit(string(raw))
+			if err != nil {
+				return fmt.Errorf("%s: %w", f.path, err)
+			}
+			if out == string(raw) {
+				status = "exists — kept (already listed)"
+			} else if write {
+				if err := os.WriteFile(filepath.Join(root, f.path), []byte(out), 0o644); err != nil {
+					return err
+				}
+				written++
+			}
+		} else if exists(root, f.path) {
 			mark, status = '○', "exists — kept (scaffolding never overwrites)"
 		} else if write {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.path)), 0o755); err != nil {
@@ -144,6 +170,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		ClusterInit:  true,
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
+		Hub:          host == hubHost,
 	}
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile
@@ -226,8 +253,29 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p.tpl, err)
 		}
-		out = append(out, scaffoldFile{p.path, b, p.note})
+		out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
 	}
+	// The cluster's monitoring on the hub (#288): everything the central
+	// layer knows about this one cluster, in one file keyed by its name,
+	// plus the line that makes flux apply it.
+	b, err := render("cluster-monitoring.yaml.gotpl")
+	if err != nil {
+		return nil, fmt.Errorf("cluster-monitoring.yaml.gotpl: %w", err)
+	}
+	note := "dead man's switch (metrics, logs), edge Alertmanager datasource"
+	if view.BackupProfile == "production" {
+		note += ", PVBackupNotConfigured"
+	}
+	item := "clusters/" + host + ".yaml"
+	out = append(out,
+		scaffoldFile{path: clusterMonitoringPath(host), content: b, note: note},
+		scaffoldFile{path: clusterMonitoringKustomization, note: "+ " + item, edit: func(s string) (string, error) {
+			if strings.Contains(s, item) {
+				return s, nil
+			}
+			return appendListItem(s, "resources", item)
+		}},
+	)
 	return out, nil
 }
 

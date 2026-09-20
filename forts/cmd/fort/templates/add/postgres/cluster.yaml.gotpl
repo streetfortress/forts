@@ -33,29 +33,36 @@ spec:
   # console login.
   enableSuperuserAccess: false
 
+{{- if .Archive }}
+
   # Continuous archiving from day one, so the fort is born on the
-  # physical-restore path. Cloud fort caveat on record: base backups
-  # transit the WAN tunnel to luxor's rustfs; pointing cloud forts at B2
-  # directly is the #47-adjacent follow-up if the nightly cost bites.
-  # serverName is versioned for the restore cycle: a repave that
-  # recovers FROM v1 archives as v2.
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://cnpg/{{ .Fort }}
-      endpointURL: http://10.1.0.5:30900
-      serverName: sites-db-v1
-      s3Credentials:
-        accessKeyId:
-          name: sites-db-backup-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: sites-db-backup-credentials
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-    retentionPolicy: "7d"
+  # physical-restore path: base backups + WAL to B2 through the
+  # barman-cloud plugin — objectstore.yaml carries the destination and
+  # the fort's own key (the in-tree barmanObjectStore is deprecated and
+  # pointed every fort at luxor's rustfs until 2026-09-18). serverName
+  # is versioned for the restore cycle: a repave that recovers FROM v1
+  # archives as v2. No retentionPolicy: the fort's key cannot delete,
+  # the bucket's lifecycle rule is the retention (objectstore.yaml).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: b2
+        serverName: sites-db-v1
+{{- else }}
+
+  # NO ARCHIVE — the manifest's [backups] profile is "{{ .BackupProfile }}".
+  # A lab fort's data is reproducible (seeds, imports; docs/infra/
+  # backups.md) and no lab fort ships barman anywhere today, so this is
+  # a declaration, not an oversight: no WAL archive, no base backups, a
+  # repave is a re-seed. When that stops being true, set the profile to
+  # production and lay the archive down the way sfi-prod-439bf72 has it:
+  # objectstore.yaml, a plugins: block here (barman-cloud.cloudnative-pg.io,
+  # barmanObjectName b2, serverName sites-db-v1), scheduled-backup.yaml
+  # with method: plugin, and the secrets-backup entry in
+  # secrets.contract.yaml — key from `fort b2-key db-physical {{ .Fort }}
+  # --write`.
+{{- end }}
 
   monitoring:
     enablePodMonitor: true

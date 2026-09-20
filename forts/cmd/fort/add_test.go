@@ -246,11 +246,23 @@ func yamlPath(t *testing.T, file, path string) any {
 // UPDATE_GOLDEN=1 rewrites it (then review the diff like any other
 // generated code).
 func TestAddFreshCloudFort(t *testing.T) {
+	// testdata manifest: linode, dns zone example.cloud, profile production
+	testAddFresh(t, "cloud-fort", "testdata/golden/fresh-cloud")
+}
+
+// The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
+// a sites-db born with NO archive (forts#5): no ObjectStore, no
+// ScheduledBackup, no secrets-backup, and cluster.yaml says why.
+func TestAddFreshLabFort(t *testing.T) {
+	testAddFresh(t, "lab-fort", "testdata/golden/fresh-lab")
+}
+
+func testAddFresh(t *testing.T, fort, golden string) {
+	t.Helper()
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	const fort = "cloud-fort" // testdata manifest: linode, dns zone example.cloud
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
 	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
@@ -283,7 +295,6 @@ func TestAddFreshCloudFort(t *testing.T) {
 	})
 	got["REPORT.txt"] = report.String()
 
-	golden := "testdata/golden/fresh-cloud"
 	if os.Getenv("UPDATE_GOLDEN") != "" {
 		os.RemoveAll(golden)
 		for rel, content := range got {

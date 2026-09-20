@@ -28,10 +28,35 @@ func TestRenderScaffold(t *testing.T) {
 
 	cloud := byPath(render(t, "cloud-fort", hosts["cloud-fort"]))
 	lab := byPath(render(t, "lab-fort", hosts["lab-fort"]))
+	// nix host dir (2) + fleet/clusters (fleet) + the apps root + the
+	// cluster's monitoring on the hub and the hub kustomization append.
 	for _, m := range []map[string]string{cloud, lab} {
-		if len(m) != 2+len(fleet)+1 {
-			t.Errorf("want %d files, got %d: %v", 2+len(fleet)+1, len(m), keys(m))
+		if len(m) != 2+len(fleet)+1+2 {
+			t.Errorf("want %d files, got %d: %v", 2+len(fleet)+1+2, len(m), keys(m))
 		}
+	}
+	// The per-cluster file: the dead man's switch on both, the expected
+	// backup leg only where the profile promises one, and the edge
+	// Alertmanager over the mesh (the hub's own is cluster DNS).
+	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
+		got := m[clusterMonitoringPath(name)]
+		for _, s := range []string{`absent(up{cluster="` + name + `"})`, `absent_over_time({job="fluent-bit", cluster="` + name + `"}[15m])`, "uid: am-edge-" + name, "loki_rule:", "grafana_datasource:"} {
+			if !strings.Contains(got, s) {
+				t.Errorf("%s monitoring lacks %q:\n%s", name, s, got)
+			}
+		}
+		if _, ok := m[clusterMonitoringKustomization]; !ok {
+			t.Errorf("%s: no hub kustomization append", name)
+		}
+	}
+	if !strings.Contains(cloud[clusterMonitoringPath("cloud-fort")], "PVBackupNotConfigured") {
+		t.Errorf("production profile must render PVBackupNotConfigured")
+	}
+	if strings.Contains(lab[clusterMonitoringPath("lab-fort")], "PVBackupNotConfigured") {
+		t.Errorf("lab profile must not render PVBackupNotConfigured")
+	}
+	if !strings.Contains(cloud[clusterMonitoringPath("cloud-fort")], "url: http://10.1.0.98:30993") {
+		t.Errorf("a fort's edge Alertmanager is reached over the mesh")
 	}
 	for _, f := range want {
 		if _, ok := cloud[filepath.Join("nixos/hosts/cloud-fort", f)]; !ok {
@@ -163,14 +188,14 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 		t.Fatal(err, problems)
 	}
 	for name, h := range hosts {
-		// luxor was bootstrapped by hand and carries a bespoke apps layer
-		// (databasus-configs) and pre-module comments — the exception its
-		// manifest's header records, not a template drift.
-		if name == "luxor" {
-			continue
-		}
 		for _, f := range render(t, name, h) {
-			if !strings.HasPrefix(f.path, "fleet/clusters/") {
+			// The cluster's monitoring on the hub is rendered for every
+			// flux cluster, luxor's own included; fleet/clusters/luxor
+			// was bootstrapped by hand and carries a bespoke apps layer
+			// (databasus-configs) and pre-module comments — the exception
+			// its manifest's header records, not a template drift.
+			isMon := strings.HasPrefix(f.path, clusterMonitoringDir+"/")
+			if !isMon && (name == "luxor" || !strings.HasPrefix(f.path, "fleet/clusters/")) {
 				continue
 			}
 			if got := readFile(t, filepath.Join(repo, f.path)); got != string(f.content) {
