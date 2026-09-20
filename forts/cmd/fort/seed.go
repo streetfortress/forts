@@ -33,7 +33,7 @@ import (
 // value is ever printed.
 func seed(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]")
+		return fmt.Errorf("usage: fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--write]")
 	}
 	o := seedOpts{fort: args[0]}
 	var dirs []string
@@ -43,7 +43,7 @@ func seed(args []string) error {
 		rest = rest[1:]
 	}
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
-	fs.StringVar(&o.setKey, "set", "", "set this key from stdin (an external key, or a deliberate replace) — needs exactly one <dir>")
+	fs.StringVar(&o.setKey, "set", "", "set this key from stdin (an external key, or a deliberate replace) — needs exactly one <dir>; FILE/KEY when two Secrets in it share the key name")
 	fs.StringVar(&o.chartDir, "chart-dir", "", "read the chart's contract from a local dir instead of pulling (tests, chart authors)")
 	fs.BoolVar(&o.write, "write", false, "seed (default: print the plan)")
 	if err := fs.Parse(rest); err != nil {
@@ -63,6 +63,7 @@ func seed(args []string) error {
 		return err
 	}
 	o.root, o.dirs, o.tool = root, dirs, sopsCLI{root: root}
+	o.setFile, o.setKey = splitSetArg(o.setKey)
 	if o.setKey != "" && len(dirs) != 1 {
 		return fmt.Errorf("--set wants exactly one <dir>")
 	}
@@ -74,7 +75,7 @@ func seed(args []string) error {
 		return err
 	}
 	if o.setKey != "" && o.write {
-		if o.setValue, err = readSetValue(o.setKey, setTarget(plans)); err != nil {
+		if o.setValue, err = readSetValue(o.setArg(), setTarget(plans)); err != nil {
 			return err
 		}
 	}
@@ -96,6 +97,7 @@ type seedOpts struct {
 	root, fort, chartDir string
 	dirs                 []string // repo-relative app dirs; empty = every contract dir of the fort
 	setKey, setValue     string
+	setFile              string // --set FILE/KEY: the one Secret file the key is set in
 	// setValue is filled after planning (see seed), and only for --write:
 	// a dry run reports what --set would touch without asking for it.
 	write  bool
@@ -176,7 +178,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 				}
 			}
 			for _, k := range sf.Keys {
-				if o.setKey == k.Name {
+				if o.setKey == k.Name && (o.setFile == "" || o.setFile == sf.File) {
 					kk := k
 					f.set = &kk
 					continue
@@ -194,16 +196,25 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 			p.files = append(p.files, f)
 		}
 		if o.setKey != "" {
-			claimed := false
-			var known []string
+			var claimed, known []string
 			for _, f := range p.files {
-				claimed = claimed || f.set != nil
+				if f.set != nil {
+					claimed = append(claimed, f.sf.File)
+				}
 				for _, k := range f.sf.Keys {
 					known = append(known, f.sf.File+"/"+k.Name)
 				}
 			}
-			if !claimed {
-				return nil, fmt.Errorf("--set %s: not a key of any Secret in %s (keys: %s)", o.setKey, d, strings.Join(known, ", "))
+			if len(claimed) == 0 {
+				return nil, fmt.Errorf("--set %s: not a key of any Secret in %s (keys: %s)", o.setArg(), d, strings.Join(known, ", "))
+			}
+			// One value, one file. Two Secrets in a dir may well share a
+			// key name (a Storage CR's access-key/secret-key per host —
+			// #375); a bare KEY would then be set in every one of them,
+			// and the prompt names only the first. Refuse and ask for
+			// the qualified form, the same file/key a sops ref spells.
+			if len(claimed) > 1 {
+				return nil, fmt.Errorf("--set %s: a key of %d Secrets in %s (%s) — say which: --set %s/%s", o.setKey, len(claimed), d, strings.Join(claimed, ", "), claimed[0], o.setKey)
 			}
 		}
 		plans = append(plans, p)
@@ -568,7 +579,7 @@ func (p *seedPlan) execute(o seedOpts) error {
 		full := filepath.Join(o.root, f.path)
 		if f.set != nil {
 			if !f.exists {
-				return fmt.Errorf("--set %s: %s does not exist yet — seed it first", o.setKey, f.path)
+				return fmt.Errorf("--set %s: %s does not exist yet — seed it first", o.setArg(), f.path)
 			}
 			if err := o.tool.Set(full, f.set.Name, o.setValue); err != nil {
 				return err
@@ -789,6 +800,24 @@ func names(specs []NamedSpec) []string {
 		out = append(out, s.Name)
 	}
 	return out
+}
+
+// splitSetArg reads --set's argument: KEY, or FILE/KEY naming the one
+// Secret file of the dir the key is set in — the file/key pair a sops
+// ref in a contract spells, so the two read alike.
+func splitSetArg(arg string) (file, key string) {
+	if i := strings.LastIndex(arg, "/"); i >= 0 {
+		return arg[:i], arg[i+1:]
+	}
+	return "", arg
+}
+
+// setArg is --set's argument as the operator typed it, for messages.
+func (o seedOpts) setArg() string {
+	if o.setFile != "" {
+		return o.setFile + "/" + o.setKey
+	}
+	return o.setKey
 }
 
 // setTarget names the file a --set will write, for the prompt.

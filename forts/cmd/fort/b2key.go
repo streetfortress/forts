@@ -391,10 +391,14 @@ func (r b2Role) followUp() string {
 			"pasted. It belongs in no host's nixos secrets: the host never uses it."
 	}
 	if r.kind == "db-logical" {
-		return "Next: paste it into the databasus S3 storage for " + r.host + " — endpoint from\n" +
-			"docs/infra/backups.md, bucket " + b2LogicalBucket + ", prefix " + r.prefix + " — and keep a\n" +
-			"copy in the password manager. A UI-configured databasus keeps it in its own\n" +
-			"database, so it belongs in no host's sops file."
+		f := "secrets-b2-" + r.host + ".sops.yaml"
+		return "Next: it belongs in luxor's databasus-central tree, as the Secret the\n" +
+			"host's Storage CR references (fleet/apps/luxor/databasus-central/\n" +
+			"secrets.contract.yaml) — seeded, not pasted into a UI. That file must\n" +
+			"exist first (`fort seed luxor fleet/apps/luxor/databasus-central --write`), then:\n" +
+			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/access-key --write\n" +
+			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/secret-key --write\n" +
+			"FILE/KEY because every host's Secret there carries the same two key names."
 	}
 	if r.kind == "restore" {
 		return "Next: it is an OPERATIONAL INPUT like the minting key — password manager,\n" +

@@ -1,7 +1,7 @@
 # fort seed — the sops Secrets, from contracts
 
 ```
-fort seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]
+fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--write]
 ```
 
 `seed` produces the sops-encrypted Kubernetes Secrets a fort's workloads
@@ -62,7 +62,13 @@ dry run — nothing seeded (seed --write).
   before anything is pasted (the usual cause is a checkout whose contract
   does not carry the key yet). Without `--write` it only reports what
   `--set` would touch and asks for nothing. For an `external` key, or a
-  deliberate replacement of any other key.
+  deliberate replacement of any other key. One value lands in one file:
+  when two Secrets of the dir share the key name (databasus-central's
+  per-host `access-key`/`secret-key`), a bare `KEY` is refused and
+  **`--set FILE/KEY`** names the file — `--set
+  secrets-b2-sfi-fort-zenbook.sops.yaml/access-key`, the same file/key a
+  `sops:` ref in a contract spells. The file must already exist (a plain
+  `--write` creates it with its external keys absent).
 - Decrypted material flows through memory only; the report shows key
   names, never values.
 

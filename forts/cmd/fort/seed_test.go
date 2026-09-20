@@ -354,6 +354,36 @@ func TestSeedEdgeCases(t *testing.T) {
 		t.Errorf("--set typo: want an error, got %v", err)
 	}
 
+	// --set with a key two Secrets of the dir share → refused, naming
+	// the qualified form; FILE/KEY then lands in that one file only
+	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("fleet/apps", fort, "sites-db")}, setKey: "password", setValue: "x"}
+	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "--set secrets-a.sops.yaml/password") {
+		t.Errorf("--set shared key: want the ambiguity error, got %v", err)
+	}
+	o.setFile = "secrets-b.sops.yaml"
+	plans, err = planSeed(o)
+	if err != nil {
+		t.Fatalf("--set FILE/KEY: %v", err)
+	}
+	var targets []string
+	for _, f := range plans[0].files {
+		if f.set != nil {
+			targets = append(targets, f.sf.File)
+		}
+	}
+	if len(targets) != 1 || targets[0] != "secrets-b.sops.yaml" {
+		t.Errorf("--set FILE/KEY: want only secrets-b.sops.yaml targeted, got %v", targets)
+	}
+	o.setFile = "secrets-c.sops.yaml"
+	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "--set secrets-c.sops.yaml/password: not a key") {
+		t.Errorf("--set FILE/KEY with a wrong file: want a not-a-key error, got %v", err)
+	}
+	for _, c := range []struct{ arg, file, key string }{{"KEY", "", "KEY"}, {"a.sops.yaml/KEY", "a.sops.yaml", "KEY"}, {"secret.key", "", "secret.key"}} {
+		if f, k := splitSetArg(c.arg); f != c.file || k != c.key {
+			t.Errorf("splitSetArg(%q) = %q, %q; want %q, %q", c.arg, f, k, c.file, c.key)
+		}
+	}
+
 	// an explicitly named dir with nothing to seed → error
 	write("gateway/kustomization.yaml", "resources: []\n")
 	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"gateway"}} // bare name = fleet/apps/<fort>/gateway
