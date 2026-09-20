@@ -184,8 +184,10 @@ var b2HostRoles = map[string]func(host string) b2Role{
 
 // pvRole is a host's restic credential. For a fort it is `fort mint`'s to
 // create and record — hostKeySpec builds mint's key from this same role,
-// so there is one definition — and this verb is for a host with no
-// manifest — the pre-fort zenbook was one; none exist today.
+// so there is one definition — and this verb is for a host mint does
+// not mint for: one with no manifest (the pre-fort zenbook was one; none
+// exist today) or a manifest with [backups] profile = "none" (luxor,
+// whose targets are hand-configured).
 func pvRole(host string) b2Role {
 	return b2Role{
 		name:    b2KeyName(host),
@@ -199,7 +201,8 @@ func pvRole(host string) b2Role {
 			"    deleteFiles: pruning is luxor's job, under the one key that deletes. For a\n" +
 			"    fort, `fort mint` creates this key and records its id; a key made behind\n" +
 			"    mint's back is one it will refuse to shadow, so this verb refuses a host\n" +
-			"    that has a manifest.",
+			"    whose manifest has a backups profile; profile \"none\" (hand-configured\n" +
+			"    targets) is let through — mint mints nothing for it.",
 	}
 }
 
@@ -287,10 +290,18 @@ func b2Key(args []string) error {
 	// secrets file and refuses to shadow a same-named key it has no
 	// secret for. Hand-minting one here would produce exactly that
 	// standoff, so refuse before the call rather than after.
+	//
+	// Unless the manifest says [backups] profile = "none": mint renders
+	// no backup targets for such a host (Backups.Backed()), so there is
+	// no key of mint's to shadow — luxor, whose B2 target is configured
+	// by hand (#383), is exactly the case this verb exists for.
 	if role.kind == "pv" {
 		root, err := repoRoot()
 		if err == nil && exists(root, manifest.Path(role.host)) {
-			return fmt.Errorf("%s has a fort manifest (%s) — its PV key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
+			h, lerr := manifest.Load(root, role.host)
+			if lerr != nil || h.Backups.Backed() {
+				return fmt.Errorf("%s has a fort manifest (%s) — its PV key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
+			}
 		}
 	}
 
@@ -422,8 +433,11 @@ func (r b2Role) followUp() string {
 			"    '[\"restic-prune-s3-env-b2\"]' \"\\\"AWS_ACCESS_KEY_ID=<id>\\nAWS_SECRET_ACCESS_KEY=<secret>\\n\\\"\"\n" +
 			"and nowhere else. It is the only credential in the fleet that deletes backups."
 	default:
-		return "Next: it belongs in that host's own secrets as the env file its restic\n" +
-			"units source (restic-s3-env-b2), and nowhere else."
+		return "Next: it belongs in " + r.host + "'s own secrets as the env file its restic\n" +
+			"units source, and nowhere else — from the repo root:\n" +
+			"  sops --config nixos/.sops.yaml set nixos/secrets/" + r.host + ".yaml \\\n" +
+			"    '[\"restic-s3-env-b2\"]' \"\\\"AWS_ACCESS_KEY_ID=<id>\\nAWS_SECRET_ACCESS_KEY=<secret>\\n\\\"\"\n" +
+			"(restic-password beside it is the FLEET password, copied from provisioning/secrets.yaml)."
 	}
 }
 
