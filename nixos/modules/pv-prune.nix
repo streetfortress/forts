@@ -100,15 +100,25 @@ let
       fi
 
       echo "== $repo"
+      # Clear STALE locks first — `unlock` without --remove-all drops only
+      # locks older than 30 min (a live backup refreshes its lock every
+      # 5 min, so one stays). A fort's writer could not delete its own
+      # lock on rustfs until its policy gained locks/ (the same PR), and
+      # a run that dies mid-backup leaves one on either tier; without
+      # this the sweep sat out the full retry on every repo and then
+      # failed (2026-09-21, the first dry run). Never --remove-all here:
+      # a genuinely held lock means a backup in flight, and forgetting
+      # under it is how a retention job becomes an incident.
+      ${pkgs.restic}/bin/restic -r "s3:$endpoint/$bucket/$repo" unlock || true
       if ${pkgs.restic}/bin/restic -r "s3:$endpoint/$bucket/$repo" \
           forget ${lib.concatStringsSep " " tier.keep} --prune ${lib.optionalString cfg.dryRun "--dry-run"} \
           --retry-lock ${cfg.retryLock}; then
         pruned=$((pruned + 1))
       else
-        # Most likely a backup holding the repo lock. Do NOT unlock: the
+        # A live lock that outlasted the retry, or the tier refusing. The
         # next run is a week away and an interrupted prune is worse than
-        # a late one. A repeated failure shows up as a stale
-        # last-success metric.
+        # a late one, so fail this repo and move on; a repeat shows up as
+        # PVPruneStale on the freshness metric.
         echo "::failed:: $repo"
         failed=$((failed + 1))
       fi

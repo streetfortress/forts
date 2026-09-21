@@ -246,3 +246,17 @@ spec:
             severity: critical
           annotations:
             summary: "CNPG {{ $labels.namespace }}/{{ $labels.cluster }}: WAL archive_command failing (last failure newer than last success)"
+
+        # The pruner's freshness (sfi.pv-prune, luxor only): one series per
+        # tier, written after a sweep with no failed repo. Weekly plus
+        # jitter, so 8 d — a missed sweep is a bill on B2 and a filling
+        # disk on luxor, and a repo whose lock outlasts the retry fails
+        # the whole sweep's metric on purpose. No series = never run: a
+        # host that enables the module sees this within a week.
+        - alert: PVPruneStale
+          expr: (time() - node_pv_prune_last_success_seconds) > 8 * 86400
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: no clean restic prune sweep on the {{ $labels.tier }} tier in >8d — every repo there is only growing"
