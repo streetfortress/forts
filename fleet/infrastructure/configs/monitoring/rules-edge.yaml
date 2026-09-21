@@ -161,17 +161,24 @@ spec:
         # restic PV backups: one series per destination (target=rustfs|b2)
         # from the textfile the unit writes on success. Joined to the path
         # count so "nothing to back up yet" (paths=0, the unit skips and
-        # writes no timestamp) is not "backups are broken". 36 h: daily is
-        # the slowest schedule and the timers carry jitter.
+        # writes no timestamp) is not "backups are broken". The threshold
+        # is the unit's own: node_pv_backup_max_age_seconds, published next
+        # to the path count, is 2× that target's cadence (36 h for the
+        # 6-hourly targets, 8 d for the production profile's weekly rustfs
+        # copy — a flat 36 h fired on every production fort from Monday
+        # to Sunday, 2026-09-21). A host not yet rebuilt with the metric
+        # falls back to 36 h rather than going silent.
         - alert: PVBackupStale
           expr: >-
-            (time() - node_pv_backup_last_success_seconds) > 36 * 3600
+            (time() - node_pv_backup_last_success_seconds)
+              > on (instance, target)
+                (node_pv_backup_max_age_seconds or on (instance, target) (node_pv_backup_paths * 0 + 36 * 3600))
               and on (instance, target) node_pv_backup_paths > 0
           for: 15m
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.instance }}: no successful restic backup to {{ $labels.target }} in >36h"
+            summary: "{{ $labels.instance }}: no successful restic backup to {{ $labels.target }} within its max age ({{ $value | humanizeDuration }} since the last)"
 
         # Paths to back up, and no success EVER for that destination: the
         # unit is failing from the start (a bad key, a capped account, a
@@ -214,6 +221,12 @@ spec:
         # plugin series exists): a lab cluster's archiver has nowhere to
         # go and must not page. CNPG switches a segment at least every
         # archive_timeout (5 m default), so an hour without one is stuck.
+        # Known false positive: postgres only forces the timed switch if
+        # WAL was written since the last one, so a cluster nobody writes
+        # to (the drill fort's sites-db after gitea left it, 2026-09-21)
+        # trips this too. On a production fort an hour of silence is
+        # itself worth a look; on a fort being dismantled it goes with
+        # the fort.
         - alert: CNPGWALArchivingStale
           expr: >-
             cnpg_pg_stat_archiver_seconds_since_last_archival > 3600

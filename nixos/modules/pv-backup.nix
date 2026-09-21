@@ -83,6 +83,10 @@ let
           Persistent = "true";
           RandomizedDelaySec = toString cfg.randomizedDelaySec;
         };
+        # A weekly target's staleness threshold travels with its cadence
+        # (see maxAge): the fleet rule reads it, so a flat 36 h never
+        # again fires on this copy from Monday to Sunday.
+        maxAge = 8 * 86400;
       }
       {
         name = "b2";
@@ -105,7 +109,7 @@ let
   # both paths here or every optional field is a missing-attribute error
   # at use (caught by evaluating the profile path with no host consuming
   # it yet).
-  normalize = t: { passwordFile = null; pruneOpts = null; timerConfig = null; } // t;
+  normalize = t: { passwordFile = null; pruneOpts = null; timerConfig = null; maxAge = null; } // t;
 
   targets = map normalize
     (if cfg.profile != null then profileTargets.${cfg.profile} else cfg.targets);
@@ -151,8 +155,11 @@ let
   # It also publishes the path COUNT, which is what lets an alert tell
   # "nothing to back up yet" apart from "backups are broken" — the
   # freshness metric alone cannot, because a skipped run writes no
-  # timestamp and looks exactly like a stuck one.
-  condition = name: pkgs.writeShellScript "pv-backup-condition-${name}" ''
+  # timestamp and looks exactly like a stuck one. And the target's MAX
+  # AGE: the staleness threshold belongs to the unit that knows its own
+  # timer, not to a fleet rule guessing the cadence — PVBackupStale in
+  # rules-edge.yaml compares against this series.
+  condition = name: maxAge: pkgs.writeShellScript "pv-backup-condition-${name}" ''
     set -eu
     n=$(${pathScript} | ${pkgs.coreutils}/bin/wc -l)
     dir=/var/lib/node-exporter-textfiles
@@ -161,6 +168,9 @@ let
       echo "# HELP node_pv_backup_paths PVC directories this target would include."
       echo "# TYPE node_pv_backup_paths gauge"
       echo "node_pv_backup_paths{target=\"${name}\"} $n"
+      echo "# HELP node_pv_backup_max_age_seconds Oldest a successful run may be before this target counts as stale (2x its cadence)."
+      echo "# TYPE node_pv_backup_max_age_seconds gauge"
+      echo "node_pv_backup_max_age_seconds{target=\"${name}\"} ${toString maxAge}"
     } > "$tmp"
     ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
     ${pkgs.coreutils}/bin/mv "$tmp" "$dir/pv-backup-paths-${name}.prom"
@@ -277,6 +287,18 @@ in
       description = "Default OnCalendar for a target that does not override it.";
     };
 
+    maxAge = lib.mkOption {
+      type = lib.types.int;
+      default = 36 * 3600;
+      description = ''
+        Seconds a target's last success may age before PVBackupStale fires,
+        published as node_pv_backup_max_age_seconds. Twice the cadence:
+        36 h for the 6-hourly default (the timers carry jitter). A target
+        with its own timer sets its own — the production profile's weekly
+        rustfs copy carries 8 d.
+      '';
+    };
+
     randomizedDelaySec = lib.mkOption {
       type = lib.types.int;
       default = 900;
@@ -337,6 +359,11 @@ in
             type = lib.types.nullOr (lib.types.attrsOf lib.types.str);
             default = null;
             description = "Per-target override; null takes the top-level schedule.";
+          };
+          maxAge = lib.mkOption {
+            type = lib.types.nullOr lib.types.int;
+            default = null;
+            description = "Per-target override; null takes the top-level maxAge. Set it with a slower timerConfig.";
           };
         };
       });
@@ -403,7 +430,7 @@ in
       (target: {
         name = "restic-backups-pv-${target.name}";
         value.serviceConfig = {
-          ExecCondition = toString (condition target.name);
+          ExecCondition = toString (condition target.name (if target.maxAge != null then target.maxAge else cfg.maxAge));
           ExecStartPost = toString (freshness target.name);
         };
       })
