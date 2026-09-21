@@ -91,6 +91,13 @@ let
     for prefix in $prefixes; do
       repo=''${prefix%/}
 
+      # Named, not ours: a repo the fleet password does not open. Left
+      # in place on purpose (an archive kept readable under its own
+      # password); handing it to `forget` is a failed sweep every week.
+      case " ${lib.concatStringsSep " " cfg.exclude} " in
+        *" $repo "*) echo "skip $repo: excluded (sfi.pv-prune.exclude)"; continue ;;
+      esac
+
       # A restic repo always has a `config` object at its root. Anything
       # else under the bucket is someone else's upload, and handing it to
       # `restic forget` is how a prune becomes an incident.
@@ -172,6 +179,20 @@ in
         Report what would be removed and delete nothing. Worth one cycle
         on first enable, and on any retention change: this is the only
         thing in the fleet that deletes backups.
+      '';
+    };
+
+    exclude = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "zenbook" ];
+      description = ''
+        Top-level prefixes the sweep names and leaves alone: repos in
+        the bucket that are not the fleet's — kept readable under a
+        password of their own, so `forget` under the fleet password
+        fails on them and fails the whole sweep's freshness metric.
+        Say why beside each entry; an excluded repo is never pruned,
+        so it either stays for a reason or gets deleted.
       '';
     };
 
