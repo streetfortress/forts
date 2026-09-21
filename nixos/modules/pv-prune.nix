@@ -55,10 +55,15 @@ let
     # Offsite carries the tail.
     b2 = {
       endpoint = "https://s3.us-west-004.backblazeb2.com";
+      region = "us-west-004";
       keep = [ "--keep-last 3" "--keep-daily 14" "--keep-weekly 8" "--keep-monthly 12" ];
       schedule = "Sun *-*-* 04:00:00";
     };
   };
+
+  # A tier switched off declares nothing — no secret, no unit, no timer
+  # — so the two can be enabled a key at a time.
+  enabledTiers = lib.filterAttrs (_: tier: tier.enable) cfg.tiers;
 
   pruneScript = tierName: tier: pkgs.writeShellScript "pv-prune-${tierName}" ''
     set -euo pipefail
@@ -68,6 +73,7 @@ let
     . ${tier.environmentFile}
     set +a
     export RESTIC_PASSWORD_FILE=${cfg.passwordFile}
+    ${lib.optionalString (tier.region != null) "export AWS_REGION=${lib.escapeShellArg tier.region}"}
 
     endpoint=${lib.escapeShellArg tier.endpoint}
     bucket=${lib.escapeShellArg cfg.bucket}
@@ -170,18 +176,39 @@ in
     };
 
     tiers = lib.mkOption {
-      default = defaultTiers;
+      default = { };
       description = ''
-        Destinations to sweep, keyed by name. Defaults to the two the
-        fleet has; the retention windows differ on purpose — luxor is the
+        Destinations to sweep, keyed by name. The two the fleet has are
+        pre-declared below as defaults a host merges with (`tiers.b2.enable
+        = false` leaves the rest of b2 and all of rustfs in place); the
+        retention windows differ on purpose — luxor is the
         operational-recovery copy on a constrained disk, B2 carries the
         tail.
       '';
       type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
         options = {
+          enable = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = ''
+              Sweep this tier. Off, the tier declares nothing — no sops
+              secret, no unit, no timer — so a tier whose delete-capable
+              key is not yet in the host's file can wait without holding
+              the other back. Both default tiers are on.
+            '';
+          };
           endpoint = lib.mkOption {
             type = lib.types.str;
             description = "S3 endpoint, matching the one `sfi.pv-backup` writes to.";
+          };
+          region = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = ''
+              Exported as AWS_REGION for the sweep. B2 signs against the
+              region in its endpoint's hostname; s5cmd, unlike restic,
+              does not infer it. Unset for an endpoint that ignores it.
+            '';
           };
           environmentFile = lib.mkOption {
             type = lib.types.path;
@@ -213,7 +240,11 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+    # The fleet's two tiers, as defaults: a host overrides a field or
+    # switches one off without restating the other.
+    { sfi.pv-prune.tiers = lib.mapAttrs (_: lib.mapAttrs (_: lib.mkDefault)) defaultTiers; }
+    (lib.mkIf cfg.enable {
     assertions = lib.mapAttrsToList
       (name: tier: {
         assertion = lib.any (k: lib.hasPrefix "--keep-last" k) tier.keep;
@@ -223,10 +254,10 @@ in
           zero snapshots and a backup failure becomes data loss.
         '';
       })
-      cfg.tiers;
+      enabledTiers;
 
     sops.secrets = { restic-password = { }; }
-      // lib.mapAttrs' (name: _: lib.nameValuePair "restic-prune-s3-env-${name}" { }) cfg.tiers;
+      // lib.mapAttrs' (name: _: lib.nameValuePair "restic-prune-s3-env-${name}" { }) enabledTiers;
 
     systemd.services = lib.mapAttrs'
       (name: tier: lib.nameValuePair "pv-prune-${name}" {
@@ -246,7 +277,7 @@ in
           Environment = [ "RESTIC_CACHE_DIR=%C/pv-prune" ];
         };
       })
-      cfg.tiers;
+      enabledTiers;
 
     systemd.timers = lib.mapAttrs'
       (name: tier: lib.nameValuePair "pv-prune-${name}" {
@@ -257,8 +288,9 @@ in
           RandomizedDelaySec = "1h";
         };
       })
-      cfg.tiers;
+      enabledTiers;
 
     environment.systemPackages = [ pkgs.restic pkgs.s5cmd ];
-  };
+    })
+  ];
 }
