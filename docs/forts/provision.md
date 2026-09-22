@@ -135,6 +135,45 @@ qcow2 through the provider's XSLT hook (`xsltproc` from nixpkgs when the
 host has none). No firewall, no DNS: the bridge and the lab dnsmasq are
 the hypervisor's; the host's own nftables is the only filter.
 
+## When birth stalls
+
+Two failure shapes from sfi-stage-d95cc36's birth (2026-09-22, #408).
+Both now self-heal; this is what the journal looks like if they recur,
+and the hand recovery each guard automates.
+
+**k3s restarts every ~11 s, `cloud-controller-manager exited: … configmaps
+"extension-apiserver-authentication" is forbidden: User
+"k3s-cloud-controller-manager"`.** The embedded CCM started before the
+last object of k3s's own `ccm.yaml` (the kube-system RoleBinding to
+`extension-apiserver-authentication-reader`) was applied, its exit took
+k3s down mid-apply, and every restart re-runs the race with the loser
+fixed: `journalctl -u k3s | grep -c "Kind=Addon controller"` stays at 1
+however many starts there are. `k3s-ccm-rbac-guard.service`
+(k3s-server.nix) watches for the signature and re-applies the manifest
+in an up-window; by hand it is
+
+```
+until sudo sfi-kubectl apply -f /var/lib/rancher/k3s/server/manifests/ccm.yaml; do sleep 1; done
+```
+
+from a fort that has the disposable-fort `sfi-kubectl` verb. Upstream:
+k3s-io/k3s#7328.
+
+**`flux-bootstrap.service` failed: `UPGRADE FAILED: another operation
+(install/upgrade/rollback) is in progress`.** A previous bootstrap run
+died mid `helm install` (it shares k3s's fate on day 0) and left the
+release record at `pending-install`; helm refuses everything while a
+release is pending. The unit now clears any `pending-*` record before
+installing and retries on failure a minute apart; by hand it is
+
+```
+sudo sfi-kubectl -n flux-system delete secret sh.helm.release.v1.flux-operator.v1
+sudo sfi-systemd-restart flux-bootstrap
+```
+
+The chart's resources survive the delete and the fresh install adopts
+them.
+
 ## Environment
 
 Every verb here forces `PULUMI_BACKEND_URL` to this checkout's

@@ -60,6 +60,67 @@ in
       "$kubeconfig"
   '';
 
+  # Fresh-cluster deadlock guard (#408). k3s gates its embedded cloud-
+  # controller-manager on a SubjectAccessReview that passes the moment
+  # ccm.yaml's ClusterRoleBinding lands — before the same manifest's
+  # kube-system RoleBinding (extension-apiserver-authentication-reader)
+  # does. Lose that race and the CCM's fatal exit takes k3s down mid-
+  # apply; on every restart the SAR passes instantly on the half-applied
+  # RBAC, the CCM dies within a second, and the addon controller (which
+  # starts a beat later) never gets to finish. sfi-stage-d95cc36 looped
+  # 218 times this way at birth; upstream k3s-io/k3s#7328 is the race.
+  #
+  # The signature is stable — ClusterRoleBinding present, RoleBinding
+  # absent — and lasts milliseconds on a healthy start, forever in the
+  # deadlock. Seen twice in a row, re-apply k3s's own ccm.yaml (a no-op
+  # on top of what did land; the deploy controller adopts it afterwards,
+  # as the manual recovery proved). Polling continues through the API's
+  # up-windows because a failed kubectl is "not yet", never an error.
+  systemd.services.k3s-ccm-rbac-guard = {
+    description = "Re-apply k3s CCM RBAC if a fresh cluster deadlocked mid-apply (#408)";
+    after = [ "k3s.service" ];
+    requires = [ "k3s.service" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.k3s ];
+    environment.KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      TimeoutStartSec = "35min";
+    };
+    script = ''
+      set -euo pipefail
+      kubectl() { k3s kubectl "$@"; }
+      manifest=/var/lib/rancher/k3s/server/manifests/ccm.yaml
+      # No manifest = CCM disabled or not a server; nothing to guard.
+      if [ ! -s "$manifest" ]; then
+        echo "no $manifest; nothing to guard"
+        exit 0
+      fi
+
+      seen=0
+      # ~30 min at 2s: a cluster still not up by then is not this problem.
+      for _ in $(seq 900); do
+        if kubectl -n kube-system get rolebinding \
+            k3s-cloud-controller-manager-authentication-reader >/dev/null 2>&1; then
+          echo "CCM auth-reader RoleBinding present; cluster is past the race"
+          exit 0
+        fi
+        if kubectl get clusterrolebinding k3s-cloud-controller-manager >/dev/null 2>&1; then
+          seen=$((seen + 1))
+          if [ "$seen" -ge 2 ]; then
+            echo "deadlock signature: CCM ClusterRoleBinding present, auth-reader RoleBinding absent — re-applying $manifest"
+            # The API may vanish under us mid-window; just try again.
+            kubectl apply -f "$manifest" || true
+          fi
+        fi
+        sleep 2
+      done
+      echo "gave up waiting for the CCM RBAC to settle; see journalctl -u k3s" >&2
+      exit 1
+    '';
+  };
+
   networking.firewall.allowedTCPPorts = [ 6443 80 443 ];
 
   # Trust the lab step-ca root (ACME/TLS for *.lofi services).

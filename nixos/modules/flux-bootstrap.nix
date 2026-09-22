@@ -10,8 +10,17 @@
 #   5. `flux-system` git-auth secret from flux-git-deploy-key (identity.pub is
 #      derived, known_hosts is public and lives here in the module)
 #   6. helm install flux-operator (pinned; the fleet HelmRelease adopts the
-#      release — same name + namespace — and reconciles to its own pin after)
+#      release — same name + namespace — and reconciles to its own pin after);
+#      a release left `pending-*` by an earlier run that died mid-install
+#      is cleared first, since helm refuses every operation while one is
+#      pending (#408: the birth run was SIGTERMed with k3s and every later
+#      run failed "another operation is in progress" until a human deleted
+#      the release secret)
 #   7. apply the cluster's FluxInstance
+#
+# The unit retries on failure (a minute apart, no start limit): day 0 is
+# when k3s under it is most likely to flap, and a oneshot that stays
+# `failed` needs a reboot — or sfi-systemd-restart (#212) — to try again.
 #
 # The FluxInstance manifest is NOT duplicated here: the flake's source is
 # the whole repo, so the module applies the very file flux later owns
@@ -85,11 +94,16 @@ in
       path = [ pkgs.k3s pkgs.kubernetes-helm pkgs.openssh ];
       environment.KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
 
+      unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         # First boot pulls the operator image over WAN.
         TimeoutStartSec = "20min";
+        # Ride out a flapping k3s / unreachable gitea on first boot rather
+        # than sit `failed` until someone reboots (#408).
+        Restart = "on-failure";
+        RestartSec = "60s";
       };
 
       script = ''
@@ -120,6 +134,21 @@ in
           --from-file=identity.pub="$tmp/identity.pub" \
           --from-file=known_hosts=${knownHostsFile} \
           --dry-run=client -o yaml | kubectl apply -f -
+
+        # A helm release stuck pending-* (this run's predecessor died mid
+        # install/upgrade) blocks every helm operation. Helm's own remedy
+        # is to drop that revision's record: the chart's resources stay,
+        # and the next upgrade --install adopts them (they carry helm's
+        # ownership labels) or, with a prior deployed revision, upgrades
+        # from it. Day-0 safe by construction.
+        pending=$(kubectl -n flux-system get secret \
+          -l 'owner=helm,name=flux-operator,status in (pending-install,pending-upgrade,pending-rollback)' \
+          -o name)
+        if [ -n "$pending" ]; then
+          echo "clearing stuck helm release record(s): $pending"
+          # shellcheck disable=SC2086
+          kubectl -n flux-system delete $pending
+        fi
 
         installed=""
         for attempt in 1 2 3; do
