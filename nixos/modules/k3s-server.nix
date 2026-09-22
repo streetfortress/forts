@@ -83,5 +83,10 @@ in
     ./ops/ops-commands.nix
     ./ops/flux.nix
     ./ops/workloads.nix
+    ./ops/systemd.nix
   ];
+
+  # k3s after a cached-cert change (the SAN note above) is one restart —
+  # sfi-systemd-restart k3s (#212).
+  sfi.ops.restartableUnits = [ "k3s" ];
 }

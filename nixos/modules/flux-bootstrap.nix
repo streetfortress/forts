@@ -36,6 +36,8 @@ let
   knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
 in
 {
+  imports = [ ./ops/systemd.nix ]; # sfi-systemd-restart flux-bootstrap (#212)
+
   options.sfi.flux-bootstrap = {
     enable = lib.mkEnableOption "day-0 Flux bootstrap (flux-operator + FluxInstance)";
 
@@ -67,6 +69,11 @@ in
     # `fort mint` seeds both, flux-sops-age-key and flux-git-deploy-key).
     sops.secrets.flux-sops-age-key = { };
     sops.secrets.flux-git-deploy-key = { };
+
+    # Day 0 is when k3s is most likely to flap under it (#408: the birth
+    # bootstrap died with k3s and the fort had to be rebooted to retry) —
+    # a oneshot's retry is a restart.
+    sfi.ops.restartableUnits = [ "flux-bootstrap" ];
 
     systemd.services.flux-bootstrap = {
       description = "Day-0 Flux bootstrap (${cfg.cluster})";

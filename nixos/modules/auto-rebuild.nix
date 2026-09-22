@@ -219,12 +219,18 @@ in
   imports = [
     ./textfile-metrics.nix # nixos-{attempted,applied,effective}.prom
     ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
+    ./ops/systemd.nix # sfi-systemd-restart nixos-upgrade (#212)
   ];
 
   config = lib.mkIf cfg.enable {
     # Also declared by flux-bootstrap.nix on flux hosts; identical empty
     # definitions merge cleanly, and non-flux hosts get it from here.
     sops.secrets.flux-git-deploy-key = { };
+
+    # sfi-nixos-rebuild is the curated path (clears the attempted-rev
+    # marker first); the bare restart is the escape hatch when that verb
+    # itself is what misbehaves.
+    sfi.ops.restartableUnits = [ "nixos-upgrade" ];
 
     system.autoUpgrade = {
       enable = true;

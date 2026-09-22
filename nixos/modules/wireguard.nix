@@ -74,7 +74,13 @@ let
   '';
 in
 {
-  imports = [ ./textfile-metrics.nix ];
+  imports = [
+    ./textfile-metrics.nix
+    ./ops/systemd.nix # sfi-systemd-restart wg-quick-wg0 (#212)
+  ];
+
+  # A peer rollout that wg-quick did not pick up is one restart away.
+  sfi.ops.restartableUnits = [ "wg-quick-wg0" ];
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
