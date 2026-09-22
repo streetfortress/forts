@@ -35,6 +35,10 @@
 # hold is the 2026-09-03 drift incident with extra steps, and this verb
 # must not be a quiet way to fall off main.
 #
+# Reach: generations younger than sfi.auto-rebuild.gc.olderThan (30 d by
+# default, #423) — nix.gc in auto-rebuild.nix collects older ones; the
+# running (and so a pinned) generation is never collected.
+#
 # Caveat, stated by the verb when it applies: a generation built before
 # this module carries a gate that does not read the pin. Rolling back to
 # one, the verb also stops nixos-upgrade.timer for this boot — a reboot

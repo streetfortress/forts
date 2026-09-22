@@ -94,6 +94,17 @@ let
   # fleet-only commit: markers advance, no eval.
   closureTrees = [ "nixos" "wireguard" "fleet/clusters" ];
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
+    # node_nixos_generations (#423): what is on disk for sfi-nixos-rollback
+    # to choose from, and the thing nix.gc (below) actually bounds. Written
+    # first so it is fresh whatever the gate decides next — a pin skip, a
+    # failed ls-remote — and minutely, so a collection shows within the
+    # tick rather than at the next switch.
+    gens=$(${pkgs.coreutils}/bin/ls /nix/var/nix/profiles | ${pkgs.gnugrep}/bin/grep -c '^system-[0-9][0-9]*-link$' || true)
+    tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-generations.prom.XXXXXX)
+    printf 'node_nixos_generations %s\n' "''${gens:-0}" > "$tmp"
+    ${pkgs.coreutils}/bin/chmod 0644 "$tmp"
+    ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-generations.prom
+
     # A pin (ops/nixos-rollback.nix) holds the host on the generation it
     # names; it is stale — and dropped — the moment the host is on any
     # other generation, so an older generation's sfi-nixos-rebuild (which
@@ -236,6 +247,31 @@ in
       description = "Jitter so the fleet's ticks (and their ls-remotes against gitea) don't line up.";
     };
 
+    # Retention (#423). The loop makes a generation per closure-relevant
+    # merge and nothing else ever removes one, so the loop owns the
+    # bound too. The window is the rollback depth: sfi-nixos-rollback can
+    # reach any generation younger than this (the running one — and so a
+    # pinned one — is never collected, whatever its age). Measured
+    # 2026-09-22: stores 3.4–4.3 GiB, growing 0.2–0.4 GiB/week, 8–15
+    # generations per host — a month is many incidents' worth and ~2 GiB.
+    gc = {
+      olderThan = lib.mkOption {
+        type = lib.types.str;
+        default = "30d";
+        description = "nix-collect-garbage --delete-older-than window: generations (and their closures) younger than this survive. This IS sfi-nixos-rollback's reach.";
+      };
+      dates = lib.mkOption {
+        type = lib.types.str;
+        default = "weekly";
+        description = "systemd.time(7) calendar for the collection.";
+      };
+      bootEntries = lib.mkOption {
+        type = lib.types.int;
+        default = 30;
+        description = "Bootloader menu entries kept (grub / systemd-boot configurationLimit); sized to hold a month of generations at the observed rate.";
+      };
+    };
+
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
       # Same pin as flux-bootstrap.nix gitKnownHosts.
@@ -260,6 +296,26 @@ in
     # marker first); the bare restart is the escape hatch when that verb
     # itself is what misbehaves.
     sfi.ops.restartableUnits = [ "nixos-upgrade" ];
+
+    # Retention — see the gc options above. Collection and optimisation
+    # are root's own timers, sudo-free and not verbs: nothing about them
+    # is a decision an operator makes on a host. The pull loop's own GC
+    # roots (the in-flight build) are honoured by nix-collect-garbage, so
+    # the two timers can overlap.
+    nix.gc = {
+      automatic = true;
+      dates = cfg.gc.dates;
+      randomizedDelaySec = "45min";
+      options = "--delete-older-than ${cfg.gc.olderThan}";
+    };
+    # Adjacent generations share almost their whole closure; hard-linking
+    # identical store files is the cheap half of the store's size.
+    nix.optimise.automatic = true;
+    # Both bootloaders' options exist whether or not that loader is the
+    # host's (qcow/linode: grub; baremetal: systemd-boot); the inactive
+    # one is inert.
+    boot.loader.grub.configurationLimit = lib.mkDefault cfg.gc.bootEntries;
+    boot.loader.systemd-boot.configurationLimit = lib.mkDefault cfg.gc.bootEntries;
 
     system.autoUpgrade = {
       enable = true;
