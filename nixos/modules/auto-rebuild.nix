@@ -39,6 +39,10 @@
 #     `sfi-nixos-rebuild`) retries. If gitea is unreachable the gate lets
 #     the run proceed and fail loudly rather than skipping silently
 #     forever.
+#   - The way back: `sudo sfi-nixos-rollback <generation>` (ops/nixos-
+#     rollback.nix) switches to a prior generation and PINS the loop
+#     there — the gate skips while the host is on that generation, a
+#     textfile metric shows the hold, and this verb lifts it.
 #   - Escape hatch: `sudo sfi-nixos-rebuild` as deployer clears the
 #     attempted-rev marker and starts nixos-upgrade.service immediately —
 #     the moral equivalent of `flux reconcile --with-source`. Declared via
@@ -90,6 +94,22 @@ let
   # fleet-only commit: markers advance, no eval.
   closureTrees = [ "nixos" "wireguard" "fleet/clusters" ];
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
+    # A pin (ops/nixos-rollback.nix) holds the host on the generation it
+    # names; it is stale — and dropped — the moment the host is on any
+    # other generation, so an older generation's sfi-nixos-rebuild (which
+    # does not know pins) can never strand the host behind one.
+    pin="$STATE_DIRECTORY/pinned-generation"
+    if [ -e "$pin" ]; then
+      pinned=$(${pkgs.coreutils}/bin/cat "$pin")
+      current=$(${pkgs.coreutils}/bin/readlink /nix/var/nix/profiles/system | ${pkgs.gnused}/bin/sed -n 's/^system-\([0-9][0-9]*\)-link$/\1/p')
+      if [ "$pinned" = "$current" ]; then
+        echo "gate: pinned to generation $pinned (sfi-nixos-rollback); skipping — sudo sfi-nixos-rebuild lifts the pin"
+        exit 1
+      fi
+      echo "gate: pin to generation $pinned is stale (host is on $current); lifting it"
+      ${pkgs.coreutils}/bin/rm -f "$pin" ${textfileDir}/nixos-pinned.prom
+    fi
+
     git=${pkgs.git}/bin/git
     remote=$($git ls-remote ${repoUrl} refs/heads/main | ${pkgs.coreutils}/bin/cut -f1)
     if [ -z "$remote" ]; then
@@ -166,6 +186,14 @@ let
   # on host-fleet keys on it.
   recordEffective = pkgs.writeShellScript "auto-rebuild-record-effective" ''
     rev=$(${pkgs.coreutils}/bin/cat /var/lib/sfi-auto-rebuild/last-attempted-rev 2>/dev/null) || exit 0
+    # Ledger for sfi-nixos-rollback's menu: which main commit each
+    # generation was built from. The switch has happened by now, so the
+    # profile link names the new generation. Append-only; a generation
+    # that nix-env has deleted simply stops being listed.
+    gen=$(${pkgs.coreutils}/bin/readlink /nix/var/nix/profiles/system | ${pkgs.gnused}/bin/sed -n 's/^system-\([0-9][0-9]*\)-link$/\1/p')
+    if [ -n "$gen" ]; then
+      printf '%s %s %s\n' "$gen" "$rev" "$(${pkgs.coreutils}/bin/date +%s)" >> /var/lib/sfi-auto-rebuild/generations
+    fi
     tmp=$(${pkgs.coreutils}/bin/mktemp ${textfileDir}/.nixos-effective.prom.XXXXXX)
     {
       printf 'node_nixos_effective_revision_info{revision="%s"} 1\n' "$rev"
@@ -220,6 +248,7 @@ in
     ./textfile-metrics.nix # nixos-{attempted,applied,effective}.prom
     ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
     ./ops/systemd.nix # sfi-systemd-restart nixos-upgrade (#212)
+    ./ops/nixos-rollback.nix # sfi-nixos-rollback: prior generation + pin
   ];
 
   config = lib.mkIf cfg.enable {
@@ -304,10 +333,23 @@ in
             *) echo "usage: sfi-nixos-rebuild [--from <ip> [--ref <branch>]]" >&2; exit 2 ;;
           esac
         done
+        # A rollback pin (sfi-nixos-rollback) ends here, on either path:
+        # this verb IS "move on from the hold". The gate would drop it
+        # anyway once the switch lands (stale pin), but lifting first
+        # keeps the metric honest through the run.
+        lift_pin() {
+          pin=/var/lib/sfi-auto-rebuild/pinned-generation
+          if [ -e "$pin" ]; then
+            echo "lifted the rollback pin to generation $(${pkgs.coreutils}/bin/cat "$pin")"
+            ${pkgs.coreutils}/bin/rm -f "$pin" ${textfileDir}/nixos-pinned.prom
+            ${pkgs.systemd}/bin/systemctl start nixos-upgrade.timer
+          fi
+        }
         if [ -n "$from" ]; then
           case "$from" in
             *[!0-9.]*|"") echo "--from: want an IPv4 address, got '$from'" >&2; exit 2 ;;
           esac
+          lift_pin
           case "$ref" in
             *[!A-Za-z0-9._/-]*|"") echo "--ref: want a branch name, got '$ref'" >&2; exit 2 ;;
           esac
@@ -328,6 +370,7 @@ in
         if [ "$ref" != main ]; then
           echo "--ref needs --from (the unit pulls main by name)" >&2; exit 2
         fi
+        lift_pin
         marker=/var/lib/sfi-auto-rebuild/last-attempted-rev
         if [ -e "$marker" ]; then
           echo "cleared last-attempted marker ($(${pkgs.coreutils}/bin/cat "$marker")) — the gate will report 'none' and rebuild"
