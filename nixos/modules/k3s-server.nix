@@ -123,23 +123,12 @@ in
 
   networking.firewall.allowedTCPPorts = [ 6443 80 443 ];
 
-  # Trust the lab step-ca root (ACME/TLS for *.lofi services).
-  security.pki.certificateFiles = [ ../certs/step-ca-root.pem ];
-
-  # Node metrics
-  services.prometheus.exporters.node = {
-    enable = true;
-    openFirewall = true; # opens port 9100
-  };
-
-  # Directory-size metrics for the host dashboard (#130); k3s-cluster
-  # inherits this via its k3s-server import, so every exporter host has it.
+  # lab-host.nix: the lab CA, the gitea pin, node + directory metrics —
+  # everything a lab member has whether or not it runs k3s (#417).
   # ops/: the observe/nudge ladder — read-only kubeconfig, the sfi-* verb
   # framework, and the flux verbs every k3s host should carry.
   imports = [
-    # gitea.zen.lofi pin: /etc/hosts + the coredns-custom add-on (one fact).
-    ./lab-dns.nix
-    ./disk-usage-metrics.nix
+    ./lab-host.nix
     ./ops/ops-kubeconfig.nix
     ./ops/ops-commands.nix
     ./ops/flux.nix

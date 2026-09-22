@@ -5,8 +5,8 @@
 # shell profiles sourced by home/steven.nix expect.
 #
 # Requires:
-#   - the lab CA trusted        so TLS to gitea.zen.lofi validates. staging-k3s
-#                               already gets this from modules/k3s-server.nix.
+#   - the lab CA trusted        so TLS to gitea.zen.lofi validates — from
+#                               modules/lab-host.nix (imported by k3s-server.nix).
 #   - DNS resolving *.zen.lofi  (10.0.0.2, via the k8s dnsmasq forward).
 #
 # staging-k3s reaches gitea over the LAN (it sits on 10.0.0.0/24); production
@@ -29,7 +29,7 @@ in
 
     path = [ pkgs.git ];
     # git validates the gitea chain against the system bundle, which
-    # security.pki (via k3s-server.nix) rebuilds to include the lab CA.
+    # security.pki (via lab-host.nix) rebuilds to include the lab CA.
     environment.SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
 
     serviceConfig = {

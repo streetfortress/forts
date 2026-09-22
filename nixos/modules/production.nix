@@ -1,10 +1,10 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
-# Imported by every fort's hosts/<name>/default.nix (`fort scaffold` renders it
-# unconditionally — a fort is always this profile, #272; dotfiles.nix +
+# Imported by every flux fort's hosts/<name>/default.nix (`fort scaffold`
+# renders it unconditionally for a cluster fort, #272; dotfiles.nix +
 # interactive.nix are for hand-managed lab hosts; the profiles are
-# mutually exclusive).
-#
-# Relative to the lab VM shape this changes:
+# mutually exclusive). The hardening itself — mesh-only SSH, UTC, the
+# closure trims, root-only nix — is hardened.nix (#417), shared with
+# dev-fort.nix; this module is what a CLUSTER fort adds on top:
 #   - No Home Manager payload, and no steven at all: interactive.nix isn't
 #     imported here, so the only login account is the unprivileged `deployer`
 #     below. The home-manager.users force is CORRECTNESS-load-bearing, not just
@@ -12,10 +12,8 @@
 #     for steven, who does not exist on this host, and the force is what keeps
 #     that from evaluating. (It's also the size lever for the 6 GB uncompressed
 #     custom-image cap: lab images measure 2.8-4.3 GB with the home stack.)
-#   - SSH reachable over the wireguard mesh only. The public/LAN interface
-#     serves exactly 80/443 (+ 51820/udp, which IS the mesh transport, from
-#     wireguard.nix). Production hosts therefore MUST be mesh members —
-#     without wg0 there is no login path at all.
+#   - The public/LAN interface serves exactly 80/443; the cluster and edge
+#     ports re-open on the mesh interface only.
 #   - deployer is a plain user: no wheel, so no path to root from SSH (the
 #     carve-outs are the pinned NOPASSWD `sfi-*` ops verbs from
 #     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
@@ -27,20 +25,20 @@
 { lib, pkgs, ... }:
 
 {
+  imports = [ ./hardened.nix ];
+
   # Empty the HM user set wholesale rather than removing users.steven's entry —
   # one mkForce, and any future HM user added by a shared module is excluded
   # from production by default instead of sneaking into the image.
   home-manager.users = lib.mkForce { };
 
-  # Servers run UTC (common.nix's America/Los_Angeles is the interactive-
-  # host leftover): journald, timer calendars, and dashboard timestamps
-  # stop needing a 7-hour mental offset.
-  time.timeZone = lib.mkForce "UTC";
-
   # The production operator account: SSH in over the mesh, watch the machinery,
-  # pull a log (journal read via the systemd-journal group). No wheel — writes go through git, not a shell (#90 adds the
-  # read-only kubeconfig this account will use). Key set matches
-  # interactive.nix for now; trim to the ops devices when vetting settles.
+  # pull a log (journal read via the systemd-journal group). No wheel —
+  # writes go through git, not a shell (#90 adds the read-only kubeconfig
+  # this account uses), and no nix daemon access (hardened.nix keeps it
+  # root-only): deployer observes the cluster, not the store; rebuilds
+  # arrive as replacement images. Key set matches interactive.nix for
+  # now; trim to the ops devices when vetting settles.
   users.users.deployer = {
     extraGroups = [
       # Read the ops-ro kubeconfig (ops-kubeconfig.nix, #90).
@@ -68,34 +66,23 @@
     ];
   };
 
-  # Only root talks to the nix daemon: deployer observes the cluster, not the
-  # store, and rebuilds arrive as replacement images.
-  nix.settings.allowed-users = [ "root" ];
-
-  # Collapse the merged firewall openings (22 from common.nix / openssh
-  # openFirewall, 6443 + 80 + 443 from k3s-server.nix) down to the public
-  # 80/443, then re-open the admin/cluster ports on the mesh interface only.
-  # The node exporter's openFirewall injects an iptables rule outside
-  # allowedTCPPorts, so it must be switched off explicitly to scope 9100.
-  networking.firewall.allowedTCPPorts = lib.mkForce [ 80 443 ];
+  # The public face of a cluster fort is exactly 80/443; hardened.nix
+  # collapses every other merged opening to this list. The admin/cluster
+  # ports below re-open on the mesh interface only (22 + 9100 are already
+  # there from hardened.nix).
+  sfi.hardened.publicTCPPorts = [ 80 443 ];
   # 30909/30993: edge Prometheus/Alertmanager NodePorts (mesh-services-
   # edge.yaml) — the wg0-only opening IS their access control; silences
   # are set against 30993.
   # 30432: sites-db's primary NodePort (fleet/apps/<fort>/sites-db/
   # mesh-service.yaml), read by databasus-central on luxor (#327) — every
   # fort, like the edge pair, so the consumer can assume the coordinate.
-  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 6443 9100 10255 30432 30909 30993 ];
-  services.prometheus.exporters.node.openFirewall = lib.mkForce false;
+  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 6443 10255 30432 30909 30993 ];
 
   # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at
   # the mesh address; pod traffic to the host's own wg0 IP ingresses on
-  # cni0, so 9100 must be open there too. The wg0 9100/10255 rows above are
-  # the soundship pull-model path — drop them once the edge stack is
-  # verified on an edge cluster.
+  # cni0, so 9100 must be open there too. The wg0 10255 row above and
+  # hardened.nix's wg0 9100 are the soundship pull-model path — drop them
+  # once the edge stack is verified on an edge cluster.
   networking.firewall.interfaces."cni0".allowedTCPPorts = [ 9100 ];
-
-  # Closure trims: manuals and the default perl/rsync/strace set have no
-  # business on a node nobody develops on.
-  documentation.enable = false;
-  environment.defaultPackages = lib.mkForce [ ];
 }
