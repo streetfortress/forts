@@ -23,7 +23,7 @@ func TestDismantle(t *testing.T) {
 		cloud     bool
 		recipient int // `# cluster:` lines in the shared rule
 	}{
-		{"sfi-fort-d54d5b3", false, 1},
+		{"sfi-fort-zenbook", false, 1},
 		{"sfi-prod-439bf72", true, 1},
 	} {
 		t.Run(tc.host, func(t *testing.T) {
