@@ -42,6 +42,11 @@ func TestDismantle(t *testing.T) {
 			}
 			// a doc that names the host, so residue reporting has something to find
 			write("README.md", "# fleet\n\nthe fort "+tc.host+" is mentioned here\n")
+			// the client side (#434), as the tree before the dismantle has it
+			m, _ := loadMesh(tmp)
+			hosts, _, _ := manifest.LoadAll(tmp)
+			write(sshConfigPath, renderSSHConfig(m, hosts))
+			write(knownHostsPath, knownHostsSet(knownHostsSet("", tc.host, m.Peers[tc.host].IP, "ssh-ed25519 GONE"), "luxor", "10.1.0.5", "ssh-ed25519 STAYS"))
 			write("fleet/apps/luxor/app/secrets.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/sites-db/secrets-db.sops.yaml, stringData.password]}\n")
 
 			p, err := planDismantle(tmp, tc.host)
@@ -92,6 +97,16 @@ func TestDismantle(t *testing.T) {
 			}
 			if len(tool.rekeyed) != 1 || !strings.HasSuffix(tool.rekeyed[0], "alertmanager-edge-config.sops.yaml") {
 				t.Errorf("updatekeys: %v", tool.rekeyed)
+			}
+			sc := readFile(t, filepath.Join(tmp, sshConfigPath))
+			if strings.Contains(sc, tc.host) || !strings.Contains(sc, "Host luxor\n") || !strings.Contains(rep, "◆ wireguard/ssh_config") {
+				t.Errorf("ssh_config after dismantle:\n%s\n%s", sc, rep)
+			}
+			if kh := parseKnownHosts(readFile(t, filepath.Join(tmp, knownHostsPath))); len(kh) != 1 || kh["luxor"].key != "ssh-ed25519 STAYS" || !strings.Contains(rep, "◆ wireguard/known_hosts") {
+				t.Errorf("known_hosts after dismantle: %+v\n%s", kh, rep)
+			}
+			if strings.Contains(rep, "wireguard/ssh_config:") || strings.Contains(rep, "wireguard/known_hosts:") {
+				t.Errorf("the rendered files are not residue:\n%s", rep)
 			}
 			if !strings.Contains(rep, "README.md:") {
 				t.Errorf("residue should list README.md:\n%s", rep)

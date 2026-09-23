@@ -98,6 +98,9 @@ type mintPlan struct {
 	newFile     bool
 
 	edits      []dEdit  // text edits (rules, peer), with "exists" ones filtered out
+	sshConfig  string   // wireguard/ssh_config re-rendered with this peer ("" = already current)
+	sshNote    string   // the fort's Host block, one line, for the report
+	knownHosts string   // wireguard/known_hosts with this fort's host key ("" = already current)
 	rekey      []string // fleet/infrastructure sops files that gain the cluster recipient
 	canaryPath string   // "" = not a flux cluster or already there
 	admins     map[string][]string
@@ -281,6 +284,9 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
 			func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
 	}
+	if err := p.planMesh(string(peers)); err != nil {
+		return nil, err
+	}
 	if !entry.Cluster() {
 		// No fleet rule, no infra recipient, no canary; the deploy key
 		// still — auto-rebuild.nix pulls main with it.
@@ -356,6 +362,10 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 		if err := tool.GitAdd(e.path); err != nil {
 			return err
 		}
+	}
+	// The client-side renders follow the peer they were computed from.
+	if err := writeRendered(p.root, tool, p.sshConfig, p.knownHosts); err != nil {
+		return err
 	}
 	// Before the secrets file: b2_create_key returns the secret half
 	// exactly once, so it must be in hand before anything renders it. A
@@ -538,6 +548,12 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	for _, e := range p.edits {
 		fmt.Fprintf(w, "○ %-36s %s\n", e.path, e.note)
 	}
+	if p.sshConfig != "" {
+		fmt.Fprintf(w, "◆ %-36s re-rendered — %s\n", sshConfigPath, p.sshNote)
+	}
+	if p.knownHosts != "" {
+		fmt.Fprintf(w, "◆ %-36s + %s,%s (its ssh host key; first login is prompt-free)\n", knownHostsPath, p.host, p.entry.MeshIP)
+	}
 	for _, rel := range p.rekey {
 		fmt.Fprintf(w, "◆ %-36s sops updatekeys (gains the %s recipient)\n", rel, p.host)
 	}
@@ -571,6 +587,48 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		return
 	}
 	fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: fort add / fort seed %s → PR → merge; then the image build + fort provision %s --image <path>\n", p.host, p.host)
+}
+
+// planMesh is the client side of the peer (mesh.go): the fort's Host
+// block in wireguard/ssh_config, rendered on the peers.json this plan
+// leaves behind, and its host-key line in wireguard/known_hosts — the
+// key is in hand here (minted, or restored from the secrets file) and
+// nowhere else in plaintext. A line that names the host under another
+// key is refused the way a foreign peer entry is: the host's real key is
+// not in the secrets file, or the line is stale.
+func (p *mintPlan) planMesh(peersText string) error {
+	future := peersText
+	for _, e := range p.edits {
+		if e.path == peersPath {
+			var err error
+			if future, err = e.fn(peersText); err != nil {
+				return err
+			}
+		}
+	}
+	rendered, hosts, err := renderSSHConfigFrom(p.root, future, "")
+	if err != nil {
+		return err
+	}
+	have, err := readOrEmpty(p.root, sshConfigPath)
+	if err != nil {
+		return err
+	}
+	if rendered != have {
+		p.sshConfig = rendered
+		p.sshNote = sshConfigLine(p.host, hosts, p.entry.MeshIP)
+	}
+	kh, err := readOrEmpty(p.root, knownHostsPath)
+	if err != nil {
+		return err
+	}
+	if e, ok := parseKnownHosts(kh)[p.host]; ok && e.key != hostKeyLine(p.hostKey.public) {
+		return fmt.Errorf("%s already lists %s with a key that is not the one %s derives — the real host key is not in the secrets file, or the line is stale; a re-key is a deliberate act", knownHostsPath, p.host, keySSHHost)
+	}
+	if next := knownHostsSet(kh, p.host, p.entry.MeshIP, p.hostKey.public); next != kh {
+		p.knownHosts = next
+	}
+	return nil
 }
 
 // --- edits (the inverses of dismantle's; same anchors preseed-identity used)

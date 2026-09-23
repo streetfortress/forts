@@ -23,9 +23,9 @@ manifest; nothing else changes hands ([manifest.md](manifest.md)).
 
 | kind | verbs | what they touch |
 |---|---|---|
-| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
+| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
 | **apply** | [`provision`](provision.md), [`adopt`](provision.md#adopt), [`destroy`](destroy.md) | the provider (Linode, or soundship's libvirt), through pulumi with inherited stdio: you read the preview and confirm. |
-| **read** | `check`, [`preview`](provision.md#preview) | nothing. `check` is the admission gate over the repo (CI runs it); `preview` is the diff against pulumi, `--refresh` the drift against the provider. |
+| **read** | `check`, [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
 
 Author verbs never overwrite: scaffold keeps a file that exists, add only
 creates files and appends list entries, seed adds missing keys and never
@@ -64,7 +64,9 @@ checkpoint in git history is an audit trail no backend gives you for free.
 provisioning/forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
                                  mesh_ip, [dns], the provider table; fort check --all
 fort scaffold <host> --write  ← nixos/hosts/<host>/, fleet/clusters/<host>/, apps root
-fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
+fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary;
+                                 the fort's block in wireguard/ssh_config + its
+                                 host key in wireguard/known_hosts (ssh-config.md)
                               → PR → merge
 fort image <host>             ← nix build (the variant from the manifest) + the host
                                  key grafted in → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
@@ -124,7 +126,7 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |
-| nothing | — | `check` (CI runs it without any key), `scaffold` |
+| nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
 
 `PULUMI_BACKEND_URL` is forced to this checkout's `forts/pulumi/state` by
 every verb, so a `pulumi login` elsewhere can never redirect state into
@@ -146,6 +148,9 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [add](add.md) — a chart's fort-side tree, from its contract
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
+- [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
+  `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
+  Mac joining the mesh
 - [destroy](destroy.md) — the side-effects half, gated on the merge
 - [fort configuration contracts](fort-configuration-contracts.md) — the
   contract schema, overlays, the gate, chart-author guidelines (the #144

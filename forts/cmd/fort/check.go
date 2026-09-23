@@ -85,6 +85,7 @@ func check(args []string) error {
 	if *all {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
 		shared.findings = append(shared.findings, clusterMonitoringFindings(root, parsed)...)
+		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {

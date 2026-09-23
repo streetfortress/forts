@@ -120,10 +120,18 @@ func TestMint(t *testing.T) {
 	if len(*registered) != 1 || (*registered)[0].Title != "flux-"+host || !strings.HasPrefix((*registered)[0].Key, "ssh-ed25519 ") {
 		t.Errorf("gitea: %+v", *registered)
 	}
-	for _, want := range []string{"● nixos/secrets/" + host + ".yaml", "○ nixos/.sops.yaml", "○ wireguard/peers.json", "○ .sops.yaml", "◆ fleet/infrastructure/", "◆ fleet/apps/" + host + "/sops-canary.yaml", "registered flux-" + host, "staged."} {
+	for _, want := range []string{"● nixos/secrets/" + host + ".yaml", "○ nixos/.sops.yaml", "○ wireguard/peers.json", "○ .sops.yaml", "◆ fleet/infrastructure/", "◆ fleet/apps/" + host + "/sops-canary.yaml", "registered flux-" + host, "staged.",
+		"◆ wireguard/ssh_config", "Host " + host + " → deployer@10.1.0.97", "◆ wireguard/known_hosts", "+ " + host + ",10.1.0.97"} {
 		if !strings.Contains(rep, want) {
 			t.Errorf("report lacks %q:\n%s", want, rep)
 		}
+	}
+	// the client side (#434): the fort's Host block and its host key, by name
+	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); !strings.Contains(sc, "Host "+host+"\n  Hostname 10.1.0.97\n  User deployer\n  HostKeyAlias "+host+"\n") {
+		t.Errorf("ssh_config:\n%s", sc)
+	}
+	if kh := parseKnownHosts(readFile(t, filepath.Join(tmp, knownHostsPath))); kh[host].ip != "10.1.0.97" || kh[host].key != hostKeyLine(p.hostKey.public) {
+		t.Errorf("known_hosts: %+v", kh)
 	}
 
 	// re-run: identity restored from the file, nothing to do, key verified on gitea
@@ -136,8 +144,8 @@ func TestMint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || len(p2.rekey) != 0 || p2.canaryPath != "" || p2.registerOn || !strings.Contains(p2.deployKey, "verified match") {
-		t.Errorf("re-run plan: missing=%v edits=%d rekey=%v canary=%q deploy=%q", p2.missing, len(p2.edits), p2.rekey, p2.canaryPath, p2.deployKey)
+	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || len(p2.rekey) != 0 || p2.canaryPath != "" || p2.registerOn || !strings.Contains(p2.deployKey, "verified match") || p2.sshConfig != "" || p2.knownHosts != "" {
+		t.Errorf("re-run plan: missing=%v edits=%d rekey=%v canary=%q deploy=%q ssh=%d kh=%d", p2.missing, len(p2.edits), p2.rekey, p2.canaryPath, p2.deployKey, len(p2.sshConfig), len(p2.knownHosts))
 	}
 	if p2.hostRecip != p.hostRecip || p2.cluster.recipient != p.cluster.recipient || p2.wg.public != p.wg.public {
 		t.Error("re-run derived a different identity")
@@ -194,6 +202,13 @@ func TestMint(t *testing.T) {
 		t.Errorf("foreign wireguard key: want refusal, got %v", err)
 	}
 	os.WriteFile(secrets, []byte(keep), 0o600)
+	khPath := filepath.Join(tmp, knownHostsPath)
+	khKeep := readFile(t, khPath)
+	os.WriteFile(khPath, []byte(knownHostsSet(khKeep, host, "10.1.0.97", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGx6GXsI2LCgCru4Jm5qAV4xKqMfWHKrmW2pVHvG6GGa stale")), 0o644)
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "known_hosts already lists") {
+		t.Errorf("foreign host key line: want refusal, got %v", err)
+	}
+	os.WriteFile(khPath, []byte(khKeep), 0o644)
 	(*registered)[0].Key = strings.TrimSpace(p.deploy.public)
 
 	// round trip: dismantle gives the original files back
@@ -211,6 +226,12 @@ func TestMint(t *testing.T) {
 	}
 	if exists(tmp, manifest.Path(host)) {
 		t.Error("manifest still exists after dismantle")
+	}
+	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); strings.Contains(sc, host) {
+		t.Errorf("ssh_config still names %s after dismantle:\n%s", host, sc)
+	}
+	if kh := readFile(t, khPath); strings.Contains(kh, host) || kh != knownHostsHeader {
+		t.Errorf("known_hosts after dismantle:\n%s", kh)
 	}
 }
 
@@ -331,6 +352,9 @@ func TestMintDevFort(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
 		t.Error("a dev fort must not touch the fleet .sops.yaml")
+	}
+	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); !strings.Contains(sc, "# dev fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User agent\n") {
+		t.Errorf("a dev fort answers as agent:\n%s", sc)
 	}
 	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
 		t.Error("nixos rule missing")

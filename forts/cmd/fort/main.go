@@ -60,6 +60,10 @@ func main() {
 		err = b2BucketsCmd(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
+	case "ssh-config":
+		err = sshConfigCmd(os.Args[2:])
+	case "wg-conf":
+		err = wgConf(os.Args[2:])
 	case "dismantle":
 		err = dismantle(os.Args[2:])
 	case "destroy":
@@ -84,10 +88,10 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  scaffold, mint, image, add, seed, dismantle
+  author  scaffold, mint, image, add, seed, dismantle, ssh-config
   keys    b2-key (the B2 credentials no other verb creates)
   apply   provision, adopt, destroy
-  read    check, preview
+  read    check, preview, wg-conf
 
   scaffold <host> [--write]
       render the host's generated surface from its manifest,
@@ -241,6 +245,33 @@ func usage() {
       manifest and warns on host dirs no manifest claims. Strict on
       every fort; exits nonzero on any error; annotates for CI when
       GITEA_ACTIONS is set.
+
+  ssh-config [--write]
+      render the client side of the mesh from the tree (#434):
+      wireguard/ssh_config — one Host block per peer in peers.json, the
+      fort name plus a role alias where one fort holds the role (sfi-dev,
+      sfi-prod, sfi-stage), its mesh address, and the account its shape
+      answers on (a [dev] fort agent, a cluster fort deployer, a peer
+      with no manifest steven) — and wireguard/known_hosts, one line per
+      fort with its ssh host key, keyed by fort name (HostKeyAlias) and
+      mesh address. Both are committed; consumers Include the first and
+      list the second as a UserKnownHostsFile. mint and dismantle keep
+      them current as they add or remove a peer; this is the whole-fleet
+      render, and the one that backfills a fort's key line, which is in
+      its sops file — with no age key here the committed line is kept
+      and said so. fort check --all fails on a stale ssh_config and
+      warns on a missing key line. Prints the plan; --write writes and
+      stages.
+
+  wg-conf <member>
+      print a mesh member's own wg0 the way the WireGuard app (or
+      wg-quick) wants it pasted, from peers.json: Address, ListenPort
+      (peers, not roaming clients), every other peer with its Endpoint
+      where it has one and PersistentKeepalive, every client without.
+      No PrivateKey line — the app generated that key on the device and
+      its public half is what peers.json holds; the member must already
+      be registered there (docs/nixos/mesh.md, "Adding a peer"). The way a
+      Mac joins the mesh: register, wg-conf, paste. Writes nothing.
 
   dismantle <host> [--write]
       the inverse of scaffold + mint, as a repo mutation

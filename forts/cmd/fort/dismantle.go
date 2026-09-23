@@ -59,6 +59,8 @@ type dismantlePlan struct {
 	entry      manifest.Host
 	removes    []string // repo-relative paths (files or dirs)
 	edits      []dEdit
+	sshConfig  string   // wireguard/ssh_config re-rendered without the host ("" = nothing to do)
+	knownHosts string   // wireguard/known_hosts without the host's line ("" = nothing to do)
 	rekey      []string // sops files under the shared infrastructure rule
 	rustfsUser string   // the fort's identity to withdraw from luxor's provider contract
 	residue    []string // "path: N mention(s)"
@@ -129,6 +131,13 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// 4. wireguard peer
 	p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 
+	// 4b. the client side of the peer (mesh.go): the host's block leaves
+	// ssh_config and its key line leaves known_hosts — where those files
+	// exist; a tree from before them gets neither created here.
+	if err := p.planMesh(); err != nil {
+		return nil, err
+	}
+
 	// 5. residue: everything else that still names the host — counted
 	// on the post-edit text for the files this plan edits, so a dry run
 	// shows what the reviewer will actually face.
@@ -141,6 +150,12 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		if out, err := e.fn(string(raw)); err == nil {
 			edited[e.path] = out
 		}
+	}
+	if p.sshConfig != "" {
+		edited[sshConfigPath] = p.sshConfig
+	}
+	if p.knownHosts != "" {
+		edited[knownHostsPath] = p.knownHosts
 	}
 	p.residue, p.crossRefs = scanResidue(root, host, p.removes, edited)
 	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("forts/pulumi/state/.pulumi/stacks/forts", host+".json")) {
@@ -199,6 +214,9 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 			return err
 		}
 	}
+	if err := writeRendered(p.root, tool, p.sshConfig, p.knownHosts); err != nil {
+		return err
+	}
 	// After the rule edit, so the departed recipient is gone from the
 	// rule the files are re-keyed against.
 	for _, rel := range p.rekey {
@@ -227,6 +245,12 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	for _, e := range p.edits {
 		fmt.Fprintf(w, "○ %-32s %s\n", e.path, e.note)
 	}
+	if p.sshConfig != "" {
+		fmt.Fprintf(w, "◆ %-32s re-rendered without %s\n", sshConfigPath, p.host)
+	}
+	if p.knownHosts != "" {
+		fmt.Fprintf(w, "◆ %-32s - the %s line\n", knownHostsPath, p.host)
+	}
 	for _, rel := range p.rekey {
 		fmt.Fprintf(w, "◆ %-32s sops updatekeys (lost the %s recipient)\n", rel, p.host)
 	}
@@ -251,6 +275,41 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		return
 	}
 	fmt.Fprintln(w, "staged. Next: triage the residue, commit, PR — then fort destroy after the merge.")
+}
+
+// planMesh re-renders the client-side files (mesh.go) on the peers.json
+// this plan leaves behind and without the host's manifest, which this
+// plan removes.
+func (p *dismantlePlan) planMesh() error {
+	if have, err := readOrEmpty(p.root, sshConfigPath); err != nil {
+		return err
+	} else if have != "" {
+		peers, err := os.ReadFile(filepath.Join(p.root, peersPath))
+		if err != nil {
+			return err
+		}
+		future, err := removePeer(string(peers), p.host)
+		if err != nil {
+			return err
+		}
+		rendered, _, err := renderSSHConfigFrom(p.root, future, p.host)
+		if err != nil {
+			return err
+		}
+		if rendered != have {
+			p.sshConfig = rendered
+		}
+	}
+	kh, err := readOrEmpty(p.root, knownHostsPath)
+	if err != nil {
+		return err
+	}
+	if kh != "" {
+		if next := knownHostsRemove(kh, p.host); next != kh {
+			p.knownHosts = next
+		}
+	}
+	return nil
 }
 
 // --- edits

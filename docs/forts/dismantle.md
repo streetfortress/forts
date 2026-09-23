@@ -26,6 +26,8 @@ dismantle sfi-x   (cloud: linode)
 ◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
 ○ fleet/apps/luxor/monitoring/kustomization.yaml   - clusters/sfi-x.yaml
 ○ wireguard/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
+◆ wireguard/ssh_config           re-rendered without sfi-x
+◆ wireguard/known_hosts          - the sfi-x line
 ! residue — 3 file(s) still mention sfi-x; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):
     README.md: 2 mention(s)   (doc)
     fleet/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)

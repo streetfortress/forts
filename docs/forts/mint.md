@@ -42,6 +42,8 @@ Consequences worth knowing:
 | ● | `nixos/secrets/<host>.yaml` — `k3s-token`, `wireguard-private-key`, `ssh-host-key` + `.pub`, `flux-sops-age-key`, `flux-git-deploy-key` | new file written whole and encrypted once; missing keys added with `sops set` |
 | ○ | `nixos/.sops.yaml` — a `# BEGIN/END fort sops rule: <host>` block for `secrets/<host>.yaml`, recipients = the shared admin set + the host | always |
 | ○ | `wireguard/peers.json` — `.peers.<host>` with `wg_vpn_ip`, `public_key`, and `wg_endpoint_ip` (the manifest's `mesh_endpoint`, else the lab `[libvirt] ip`, else `[dns]` name.zone) | always |
+| ◆ | `wireguard/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `agent` on a `[dev]` fort else `deployer`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
+| ◆ | `wireguard/known_hosts` — the host's ssh host key, keyed by name and mesh address; a line under another key is refused | the line is absent |
 | ○ | `.sops.yaml` — the fleet rule for `fleet/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `fleet/infrastructure` rule | always |
 | ◆ | `fleet/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `fleet/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
@@ -170,6 +172,8 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ● nixos/secrets/sfi-x.yaml             k3s-token, wireguard-private-key, … — minted, sops-encrypted
 ○ nixos/.sops.yaml                     + rule secrets/sfi-x.yaml → 3 shared recipient(s) + host age1…
 ○ wireguard/peers.json                 + .peers.sfi-x (10.1.0.55, endpoint sfi-x.streetfortress.cloud)
+◆ wireguard/ssh_config                 re-rendered — Host sfi-x → deployer@10.1.0.55
+◆ wireguard/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
 ○ .sops.yaml                           + rule fleet/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
 ◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (gains the sfi-x recipient)
 ◆ fleet/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
