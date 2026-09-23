@@ -100,5 +100,17 @@ in
     publicKey = giteaKey;
   };
 
+  # The agent identity bundle (#414): minted per fort by `fort mint`,
+  # revoked by `fort destroy`. Owned by agent, read by the tools in
+  # home/agent.nix (git's ssh transport, the gpg import, tea's login,
+  # Claude Code's session). agent-claude-oauth-token is the one fleet-wide
+  # value among them — billing is the subscription, not the API.
+  sops.secrets = {
+    agent-ssh-key = { owner = "agent"; mode = "0400"; };
+    agent-gpg-key = { owner = "agent"; mode = "0400"; };
+    agent-gitea-token = { owner = "agent"; mode = "0400"; };
+    agent-claude-oauth-token = { owner = "agent"; mode = "0400"; };
+  };
+
   environment.systemPackages = [ pkgs.git ];
 }

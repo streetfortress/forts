@@ -119,7 +119,8 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | need | comes from | verbs |
 |---|---|---|
 | admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — flux clusters only |
+| `gitea-token` | `provisioning/secrets.yaml` | mint (register deploy key; on a `[dev]` fort the agent bundle, which needs `write:user`), destroy (revoke) |
+| `agent-claude-oauth-token` | `provisioning/secrets.yaml`, from `claude setup-token` | mint, `[dev]` forts only — copied into the host's file |
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |

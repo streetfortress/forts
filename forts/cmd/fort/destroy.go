@@ -145,7 +145,9 @@ func destroy(args []string) error {
 
 // revokeIdentities: the deploy key fort mint registered — the one
 // off-repo identity of the flux half (the flux age identity died with
-// the sops rule) — and the B2 application keys. Both warned rather than
+// the sops rule) — a dev fort's agent bundle on the sfi-agent user
+// (everything titled agent-<host>: ssh key, gpg key, token; #414), and
+// the B2 application keys. Both warned rather than
 // fatal: the minting credential is an operational input
 // (docs/infra/backups.md), and a destroy must not be blocked waiting for
 // it. A B2 key is scoped to its fort's prefix, so what it can still
@@ -156,6 +158,19 @@ func revokeIdentities(root, host string) {
 		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
 	} else {
 		fmt.Println("  deploy key:", msg)
+	}
+	// The GPG key has no title on gitea: its id comes from the retired
+	// secrets file, read back from the commit that deleted it.
+	keyID, err := retiredGPGKeyID(root, host, sopsCLI{root: root}.Decrypt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — the gpg key (if any) stays; find it by key id on the sfi-agent user and delete it by hand\n", err)
+	}
+	if g, err := giteaClient(root); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — delete agent-%s (ssh key, gpg key, token) by hand on the sfi-agent user\n", err, host)
+	} else if msg, err := revokeAgentIdentity(g, host, keyID); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — delete agent-%s (ssh key, gpg key, token) by hand on the sfi-agent user\n", err, host)
+	} else {
+		fmt.Println("  agent identity:", msg)
 	}
 	if msg, err := revokeB2Key(host); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
@@ -266,7 +281,10 @@ func linodePowerOff(ctx context.Context, host string) error {
 	return nil
 }
 
-const giteaAPI = "https://gitea.zen.lofi/api/v1/repos/sfi/deployments"
+const (
+	giteaBase = "https://gitea.zen.lofi/api/v1"
+	giteaAPI  = giteaBase + "/repos/sfi/deployments"
+)
 
 // giteaClient is the deploy-key API as fort mint (register) and fort
 // destroy (revoke) reach it: the provisioning token, the lab CA.
@@ -282,7 +300,7 @@ func giteaClient(root string) (*giteaDeployKeys, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(ca)
 	client := &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
-	return &giteaDeployKeys{client: client, api: giteaAPI, token: token}, nil
+	return &giteaDeployKeys{client: client, api: giteaAPI, base: giteaBase, token: token}, nil
 }
 
 // revokeDeployKey deletes the read-only key fort mint registered (title

@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,27 +10,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fakeGitea is the deploy-key API: a list that POST appends to.
+// fakeGitea is the deploy-key half of the fake instance (agent_test.go
+// has the whole of it): a list that POST appends to.
 func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
-	list := &keys
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "token t" || r.URL.Path != "/keys" {
-			w.WriteHeader(404)
-			return
-		}
-		switch r.Method {
-		case "GET":
-			json.NewEncoder(w).Encode(*list)
-		case "POST":
-			var k giteaKey
-			json.NewDecoder(r.Body).Decode(&k)
-			k.ID = len(*list) + 1
-			*list = append(*list, k)
-			w.WriteHeader(201)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	return &giteaDeployKeys{client: srv.Client(), api: srv.URL, token: "t"}, list
+	st := &fakeGiteaState{deploy: keys}
+	return newFakeGitea(t, st), &st.deploy
 }
 
 // Mints a new cloud fort on a copy of the real tree's identity files,
@@ -68,7 +49,10 @@ func TestMint(t *testing.T) {
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
-	gitea, registered := fakeGitea(t, nil)
+	st := &fakeGiteaState{}
+	gitea, registered := newFakeGitea(t, st), &st.deploy
+	fleetSecret = func(root, key string) (string, error) { return "fleet-claude-secret", nil }
+	t.Cleanup(func() { fleetSecret = secret })
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
@@ -294,7 +278,10 @@ func TestMintDevFort(t *testing.T) {
 	}
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
-	gitea, registered := fakeGitea(t, nil)
+	st := &fakeGiteaState{}
+	gitea, registered := newFakeGitea(t, st), &st.deploy
+	fleetSecret = func(root, key string) (string, error) { return "fleet-claude-secret", nil }
+	t.Cleanup(func() { fleetSecret = secret })
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
@@ -304,7 +291,7 @@ func TestMintDevFort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.newFile || len(p.missing) != 4 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
+	if !p.newFile || len(p.missing) != 9 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
 		t.Fatalf("plan: newFile=%v missing=%v register=%v canary=%q rekey=%v edits=%d", p.newFile, p.missing, p.registerOn, p.canaryPath, p.rekey, len(p.edits))
 	}
 	for _, k := range []string{keyK3sToken, keyAge} {
@@ -312,14 +299,35 @@ func TestMintDevFort(t *testing.T) {
 			t.Errorf("dev fort must not mint %s", k)
 		}
 	}
+	for _, k := range []string{keyAgentSSH, keyAgentSSHPub, keyAgentGPG, keyAgentToken, keyAgentClaude} {
+		if !contains(p.missing, k) {
+			t.Errorf("dev fort must mint %s", k)
+		}
+	}
+	if p.agent == nil || !p.agent.mintToken || !p.agent.registerSSH || !p.agent.registerGPG || p.agent.claude != "fleet-claude-secret" {
+		t.Fatalf("agent plan: %+v", p.agent)
+	}
 	if err := p.apply(tool, gitea); err != nil {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
 	p.report(&sb, true)
 	rep := sb.String()
-	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "dev fort") || !strings.Contains(rep, "registered flux-"+host) {
+	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "dev fort") || !strings.Contains(rep, "registered flux-"+host) ||
+		!strings.Contains(rep, "ssh key agent-"+host+": registered") || !strings.Contains(rep, "registered + verified (key id "+p.agent.gpg.keyID) || !strings.Contains(rep, "token agent-"+host+": minted") || !strings.Contains(rep, "fleet-wide") {
 		t.Errorf("dev report:\n%s", rep)
+	}
+	// the bundle on the user: one of each, the gpg key verified by the signature mint sent
+	if len(st.keys) != 1 || st.keys[0].Title != "agent-"+host || len(st.gpg) != 1 || !st.gpg[0].Verified || len(st.tokens) != 1 || st.tokens[0].Name != "agent-"+host || strings.Join(st.tokens[0].Scopes, ",") != strings.Join(agentTokenScopes, ",") {
+		t.Errorf("user bundle: keys=%+v gpg=%+v tokens=%+v", st.keys, st.gpg, st.tokens)
+	}
+	// the secrets file holds the minted token and the fleet claude token, and no value was printed
+	sec := readFile(t, filepath.Join(tmp, "nixos/secrets", host+".yaml"))
+	if !strings.Contains(sec, keyAgentToken+": minted-agent-"+host) || !strings.Contains(sec, keyAgentClaude+": fleet-claude-secret") || !strings.Contains(sec, "BEGIN PGP PRIVATE KEY BLOCK") {
+		t.Errorf("secrets file:\n%s", sec)
+	}
+	if strings.Contains(rep, "minted-agent-") || strings.Contains(rep, "fleet-claude-secret") {
+		t.Errorf("report leaks a value:\n%s", rep)
 	}
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
 		t.Error("a dev fort must not touch the fleet .sops.yaml")
@@ -340,6 +348,9 @@ func TestMintDevFort(t *testing.T) {
 	}
 	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || p2.registerOn {
 		t.Errorf("re-run plan: missing=%v edits=%d register=%v", p2.missing, len(p2.edits), p2.registerOn)
+	}
+	if a := p2.agent; a == nil || a.mintToken || a.registerSSH || a.registerGPG || a.verifyGPG || a.gpg.keyID != p.agent.gpg.keyID || !strings.Contains(a.tokStatus, "registered") {
+		t.Errorf("re-run agent plan: %+v", p2.agent)
 	}
 	// round trip: dismantle without a fleet rule to remove
 	d, err := planDismantle(tmp, host)

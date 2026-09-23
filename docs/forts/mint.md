@@ -48,14 +48,17 @@ Consequences worth knowing:
 | ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
 | · | gitea deploy key `flux-<host>`, read-only, on `sfi/deployments` | always; registered under `--write` only |
 | · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
+| ● | `nixos/secrets/<host>.yaml` — `agent-ssh-key` + `.pub`, `agent-gpg-key`, `agent-gitea-token`, `agent-claude-oauth-token` | `[dev]` fort only |
+| · | on the `sfi-agent` gitea user: ssh key and token titled `agent-<host>`, GPG key registered **and verified** | `[dev]` fort only; registered and minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
 
-**The two calls outside the tree** are the gitea deploy key and — on a
-`production` fort — the B2 application key. Both are registered only
-under `--write`, both are reported without printing a value, and both are
-revoked by `fort destroy`.
+**The calls outside the tree** are the gitea deploy key, on a
+`production` fort the B2 application key, and on a `[dev]` fort the agent
+bundle on the `sfi-agent` user. All are registered only under `--write`,
+all are reported without printing a value, and all are revoked by `fort
+destroy`.
 
 **Where the backup credentials come from** is the design, not a detail
 (docs/infra/backups.md):
@@ -107,8 +110,36 @@ and `flux-git-deploy-key` (auto-rebuild's pull credential — every fort's)
 into the secrets file, the `nixos/.sops.yaml` rule, the peer, the deploy
 key on gitea. No `k3s-token`, no `flux-sops-age-key`, no fleet rule or
 infra recipient (nothing to re-key), no canary. The gate wants only
-`nixos/hosts/<host>/default.nix`. The agent identity bundle (#414) joins
-this plan when it lands; a re-run then fills the gap, as with any key.
+`nixos/hosts/<host>/default.nix`.
+
+**The agent identity bundle** (#414) is the dev fort's addition — what
+the coding agent on the box acts as. Per fort, on the `sfi-agent` user:
+
+| sops key | what | on gitea |
+|---|---|---|
+| `agent-ssh-key` (+ `.pub`) | git transport (`core.sshCommand`, `IdentitiesOnly`) | ssh key titled `agent-<host>`, the same every-key-under-the-title-must-match guard as the deploy key |
+| `agent-gpg-key` | commit signing — an ed25519 key, no passphrase, uid `sfi-agent (agent-<host>) <support@streetfortress.com>` | registered **and verified** (mint signs the string `GET /user/gpg_key_token` returns), so the commits show Verified. gitea keeps only the bare primary-key packet — no uid, no title — so destroy finds it by key id |
+| `agent-gitea-token` | `tea`'s login and the API credential of `pickup` (#418) | token named `agent-<host>`; scopes `write:repository write:issue read:organization read:user write:misc` |
+| `agent-claude-oauth-token` | `CLAUDE_CODE_OAUTH_TOKEN` for Claude Code | nowhere — a **fleet** secret copied from `provisioning/secrets.yaml` |
+
+GPG rather than the ssh key for signing because gitea shows an ssh-signed
+commit as Verified only for a key verified through the web form, which
+the API cannot do; the GPG routes verify over the API.
+
+**One credential, no prompt.** Everything is registered with the fleet
+`gitea-token`: the key routes live under `/user`, which an admin's token
+reaches as the agent through gitea's `Sudo` header; the token route
+insists on basic auth by method and accepts a token as the password, so
+mint sends `<owner>:<gitea-token>`. That token needs `write:user` — the
+one scope the deploy key never asked for.
+
+The token has no public half to compare, so its guard is by name: in the
+file and on gitea, or in neither. One without the other refuses — a
+token on gitea with nothing in the file is a stale mint (`fort destroy`
+revokes it, or the user's settings); a value in the file with no token
+on gitea was revoked by hand (`sops unset` it and re-run). The Claude
+token is fleet-wide by design: a compromised fort means `claude
+setup-token` again and a reseed of every dev fort, not a revocation.
 
 ## Guards
 
@@ -154,8 +185,10 @@ check after importing a key by hand.
 ## Needs
 
 The admin age key (to encrypt and to read the existing file), and for a
-flux cluster the `gitea-token` in `provisioning/secrets.yaml`. A lab-only
-host needs no gitea credential. A fort with a `[backups]` profile needs
+flux cluster the `gitea-token` in `provisioning/secrets.yaml` (every
+fort, for the deploy key; a `[dev]` fort's bundle additionally needs it to
+carry `write:user`, and `agent-claude-oauth-token` beside it — seeded
+once from `claude setup-token`). A fort with a `[backups]` profile needs
 `restic-password` and the `rustfs-access-key` / `rustfs-secret-key` pair
 in that same file; a `production` one additionally needs the B2 minting key
 (prompted, or `B2_KEY_ID` / `B2_APP_KEY`), and only when the key it would

@@ -53,6 +53,15 @@ missing manifest is no obstacle.
    (the image-id provenance lives on in git history).
 7. **Revoke the deploy key** `flux-<host>` on gitea — every key under
    that title. Not found is fine (no flux cluster, or removed by hand).
+   Then **the agent bundle** on the `sfi-agent` user, if the host was a
+   `[dev]` fort (#414): the ssh key and token titled `agent-<host>`, and
+   the GPG key by key id. gitea stores a GPG key as its bare primary-key
+   packet — no uid, no title — and the manifest and secrets file are gone
+   by now, so the id is derived from the retired `nixos/secrets/<host>.yaml`
+   read back from the commit that deleted it (still encrypted to the admin
+   key). Nothing under the name is fine too; a history read that fails
+   warns and names the key as the thing left to delete by hand.
+   `agent-claude-oauth-token` is fleet-wide and untouched.
 8. **Stage the state removal.** Commit it as its own PR
    (`<host>: destroyed`); `just iac-drift` is green again since the
    stack no longer exists to report on.
@@ -83,6 +92,7 @@ pulumi destroy -s <host>
 pulumi stack rm <host>
 ```
 
-Then the deploy key through the repo's settings or the keys API, and the
-residue above. This is exactly what `cloudEnv` sets for every fort
+Then the deploy key through the repo's settings or the keys API, the
+agent bundle through the `sfi-agent` user's settings, and the residue
+above. This is exactly what `cloudEnv` sets for every fort
 command; the difference is only who types it.

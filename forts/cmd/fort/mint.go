@@ -114,14 +114,20 @@ type mintPlan struct {
 	resticB2       string
 	b2Status       string // "" = no B2 key in this fort's shape
 	b2Mint         bool   // apply must create it
+
+	// The agent identity bundle a [dev] fort carries (agent.go); nil otherwise.
+	agent *agentPlan
 }
 
-// giteaDeployKeys is the deploy-key API shared with fort destroy. A
-// flux cluster's plan needs one; a lab-only host's passes nil.
+// giteaDeployKeys is the gitea client shared with fort destroy: the
+// deploy-key routes here (api = the repo), the user routes for the agent
+// bundle in agent.go (base = the API root). Every plan needs one.
 type giteaDeployKeys struct {
 	client *http.Client
-	api    string
+	api    string // …/repos/sfi/deployments
+	base   string // …/api/v1
 	token  string
+	admin  string // the token's owner, resolved on first basic-auth use
 }
 
 func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write bool) (*mintPlan, error) {
@@ -231,6 +237,11 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	// implies — restored where the file has them, sourced or minted
 	// where not.
 	if err := p.planBackups(take); err != nil {
+		return nil, err
+	}
+	// 2c. the agent identity bundle of a [dev] fort (agent.go) — its
+	// standing on gitea read now, registered by apply.
+	if err := p.planAgent(take, gitea); err != nil {
 		return nil, err
 	}
 
@@ -355,6 +366,12 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 			return err
 		}
 	}
+	// Same shape for the agent's token: gitea shows it once.
+	if p.agent != nil && p.agent.mintToken {
+		if err := p.mintAgentToken(gitea); err != nil {
+			return err
+		}
+	}
 
 	// Registering with luxor's rustfs-central: this fort's identity is
 	// declared in that fort's tree, because luxor hosts the backup
@@ -428,6 +445,11 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 		}
 		p.deployKey, p.registerOn = status, false
 	}
+	if p.agent != nil {
+		if err := p.registerAgent(gitea); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -470,6 +492,9 @@ func (p *mintPlan) value(key string) string {
 		return p.resticRustfs
 	case keyResticB2:
 		return p.resticB2
+	}
+	if v, ok := p.agentValue(key); ok {
+		return v
 	}
 	return ""
 }
@@ -522,6 +547,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	if p.deployKey != "" {
 		fmt.Fprintf(w, "· gitea deploy key flux-%s: %s\n", p.host, p.deployKey)
 	}
+	p.reportAgent(w)
 	if p.b2Status != "" {
 		fmt.Fprintf(w, "· b2 application key %s\n", p.b2Status)
 	}
@@ -754,29 +780,7 @@ func deployKeyStatus(g *giteaDeployKeys, host, pub string) (status string, regis
 	if err != nil {
 		return "", false, err
 	}
-	local := strings.Join(strings.Fields(pub)[:2], " ")
-	var ids, stale []string
-	for _, k := range keys {
-		if k.Title != "flux-"+host {
-			continue
-		}
-		ids = append(ids, fmt.Sprint(k.ID))
-		if !strings.HasPrefix(k.Key, local) {
-			stale = append(stale, fmt.Sprint(k.ID))
-		}
-	}
-	switch {
-	case len(stale) > 0:
-		// Every key under the title must be ours: a timed-out POST that
-		// gitea recorded anyway leaves duplicates, and a stale one among
-		// them is a foreign key with our name on it.
-		return "", false, fmt.Errorf("deploy key flux-%s on gitea (id %s) differs from the one in %s — delete the stale key deliberately, then re-run", host, strings.Join(stale, ", "), filepath.Join("nixos/secrets", host+".yaml"))
-	case len(ids) > 1:
-		return fmt.Sprintf("registered %d× (ids %s — duplicates, all verified match; fort destroy revokes every one)", len(ids), strings.Join(ids, ", ")), false, nil
-	case len(ids) == 1:
-		return fmt.Sprintf("registered (id %s, verified match)", ids[0]), false, nil
-	}
-	return "would register (read-only)", true, nil
+	return keyStanding(keys, "flux-"+host, pub, "deploy key", filepath.Join("nixos/secrets", host+".yaml"), keyDeploy)
 }
 
 func registerDeployKey(g *giteaDeployKeys, host, pub string) (string, error) {

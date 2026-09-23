@@ -108,7 +108,11 @@ func usage() {
       file holds and fills gaps only — rotation is deliberate, never a
       side effect. Runs after scaffold --write, before add. Prints the
       plan; --write mints, encrypts, registers, stages. fort dismantle is
-      the inverse.
+      the inverse. A [dev] fort also gets the agent identity bundle:
+      an ssh key, a GPG signing key and a token on the sfi-agent user
+      (all titled agent-<host>, registered with the fleet gitea-token —
+      Sudo for the keys, basic auth for the token, no prompt) and the
+      fleet Claude credential copied in; fort destroy revokes the three.
 
   b2-key <minting|pruning|audit|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
       mint a B2 credential no verb may create for itself, because these
