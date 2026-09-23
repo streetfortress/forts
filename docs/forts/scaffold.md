@@ -80,6 +80,22 @@ hardened host without a mesh address has no login path at all. Every fort
 is the hardened profile and a flux cluster — there is no key for either
 (#272).
 
+## The dev shape
+
+A manifest with a `[dev]` table (#413) renders the host dir only:
+
+```
+● nixos/hosts/sfi-dev-x/default.nix   dev fort shape (qcow runtime, static LAN, agent account; no k3s/flux/backups)
+● nixos/hosts/sfi-dev-x/secrets.nix   sops-nix wiring (host key → age)
+```
+
+`default.nix` imports `dev-fort.nix` in place of `k3s-server.nix` +
+`production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`), keeps
+`wireguard.nix` and `auto-rebuild.nix`, and the LAN and zram blocks of
+the lab VM. Nothing under `fleet/` and nothing on the hub: there is no
+cluster to sync, no canary to prove decryption, no dead man's switch to
+arm. `secrets.nix` declares no `k3s-token`.
+
 ## Force-no semantics
 
 `--write` lays a file down only when it does not exist; an existing one is

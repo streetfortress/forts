@@ -266,3 +266,92 @@ func yamlUnmarshalFile(path string, v any) error {
 	}
 	return yaml.Unmarshal(raw, v)
 }
+
+// A dev fort ([dev], #413): host key, wireguard key and the deploy key
+// (auto-rebuild's credential) are minted; the cluster identity — k3s
+// token, cluster age key, fleet rule, infra recipient, canary — is not,
+// and mint's gate wants only the host dir. Dismantle round-trips without
+// a fleet rule to remove.
+func TestMintDevFort(t *testing.T) {
+	repo, err := repoRootFrom(mustGetwd(t))
+	if err != nil {
+		t.Skip("not inside the deployments checkout")
+	}
+	const host = "mint-dev"
+	tmp := t.TempDir()
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
+		"fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
+	for _, rel := range files {
+		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
+	}
+	original := map[string]string{}
+	for _, rel := range files {
+		original[rel] = readFile(t, filepath.Join(tmp, rel))
+	}
+	write := func(rel, content string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
+		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
+	}
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n")
+	tool := &fakeTool{}
+	gitea, registered := fakeGitea(t, nil)
+	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
+		t.Fatalf("without the scaffold: want the gate, got %v", err)
+	}
+	// the host dir alone satisfies the gate — no fleet files wanted
+	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
+	p, err := planMint(tmp, host, tool, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.newFile || len(p.missing) != 4 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
+		t.Fatalf("plan: newFile=%v missing=%v register=%v canary=%q rekey=%v edits=%d", p.newFile, p.missing, p.registerOn, p.canaryPath, p.rekey, len(p.edits))
+	}
+	for _, k := range []string{keyK3sToken, keyAge} {
+		if contains(p.missing, k) {
+			t.Errorf("dev fort must not mint %s", k)
+		}
+	}
+	if err := p.apply(tool, gitea); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	p.report(&sb, true)
+	rep := sb.String()
+	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "dev fort") || !strings.Contains(rep, "registered flux-"+host) {
+		t.Errorf("dev report:\n%s", rep)
+	}
+	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
+		t.Error("a dev fort must not touch the fleet .sops.yaml")
+	}
+	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
+		t.Error("nixos rule missing")
+	}
+	if !strings.Contains(readFile(t, filepath.Join(tmp, "wireguard/peers.json")), `"`+host+`": {`) {
+		t.Error("peer missing")
+	}
+	if len(*registered) != 1 || (*registered)[0].Title != "flux-"+host {
+		t.Errorf("gitea: %+v", *registered)
+	}
+	// re-run: nothing to do
+	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || p2.registerOn {
+		t.Errorf("re-run plan: missing=%v edits=%d register=%v", p2.missing, len(p2.edits), p2.registerOn)
+	}
+	// round trip: dismantle without a fleet rule to remove
+	d, err := planDismantle(tmp, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.apply(&fakeTool{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json"} {
+		if got := readFile(t, filepath.Join(tmp, rel)); got != original[rel] {
+			t.Errorf("%s after mint+dismantle differs from the original", rel)
+		}
+	}
+}

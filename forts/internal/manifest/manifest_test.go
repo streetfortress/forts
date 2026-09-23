@@ -169,3 +169,30 @@ func TestLoadAll(t *testing.T) {
 		t.Errorf("missing: %v", err)
 	}
 }
+
+// [dev] (#413): a positive declaration with its own invariants — no
+// backups, no cluster seed, a lab VM.
+func TestDev(t *testing.T) {
+	base := "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
+	h, err := Parse("dev-fort", []byte(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !h.IsDev() || h.Cluster() {
+		t.Errorf("want a dev fort that is not a cluster: dev=%v cluster=%v", h.IsDev(), h.Cluster())
+	}
+	plain, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
+	if err != nil || plain.IsDev() || !plain.Cluster() {
+		t.Errorf("a fort without [dev] is a cluster: %v dev=%v", err, plain.IsDev())
+	}
+	for name, raw := range map[string]string{
+		"backups": "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+		"cluster": "mesh_ip = \"10.1.0.96\"\nk3s_cluster_init = false\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+		"cloud":   "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"dev\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
+		"unknown": "mesh_ip = \"10.1.0.96\"\n[dev]\nagent = \"sfi-agent\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+	} {
+		if _, err := Parse("dev-fort", []byte(raw)); err == nil {
+			t.Errorf("%s: want a refusal", name)
+		}
+	}
+}

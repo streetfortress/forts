@@ -88,8 +88,14 @@ func check(args []string) error {
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {
-		findings := checkFleetFort(root, fort, shared)
-		if exists(root, filepath.Join("fleet/apps", fort)) {
+		entry, ok := parsed[fort]
+		if !ok {
+			if entry, err = manifest.Load(root, fort); err != nil {
+				return err
+			}
+		}
+		findings := checkFleetFort(root, fort, entry, shared)
+		if entry.Cluster() && exists(root, filepath.Join("fleet/apps", fort)) {
 			cf, err := checkFort(o, fort)
 			if err != nil {
 				return err

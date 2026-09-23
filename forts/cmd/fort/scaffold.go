@@ -46,6 +46,9 @@ type hostView struct {
 	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
 	// is reached by cluster DNS rather than over the mesh.
 	Hub bool
+	// Dev: a dev fort ([dev], #413) — the dev host shape (agent account,
+	// toolchains, no k3s/flux/backups) and no fleet surface at all.
+	Dev bool
 }
 
 // scaffoldFile is one rendered file: repo-relative path + content — or,
@@ -135,7 +138,11 @@ func scaffold(args []string) error {
 		fmt.Println("\ndry run — nothing written (scaffold --write).")
 		return nil
 	}
-	fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
+	if entry.IsDev() {
+		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (host keys, sops rule, deploy key — no cluster identity),\n", written, host)
+	} else {
+		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
+	}
 	if entry.Realized() {
 		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
 	} else {
@@ -145,6 +152,9 @@ func scaffold(args []string) error {
 }
 
 func scaffoldShape(e manifest.Host) string {
+	if e.IsDev() {
+		return "dev fort: lab VM, no cluster"
+	}
 	s := "lab VM"
 	if e.Baremetal() != nil {
 		s = "lab hardware"
@@ -171,6 +181,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
 		Hub:          host == hubHost,
+		Dev:          entry.IsDev(),
 	}
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile
@@ -232,10 +243,26 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if view.Cloud {
 		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, split DNS over the mesh, zram)"
 	}
+	if view.Dev {
+		hostTpl, hostNote = "host-dev.nix.gotpl", "dev fort shape (qcow runtime, static LAN, agent account; no k3s/flux/backups)"
+	}
 	hostDir := filepath.Join("nixos/hosts", host)
 	plan := []struct{ path, tpl, note string }{
 		{filepath.Join(hostDir, "default.nix"), hostTpl, hostNote},
 		{filepath.Join(hostDir, "secrets.nix"), "secrets.nix.gotpl", "sops-nix wiring (host key → age)"},
+	}
+	if view.Dev {
+		// No fleet surface: no cluster dir, no apps root, no canary home,
+		// no dead man's switch on the hub — there is no cluster to watch.
+		var out []scaffoldFile
+		for _, p := range plan {
+			b, err := render(p.tpl)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", p.tpl, err)
+			}
+			out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
+		}
+		return out, nil
 	}
 	clusters := filepath.Join("fleet/clusters", host)
 	plan = append(plan,

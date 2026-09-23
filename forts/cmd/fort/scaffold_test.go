@@ -221,3 +221,38 @@ func keys(m map[string]string) []string {
 	}
 	return out
 }
+
+// A dev fort ([dev], #413) renders the host dir only — the dev shape,
+// no fleet surface, no dead man's switch on the hub.
+func TestRenderScaffoldDev(t *testing.T) {
+	hosts, problems, err := manifest.LoadAll("testdata")
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
+	}
+	files := render(t, "dev-fort", hosts["dev-fort"])
+	if len(files) != 2 {
+		t.Fatalf("want 2 files (default.nix, secrets.nix), got %d", len(files))
+	}
+	m := map[string]string{}
+	for _, f := range files {
+		m[f.path] = string(f.content)
+	}
+	d := m["nixos/hosts/dev-fort/default.nix"]
+	for _, s := range []string{"../../modules/qcow-runtime.nix", "../../modules/dev-fort.nix", "../../modules/wireguard.nix", "../../modules/auto-rebuild.nix", "agent@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "dev-fort"`, "zramSwap", "DEV PROFILE"} {
+		if !strings.Contains(d, s) {
+			t.Errorf("dev default.nix lacks %q", s)
+		}
+	}
+	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "clusterInit", "deployer", "interactive.nix", "dotfiles.nix"} {
+		if strings.Contains(d, s) {
+			t.Errorf("dev default.nix should not carry %q", s)
+		}
+	}
+	sec := m["nixos/hosts/dev-fort/secrets.nix"]
+	if !strings.Contains(sec, "secrets/dev-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
+		t.Errorf("dev secrets.nix wrong:\n%s", sec)
+	}
+	if _, ok := m[clusterMonitoringKustomization]; ok {
+		t.Error("a dev fort must not touch the hub's monitoring kustomization")
+	}
+}

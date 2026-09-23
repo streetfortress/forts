@@ -99,6 +99,17 @@ the intersection; with none — a fresh fork — the catch-all is the answer.
 Adding or removing an admin is a hand edit of the existing rules and new
 hosts follow.
 
+## A dev fort
+
+For a `[dev]` manifest (#413) the plan is the host's own identity and
+nothing cluster-shaped: `wireguard-private-key`, `ssh-host-key` + `.pub`
+and `flux-git-deploy-key` (auto-rebuild's pull credential — every fort's)
+into the secrets file, the `nixos/.sops.yaml` rule, the peer, the deploy
+key on gitea. No `k3s-token`, no `flux-sops-age-key`, no fleet rule or
+infra recipient (nothing to re-key), no canary. The gate wants only
+`nixos/hosts/<host>/default.nix`. The agent identity bundle (#414) joins
+this plan when it lands; a re-run then fills the gap, as with any key.
+
 ## Guards
 
 Mint refuses, before writing anything, when the repo already names an

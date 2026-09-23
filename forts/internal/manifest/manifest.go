@@ -5,8 +5,10 @@
 //
 // The neutral top level is the contract every consumer reads — scaffold,
 // mint, flux, the mesh: mesh_ip, [shape], [dns]. What a fort IS is not a
-// key: every fort is the hardened host profile, flux-managed, a mesh
-// member (#272) — a different shape will be a positive declaration.
+// key: every fort is the hardened host profile, a mesh member (#272), and
+// — unless it says otherwise — a flux cluster. The one thing it can say
+// is [dev] (#413): a transient lab VM hosting one agent identity, no
+// cluster at all. A positive declaration, never the absence of flux.
 // Exactly one provider table ([linode], [libvirt], [baremetal]) names the
 // backend that raises the host; it is decoded by that provider's own Spec
 // type and is opaque to everything else. Adding a provider = one file in
@@ -56,6 +58,9 @@ type Host struct {
 	Shape   Shape   `toml:"shape"`
 	DNS     DNS     `toml:"dns"`
 	Backups Backups `toml:"backups"`
+	// Dev is the [dev] table when present: this fort is a dev fort
+	// (#413). Empty today; the presence is the declaration.
+	Dev *DevSpec `toml:"dev"`
 
 	// Provider is the one provider table present; Spec its decoded form.
 	Provider string `toml:"-"`
@@ -93,6 +98,25 @@ type Backups struct {
 	// to its own rustfs would be circular.
 	Profile string `toml:"profile"`
 }
+
+// DevSpec is the [dev] table (#413): a dev fort — a transient lab VM
+// with an unprivileged `agent` account, the dev toolchains and the
+// dotfiles, and NO cluster: no k3s, no flux, no fleet tree, no cluster
+// age key, no backups. scaffold renders the dev host shape, mint skips
+// the cluster identity, check expects no fleet dirs. It carries no keys
+// yet; the table's presence is the whole declaration.
+//
+//	[dev]
+type DevSpec struct{}
+
+// IsDev says whether this is a dev fort — the one shape that is not a
+// flux cluster.
+func (h Host) IsDev() bool { return h.Dev != nil }
+
+// Cluster says whether this fort is a flux cluster: fleet/clusters +
+// fleet/apps trees, the cluster age key, the canary, k3s. Every fort
+// but a dev one.
+func (h Host) Cluster() bool { return !h.IsDev() }
 
 // Profiles are the accepted values of [backups] profile.
 var Profiles = []string{"lab", "production", "none"}
@@ -318,6 +342,21 @@ func (h Host) Validate(host string) error {
 		return fail("[backups] profile is required — one of %s. A fort that does not say silently gets nothing backed up; \"none\" says so out loud (docs/infra/backups.md)", strings.Join(Profiles, ", "))
 	default:
 		return fail("[backups] profile %q: want one of %s", h.Backups.Profile, strings.Join(Profiles, ", "))
+	}
+	if h.IsDev() {
+		// A dev fort has nothing to back up and nothing to cluster; the
+		// manifest must not pretend otherwise. Lab VM only for now: the
+		// shape is a libvirt domain on the hypervisor (forts#12), and a
+		// cloud or hardware dev fort would be its own declaration.
+		if h.Backups.Profile != "none" {
+			return fail("[dev] requires [backups] profile = \"none\" — a dev fort is transient and owns nothing worth a copy")
+		}
+		if h.ClusterInit != nil {
+			return fail("[dev] and k3s_cluster_init together — a dev fort has no cluster")
+		}
+		if h.Libvirt() == nil {
+			return fail("[dev] needs the [libvirt] table — a dev fort is a lab VM on the hypervisor (forts#12)")
+		}
 	}
 	if err := h.Spec.Validate(host, h); err != nil {
 		return fail("[%s]: %v", h.Provider, err)

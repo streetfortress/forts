@@ -141,9 +141,11 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if !exists(root, filepath.Join("nixos/hosts", host, "default.nix")) {
 		need = append(need, filepath.Join("nixos/hosts", host, "default.nix"))
 	}
-	for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
-		if !exists(root, rel) {
-			need = append(need, rel)
+	if entry.Cluster() {
+		for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
+			if !exists(root, rel) {
+				need = append(need, rel)
+			}
 		}
 	}
 	if len(need) > 0 {
@@ -171,11 +173,16 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		return v, ok
 	}
 
-	// 2. the identity: restored where the file has it, minted where not
-	if v, ok := take(keyK3sToken); ok {
-		p.k3sToken = v
-	} else if p.k3sToken, err = newToken(); err != nil {
-		return nil, err
+	// 2. the identity: restored where the file has it, minted where not.
+	// A dev fort ([dev], #413) has no cluster: no k3s token, no cluster
+	// age key, no fleet rule, no canary. Host key, wireguard key and the
+	// deploy key (auto-rebuild's pull credential) are every fort's.
+	if entry.Cluster() {
+		if v, ok := take(keyK3sToken); ok {
+			p.k3sToken = v
+		} else if p.k3sToken, err = newToken(); err != nil {
+			return nil, err
+		}
 	}
 	if v, ok := take(keyWgPrivate); ok {
 		p.wg, err = wgKeyFrom(v)
@@ -201,13 +208,15 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if p.hostRecip, err = sshToAge(p.hostKey.public); err != nil {
 		return nil, err
 	}
-	if v, ok := take(keyAge); ok {
-		p.cluster, err = ageKeyFrom(v)
-	} else {
-		p.cluster, err = newAgeKey()
-	}
-	if err != nil {
-		return nil, err
+	if entry.Cluster() {
+		if v, ok := take(keyAge); ok {
+			p.cluster, err = ageKeyFrom(v)
+		} else {
+			p.cluster, err = newAgeKey()
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	if v, ok := take(keyDeploy); ok {
 		p.deploy, err = sshKeyFrom(v, "flux-"+host)
@@ -260,6 +269,16 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		}
 		p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
 			func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
+	}
+	if !entry.Cluster() {
+		// No fleet rule, no infra recipient, no canary; the deploy key
+		// still — auto-rebuild.nix pulls main with it.
+		status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
+		if err != nil {
+			return nil, err
+		}
+		p.deployKey, p.registerOn = status, register
+		return p, nil
 	}
 	fleetSops, err := os.ReadFile(filepath.Join(root, ".sops.yaml"))
 	if err != nil {
@@ -465,6 +484,9 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	default:
 		facts = append(facts, "lab: libvirt backend")
 	}
+	if p.entry.IsDev() {
+		facts = append(facts, "dev fort: no cluster identity")
+	}
 	facts = append(facts, "mesh "+p.entry.MeshIP)
 	fmt.Fprintf(w, "mint %s   (%s)\n", p.host, strings.Join(facts, " · "))
 	// A dry run mints in memory and discards: a recipient derived from a
@@ -477,7 +499,9 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		return ""
 	}
 	fmt.Fprintf(w, "  host age recipient %s%s\n", p.hostRecip, throwaway(keySSHHost))
-	fmt.Fprintf(w, "  cluster recipient  %s%s\n", p.cluster.recipient, throwaway(keyAge))
+	if p.entry.Cluster() {
+		fmt.Fprintf(w, "  cluster recipient  %s%s\n", p.cluster.recipient, throwaway(keyAge))
+	}
 	switch {
 	case p.newFile:
 		fmt.Fprintf(w, "● %-36s %s — minted, sops-encrypted (host key doubles as its age identity)\n", p.secretsPath, strings.Join(p.missing, ", "))
@@ -514,6 +538,10 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	fmt.Fprintln(w)
 	if !written {
 		fmt.Fprintln(w, "dry run — nothing minted (mint --write).")
+		return
+	}
+	if p.entry.IsDev() {
+		fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then the image build + fort provision %s --image <path>\n", p.host)
 		return
 	}
 	fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: fort add / fort seed %s → PR → merge; then the image build + fort provision %s --image <path>\n", p.host, p.host)

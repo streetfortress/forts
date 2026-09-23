@@ -1,8 +1,8 @@
-# Clone steven's dotfiles from the internal Gitea over the lab network, so
-# ~/.files exists at runtime. Home Manager builds the dotfiles themselves into
-# the Nix store at image-build time (home/steven.nix); this only provides the
-# working checkout that the `nix-rebuild` alias (--flake ~/.files/nixos) and the
-# shell profiles sourced by home/steven.nix expect.
+# Clone the dotfiles from the internal Gitea over the lab network, so
+# ~/.files exists at runtime for the user this host carries (`sfi.dotfiles.user`:
+# steven on an interactive host, agent on a dev fort — #413). Home Manager
+# symlinks into that checkout (home/base.nix); this only provides the
+# working checkout the symlinks and the shell profiles expect.
 #
 # Requires:
 #   - the lab CA trusted        so TLS to gitea.zen.lofi validates — from
@@ -13,15 +13,21 @@
 # hosts with no LAN path reach it over the WireGuard mesh, so the unit orders
 # itself after wg-quick-wg0 when that interface is present. Best-effort: an
 # unreachable gitea logs and exits 0 rather than failing activation.
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
-  user = "steven";
+  user = config.sfi.dotfiles.user;
   home = config.users.users.${user}.home;
   repo = "https://gitea.zen.lofi/sf1tzp/.files.git";
 in
 {
-  systemd.services.clone-dotfiles = {
+  options.sfi.dotfiles.user = lib.mkOption {
+    type = lib.types.str;
+    default = "steven";
+    description = "The account whose ~/.files this host clones and keeps current.";
+  };
+
+  config.systemd.services.clone-dotfiles = {
     description = "Clone/update ${user}'s dotfiles from ${repo}";
     after = [ "network-online.target" "wg-quick-wg0.service" ];
     wants = [ "network-online.target" ];

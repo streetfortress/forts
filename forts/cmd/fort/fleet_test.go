@@ -6,28 +6,49 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
 func TestFleetTree(t *testing.T) {
 	root := t.TempDir()
 	mk := func(rel string) { os.MkdirAll(filepath.Join(root, rel), 0o755) }
 	shared := fleetShared{infra: map[string]string{}}
+	cluster := manifest.Host{}
 
-	got := checkFleetFort(root, "a", shared)
+	got := checkFleetFort(root, "a", cluster, shared)
 	if len(got) != 3 || got[0].level != "error" || got[0].dir != "nixos/hosts/a" {
 		t.Errorf("empty tree: %+v", got)
 	}
 	mk("nixos/hosts/a")
 	mk("fleet/clusters/a")
 	mk("fleet/apps/a")
-	got = checkFleetFort(root, "a", shared)
+	got = checkFleetFort(root, "a", cluster, shared)
 	if len(got) == 0 || got[0].dir != "fleet/clusters/a/cluster-vars.yaml" || got[0].level != "error" {
 		t.Errorf("no cluster-vars: %+v", got)
 	}
 
+	// a dev fort ([dev], #413): the host dir is the whole tree, and a
+	// fleet dir that exists anyway is the finding
+	dev := manifest.Host{Dev: &manifest.DevSpec{}}
+	got = checkFleetFort(root, "d", dev, shared)
+	if len(got) != 1 || got[0].level != "error" || got[0].dir != "nixos/hosts/d" {
+		t.Errorf("dev without host dir: %+v", got)
+	}
+	mk("nixos/hosts/d")
+	got = checkFleetFort(root, "d", dev, shared)
+	if len(got) != 1 || got[0].level != "ok" {
+		t.Errorf("dev with host dir: %+v", got)
+	}
+	mk("fleet/apps/d")
+	got = checkFleetFort(root, "d", dev, shared)
+	if len(got) != 1 || got[0].level != "error" || got[0].dir != "fleet/apps/d" {
+		t.Errorf("dev with a stray apps tree: %+v", got)
+	}
+
 	mk("nixos/hosts/zz")
 	mk("fleet/apps/old")
-	orphans := orphanFindings(root, map[string]bool{"a": true})
+	orphans := orphanFindings(root, map[string]bool{"a": true, "d": true})
 	if len(orphans) != 2 || orphans[0].dir != "nixos/hosts/zz" || orphans[1].dir != "fleet/apps/old" || orphans[0].level != "warning" {
 		t.Errorf("orphans: %+v", orphans)
 	}

@@ -56,17 +56,43 @@ mac = "f8:ce:72:02:05:07"    # the NIC the address goes on — a dock's USB NIC
 disk = "/dev/nvme0n1"        # the writer's target (docs/forts/baremetal.md)
 ```
 
+```toml
+# sfi-dev-c86dd7b — a dev fort (#413): a transient lab VM hosting one
+# agent identity; no cluster.
+mesh_ip = "10.1.0.61"
+
+[dev]                        # THE declaration: dev-fort.nix, no k3s/flux/backups
+
+[backups]
+profile = "none"             # required with [dev] — nothing on it is precious
+
+[shape]
+vcpus = 4
+memory = 8
+disk = "80G"
+
+[libvirt]
+ip = "10.0.0.61"
+```
+
 **The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
 `nixos_state_version`, `[shape]`, `[dns]`, `[backups]` — this is what scaffold, mint,
 add, check, the pulumi program and the mesh read. Every consumer reads the
 same Go struct (`forts/internal/manifest`), so the generators cannot drift.
 
-**A fort is always hardened, flux-managed, on the mesh.** There is no
-`production` or `flux_cluster` key (#272): every fort imports
-`production.nix` (deployer-only, mesh-scoped SSH), gets
-`fleet/clusters/<host>` + the cluster key + the deploy key, carries
-`protect: true` on its stack, and `mesh_ip` is required. A different shape
-(#273) will be a positive declaration, not the absence of flux.
+**A fort is always hardened, on the mesh — and, unless it says
+otherwise, flux-managed.** There is no `production` or `flux_cluster`
+key (#272): every fort imports the hardened profile (mesh-scoped SSH,
+no wheel), gets the deploy key (auto-rebuild's pull credential), carries
+`protect: true` on its stack, and `mesh_ip` is required. A cluster fort
+adds `production.nix` (deployer-only), `fleet/clusters/<host>` and the
+cluster key. The one different shape is a positive declaration, never
+the absence of flux: **`[dev]`** (#413) makes the host a dev fort —
+`dev-fort.nix` (an unprivileged `agent` that builds, the toolchains, the
+dotfiles, nix-ld) with no k3s, no flux, no fleet tree, no cluster age key.
+The table is empty today; its presence is the whole declaration. It
+requires `[backups] profile = "none"`, refuses `k3s_cluster_init`, and
+is `[libvirt]`-only for now (forts#12: a lab VM on the hypervisor).
 
 **One provider table, opaque to everyone but its backend.** `[linode]`,
 `[libvirt]` and `[baremetal]` are decoded by their own Go types
@@ -142,14 +168,14 @@ fort is how they drift.
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block |
-| `mint` | `mesh_ip` (wg key, peer), the endpoint; the cluster key, deploy key and canary always; `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
+| `scaffold` | everything: the provider table picks the host shape, `[dev]` picks the dev shape and drops the fleet surface, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a cluster fort (`[dev]` skips them and the k3s token); `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
 | `destroy` | the gate: no manifest on `origin/main` and none in the working tree (so it revokes the B2 key by name, not by profile — there is no manifest left to read) |
-| `check --all` (fleet half), the nix-eval job | the list of hosts |
+| `check --all` (fleet half), the nix-eval job | the list of hosts; `[dev]` → a host dir and no fleet dirs is the expected tree (a fleet dir anyway is an error) |
 
 ## History
 

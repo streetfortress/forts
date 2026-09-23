@@ -58,6 +58,11 @@ Two things deserve the explanation:
 The residue is counted on the post-edit text of the files the plan
 edits, so the dry run shows what the reviewer will actually face.
 
+A dev fort (#413) has no fleet dirs, no file on the hub and no fleet
+sops rule to lose — the plan is the manifest, the host dir, the secrets
+file, the `nixos/.sops.yaml` rule and the peer. The `.sops.yaml` edit is
+planned only where the host's rule block exists.
+
 ## What stays, on purpose
 
 - **The pulumi stack** and its state. Touching it here would put a
