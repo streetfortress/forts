@@ -1,0 +1,92 @@
+# {{ .Hostname }}'s monitoring on the hub — a DEV fort ([dev], #413): no
+# cluster, no edge Prometheus, so the hub PULLS. Rendered by `fort scaffold`
+# from the manifest (mesh_ip), removed by `fort dismantle`; `fort check
+# --all` requires one per dev fort. Two targets over the mesh: node-exporter
+# (lab-host.nix) and the fort-local OpenTelemetry collector (dev-fort.nix,
+# #437) that holds Claude Code's usage metrics. The journal and the Claude
+# events push to loki-mesh from the fort; this file arms the switches for
+# both legs. `cluster` = the fort's name — a cluster of none, but the label
+# every fleet rule and dashboard keys on.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: dev-fort-{{ .Hostname }}
+  namespace: monitoring-central
+  labels:
+    monitoring.sfi/scope: central
+spec:
+  jobName: dev_fort_{{ .Hostname }}
+  staticConfigs:
+    # Target labels win over the job_name-derived `job` (Prometheus sets it
+    # only when the target has none): the node leg files under linux_vms
+    # beside devbox, so the host-fleet dashboard's VM panels see the fort.
+    - targets: ["{{ .MeshIP }}:9100"]
+      labels:
+        job: linux_vms
+        component: node
+        instance: {{ .Hostname }}
+        cluster: {{ .Hostname }}
+        host: {{ .Hostname }}
+    - targets: ["{{ .MeshIP }}:9464"]
+      labels:
+        job: claude_code
+        component: otel
+        instance: {{ .Hostname }}
+        cluster: {{ .Hostname }}
+        host: {{ .Hostname }}
+---
+# Dead man's switch, pull-shaped: a scraped target that stops answering
+# is up == 0 (no absent() needed — the series lives as long as this file).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dev-fort-{{ .Hostname }}
+  namespace: monitoring-central
+  labels:
+    monitoring.sfi/scope: central
+spec:
+  groups:
+    - name: dev-fort-{{ .Hostname }}
+      rules:
+        - alert: DevFortDown
+          expr: up{cluster="{{ .Hostname }}", component="node"} == 0
+          for: 10m
+          labels:
+            severity: critical
+            cluster: {{ .Hostname }}
+          annotations:
+            summary: "{{ .Hostname }} unreachable over the mesh for 10m — fort down, or destroyed without `fort dismantle {{ .Hostname }}`"
+        # The collector alone: the host answers but Claude Code's usage is
+        # dark (and so is the journal leg — see LogStreamSilent).
+        - alert: DevFortCollectorDown
+          expr: up{cluster="{{ .Hostname }}", component="otel"} == 0 unless on (cluster) up{cluster="{{ .Hostname }}", component="node"} == 0
+          for: 10m
+          labels:
+            severity: warning
+            cluster: {{ .Hostname }}
+          annotations:
+            summary: "{{ .Hostname }}'s OpenTelemetry collector is not answering — Claude Code usage and the journal are not being shipped"
+---
+# Log analog: the journal leg (job=systemd) goes quiet. auto-rebuild's gate
+# echoes into the journal every minute, so 15m of silence is a broken
+# collector or ingest, not a quiet host.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-{{ .Hostname }}
+  namespace: monitoring-central
+  labels:
+    loki_rule: "1"
+data:
+  {{ .Hostname }}.yaml: |
+    groups:
+      - name: dev-fort-{{ .Hostname }}
+        rules:
+          - alert: LogStreamSilent
+            expr: absent_over_time({job="systemd", cluster="{{ .Hostname }}"}[15m])
+            for: 5m
+            labels:
+              severity: warning
+              cluster: {{ .Hostname }}
+            annotations:
+              summary: No journal from {{ .Hostname }} for 15m — the fort's collector or Loki ingest broken

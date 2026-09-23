@@ -222,16 +222,17 @@ func keys(m map[string]string) []string {
 	return out
 }
 
-// A dev fort ([dev], #413) renders the host dir only — the dev shape,
-// no fleet surface, no dead man's switch on the hub.
+// A dev fort ([dev], #413) renders the host dir — the dev shape, no
+// fleet surface — plus its pull-shaped file on the hub (#437) and the
+// kustomization line that applies it.
 func TestRenderScaffoldDev(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
 		t.Fatal(err, problems)
 	}
 	files := render(t, "dev-fort", hosts["dev-fort"])
-	if len(files) != 2 {
-		t.Fatalf("want 2 files (default.nix, secrets.nix), got %d", len(files))
+	if len(files) != 4 {
+		t.Fatalf("want 4 files (default.nix, secrets.nix, clusters/dev-fort.yaml, + kustomization line), got %d", len(files))
 	}
 	m := map[string]string{}
 	for _, f := range files {
@@ -252,7 +253,28 @@ func TestRenderScaffoldDev(t *testing.T) {
 	if !strings.Contains(sec, "secrets/dev-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
 		t.Errorf("dev secrets.nix wrong:\n%s", sec)
 	}
-	if _, ok := m[clusterMonitoringKustomization]; ok {
-		t.Error("a dev fort must not touch the hub's monitoring kustomization")
+	mon := m[clusterMonitoringPath("dev-fort")]
+	for _, s := range []string{"kind: ScrapeConfig", `targets: ["10.1.0.96:9100"]`, `targets: ["10.1.0.96:9464"]`, "job: linux_vms", "job: claude_code", `cluster: dev-fort`, "alert: DevFortDown", "alert: DevFortCollectorDown", `{job="systemd", cluster="dev-fort"}`} {
+		if !strings.Contains(mon, s) {
+			t.Errorf("dev hub file lacks %q", s)
+		}
+	}
+	for _, s := range []string{"ClusterStreamSilent", "grafana_datasource", "fluent-bit", "30993"} {
+		if strings.Contains(mon, s) {
+			t.Errorf("dev hub file should not carry %q (that is a cluster's)", s)
+		}
+	}
+	var hasEdit bool
+	for _, f := range files {
+		if f.path == clusterMonitoringKustomization && f.edit != nil {
+			hasEdit = true
+			out, err := f.edit("resources:\n  - clusters/luxor.yaml\n")
+			if err != nil || !strings.Contains(out, "  - clusters/dev-fort.yaml\n") {
+				t.Errorf("kustomization edit: %v\n%s", err, out)
+			}
+		}
+	}
+	if !hasEdit {
+		t.Error("a dev fort's file on the hub needs its kustomization line")
 	}
 }

@@ -15,6 +15,13 @@
 # and the box is replaced, not repaired. That is what makes an unattended
 # `claude -p` with permissions bypassed sane here (#418) and nowhere else.
 #
+# The fort also carries its own telemetry (#437): an OpenTelemetry
+# collector that takes Claude Code's usage metrics and events on
+# localhost, publishes the metrics for luxor to scrape over the mesh
+# (like node-exporter), and pushes the system journal + the events to
+# luxor's Loki. A dev fort has no k3s and so no fluent-bit; this is its
+# only log path, and the one that lets NixosUpgradeFailed fire for it.
+#
 # Toolchains come from the store, not from installers at runtime: nothing
 # the SFI checkouts pin today needs a channel manager (go 1.24–1.26, node
 # ≥22, python 3.13 via uv). Add rustup only when a repo grows a
@@ -28,6 +35,11 @@ let
   # agent's first clone over ssh never meets a trust prompt.
   giteaParts = lib.splitString " " config.sfi.auto-rebuild.gitKnownHosts;
   giteaKey = "${lib.elemAt giteaParts 1} ${lib.elemAt giteaParts 2}";
+  # The fort's name, stamped on everything its collector ships (below):
+  # `cluster` because that is the label every fleet rule and dashboard
+  # keys on — a dev fort is a cluster of none, and the alternative was a
+  # second label meaning the same thing.
+  host = config.networking.hostName;
 in
 {
   imports = [
@@ -111,6 +123,111 @@ in
     agent-gitea-token = { owner = "agent"; mode = "0400"; };
     agent-claude-oauth-token = { owner = "agent"; mode = "0400"; };
   };
+
+  # ---- telemetry (#437) --------------------------------------------------
+  # One collector per fort, the [dev] profile's telemetry contract: Claude
+  # Code points at localhost (home/agent.nix sets the env) and never learns
+  # a luxor address; the collector is what stamps cluster/host, so a task's
+  # env only has to add what the fort cannot know (repo, issue — pickup,
+  # #418). Three pipelines:
+  #   metrics  otlp → deltatocumulative → stamp → :9464 (prometheus
+  #            exporter; luxor's ScrapeConfig from clusters/<host>.yaml
+  #            pulls it beside node-exporter). Claude Code is asked for
+  #            cumulative temporality (the env); deltatocumulative is the
+  #            belt for a session that ignores the preference.
+  #   logs     Claude Code's events (prompt/response/tool_result/api_request,
+  #            text redacted by default) → loki-mesh, job=claude-code
+  #   logs     the system journal → loki-mesh, job=systemd — the same
+  #            labels fluent-bit ships from a cluster fort, so the fleet's
+  #            journal rules and dashboards see a dev fort unchanged. The
+  #            line is the journal record as JSON (fluent-bit's
+  #            line_format json), so `| json | _SYSTEMD_UNIT=...` is the
+  #            same query on both.
+  # Which resource attributes Loki indexes as labels is the hub's call:
+  # otlp_config in fleet/apps/luxor/monitoring/loki.yaml (job, cluster,
+  # host, repo, issue); the rest ride as structured metadata.
+  services.opentelemetry-collector = {
+    enable = true;
+    # contrib: journald receiver, deltatocumulative, prometheus exporter.
+    package = pkgs.opentelemetry-collector-contrib;
+    settings = {
+      receivers = {
+        otlp.protocols.grpc.endpoint = "127.0.0.1:4317";
+        # The system journal, from now: no cursor store, so a collector
+        # restart skips what happened while it was down (Loki is the
+        # dashboard, journalctl on the host is the record).
+        journald.start_at = "end";
+      };
+      processors = {
+        batch = { };
+        deltatocumulative = { };
+        "transform/metrics".metric_statements = [{
+          statements = [
+            ''set(datapoint.attributes["cluster"], "${host}")''
+            ''set(datapoint.attributes["host"], "${host}")''
+          ];
+        }];
+        "transform/claude".log_statements = [{
+          statements = [
+            ''set(resource.attributes["job"], "claude-code")''
+            ''set(resource.attributes["cluster"], "${host}")''
+            ''set(resource.attributes["host"], "${host}")''
+          ];
+        }];
+        "transform/journal".log_statements = [{
+          statements = [
+            ''set(resource.attributes["job"], "systemd")''
+            ''set(resource.attributes["cluster"], "${host}")''
+            ''set(resource.attributes["host"], "${host}")''
+            # The unit as structured metadata: filterable without a label
+            # per unit.
+            ''set(log.attributes["unit"], log.body["_SYSTEMD_UNIT"]) where log.body["_SYSTEMD_UNIT"] != nil''
+          ];
+        }];
+      };
+      exporters = {
+        # All interfaces, like node-exporter; hardened.nix's wg0-only
+        # firewall (+ the port below) is what makes it mesh-only.
+        prometheus = {
+          endpoint = "0.0.0.0:9464";
+          # Claude Code already copies OTEL_RESOURCE_ATTRIBUTES onto every
+          # datapoint (OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES), so no
+          # resource→label conversion here — it would also drag
+          # service.* onto every series.
+          resource_to_telemetry_conversion.enabled = false;
+          # A task's series outlive its process by this much; the scrape is
+          # 30 s (kube-prometheus-stack's default), so nothing is missed.
+          metric_expiration = "10m";
+        };
+        # Loki's native OTLP ingest (Loki ≥ 3.0) on the mesh NodePort
+        # (fleet/apps/luxor/monitoring/mesh-services.yaml). The mesh IP,
+        # not luxor.lofi: the name is a dual A record (fluent-bit's lesson).
+        otlphttp.endpoint = "http://10.1.0.5:31100/otlp";
+      };
+      service.pipelines = {
+        metrics = {
+          receivers = [ "otlp" ];
+          processors = [ "deltatocumulative" "transform/metrics" "batch" ];
+          exporters = [ "prometheus" ];
+        };
+        "logs/claude" = {
+          receivers = [ "otlp" ];
+          processors = [ "transform/claude" "batch" ];
+          exporters = [ "otlphttp" ];
+        };
+        "logs/journal" = {
+          receivers = [ "journald" ];
+          processors = [ "transform/journal" "batch" ];
+          exporters = [ "otlphttp" ];
+        };
+      };
+    };
+  };
+  # The journald receiver shells out to journalctl (the module grants the
+  # systemd-journal group but not the binary).
+  systemd.services.opentelemetry-collector.path = [ pkgs.systemd ];
+  # Mesh-only, beside 22 and 9100 from hardened.nix.
+  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 9464 ];
 
   environment.systemPackages = [ pkgs.git ];
 }

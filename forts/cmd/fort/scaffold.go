@@ -252,8 +252,11 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		{filepath.Join(hostDir, "secrets.nix"), "secrets.nix.gotpl", "sops-nix wiring (host key → age)"},
 	}
 	if view.Dev {
-		// No fleet surface: no cluster dir, no apps root, no canary home,
-		// no dead man's switch on the hub — there is no cluster to watch.
+		// No fleet surface: no cluster dir, no apps root, no canary home.
+		// The hub still gets the fort's file (#437): with no edge
+		// Prometheus the hub PULLS — node-exporter and the fort's
+		// OpenTelemetry collector over the mesh — and arms the switches
+		// on both legs, in the same <host>-keyed place a cluster's live.
 		var out []scaffoldFile
 		for _, p := range plan {
 			b, err := render(p.tpl)
@@ -262,7 +265,11 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 			}
 			out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
 		}
-		return out, nil
+		b, err := render("dev-monitoring.yaml.gotpl")
+		if err != nil {
+			return nil, fmt.Errorf("dev-monitoring.yaml.gotpl: %w", err)
+		}
+		return append(out, hubMonitoringFiles(host, b, devMonitoringNote)...), nil
 	}
 	clusters := filepath.Join("fleet/clusters", host)
 	plan = append(plan,
@@ -289,21 +296,27 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cluster-monitoring.yaml.gotpl: %w", err)
 	}
-	note := "dead man's switch (metrics, logs), edge Alertmanager datasource"
+	note := clusterMonitoringNote
 	if view.BackupProfile == "production" {
 		note += ", PVBackupNotConfigured"
 	}
+	return append(out, hubMonitoringFiles(host, b, note)...), nil
+}
+
+// hubMonitoringFiles is a fort's file on the hub plus the line that
+// makes flux apply it (clustermon.go) — the same pair for a cluster and
+// a dev fort, different content.
+func hubMonitoringFiles(host string, content []byte, note string) []scaffoldFile {
 	item := "clusters/" + host + ".yaml"
-	out = append(out,
-		scaffoldFile{path: clusterMonitoringPath(host), content: b, note: note},
-		scaffoldFile{path: clusterMonitoringKustomization, note: "+ " + item, edit: func(s string) (string, error) {
+	return []scaffoldFile{
+		{path: clusterMonitoringPath(host), content: content, note: note},
+		{path: clusterMonitoringKustomization, note: "+ " + item, edit: func(s string) (string, error) {
 			if strings.Contains(s, item) {
 				return s, nil
 			}
 			return appendListItem(s, "resources", item)
 		}},
-	)
-	return out, nil
+	}
 }
 
 func repoRoot() (string, error) {

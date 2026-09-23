@@ -82,19 +82,31 @@ is the hardened profile and a flux cluster — there is no key for either
 
 ## The dev shape
 
-A manifest with a `[dev]` table (#413) renders the host dir only:
+A manifest with a `[dev]` table (#413) renders the host dir and the
+fort's file on the hub:
 
 ```
 ● nixos/hosts/sfi-dev-x/default.nix   dev fort shape (qcow runtime, static LAN, agent account; no k3s/flux/backups)
 ● nixos/hosts/sfi-dev-x/secrets.nix   sops-nix wiring (host key → age)
+fleet/apps/luxor/monitoring/
+● clusters/sfi-dev-x.yaml             mesh scrape targets (node-exporter, otel collector), DevFortDown, LogStreamSilent
+○ kustomization.yaml                  + clusters/sfi-dev-x.yaml
 ```
 
 `default.nix` imports `dev-fort.nix` in place of `k3s-server.nix` +
 `production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`), keeps
 `wireguard.nix` and `auto-rebuild.nix`, and the LAN and zram blocks of
-the lab VM. Nothing under `fleet/` and nothing on the hub: there is no
-cluster to sync, no canary to prove decryption, no dead man's switch to
-arm. `secrets.nix` declares no `k3s-token`.
+the lab VM. Nothing under `fleet/`: there is no cluster to sync and no
+canary to prove decryption. `secrets.nix` declares no `k3s-token`.
+
+The hub file is the pull-shaped counterpart of a cluster's (#437): with
+no edge Prometheus, luxor scrapes the fort over the mesh — node-exporter
+on 9100 and the fort's OpenTelemetry collector on 9464, which holds
+Claude Code's usage metrics — and arms `DevFortDown` /
+`DevFortCollectorDown` on the targets and `LogStreamSilent` on the
+journal stream the collector pushes to Loki. `cluster` is the fort's
+name, as on every other fort. No edge Alertmanager datasource: a dev
+fort has none.
 
 ## Force-no semantics
 

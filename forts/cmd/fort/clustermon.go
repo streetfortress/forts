@@ -25,16 +25,25 @@ const (
 
 // clusterMonitoringPath is a cluster's file on the hub: its dead man's
 // switch (metrics and logs), the backup leg its profile promises, and
-// its edge Alertmanager as a Grafana datasource.
+// its edge Alertmanager as a Grafana datasource. A dev fort ([dev]) has
+// a file in the same place with the pull-shaped equivalent (#437): the
+// hub's ScrapeConfig for node-exporter + the fort's OpenTelemetry
+// collector over the mesh, and the switches on both legs.
 func clusterMonitoringPath(host string) string {
 	return filepath.Join(clusterMonitoringDir, host+".yaml")
 }
 
-// clusterMonitoringFindings (--all): every flux cluster has its file on
-// the hub and the hub's kustomization lists it — a cluster with no dead
-// man's switch is the silent failure the central layer exists to
-// catch — and every file there belongs to a manifest, so a retired
-// fort's rule cannot keep paging for a cluster that is gone.
+// The post-scaffold notes for the two shapes (also what check reports).
+const (
+	clusterMonitoringNote = "dead man's switch (metrics, logs), edge Alertmanager datasource"
+	devMonitoringNote     = "mesh scrape targets (node-exporter, otel collector), DevFortDown, LogStreamSilent"
+)
+
+// clusterMonitoringFindings (--all): every flux cluster and every dev
+// fort has its file on the hub and the hub's kustomization lists it — a
+// fort with no dead man's switch is the silent failure the central layer
+// exists to catch — and every file there belongs to a manifest, so a
+// retired fort's rule cannot keep paging for a host that is gone.
 func clusterMonitoringFindings(root string, hosts map[string]manifest.Host) []finding {
 	var out []finding
 	kust, _ := os.ReadFile(filepath.Join(root, clusterMonitoringKustomization))
@@ -44,17 +53,22 @@ func clusterMonitoringFindings(root string, hosts map[string]manifest.Host) []fi
 	}
 	sort.Strings(names)
 	for _, host := range names {
-		if !exists(root, filepath.Join("fleet/clusters", host)) {
+		dev := hosts[host].IsDev()
+		if !dev && !exists(root, filepath.Join("fleet/clusters", host)) {
 			continue
 		}
 		rel := clusterMonitoringPath(host)
+		what, note := "a flux cluster with no dead man's switch on the hub", clusterMonitoringNote
+		if dev {
+			what, note = "a dev fort the hub does not scrape", devMonitoringNote
+		}
 		switch {
 		case !exists(root, rel):
-			out = append(out, finding{"error", rel, "missing — " + host + " is a flux cluster with no dead man's switch on the hub; `fort scaffold " + host + " --write` renders it"})
+			out = append(out, finding{"error", rel, "missing — " + host + " is " + what + "; `fort scaffold " + host + " --write` renders it"})
 		case !strings.Contains(string(kust), "clusters/"+host+".yaml"):
 			out = append(out, finding{"error", clusterMonitoringKustomization, "does not list clusters/" + host + ".yaml — the file exists and flux never applies it; `fort scaffold " + host + " --write` adds the line"})
 		default:
-			out = append(out, finding{"ok", rel, "dead man's switch (metrics, logs), edge Alertmanager datasource"})
+			out = append(out, finding{"ok", rel, note})
 		}
 	}
 	entries, _ := os.ReadDir(filepath.Join(root, clusterMonitoringDir))
