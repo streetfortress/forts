@@ -107,7 +107,7 @@ func TestMint(t *testing.T) {
 	}
 	fleet := readFile(t, filepath.Join(tmp, ".sops.yaml"))
 	block = markerBlock(fleet, host)
-	if strings.Count(block, "- age1") != 2 || !strings.Contains(block, p.cluster.recipient+" # "+host) || !strings.Contains(block, "# admin") {
+	if strings.Count(block, "- age1") != len(sharedRecipients(original[".sops.yaml"]))+1 || !strings.Contains(block, p.cluster.recipient+" # "+host) || !strings.Contains(block, "# admin") {
 		t.Errorf("fleet rule:\n%s", block)
 	}
 	if !strings.Contains(fleet, "      - "+p.cluster.recipient+" # cluster: "+host+"\n") {
