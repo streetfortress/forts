@@ -13,7 +13,14 @@
 # answers on the mesh only (hardened.nix), the agent has no wheel and no
 # ops verbs — the pull loop is the only way config reaches this host —
 # and the box is replaced, not repaired. That is what makes an unattended
-# `claude -p` with permissions bypassed sane here (#418) and nowhere else.
+# Claude with permissions bypassed sane here (#418) and nowhere else.
+#
+# The dispatch loop (#418, docs/forts/dev.md): `ssh sfi-dev pickup
+# <owner/repo> <n>` preps a worktree and hands the task to Claude inside a
+# herdr workspace; herdr is the supervisor — its server runs as a user
+# service in agent's lingering manager (home/agent.nix), the package comes
+# from the second nixpkgs input (below), and macmini watches it over the
+# mesh with `herdr --remote`.
 #
 # The fort also carries its own telemetry (#437): an OpenTelemetry
 # collector that takes Claude Code's usage metrics and events on
@@ -27,7 +34,7 @@
 # ≥22, python 3.13 via uv). Add rustup only when a repo grows a
 # rust-toolchain.toml; don't build an FHS env unless something specific
 # breaks after nix-ld.
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 let
   # gitea's host key, from the one pin auto-rebuild.nix carries
@@ -60,9 +67,9 @@ in
     isNormalUser = true;
     description = "SFI coding agent";
     shell = pkgs.zsh;
-    # A user manager that outlives the login: `pickup` (#418) runs claude
-    # under systemd-run --user so a dropped ssh session never kills a
-    # task in flight.
+    # A user manager that outlives the login: the herdr server (#418,
+    # home/agent.nix) lives in it, so a task keeps running after the
+    # dispatching ssh session ends.
     linger = true;
     # Read the host journal — the OBSERVE rung for a host with no other
     # operator account (same grant as deployer's, production.nix).
@@ -83,6 +90,15 @@ in
   # agent builds: `nix develop`, `nix build` in the checkouts. hardened.nix
   # keeps root; this appends.
   nix.settings.allowed-users = [ "agent" ];
+
+  # herdr from the second nixpkgs input (flake.nix): the fleet pin predates
+  # the package. An overlay, so home/agent.nix says `pkgs.herdr` like
+  # anything else and moving it to the fleet pin is a delete here.
+  nixpkgs.overlays = [
+    (final: prev: {
+      herdr = inputs.nixpkgs-herdr.legacyPackages.${prev.stdenv.hostPlatform.system}.herdr;
+    })
+  ];
 
   # A build box churns generations and fills a store faster than a fort
   # that only receives merges: half the fleet window (#423).
@@ -128,8 +144,8 @@ in
   # One collector per fort, the [dev] profile's telemetry contract: Claude
   # Code points at localhost (home/agent.nix sets the env) and never learns
   # a luxor address; the collector is what stamps cluster/host, so a task's
-  # env only has to add what the fort cannot know (repo, issue — pickup,
-  # #418). Three pipelines:
+  # env only has to add what the fort cannot know (repo, issue — the
+  # herdr workspace pickup creates, #418). Three pipelines:
   #   metrics  otlp → deltatocumulative → stamp → :9464 (prometheus
   #            exporter; luxor's ScrapeConfig from clusters/<host>.yaml
   #            pulls it beside node-exporter). Claude Code is asked for
