@@ -94,10 +94,23 @@ in
   # herdr from the second nixpkgs input (flake.nix): the fleet pin predates
   # the package. An overlay, so home/agent.nix says `pkgs.herdr` like
   # anything else and moving it to the fleet pin is a delete here.
+  # The agent's fast-moving tools from the fresh nixpkgs input, not the
+  # fleet pin: herdr (#418) and claude-code — the fleet pin's Claude Code
+  # (2.1.137, 2026-05) trails the laptops by months, and a store package
+  # cannot self-update. Dev forts only; every other host keeps the pin.
   nixpkgs.overlays = [
-    (final: prev: {
-      herdr = inputs.nixpkgs-herdr.legacyPackages.${prev.stdenv.hostPlatform.system}.herdr;
-    })
+    (final: prev:
+      let
+        fresh = import inputs.nixpkgs-herdr {
+          inherit (prev.stdenv.hostPlatform) system;
+          # A second nixpkgs is a second config: the fleet's allowUnfree
+          # (common.nix) does not reach legacyPackages, and the eval
+          # refused claude-code as unfree. Let through by name, only what
+          # this overlay takes — the carve-out is the dev fort's, not a
+          # second fleet-wide allowUnfree.
+          config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "claude-code" ];
+        };
+      in { inherit (fresh) herdr claude-code; })
   ];
 
   # A build box churns generations and fills a store faster than a fort
