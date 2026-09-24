@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,7 +64,11 @@ func checkFleetShared(root string, hosts map[string]bool, orphans bool) fleetSha
 			continue
 		}
 		s.infra[layer] = built
-		s.findings = append(s.findings, finding{"ok", layer, "kustomize build"})
+		if ff := dataSizeFindings(layer, built); len(ff) > 0 {
+			s.findings = append(s.findings, ff...)
+		} else {
+			s.findings = append(s.findings, finding{"ok", layer, "kustomize build + data sizes"})
+		}
 	}
 	if orphans {
 		s.findings = append(s.findings, orphanFindings(root, hosts)...)
@@ -129,11 +134,12 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 			out = append(out, finding{"error", layer, err.Error()})
 			continue
 		}
-		ff := append(namespaceFindings(layer, fort, built), envsubstFindings(layer, fort, built, vars)...)
+		ff := append(namespaceFindings(layer, fort, built), dataSizeFindings(layer, built)...)
+		ff = append(ff, envsubstFindings(layer, fort, built, vars)...)
 		if len(ff) > 0 {
 			out = append(out, ff...)
 		} else {
-			out = append(out, finding{"ok", layer, fmt.Sprintf("kustomize build + namespaces + strict envsubst (%d cluster vars)", len(vars))})
+			out = append(out, finding{"ok", layer, fmt.Sprintf("kustomize build + namespaces + data sizes + strict envsubst (%d cluster vars)", len(vars))})
 		}
 	}
 	for _, layer := range infraLayers {
@@ -229,6 +235,92 @@ func namespaceFindings(layer, fort, built string) []finding {
 		out = append(out, finding{"error", layer, fmt.Sprintf("(%s): %s/%s has no namespace — the apply fails with \"namespace not specified\" and stops the whole layer (a generator does not inherit one; set `namespace:` on its entry)", fort, doc.Kind, doc.Metadata.Name)})
 	}
 	return out
+}
+
+// dataSizeLimit is what the API server allows a ConfigMap or a Secret
+// to carry: the validation sums the data values and refuses the object
+// above 1 MiB (MaxSecretSize in the API server's own validation).
+// dataSizeWarn is the point at which the next file of the same size
+// would not fit — three quarters of the limit.
+const (
+	dataSizeLimit = 1 << 20
+	dataSizeWarn  = dataSizeLimit * 3 / 4
+)
+
+// dataSizeFindings: no generated ConfigMap or Secret in the built stream
+// passes the 1 MiB limit. The API server refuses the object, and flux
+// then fails the WHOLE layer — every other resource in the directory
+// stops to reconcile, and the symptom the operator sees first is "my
+// dashboard did not appear" (#508). Nothing warned before that point:
+// kustomize build applies no size limit of its own, and the 13 grafana
+// dashboards in one ConfigMap reached 63% of the limit unremarked.
+// The warning at three quarters of the limit is that notice.
+func dataSizeFindings(layer, built string) []finding {
+	var out []finding
+	for _, chunk := range docSep.Split(built, -1) {
+		if strings.TrimSpace(chunk) == "" {
+			continue
+		}
+		var doc struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Name string `yaml:"name"`
+			} `yaml:"metadata"`
+			Data       map[string]string `yaml:"data"`
+			BinaryData map[string]string `yaml:"binaryData"`
+			StringData map[string]string `yaml:"stringData"`
+		}
+		// A type error still fills the fields it could decode, and an
+		// unparseable document carries no Kind and falls out below —
+		// envsubstFindings is where a broken document is reported.
+		_ = yaml.Unmarshal([]byte(chunk), &doc)
+		if doc.Kind != "ConfigMap" && doc.Kind != "Secret" {
+			continue
+		}
+		size := dataSize(doc.Kind, doc.Data, doc.BinaryData, doc.StringData)
+		switch {
+		case size > dataSizeLimit:
+			out = append(out, finding{"error", layer, fmt.Sprintf("%s/%s carries %d bytes of data, over the API server's %d — the apply fails and flux stops the whole layer (split it: one ConfigMap for each file)", doc.Kind, doc.Metadata.Name, size, dataSizeLimit)})
+		case size > dataSizeWarn:
+			out = append(out, finding{"warning", layer, fmt.Sprintf("%s/%s carries %d bytes of data, over three quarters of the API server's %d — split it before it passes the limit and stops the whole layer", doc.Kind, doc.Metadata.Name, size, dataSizeLimit)})
+		}
+	}
+	return out
+}
+
+// dataSize counts what the API server counts. A ConfigMap is measured
+// by its values alone; binaryData holds base64, and the limit applies
+// to the bytes that value decodes to. A Secret is measured by its keys
+// and its values, and its data is base64 for the same reason.
+func dataSize(kind string, data, binaryData, stringData map[string]string) int {
+	size := 0
+	if kind == "Secret" {
+		for k, v := range data {
+			size += len(k) + decodedLen(v)
+		}
+		for k, v := range stringData {
+			size += len(k) + len(v)
+		}
+		return size
+	}
+	for _, v := range data {
+		size += len(v)
+	}
+	for _, v := range binaryData {
+		size += decodedLen(v)
+	}
+	return size
+}
+
+// decodedLen is the length of a base64 value, or the length of the
+// string itself when it does not decode — a sops-encrypted value is
+// ciphertext with a prefix, and counting it raw is the safe side.
+func decodedLen(v string) int {
+	b, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(v), ""))
+	if err != nil {
+		return len(v)
+	}
+	return len(b)
 }
 
 // envsubstFindings: every ${VAR} in the built stream's non-exempt

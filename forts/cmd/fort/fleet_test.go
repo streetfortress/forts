@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,5 +197,37 @@ metadata:
 		if !clusterScoped[kind] {
 			t.Errorf("%s must be exempt", kind)
 		}
+	}
+}
+
+// The 1 MiB ceiling is not kustomize's — it is the API server's, and it
+// arrives as a failure of the whole layer (#508). The gate measures the
+// same bytes the API server measures: a ConfigMap by its values, a
+// Secret by its keys and its decoded values.
+func TestDataSizeFindings(t *testing.T) {
+	cm := func(name string, size int) string {
+		return "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: " + name +
+			"\ndata:\n  big.json: " + strings.Repeat("x", size) + "\n---\n"
+	}
+	built := cm("small", 1024) + cm("near", dataSizeWarn+1) + cm("over", dataSizeLimit+1)
+	got := dataSizeFindings("fleet/apps/luxor", built)
+	if len(got) != 2 {
+		t.Fatalf("the small ConfigMap must not be a finding: %+v", got)
+	}
+	if got[0].level != "warning" || !strings.Contains(got[0].msg, "ConfigMap/near") {
+		t.Errorf("three quarters of the limit is a warning: %+v", got[0])
+	}
+	if got[1].level != "error" || !strings.Contains(got[1].msg, "ConfigMap/over") {
+		t.Errorf("over the limit is an error: %+v", got[1])
+	}
+	if got := dataSizeFindings("x", ""); len(got) != 0 {
+		t.Errorf("empty stream: %+v", got)
+	}
+	// A Secret's data is base64: 1 MiB of ciphertext is 1.33 MiB of
+	// text, and the API server counts the bytes it decodes to.
+	secret := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: s\ndata:\n  k: " +
+		base64.StdEncoding.EncodeToString([]byte(strings.Repeat("y", 800*1024))) + "\n"
+	if got := dataSizeFindings("x", secret); len(got) != 1 || got[0].level != "warning" {
+		t.Errorf("base64 must be counted decoded: %+v", got)
 	}
 }

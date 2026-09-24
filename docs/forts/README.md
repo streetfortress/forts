@@ -43,8 +43,9 @@ Every fort change follows the same beat, and the reasons are the rules.
 2. **PR, review, merge.** Generated code is reviewed like any other. CI
    runs `fort check --all` (every manifest valid, the tree matches them,
    every flux layer kustomize-builds — a listed-but-unseeded Secret fails
-   it, that red X is the guard working — strict envsubst satisfiable,
-   secrets match contracts) and `nix eval` of every host.
+   it, that red X is the guard working — strict envsubst satisfiable, no
+   ConfigMap or Secret above the API server's 1 MiB limit, secrets match
+   contracts) and `nix eval` of every host.
 3. **Apply from merged main.** `provision` and `destroy` run against what
    main says. `destroy` refuses outright unless the host's manifest is
    *absent* from `origin/main` — the merged dismantle PR is the deliberate
