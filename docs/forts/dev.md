@@ -137,6 +137,42 @@ input above).
   Claude Code reads `OTEL_RESOURCE_ATTRIBUTES` once at start, so a
   session is never re-stamped to another issue.
 
+## What it did, what it cost: the dashboard and the alerts
+
+The fort's collector (#437, `nixos/modules/dev-fort.nix`) is what makes
+the loop observable from luxor: Claude Code's usage counters scraped
+over the mesh, one series set per task (`cluster` = the fort, `repo` +
+`issue` from the workspace env, no `session.id`), and the session's
+event stream in Loki (`{job="claude-code"}`, the same labels, every
+event attribute as structured metadata, prompt and response text
+`<REDACTED>`). On top of it:
+
+- **The dashboard** — *Claude Code (dev forts)*, `sfi-claude-code`
+  (`fleet/apps/luxor/monitoring/dashboards/claude-code.py`): totals over
+  the range, cost and tokens by task and by model, a per-task table
+  (cost, tokens, time in tools, commits, PRs, lines), the activity
+  counters, and the events — API calls and latency by model, tool
+  calls and failures by tool, the event log. `$cluster` and `$repo`
+  select; a row with no repo/issue is the fort's own interactive usage.
+- **`ClaudeCodeDailyCostHigh`** (`rules-central.yaml`, the metrics side):
+  one fort's 24 h spend above 50 USD-equivalent. The number is the
+  CLI's API-equivalent — billing is the subscription — so it is a pace
+  alarm: a looping task, or more dispatches than the fort should carry.
+- **`ClaudeCodeTurnStuck`** (`loki-rules.yaml`, the log side): a turn
+  that is open and silent — its `user_prompt` has no Stop hook
+  completion behind it and no API call or tool event for 30 minutes. A
+  finished task is idle at its prompt with the turn *closed*, so it does
+  not fire; a hung tool does. This is a log rule because no counter can
+  see it: the CLI's active-time counter is added when an operation
+  ends, so a tool that never returns moves nothing.
+
+Two things about the counters that the dashboard works around, worth
+knowing when reading them raw: `session.count` is born at 1 (the CLI
+increments it before the first export), so `increase()` never sees a
+session start — sessions are counted from the SessionStart hook's
+completion event in Loki; and `active_time{type="cli"}` is time inside
+tracked operations (tool calls), not the session's wall-clock.
+
 ## What is durable, and what is not
 
 A dev fort is `[backups] profile = "none"` by requirement. What the loop
@@ -168,7 +204,17 @@ task), each a claim above:
   names which of the three answers above is wrong on this Claude Code.
 - A pane split later in the workspace prints `PICKUP_TASK` and
   `OTEL_RESOURCE_ATTRIBUTES`; the series on `:9464` carry `repo` and
-  `issue`; `claude --resume` from that pane keeps them.
+  `issue`; `claude --resume` from that pane keeps them. (Verified on
+  sfi-dev-831c637, 2026-09-24, from inside a dispatched session: the
+  pane's shell and the Claude process both carry the env — the Bash
+  tool's own subprocesses do not, Claude Code strips `OTEL_*` from
+  them — and `:9464` shows `repo="sfi/deployments", issue="437"` on
+  every counter, `vcs_*` beside them, no `session_id`.)
+- On luxor: `up{cluster="<fort>", component="otel"}` is 1 on the
+  central Prometheus; `{job="claude-code", cluster="<fort>"}` streams in
+  Loki with `event_name` as structured metadata and `prompt` /
+  `response` reading `<REDACTED>`; the Claude Code dashboard's per-task
+  table has the task's row.
 - The PR appears with a current description, and after the agent stops,
   the transcript comment with its attachment.
 - `herdr machine add … --label <host>` saved on macmini; `gotea
