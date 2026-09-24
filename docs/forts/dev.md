@@ -189,7 +189,7 @@ event attribute as structured metadata, prompt and response text
 - **The dashboard** — *Claude Code (dev forts)*, `sfi-claude-code`
   (`fleet/apps/luxor/monitoring/dashboards/claude-code.py`): totals over
   the range, cost and tokens by task and by model, a per-task table
-  (cost, tokens, time in tools, commits, PRs, lines), the activity
+  (cost, tokens, time in tools, commits, lines), the activity
   counters, and the events — API calls and latency by model, tool
   calls and failures by tool, the event log. `$cluster` and `$repo`
   select; a row with no repo/issue is the fort's own interactive usage.
@@ -205,12 +205,43 @@ event attribute as structured metadata, prompt and response text
   see it: the CLI's active-time counter is added when an operation
   ends, so a tool that never returns moves nothing.
 
-Two things about the counters that the dashboard works around, worth
-knowing when reading them raw: `session.count` is born at 1 (the CLI
-increments it before the first export), so `increase()` never sees a
-session start — sessions are counted from the SessionStart hook's
-completion event in Loki; and `active_time{type="cli"}` is time inside
-tracked operations (tool calls), not the session's wall-clock.
+What the counters can and cannot see, worth knowing when reading them
+raw — the dashboard works around each, and the generator's header
+carries the long form (#462):
+
+- **A counter's series is born carrying its first increment.** Nothing
+  is exported until the counter ticks once, so `increase()`, which takes
+  the first sample as its baseline, never sees that tick. At the fort's
+  10 s export interval that is nothing for cost, tokens and active time;
+  for `commit.count`, `lines_of_code.count` and
+  `code_edit_tool.decision` — a handful of ticks per task — it is most
+  or all of the value, and a task that commits once reads 0 forever. The
+  dashboard totals those three with `max_over_time()` instead: a task's
+  series is monotonic and dies with the task (`metric_expiration` is
+  10 m), so its max over a range that covers the task *is* the total.
+  Read raw, remember the other side of that: a range starting mid-task
+  counts the task's whole life, and a second pickup of the same issue
+  reuses the same label set, so the later series' max hides the
+  earlier's. `session.count` is the older instance of the same trap —
+  born at 1 before the first export — so sessions started are counted
+  from the SessionStart hook's completion event in Loki instead.
+- **`pull_request.count` cannot see a PR opened here**, which is why the
+  dashboard no longer has a PR panel. Claude Code bumps it on `gh pr
+  create` / `glab mr create`, a POST to a `…/pulls` URL, or an MCP tool
+  named `create_pull_request`; `tea pr create` — the PR verb the
+  `pickup` and `scout` skills use — matches none of them, and gitea's
+  `/pulls/<n>` URLs miss its URL recogniser too. It also fires on
+  unrelated POSTs. PR counts come back from gitea itself (#463).
+- **`lines_of_code.count` only sees the edit tools.** It is computed
+  from an Edit / Write / NotebookEdit diff; a `sed -i`, a heredoc or a
+  `cat >>` through Bash moves it by nothing — and `bypassPermissions`,
+  which is how `pickup` starts Claude, steers the agent towards exactly
+  those. (`commit.count` is tool-agnostic: it is parsed out of `git
+  commit`'s `[branch abc1234]` stdout.) So the panels say "edit tools"
+  and the number is a floor; the diff a task actually shipped is its
+  PR's, which gitea has (#463).
+- **`active_time{type="cli"}`** is time inside tracked operations (tool
+  calls), not the session's wall-clock.
 
 ## What is durable, and what is not
 
