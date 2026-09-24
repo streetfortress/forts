@@ -4,7 +4,7 @@ resources:
   - namespace.yaml
   - cluster.yaml
   - database-sfi-website.yaml
-  # Seeded from secrets.contract.yaml (secrets-<app>: each tenant's role
+  # Seeded from forts.contract.yaml (secrets-<app>: each tenant's role
   # password); listed-but-absent = the pre-merge kustomize guard. No
   # secrets-backup: this fort's profile renders no archive (cluster.yaml).
   - secrets-sfi-website.sops.yaml

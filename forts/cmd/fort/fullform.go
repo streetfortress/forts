@@ -10,7 +10,7 @@ import (
 
 // The fort-side seeding contract in its FULL FORM — the schema
 // `fort seed` executes and every committed
-// fleet/apps/<fort>/<dir>/secrets.contract.yaml uses today: named
+// fleet/apps/<fort>/<dir>/forts.contract.yaml uses today: named
 // sources (sops'd dotenvs), named vars, and one entry per Secret file
 // with its metadata and keyed value specs. `fort add` renders it for a
 // chart from the chart's own contract; `fort seed` executes it, or

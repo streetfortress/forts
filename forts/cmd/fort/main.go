@@ -210,7 +210,7 @@ func usage() {
 
   add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
       [--hostname fqdn] [--without type,...] [--chart-dir path] [--write]
-      render a chart's fort-side tree from the secrets.contract.yaml it
+      render a chart's fort-side tree from the forts.contract.yaml it
       ships (docs/forts/fort-configuration-contracts.md): app dir + HelmRelease with the
       contract's wire: values filled by convention, gateway listener +
       certificate, provider instances (valkey) on first need and tenant
@@ -221,7 +221,7 @@ func usage() {
 
   seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]
       produce the fort's sops-encrypted Secrets from contracts: the
-      committed full-form secrets.contract.yaml where there is one, else
+      committed full-form forts.contract.yaml where there is one, else
       the chart's own contract (pulled at the pinned tag) + the fort's
       overlay, resolved against the fort's providers by convention.
       A <dir> is the app's name (sites-db) or its repo-relative path;

@@ -154,7 +154,7 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 			continue
 		}
 		dir := filepath.Join(apps, e.Name())
-		if !exists(o.root, filepath.Join(dir, contract.FileName)) && !exists(o.root, filepath.Join(dir, "repository.yaml")) {
+		if !contract.Present(filepath.Join(o.root, dir)) && !exists(o.root, filepath.Join(dir, "repository.yaml")) {
 			continue
 		}
 		so := seedOpts{root: o.root, fort: fort, chartDir: o.chartDir, charts: o.charts}
@@ -186,6 +186,12 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 		}
 		if c != nil {
 			out = append(out, checkWires(o.root, fort, dir, c)...)
+			if c.File == contract.LegacyFileName {
+				// The chart still ships the pre-#464 name. Loading it
+				// keeps working for good; this is the nudge to rename
+				// it in the chart repo when that repo is next open.
+				out = append(out, finding{"warning", dir, "the pinned chart ships " + contract.LegacyFileName + " — rename it to " + contract.FileName + " in the chart repo (the old name keeps loading)"})
+			}
 		}
 		if len(out) == before {
 			out = append(out, finding{"ok", dir, source})
@@ -304,7 +310,7 @@ func checkDeclared(dir string, ff *FullForm, c *contract.Contract) []finding {
 	}
 	var out []finding
 	if len(missing) > 0 {
-		out = append(out, finding{"error", dir, "chart contract declares " + strings.Join(missing, ", ") + " — the fort-side secrets.contract.yaml does not carry them (add the key with a source, or drop the full form so fort seed derives it)"})
+		out = append(out, finding{"error", dir, "chart contract declares " + strings.Join(missing, ", ") + " — the fort-side " + contract.FileName + " does not carry them (add the key with a source, or drop the full form so fort seed derives it)"})
 	}
 	if len(missingOpt) > 0 {
 		out = append(out, finding{"warning", dir, "chart contract's optional key(s) not carried fort-side: " + strings.Join(missingOpt, ", ")})

@@ -34,10 +34,10 @@ func TestCheckFindings(t *testing.T) {
 		return s + "sops: {}\n"
 	}
 	// complete full-form provider
-	write("valkey/secrets.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      symbology: {generate: hex24}\n")
+	write("valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      symbology: {generate: hex24}\n")
 	write("valkey/secrets.sops.yaml", secret("valkey-users", "valkey", "default", "symbology"))
 	// sites-db: the symbology tenant secret lacks its password key
-	write("sites-db/secrets.contract.yaml", "secrets:\n  secrets-symbology.sops.yaml:\n    metadata: {name: c, namespace: sites-db}\n    keys:\n      username: {literal: symbology}\n      password: {generate: hex24}\n")
+	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-symbology.sops.yaml:\n    metadata: {name: c, namespace: sites-db}\n    keys:\n      username: {literal: symbology}\n      password: {generate: hex24}\n")
 	write("sites-db/secrets-symbology.sops.yaml", secret("c", "sites-db", "username"))
 	// symbology: chart contract (fixture), wires partly unset, Secret
 	// lacks STRIPE_SECRET_KEY (required external) and RESEND_API_KEY
@@ -52,7 +52,7 @@ func TestCheckFindings(t *testing.T) {
 	// RESEND_API_KEY (optional), and its release has no cache.* wires
 	write("legacy/repository.yaml", "kind: OCIRepository\nspec:\n  url: oci://gitea.zen.lofi/sfi/symbology\n  ref:\n    tag: \"0.1.2\"\n")
 	write("legacy/release.yaml", "spec:\n  values:\n    database: {host: h, port: \"5432\", name: legacy, user: legacy}\n")
-	write("legacy/secrets.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: legacy-env, namespace: legacy}\n    keys:\n      BETTER_AUTH_SECRET: {generate: hex32}\n      DATABASE_PASSWORD: {generate: hex32}\n      CACHE_PASSWORD: {generate: hex32}\n      STRIPE_WEBHOOK_SECRET: {generate: hex32}\n      OPENAI_API_KEY: {generate: hex32}\n      ANTHROPIC_API_KEY: {generate: hex32}\n")
+	write("legacy/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: legacy-env, namespace: legacy}\n    keys:\n      BETTER_AUTH_SECRET: {generate: hex32}\n      DATABASE_PASSWORD: {generate: hex32}\n      CACHE_PASSWORD: {generate: hex32}\n      STRIPE_WEBHOOK_SECRET: {generate: hex32}\n      OPENAI_API_KEY: {generate: hex32}\n      ANTHROPIC_API_KEY: {generate: hex32}\n")
 	write("legacy/secrets.sops.yaml", secret("legacy-env", "legacy", "BETTER_AUTH_SECRET", "DATABASE_PASSWORD", "CACHE_PASSWORD", "STRIPE_WEBHOOK_SECRET", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"))
 
 	o := checkOpts{root: tmp, chartDir: "testdata/charts/symbology", charts: map[string]pulledChart{}}
@@ -66,7 +66,7 @@ func TestCheckFindings(t *testing.T) {
 	}
 	joined := strings.Join(got, "\n")
 	for _, want := range []string{
-		"ok valkey: secrets.contract.yaml (full form)",
+		"ok valkey: forts.contract.yaml (full form)",
 		"error sites-db: secrets-symbology.sops.yaml: missing password",
 		"error symbology: secrets.sops.yaml: required external key(s) not set: STRIPE_SECRET_KEY",
 		"warning symbology: secrets.sops.yaml: optional external key(s) unset: RESEND_API_KEY",
@@ -104,7 +104,7 @@ func TestCheckFleetOffline(t *testing.T) {
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	dirs, _ := filepath.Glob(filepath.Join(repo, "fleet/apps/*/*/secrets.contract.yaml"))
+	dirs := fleetContracts(repo)
 	for _, path := range dirs {
 		raw := readFile(t, path)
 		if !isFullForm([]byte(raw)) {

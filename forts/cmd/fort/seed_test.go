@@ -21,7 +21,7 @@ func TestFullFormParityWithFleet(t *testing.T) {
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
 	}
-	contracts, _ := filepath.Glob(filepath.Join(repo, "fleet/apps/*/*/secrets.contract.yaml"))
+	contracts := fleetContracts(repo)
 	if len(contracts) == 0 {
 		t.Fatal("no contracts found")
 	}
@@ -145,10 +145,10 @@ func TestSeedFullForm(t *testing.T) {
 	// A provider dir (new file) and an app dir referencing it (new file
 	// with every primitive), plus an existing provider secret that is
 	// missing a key.
-	write("valkey/secrets.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      app: {generate: hex24}\n")
+	write("valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      app: {generate: hex24}\n")
 	write("valkey/secrets.sops.yaml", "apiVersion: v1\nkind: Secret\nmetadata: {name: valkey-users, namespace: valkey}\nstringData:\n  default: ENC[...]\nsops: {}\n")
-	write("sites-db/secrets.contract.yaml", "secrets:\n  secrets-app.sops.yaml:\n    metadata: {name: sites-db-app-credentials, namespace: sites-db, type: kubernetes.io/basic-auth}\n    keys:\n      username: {literal: app}\n      password: {generate: hex24}\n")
-	write("app/secrets.contract.yaml", `sources:
+	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-app.sops.yaml:\n    metadata: {name: sites-db-app-credentials, namespace: sites-db, type: kubernetes.io/basic-auth}\n    keys:\n      username: {literal: app}\n      password: {generate: hex24}\n")
+	write("app/forts.contract.yaml", `sources:
   legacy: `+tmp+`/legacy.env
 vars:
   db_password: {sops: [../sites-db/secrets-app.sops.yaml, stringData.password]}
@@ -251,7 +251,7 @@ func TestSeedFromChartContract(t *testing.T) {
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
 	golden := filepath.Join("testdata/golden", fort)
-	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/secrets.contract.yaml", "valkey/secrets.contract.yaml"} {
+	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/forts.contract.yaml", "valkey/forts.contract.yaml"} {
 		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "fleet/apps", fort, rel))
 	}
 	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: "testdata/charts/symbology", dirs: []string{filepath.Join("fleet/apps", fort, "symbology")}}
@@ -263,7 +263,7 @@ func TestSeedFromChartContract(t *testing.T) {
 		t.Fatalf("plans: %+v", plans)
 	}
 	got := names(plans[0].ff.Secrets[0].Keys)
-	hand, err := parseFullForm([]byte(readFile(t, filepath.Join(golden, "symbology/secrets.contract.yaml"))))
+	hand, err := parseFullForm([]byte(readFile(t, filepath.Join(golden, "symbology/forts.contract.yaml"))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,10 +329,10 @@ func TestSeedEdgeCases(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("sites-db/secrets.contract.yaml", "secrets:\n  secrets-a.sops.yaml:\n    metadata: {name: a, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n  secrets-b.sops.yaml:\n    metadata: {name: b, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n")
+	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-a.sops.yaml:\n    metadata: {name: a, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n  secrets-b.sops.yaml:\n    metadata: {name: b, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n")
 	write("sites-db/secrets-a.sops.yaml", "stringData:\n  password: ENC\n")
 	write("sites-db/secrets-b.sops.yaml", "stringData:\n  password: ENC\n")
-	write("app/secrets.contract.yaml", "vars:\n  pw: {sops: [../sites-db/secrets-a.sops.yaml, stringData.password]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: app-env, namespace: app}\n    keys:\n      URL: {template: \"x://u:${pw}@h/db\"}\n")
+	write("app/forts.contract.yaml", "vars:\n  pw: {sops: [../sites-db/secrets-a.sops.yaml, stringData.password]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: app-env, namespace: app}\n    keys:\n      URL: {template: \"x://u:${pw}@h/db\"}\n")
 
 	// null provider value → error, never "<nil>" in a URL
 	tool := &fakeTool{plain: map[string]string{filepath.Join(apps, "sites-db/secrets-a.sops.yaml"): "stringData:\n  password:\n"}}

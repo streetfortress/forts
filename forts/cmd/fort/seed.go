@@ -142,7 +142,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 		}
 		for _, e := range entries {
 			d := filepath.Join(apps, e.Name())
-			if e.IsDir() && (exists(o.root, filepath.Join(d, contract.FileName)) || exists(o.root, filepath.Join(d, "repository.yaml"))) {
+			if e.IsDir() && (contract.Present(filepath.Join(o.root, d)) || exists(o.root, filepath.Join(d, "repository.yaml"))) {
 				dirs = append(dirs, d)
 			}
 		}
@@ -159,7 +159,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 		}
 		if ff == nil {
 			if explicit {
-				return nil, fmt.Errorf("%s: nothing to seed — no secrets.contract.yaml and no pinned chart shipping one (typo?)", d)
+				return nil, fmt.Errorf("%s: nothing to seed — no %s and no pinned chart shipping one (typo?)", d, contract.FileName)
 			}
 			continue // auto-enumerated dir with neither (e.g. gateway/)
 		}
@@ -238,10 +238,10 @@ func appDir(apps, d string) string {
 // with the committed overlay. nil for dirs with neither.
 func effectiveContract(o seedOpts, dir string) (*FullForm, *contract.Contract, string, error) {
 	var overlay []byte
-	if raw, err := os.ReadFile(filepath.Join(o.root, dir, contract.FileName)); err == nil {
+	if raw, name, err := contract.Read(filepath.Join(o.root, dir)); err == nil {
 		if isFullForm(raw) {
 			ff, err := parseFullForm(raw)
-			return ff, nil, contract.FileName + " (full form)", err
+			return ff, nil, name + " (full form)", err
 		}
 		overlay = raw
 	}

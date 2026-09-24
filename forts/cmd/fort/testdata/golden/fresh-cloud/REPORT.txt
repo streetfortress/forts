@@ -7,17 +7,18 @@ fleet/apps/cloud-fort/   (chart 0.3.0)
   ● redirect-https.yaml          catch-all http→https 301
 ○ kustomization.yaml             + gateway, sites-db, sfi-website
 ● sfi-website/
+  ● forts.contract.yaml          pre-`fort seed` full form, 3 keys
   ● kustomization.yaml           
   ● namespace.yaml               
   ● release.yaml                 wire: postgres.db; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
   ● route.yaml                   HTTPRoute sfi-website.cloud-fort.example.cloud → sfi-website-ui:3000
-  ● secrets.contract.yaml        pre-`fort seed` full form, 3 keys
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
 ● sites-db/
   ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches
   ● database-sfi-website.yaml    Database CR
+  ● forts.contract.yaml          secrets-backup (the fort's B2 db-physical key, external) + secrets-sfi-website
   ● kustomization.yaml           patches: role-sfi-website.yaml
   ● namespace.yaml               
   ● objectstore.yaml             ObjectStore b2: s3://sfi-db-physical-backups/cloud-fort, the fort's own key
@@ -25,7 +26,6 @@ fleet/apps/cloud-fort/   (chart 0.3.0)
   ● scheduled-backup.yaml        nightly base backup via the plugin (stagger the hour by hand)
   ◆ secrets-backup.sops.yaml     seeded
   ◆ secrets-sfi-website.sops.yaml seeded
-  ● secrets.contract.yaml        secrets-backup (the fort's B2 db-physical key, external) + secrets-sfi-website
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed cloud-fort --write

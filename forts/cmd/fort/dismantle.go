@@ -408,7 +408,7 @@ func scanResidue(root, host string, removed []string, edited map[string]string) 
 	}
 	sort.Strings(residue)
 
-	contracts, _ := filepath.Glob(filepath.Join(root, "fleet/apps/*/*/secrets.contract.yaml"))
+	contracts := fleetContracts(root)
 	target := filepath.Join(root, "fleet/apps", host) + string(filepath.Separator)
 	for _, c := range contracts {
 		if strings.HasPrefix(c, target) {

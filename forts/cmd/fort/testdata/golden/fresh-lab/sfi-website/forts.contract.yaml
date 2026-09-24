@@ -1,7 +1,7 @@
 # Seeding contract — NON-SECRET; `fort seed` executes it.
 #
 # PRE-`fort seed` FULL FORM, rendered by `fort add` from the chart's own
-# secrets.contract.yaml (sfi/sfi-website 0.3.0). The chart's copy is
+# forts.contract.yaml (sfi/sfi-website 0.3.0). The chart's copy is
 # the contract; this file is what the current python seeder needs to
 # produce the Secret, and it shrinks to nothing once the CLI reads the
 # chart's copy (docs/forts/fort-configuration-contracts.md). Key set = the chart contract's

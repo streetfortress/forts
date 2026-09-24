@@ -60,7 +60,7 @@ spec:
   # objectstore.yaml, a plugins: block here (barman-cloud.cloudnative-pg.io,
   # barmanObjectName b2, serverName sites-db-v1), scheduled-backup.yaml
   # with method: plugin, and the secrets-backup entry in
-  # secrets.contract.yaml — key from `fort b2-key db-physical {{ .Fort }}
+  # forts.contract.yaml — key from `fort b2-key db-physical {{ .Fort }}
   # --write`.
 {{- end }}
 

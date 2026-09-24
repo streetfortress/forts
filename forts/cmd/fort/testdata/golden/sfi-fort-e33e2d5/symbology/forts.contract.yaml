@@ -1,6 +1,6 @@
 # Seeding contract — NON-SECRET; `fort seed` executes it.
 #
-# PRE-`fort seed` FULL FORM. The chart's own secrets.contract.yaml
+# PRE-`fort seed` FULL FORM. The chart's own forts.contract.yaml
 # (sfi/symbology#189, inside the 0.0.0-pr.189.* tarballs this fort runs)
 # is the contract; this file is what the current python seeder needs to
 # produce the same Secret, and it shrinks to nothing once the CLI reads

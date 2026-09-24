@@ -405,7 +405,7 @@ func (r b2Role) followUp() string {
 		f := "secrets-b2-" + r.host + ".sops.yaml"
 		return "Next: it belongs in luxor's databasus-central tree, as the Secret the\n" +
 			"host's Storage CR references (fleet/apps/luxor/databasus-central/\n" +
-			"secrets.contract.yaml) — seeded, not pasted into a UI. That file must\n" +
+			"forts.contract.yaml) — seeded, not pasted into a UI. That file must\n" +
 			"exist first (`fort seed luxor fleet/apps/luxor/databasus-central --write`), then:\n" +
 			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/access-key --write\n" +
 			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/secret-key --write\n" +
@@ -424,7 +424,7 @@ func (r b2Role) followUp() string {
 			"for a fort whose manifest says [backups] profile = \"production\". Nothing else reads it."
 	case "sfi-b2-audit-key":
 		return "Next: it belongs in luxor's monitoring-central tree as the Secret the\n" +
-			"s3-exporter reads (fleet/apps/luxor/monitoring/secrets.contract.yaml):\n" +
+			"s3-exporter reads (fleet/apps/luxor/monitoring/forts.contract.yaml):\n" +
 			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_ACCESS_KEY_ID --write\n" +
 			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_SECRET_ACCESS_KEY --write"
 	case "sfi-b2-pruning-key":

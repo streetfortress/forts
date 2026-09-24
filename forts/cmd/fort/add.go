@@ -176,7 +176,7 @@ func planAdd(o addOpts) (*plan, error) {
 	}
 	c, err := contract.Load(chartDir)
 	if err != nil {
-		return nil, fmt.Errorf("chart %s ships no usable contract (%v) — write the fort-side secrets.contract.yaml by hand for now", meta.Name, err)
+		return nil, fmt.Errorf("chart %s ships no usable contract (%v) — write the fort-side %s by hand for now", meta.Name, err, contract.FileName)
 	}
 
 	app := o.name
@@ -302,7 +302,7 @@ func planAdd(o addOpts) (*plan, error) {
 					p.add(action{path: filepath.Join(dbDir, "objectstore.yaml"), mark: '●', note: "ObjectStore b2: s3://sfi-db-physical-backups/" + o.fort + ", the fort's own key", content: render("postgres/objectstore.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup via the plugin (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
-					p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-backup (the fort's B2 db-physical key, external) + secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-backup (the fort's B2 db-physical key, external) + secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
 					dbExternals = []contract.Key{
 						{Name: "ACCESS_KEY_ID", External: "sites-db: `fort b2-key db-physical " + o.fort + " --write`, then `fort seed " + o.fort + " sites-db --set ACCESS_KEY_ID --write`"},
@@ -311,7 +311,7 @@ func planAdd(o addOpts) (*plan, error) {
 				} else {
 					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, NO archive (profile " + v.BackupProfile + "), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
-					p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '●', note: "secrets-" + app, content: render("postgres/secrets.contract.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 				}
 				tenant()
 				rootAdds = append(rootAdds, "sites-db")
@@ -331,7 +331,7 @@ func planAdd(o addOpts) (*plan, error) {
 						}
 						return appendPatch(s, sitesDBPatchesComment, "role-"+app+".yaml", "postgresql.cnpg.io", "v1", "Cluster", "sites-db", "sites-db"), nil
 					}})
-				p.add(action{path: filepath.Join(dbDir, "secrets.contract.yaml"), mark: '○', note: "+ secrets-" + app + ".sops.yaml (username literal, password generate)",
+				p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '○', note: "+ secrets-" + app + ".sops.yaml (username literal, password generate)",
 					edit: func(s string) (string, error) { return appendBlock(s, tenantContractEntry(app)), nil }})
 			}
 		case "valkey":
@@ -353,7 +353,7 @@ func planAdd(o addOpts) (*plan, error) {
 					edit: func(s string) (string, error) {
 						return appendPatch(s, valkeyPatchesComment, "acl-"+app+".yaml", "helm.toolkit.fluxcd.io", "v2", "HelmRelease", "valkey", "valkey"), nil
 					}})
-				p.add(action{path: filepath.Join(vkDir, "secrets.contract.yaml"), mark: '○', note: "+ key " + app,
+				p.add(action{path: filepath.Join(vkDir, contract.FileName), mark: '○', note: "+ key " + app,
 					edit: func(s string) (string, error) {
 						return appendMapEntry(s, "    keys:", "      "+app+": {generate: hex24}")
 					}})
@@ -365,7 +365,7 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(vkDir, "monitoring.yaml"), mark: '●', note: "PodMonitor + ValkeyDown (cache duty: no eviction alert)", content: static("valkey/monitoring.yaml")})
 				p.add(action{path: filepath.Join(vkDir, "kustomization.yaml"), mark: '●', note: "patches: acl-" + app + ".yaml", content: render("valkey/kustomization.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
-				p.add(action{path: filepath.Join(vkDir, "secrets.contract.yaml"), mark: '●', note: "valkey-users: default + " + app, content: render("valkey/secrets.contract.yaml.gotpl")})
+				p.add(action{path: filepath.Join(vkDir, contract.FileName), mark: '●', note: "valkey-users: default + " + app, content: render("valkey/forts.contract.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
 				rootAdds = append(rootAdds, "valkey")
 			}
@@ -452,7 +452,7 @@ func planAdd(o addOpts) (*plan, error) {
 		p.add(action{path: filepath.Join(appDir, "monitoring.yaml"), mark: '●', note: "PodMonitor " + app + "-" + v.Component + " (rules are policy: by hand)", content: render("app/monitoring.yaml.gotpl")})
 	}
 	p.add(action{path: filepath.Join(appDir, "kustomization.yaml"), mark: '●', content: render("app/kustomization.yaml.gotpl")})
-	p.add(action{path: filepath.Join(appDir, "secrets.contract.yaml"), mark: '●', note: fmt.Sprintf("pre-`fort seed` full form, %d keys", len(v.Keys)), content: render("app/secrets.contract.yaml.gotpl")})
+	p.add(action{path: filepath.Join(appDir, contract.FileName), mark: '●', note: fmt.Sprintf("pre-`fort seed` full form, %d keys", len(v.Keys)), content: render("app/forts.contract.yaml.gotpl")})
 	p.add(action{path: filepath.Join(appDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
 
 	if createdGateway {
@@ -670,6 +670,24 @@ func parseAddTemplates() (*template.Template, error) {
 		}
 	}
 	return root, nil
+}
+
+// fleetContracts lists every fort-side contract in the tree — either
+// name, one per dir, contract.Read's preference order as a glob.
+func fleetContracts(root string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range contract.Names {
+		m, _ := filepath.Glob(filepath.Join(root, "fleet/apps/*/*", n))
+		for _, p := range m {
+			if d := filepath.Dir(p); !seen[d] {
+				seen[d] = true
+				out = append(out, p)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func exists(root, rel string) bool {

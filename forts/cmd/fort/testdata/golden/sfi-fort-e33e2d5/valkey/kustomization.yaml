@@ -6,7 +6,7 @@ resources:
   - release.yaml
   - monitoring.yaml
   # Secret valkey-users (key per ACL user: default + symbology), seeded
-  # from secrets.contract.yaml; listed-but-absent = the pre-merge
+  # from forts.contract.yaml; listed-but-absent = the pre-merge
   # kustomize guard.
   - secrets.sops.yaml
 # Tenant registration: one JSON6902 patch per consumer adds its ACL user

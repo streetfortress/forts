@@ -17,7 +17,7 @@ the only judgement calls left are the ones a reviewer can see in the PR.
 
 One file name, one schema, two locations:
 
-- **In the chart tarball** — `secrets.contract.yaml` at the chart root,
+- **In the chart tarball** — `forts.contract.yaml` at the chart root,
   owned by the chart author. It says what the app needs from *any*
   environment: the keys its `existingSecret` must carry and how each
   value is produced, the platform services it consumes and which values
@@ -43,6 +43,34 @@ No rename, no flag day: a chart adopts the pattern by shipping the file,
 and the fort's copy shrinks to an overlay or disappears at the next
 `fort add`/adoption pass.
 
+### The name, and the old one
+
+Until #464 the file was called `secrets.contract.yaml` — a fossil of its
+first job. The v1 schema is `secret`, `requires`, `http`, `metrics`:
+secrets are one of four blocks, and a chart can ship a contract whose
+entire content is an `http` block.
+
+`forts.contract.yaml` is plural because the file is not about one fort.
+The chart author writes it once and it holds for every fort the chart
+is ever deployed to — that is the whole point of the environment-
+agnostic half of the schema. The singular `fort` is only the CLI verb;
+the project, the directory and the thing a contract addresses are
+`forts`.
+
+**The old name keeps loading, permanently.** `fort seed` and `fort
+check` read the chart's contract at the version the app's
+`OCIRepository` pins, and every chart released before the rename ships
+`secrets.contract.yaml` inside its tarball, immutably, forever. So the
+loader tries `forts.contract.yaml` first and falls back; when both are
+present the new name wins. This is not a migration step with an end
+date — it ends when someone audits every pin in the fleet and
+deliberately drops the fallback, not before. `fort check` warns on a
+pinned chart still using the old name, which is a nudge, not a
+deadline.
+
+Fort-side files have no such problem: they live in this tree, so they
+renamed wholesale in the same commit.
+
 `fort seed`, `fort check`, and CI all resolve the effective contract the
 same way: pull the chart at the tag the app's OCIRepository pins, merge
 the overlay if present, resolve provider outputs by convention against
@@ -51,7 +79,7 @@ the tree.
 ## Contract schema (v1)
 
 ```yaml
-# secrets.contract.yaml — at the chart root, inside the tarball. NON-SECRET.
+# forts.contract.yaml — at the chart root, inside the tarball. NON-SECRET.
 contract: v1
 
 # The one Secret the chart consumes (values path naming it + the keys it
@@ -137,7 +165,7 @@ Same file name and schema, in the fort's app dir, present only when
 needed:
 
 ```yaml
-# fleet/apps/<fort>/<app>/secrets.contract.yaml — OVERLAY on the chart's
+# fleet/apps/<fort>/<app>/forts.contract.yaml — OVERLAY on the chart's
 contract: v1
 requires:
   postgres.db:
@@ -202,7 +230,7 @@ fleet/apps/<fort>/<app>/
   release.yaml             HelmRelease: existingSecret, wire: values, retries -1
   route.yaml               HTTPRoute → contract.http
   monitoring.yaml          PodMonitor if contract.metrics
-  (no secrets.contract.yaml — the chart's is the contract)
+  (no forts.contract.yaml — the chart's is the contract)
 fleet/apps/<fort>/gateway/  created from template on first http need: http listener only,
   gateway.yaml              the lab step-ca issuer (or nothing on cloud forts, where
   cluster-issuer-*.yaml     letsencrypt is shared infrastructure), and the catch-all
@@ -222,7 +250,7 @@ replacement once traefik ships it.
 
 **Provider registration** (when `requires` names a type), same shape for
 each — create the shared instance from the embedded template if absent
-(including its own `secrets.contract.yaml`), then register the tenant
+(including its own `forts.contract.yaml`), then register the tenant
 with new files + kustomization lines:
 
 | Type | Instance (first need) | Per-tenant files |
@@ -334,7 +362,7 @@ Two consequences to accept and record:
    is then a HelmRelease edit that rolls pods atomically with the merge.
    The same goes for every non-secret env key (`BETTER_AUTH_URL`,
    `PUBLIC_*`, mail addresses): an `env:` map in values, not the Secret.
-3. **Ship `secrets.contract.yaml` at the chart root** and lint it in the
+3. **Ship `forts.contract.yaml` at the chart root** and lint it in the
    release workflow (`fort contract lint .`).
 4. **The fleet owns ingress.** Expose one Service + port and name it in
    `http`; keep `httpRoute.enabled: false` by default.
@@ -389,6 +417,7 @@ a CI check. That is the right size for the problem.
 
 The chart-side contract is sfi/symbology PR "chart: ship the fort
 secrets contract in the tarball" (`helm/symbology/secrets.contract.yaml`
+— 0.1.3 predates the rename below, and still loads because of it —
 against the 0.1.3 values: `database.*`, `cache.*`, `symbology-ui:3000`,
 worker `metrics`). Two scenarios.
 
@@ -417,13 +446,13 @@ fleet/apps/sfi-fort-e33e2d5/
     kustomization.yaml          + database-symbology.yaml; patches: + role-symbology.yaml
   ● database-symbology.yaml     Database CR: name/owner symbology, extensions [vector]
   ● role-symbology.yaml         JSON6902 add /spec/managed/roles/- {name: symbology, login, passwordSecret: sites-db-symbology-credentials}
-  ○ secrets.contract.yaml       + secrets-symbology.sops.yaml: {username: literal symbology, password: generate hex24}
+  ○ forts.contract.yaml         + secrets-symbology.sops.yaml: {username: literal symbology, password: generate hex24}
   ◆ secrets-symbology.sops.yaml
 ● valkey/                       first valkey need → cache-profile template (PR #182)
     kustomization.yaml, namespace.yaml, repository.yaml
     release.yaml                aclUsers: default only; patches: acl-symbology.yaml
     acl-symbology.yaml          JSON6902 add /spec/values/auth/aclUsers/symbology {permissions: "~* &* +@all -@admin -@dangerous"}
-    secrets.contract.yaml       valkey-users: {default: generate hex24, symbology: generate hex24}
+    forts.contract.yaml         valkey-users: {default: generate hex24, symbology: generate hex24}
   ◆ secrets.sops.yaml
 ● symbology/
     kustomization.yaml          namespace, repository, release, secrets.sops.yaml, route, monitoring
@@ -436,7 +465,7 @@ fleet/apps/sfi-fort-e33e2d5/
   ◆ secrets.sops.yaml           BETTER_AUTH_SECRET, DATABASE_PASSWORD, CACHE_PASSWORD
                                 absent: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, OPENAI_API_KEY (required),
                                         RESEND_API_KEY, ANTHROPIC_API_KEY (optional)
-    (no secrets.contract.yaml — nothing deviates from convention)
+    (no forts.contract.yaml — nothing deviates from convention)
 ```
 
 `release.yaml` as rendered — the `wire` paths filled from the providers'
@@ -529,7 +558,7 @@ reading the chart's contract, `fort check sfi-prod-439bf72` would say:
   under the conventional names, so the values are the ones above).
 - **Optional provider absent**: no `valkey/` on the fort; `cache.*`
   stays empty; fine.
-- The fort-side `secrets.contract.yaml` carries nothing the chart's does
+- The fort-side `forts.contract.yaml` carries nothing the chart's does
   not, so it is deleted; sfi-prod's symbology dir ends up with no
   overlay. (staging-k3s never had one.)
 

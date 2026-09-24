@@ -8,22 +8,22 @@ fleet/apps/lab-fort/   (chart 0.3.0)
   ● redirect-https.yaml          catch-all http→https 301
 ○ kustomization.yaml             + gateway, sites-db, sfi-website
 ● sfi-website/
+  ● forts.contract.yaml          pre-`fort seed` full form, 3 keys
   ● kustomization.yaml           
   ● namespace.yaml               
   ● release.yaml                 wire: postgres.db; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
   ● route.yaml                   HTTPRoute sfi-website.lab-fort.lofi → sfi-website-ui:3000
-  ● secrets.contract.yaml        pre-`fort seed` full form, 3 keys
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
 ● sites-db/
   ● cluster.yaml                 CNPG Cluster sites-db: greenfield, NO archive (profile lab), roles via patches
   ● database-sfi-website.yaml    Database CR
+  ● forts.contract.yaml          secrets-sfi-website
   ● kustomization.yaml           patches: role-sfi-website.yaml
   ● namespace.yaml               
   ● role-sfi-website.yaml        JSON6902 add /spec/managed/roles/-
   ◆ secrets-sfi-website.sops.yaml seeded
-  ● secrets.contract.yaml        secrets-sfi-website
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed lab-fort --write

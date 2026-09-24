@@ -64,7 +64,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 		"gateway/kustomization.yaml", "gateway/gateway.yaml", "gateway/redirect-https.yaml",
 		"gateway/cluster-issuer-step-ca.yaml", "gateway/certificate-symbology.yaml", "gateway/listener-symbology.yaml",
 		"valkey/kustomization.yaml", "valkey/namespace.yaml", "valkey/repository.yaml", "valkey/release.yaml",
-		"valkey/acl-symbology.yaml", "valkey/secrets.contract.yaml", "valkey/monitoring.yaml",
+		"valkey/acl-symbology.yaml", "valkey/forts.contract.yaml", "valkey/monitoring.yaml",
 		"symbology/kustomization.yaml", "symbology/namespace.yaml", "symbology/route.yaml",
 		"symbology/monitoring.yaml", "symbology/step-ca-root.pem",
 	}
@@ -77,7 +77,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	}
 
 	// sites-db: tenant present → untouched.
-	for _, rel := range []string{"kustomization.yaml", "secrets.contract.yaml"} {
+	for _, rel := range []string{"kustomization.yaml", "forts.contract.yaml"} {
 		if readFile(t, filepath.Join(golden, "sites-db", rel)) != readFile(t, filepath.Join(tmp, "fleet/apps", fort, "sites-db", rel)) {
 			t.Errorf("sites-db/%s was edited although the tenant already exists", rel)
 		}
@@ -103,16 +103,16 @@ func TestAddReproducesDrillFort(t *testing.T) {
 		}
 	}
 
-	// secrets.contract.yaml: same vars; every generated key is in the
+	// forts.contract.yaml: same vars; every generated key is in the
 	// golden with the same spec unless it is `external` here and a
 	// human-resolved source (sops/env) there.
-	gv := yamlPath(t, filepath.Join(golden, "symbology/secrets.contract.yaml"), "vars")
-	tv := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/secrets.contract.yaml"), "vars")
+	gv := yamlPath(t, filepath.Join(golden, "symbology/forts.contract.yaml"), "vars")
+	tv := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/forts.contract.yaml"), "vars")
 	if !reflect.DeepEqual(gv, tv) {
 		t.Errorf("contract vars: want %v, got %v", gv, tv)
 	}
-	gk := yamlPath(t, filepath.Join(golden, "symbology/secrets.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
-	tk := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/secrets.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
+	gk := yamlPath(t, filepath.Join(golden, "symbology/forts.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
+	tk := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/forts.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
 	for name, spec := range tk {
 		gspec, ok := gk[name]
 		if !ok {

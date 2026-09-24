@@ -10,7 +10,7 @@ own directory (source, release, route, monitoring, the seeding
 contract), the gateway listener and certificate for its hostname, and
 the provider instances it requires — a `sites-db` tenant, a valkey ACL
 user — created on first need and registered on every need after. It
-reads one thing from the chart: the `secrets.contract.yaml` it ships,
+reads one thing from the chart: the `forts.contract.yaml` it ships,
 the chart author's declaration of what the workload needs
 ([fort configuration contracts](fort-configuration-contracts.md)). What
 that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.md).
@@ -46,6 +46,7 @@ fleet/apps/sfi-x/   (chart 0.1.9)
 ● sites-db/
   ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches
   ● database-symbology.yaml      Database CR (extensions: vector)
+  ● forts.contract.yaml          secrets-backup (the fort's B2 db-physical key, external) + secrets-symbology
   ● kustomization.yaml           patches: role-symbology.yaml
   ● namespace.yaml
   ● objectstore.yaml             ObjectStore b2: s3://sfi-db-physical-backups/sfi-x, the fort's own key
@@ -53,25 +54,24 @@ fleet/apps/sfi-x/   (chart 0.1.9)
   ● scheduled-backup.yaml        nightly base backup via the plugin (stagger the hour by hand)
   ◆ secrets-backup.sops.yaml     seeded
   ◆ secrets-symbology.sops.yaml  seeded
-  ● secrets.contract.yaml        secrets-backup (the fort's B2 db-physical key, external) + secrets-symbology
 ● symbology/
+  ● forts.contract.yaml          pre-`fort seed` full form, 8 keys
   ● kustomization.yaml
   ● monitoring.yaml              PodMonitor symbology-worker (rules are policy: by hand)
   ● namespace.yaml
   ● release.yaml                 wire: postgres.db, valkey.cache; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/symbology, tag 0.1.9
   ● route.yaml                   HTTPRoute symbology.sfi-x.streetfortress.cloud → symbology-ui:3000
-  ● secrets.contract.yaml        pre-`fort seed` full form, 8 keys
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
 ● valkey/
   ● acl-symbology.yaml           JSON6902 add /spec/values/auth/aclUsers/symbology
+  ● forts.contract.yaml          valkey-users: default + symbology
   ● kustomization.yaml           patches: acl-symbology.yaml
   ● monitoring.yaml              PodMonitor + ValkeyDown (cache duty: no eviction alert)
   ● namespace.yaml
   ● release.yaml
   ● repository.yaml
-  ● secrets.contract.yaml        valkey-users: default + symbology
   ◆ secrets.sops.yaml            seeded
 
 dry run — nothing written (add --write).
@@ -95,7 +95,7 @@ the `HTTPRoute` from the hostname to the contract's `http.service:port`,
 attached to the gateway listener named for the app; `monitoring.yaml` a
 `PodMonitor` when the contract declares `metrics`. `secrets.sops.yaml` is
 listed in the kustomization before it exists: `kustomize build` fails
-until seed creates it, the repo's pre-merge guard. `secrets.contract.yaml`
+until seed creates it, the repo's pre-merge guard. `forts.contract.yaml`
 is the fort-side **full form** of the chart's contract — every key with
 its source, the `external` ones carried through for you to point at a
 source the seeder can read.
