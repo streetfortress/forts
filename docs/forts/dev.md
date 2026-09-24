@@ -273,6 +273,16 @@ names a file that lives under `~/.claude/projects` on a host that will
 be dismantled. A session outside a dispatched task (no `PICKUP_TASK`)
 posts nothing.
 
+The same hook says what the dispatch has made, on the pane herdr draws in
+the sidebar: a `pickup` metadata token, `!<n>` when the task's branch has
+an open PR and `no PR` when it has none. herdr's own state icon reads the
+screen, so it reports that a turn finished and never whether the work
+exists — a session that stopped at a blocker looks exactly like one that
+opened a PR. The token is display-only metadata under the `pickup` source,
+so it never contends with that detection, and the laptop's `config.toml`
+(`.files`, `shell/config/herdr.toml`) gives `$pickup` its colour. A scout
+reports no token: it has no `PICKUP_TASK`, so the hook returns first.
+
 ## The first raise: what to verify
 
 The checklist for the first real dispatch (`gotea dispatch` on one
