@@ -117,6 +117,37 @@ in
   # that only receives merges: half the fleet window (#423).
   sfi.auto-rebuild.gc.olderThan = "14d";
 
+  # Disk metrics, dev-fort shaped (#453). The default path list
+  # (disk-usage-metrics.nix) is cluster-shaped — /var/lib/rancher/k3s,
+  # the PVC dir, /root/.cache/nix — and sizes none of what a dev fort
+  # actually accumulates: the agent's home. Each pickup (#418) leaves a
+  # worktree and a transcript behind, and nothing removes either (gotea
+  # sessions --prune closes the workspace and keeps the worktree on
+  # purpose: the branch is pushed, the PR is the record, and a fort is
+  # replaced rather than tidied). So the 80 G disk grows monotonically
+  # over the fort's life, and this is what says how fast — the input to
+  # deciding whether anything should ever remove a worktree, or whether
+  # the answer stays "retire the fort".
+  #
+  # Both worktree roots resolve to one series PER REPO, never per issue:
+  # per-issue depth would add a series for every dispatch ever made, the
+  # unbounded shape the module's own comment warns against. The depths
+  # differ because the layouts do — ~/worktrees/<repo>/issue-<n> puts the
+  # repo at depth 1, ~/src/<owner>/<repo> at depth 2 (the issue said 1
+  # there, which would read "sfi is 12 G" and name no repo; the bound is
+  # the same handful either way). ~/.claude is a total — its children are
+  # one dir per project path, i.e. per worktree again.
+  sfi.disk-usage-metrics = {
+    paths = [
+      { path = "/home/agent/worktrees"; depth = 1; } # <repo>/issue-<n>
+      { path = "/home/agent/src"; depth = 2; } # <owner>/<repo>, the checkouts worktrees hang off
+      "/home/agent/.claude" # transcripts; die with the fort, sized while it lives
+      "/nix/store"
+      { path = "/var/log"; depth = 1; }
+    ];
+    pvcDir = null; # no local-path-provisioner on a fort with no k3s
+  };
+
   # Prebuilt dynamic binaries find a loader and the common libraries;
   # the set stays modest on purpose — grow it when a specific binary
   # names a missing one.
