@@ -108,6 +108,15 @@ journal stream the collector pushes to Loki. `cluster` is the fort's
 name, as on every other fort. No edge Alertmanager datasource: a dev
 fort has none.
 
+One `ScrapeConfig` per leg, because the operator owns `job`: it
+relabels it to the CR's `jobName` after the target's own labels are
+merged, so a `job:` under `staticConfigs` never survives. The node leg
+is `jobName: host-node-exporter` — the name a cluster fort's edge
+ServiceMonitor gives the same exporter, and the job the Host Overview
+dashboard keys every panel on — so a dev fort lists there the moment
+the hub scrapes it (#442). The collector leg is `jobName: claude-code`,
+the same name as its events' Loki stream.
+
 ## Force-no semantics
 
 `--write` lays a file down only when it does not exist; an existing one is

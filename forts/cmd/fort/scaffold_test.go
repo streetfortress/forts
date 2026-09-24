@@ -254,7 +254,10 @@ func TestRenderScaffoldDev(t *testing.T) {
 		t.Errorf("dev secrets.nix wrong:\n%s", sec)
 	}
 	mon := m[clusterMonitoringPath("dev-fort")]
-	for _, s := range []string{"kind: ScrapeConfig", `targets: ["10.1.0.96:9100"]`, `targets: ["10.1.0.96:9464"]`, "job: linux_vms", "job: claude_code", `cluster: dev-fort`, "alert: DevFortDown", "alert: DevFortCollectorDown", `{job="systemd", cluster="dev-fort"}`} {
+	// One ScrapeConfig per leg: the operator owns `job` (relabelled to
+	// jobName after the target labels), so the node leg has to be its own
+	// CR to file under host-node-exporter — the Host Overview's job (#442).
+	for _, s := range []string{"kind: ScrapeConfig", "name: dev-fort-dev-fort-node", "jobName: host-node-exporter", `targets: ["10.1.0.96:9100"]`, "name: dev-fort-dev-fort-claude", "jobName: claude-code", `targets: ["10.1.0.96:9464"]`, "component: node", "component: otel", `cluster: dev-fort`, "alert: DevFortDown", "alert: DevFortCollectorDown", `{job="systemd", cluster="dev-fort"}`} {
 		if !strings.Contains(mon, s) {
 			t.Errorf("dev hub file lacks %q", s)
 		}
@@ -263,6 +266,12 @@ func TestRenderScaffoldDev(t *testing.T) {
 		if strings.Contains(mon, s) {
 			t.Errorf("dev hub file should not carry %q (that is a cluster's)", s)
 		}
+	}
+	if strings.Contains(mon, "\n        job:") {
+		t.Errorf("dev hub file sets job as a target label — the operator overrides it with jobName")
+	}
+	if strings.Count(mon, "kind: ScrapeConfig") != 2 {
+		t.Errorf("dev hub file wants one ScrapeConfig per leg, got %d", strings.Count(mon, "kind: ScrapeConfig"))
 	}
 	var hasEdit bool
 	for _, f := range files {

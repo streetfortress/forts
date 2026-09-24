@@ -7,29 +7,50 @@
 # events push to loki-mesh from the fort; this file arms the switches for
 # both legs. `cluster` = the fort's name — a cluster of none, but the label
 # every fleet rule and dashboard keys on.
+#
+# One ScrapeConfig per leg, because `job` is the CR's: the operator
+# relabels job to spec.jobName AFTER the target's own labels are merged,
+# so a `job:` under staticConfigs never survives (#442 — the first cut
+# had one, and the series came out as job="dev_fort_<host>"). The node
+# leg is job="host-node-exporter", the name a cluster fort's edge
+# ServiceMonitor gives the same exporter: that job is the Host Overview
+# dashboard's $host list and every panel on it (host-fleet.py), so the
+# fort shows up there the moment the hub scrapes it. `component` is what
+# the switches below key on; `instance` = the hostname, as on a cluster
+# fort (dashboards key on names, not mesh IP:port pairs).
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: ScrapeConfig
 metadata:
-  name: dev-fort-{{ .Hostname }}
+  name: dev-fort-{{ .Hostname }}-node
   namespace: monitoring-central
   labels:
     monitoring.sfi/scope: central
 spec:
-  jobName: dev_fort_{{ .Hostname }}
+  jobName: host-node-exporter
   staticConfigs:
-    # Target labels win over the job_name-derived `job` (Prometheus sets it
-    # only when the target has none): the node leg files under linux_vms
-    # beside devbox, so the host-fleet dashboard's VM panels see the fort.
     - targets: ["{{ .MeshIP }}:9100"]
       labels:
-        job: linux_vms
         component: node
         instance: {{ .Hostname }}
         cluster: {{ .Hostname }}
         host: {{ .Hostname }}
+---
+# The collector's prometheus exporter: Claude Code's usage series
+# (claude_code_*), stamped cluster/host by the collector and repo/issue by
+# the task's env. Same job name as the events' Loki stream (job=claude-code,
+# dev-fort.nix) — one name for the one source.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: dev-fort-{{ .Hostname }}-claude
+  namespace: monitoring-central
+  labels:
+    monitoring.sfi/scope: central
+spec:
+  jobName: claude-code
+  staticConfigs:
     - targets: ["{{ .MeshIP }}:9464"]
       labels:
-        job: claude_code
         component: otel
         instance: {{ .Hostname }}
         cluster: {{ .Hostname }}
