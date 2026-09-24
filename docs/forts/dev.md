@@ -1,10 +1,11 @@
-# The dev fort's dispatch loop — `pickup`, herdr, and what survives
+# The dev fort's dispatch loop — `pickup`, `scout`, herdr, and what survives
 
 One command on macmini turns a gitea issue into a PR from a dev fort, and
 comes back with a pointer to the running session (#418; the laptop half
 is `gotea dispatch`, sfi/gotea#37). This page is the fort half: what
-`pickup` does, what herdr is for, how a human continues a task, and what
-is and is not durable on a host that is replaced rather than repaired.
+`pickup` and `scout` do, what herdr is for, how a human continues a task,
+and what is and is not durable on a host that is replaced rather than
+repaired.
 The host, the identity and the repo policy are
 [`docs/infra/dev-forts.md`](../infra/dev-forts.md).
 
@@ -17,7 +18,7 @@ gotea dispatch sfi/deployments#123                  macmini: the vault task, the
                       └─ Stop hook: pickup-transcript       the transcript, attached to the PR
 ```
 
-## `pickup <owner/repo> <n> [--model <name>]`
+## `pickup <owner/repo> <n> [--model <name>] [--note <text>]`
 
 `nixos/home/agent.nix` — a `writeShellApplication` on the agent's PATH,
 so `ssh sfi-dev pickup …` finds it through the login shell. Deterministic
@@ -43,7 +44,7 @@ environment exist before Claude's first metric:
    read).
 4. **Claude** — `herdr agent start <repo>-<n> --kind claude --pane <root
    pane> -- --permission-mode bypassPermissions [--model <name>]`, then
-   `herdr agent prompt … "/pickup owner/repo#n"`. The standing instruction
+   `herdr agent prompt … "/pickup owner/repo#n [<note>]"`. The standing instruction
    is the `pickup` skill in `.files` (`shell/config/claude-skills/pickup`),
    linked into `~/.claude/skills` like `kb`; there is no prompt file.
    `--model` is `gotea dispatch --model` arriving: the name is passed to
@@ -53,6 +54,14 @@ environment exist before Claude's first metric:
    The flag only decides what a *new* agent starts on: an identity whose
    workspace is already open is reported at step 3 and nothing is
    restarted, so the running agent keeps the model it started on.
+   `--note` (`-n`) is `gotea dispatch --note` arriving (sfi/gotea#49): the
+   ad-hoc context the issue does not carry — "prefer the pure half", "#46
+   just landed" — appended to the prompt **on the same line**, because
+   `herdr agent prompt` submits the text and a newline in it would be the
+   submit, leaving the rest to arrive as a second turn after the skill had
+   already run without it. gotea refuses a multi-line note before it
+   dials; a note passed here by hand is flattened to one line instead. It
+   reaches only a fresh agent, for the same reason `--model` does.
    Bypassed permissions are the whole point of the fort: the only
    credentials on the box are the per-fort SSH key, GPG key and token
    (#414), so the blast radius of a bypassed prompt is the revocation
@@ -72,6 +81,29 @@ environment exist before Claude's first metric:
    `agent-identity` installs that reports the id to the server, which
    `herdr agent get` shows as `agent_session`; pickup waits up to 30 s
    for it.
+
+## `scout <owner/repo> --note <question> [--model <name>]`
+
+The same prep and the same report for the session that has **no issue
+behind it** (`gotea scout`, sfi/gotea#51): the one sent to look at
+something nobody has written down yet, whose output is issues rather than a
+PR. Sharing is real — the checkout and the Claude hand-off are one pair of
+shell fragments in `agent.nix`, used by both verbs — so only what follows
+from having no identity differs:
+
+| | `pickup` | `scout` |
+| --- | --- | --- |
+| label | `owner/repo#n`, the join key | `scout:<owner/repo>@<YYYYmmdd-HHMMSS>` (UTC), reported back as `label=` because only the fort knows the stamp |
+| worktree | `issue-<n>`, reused when it exists | `scout-<stamp>` off `origin/HEAD`, always new — the stamp is the scout's whole identity, so nothing is ever "already open" |
+| `PICKUP_TASK` | the identity | **unset**, so the Stop hook posts nothing: there is no task to hang a transcript on, and the issues the scout files are the record |
+| `OTEL_RESOURCE_ATTRIBUTES` | `repo=…,issue=<n>` | `repo=…,issue=scout-<stamp>`, so the session still gets its own row in the cost dashboard (#437) rather than reading as the fort's own interactive usage |
+| prompt | `/pickup owner/repo#n` | `/scout owner/repo <question>` — the question is required, since it is the whole brief |
+| swept by | `gotea sessions --prune`, when gitea closes the issue | the same sweep, when the agent is quiet and the stamp is over a day old: nothing will ever close to say a scout is done |
+
+A fix smaller than the issue describing it is allowed. The `scout` skill in
+`.files` says how: file the issue first, rename the branch to `issue-<n>`,
+then open the PR — which puts the work back on the path
+`pickup-transcript` already knows, since it looks for exactly that branch.
 
 **What an unattended interactive Claude needs answered first.** The
 print-mode design of the first draft had no dialogs; an interactive
