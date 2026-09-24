@@ -17,7 +17,7 @@ gotea dispatch sfi/deployments#123                  macmini: the vault task, the
                       └─ Stop hook: pickup-transcript       the transcript, attached to the PR
 ```
 
-## `pickup <owner/repo> <n>`
+## `pickup <owner/repo> <n> [--model <name>]`
 
 `nixos/home/agent.nix` — a `writeShellApplication` on the agent's PATH,
 so `ssh sfi-dev pickup …` finds it through the login shell. Deterministic
@@ -42,10 +42,17 @@ environment exist before Claude's first metric:
    know) and `PICKUP_TASK=owner/repo#n` (what the Stop hook and the skill
    read).
 4. **Claude** — `herdr agent start <repo>-<n> --kind claude --pane <root
-   pane> -- --permission-mode bypassPermissions`, then `herdr agent
-   prompt … "/pickup owner/repo#n"`. The standing instruction is the
-   `pickup` skill in `.files` (`shell/config/claude-skills/pickup`),
+   pane> -- --permission-mode bypassPermissions [--model <name>]`, then
+   `herdr agent prompt … "/pickup owner/repo#n"`. The standing instruction
+   is the `pickup` skill in `.files` (`shell/config/claude-skills/pickup`),
    linked into `~/.claude/skills` like `kb`; there is no prompt file.
+   `--model` is `gotea dispatch --model` arriving: the name is passed to
+   `claude` as given and the set of valid names is the CLI's, not ours —
+   an alias (`opus`), a model id, or a provider's. Without it `claude`
+   picks its own default, which is what every dispatch before this took.
+   The flag only decides what a *new* agent starts on: an identity whose
+   workspace is already open is reported at step 3 and nothing is
+   restarted, so the running agent keeps the model it started on.
    Bypassed permissions are the whole point of the fort: the only
    credentials on the box are the per-fort SSH key, GPG key and token
    (#414), so the blast radius of a bypassed prompt is the revocation
