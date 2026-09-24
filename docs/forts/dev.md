@@ -193,6 +193,16 @@ event attribute as structured metadata, prompt and response text
   counters, and the events — API calls and latency by model, tool
   calls and failures by tool, the event log. `$cluster` and `$repo`
   select; a row with no repo/issue is the fort's own interactive usage.
+- **Its denominator** — *Gitea activity*, `sfi-gitea-activity`
+  (`fleet/apps/luxor/monitoring/dashboards/gitea-activity.py`), #463:
+  issues and PRs opened, closed and merged over the same window, per
+  repo, read straight out of gitea's database (a Grafana Postgres
+  datasource over the mesh, on Grafana's own read-only `grafana` role on
+  that fort's sites-db — beside databasus', never sharing it). Spend
+  means one thing beside a
+  week that closed eleven issues and another beside a week that closed
+  none, and a human opening a PR counts there too — which is why it is
+  its own dashboard and not a row on this one.
 - **`ClaudeCodeDailyCostHigh`** (`rules-central.yaml`, the metrics side):
   one fort's 24 h spend above 50 USD-equivalent. The number is the
   CLI's API-equivalent — billing is the subscription — so it is a pace
