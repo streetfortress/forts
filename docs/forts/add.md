@@ -90,7 +90,9 @@ inherit the node's trust the way containerd does), hence the local
 kustomization. `release.yaml` is the `HelmRelease`: chart by reference,
 **install and upgrade remediation retries `-1`** — the first install
 races its providers and a preview pin races its images, and a release
-must never park failed waiting for an ops nudge — and `values` filled
+must never park failed waiting for an ops nudge (add renders `-1` for
+every app; a release whose upgrade migrates a schema forward overrides it
+by hand, [contracts](fort-configuration-contracts.md)) — and `values` filled
 from the contract's `wire:` map by convention (below). `route.yaml` is
 the `HTTPRoute` from the hostname to the contract's `http.service:port`,
 attached to the gateway listener named for the app; `monitoring.yaml` a

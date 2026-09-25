@@ -228,7 +228,27 @@ Conventions that make the output deterministic (no flags for these):
 | valkey tenant | ACL user `<app>`, next free logical db, key `<app>` in the shared `valkey-users` secret |
 | s3 | bucket `<fort>-<app>` |
 | hostname | `<app>.<fort>.streetfortress.cloud` unless `--hostname` (apex domains are always explicit) |
-| HelmRelease | `install.remediation.retries: -1` and `upgrade.remediation.retries: -1` — retry until ready, never park on a failed state waiting for an ops nudge |
+| HelmRelease | `install.remediation.retries: -1` and `upgrade.remediation.retries: -1` — retry until ready, never park on a failed state waiting for an ops nudge (one exception, below) |
+
+**The one exception to `-1` on upgrade.** Retry-forever assumes a failed
+upgrade is safe to repeat. It is not safe to repeat when the upgrade
+migrates a schema forward. A retry re-runs the migration against a
+database that the last attempt has already moved part of the way, and
+`upgrade.remediation.strategy: rollback` is worse: it puts the old image
+back on a schema the migration has already moved past. Such a release
+writes its own block by hand — `upgrade.remediation.retries: 0` and
+`remediateLastFailure: false` — with a header comment that gives the
+argument. Those two values are also flux's behaviour when the block is
+absent, so the point of writing them is the decision, not the numbers.
+The release then parks at `Ready=False`, `FluxResourceNotReady`
+(`fleet/infrastructure/configs/monitoring/rules-edge.yaml`) pages at
+15m, and a human chooses the next step.
+`fleet/apps/sfi-fort-zenbook/gitea/` is the release that named this
+exception (#482). Its neighbours `gitea-actions/` and `renovate/` keep
+`-1` on both halves, because a runner and a CronJob carry no schema.
+`fort add` still renders `-1` on both halves for every new app: the
+exception is hand-written, per release, and it must carry the reason
+with it.
 
 **Secret-less base case** (chart with `http` only — moment-tally-website
 today). A contract that declares no `secret.keys` declares no Secret,
