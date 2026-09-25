@@ -14,6 +14,16 @@
 #   3. ADMIN    — an explicit `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` or a
 #      root shell at the console: the actual break-glass event.
 #
+# A verb that widens REACH rather than nudging machinery can ask for a
+# second factor: `challenge = "<reason>"` makes the verb prove live
+# possession of a fleet admin age key before it runs (ops/challenge.nix,
+# #256), and a host can gate any verb the same way with
+# `sfi.ops.challenge.verbs`. The gate is for UNAUTHORIZED OPERATORS, not
+# for a host whose root is already taken. No verb sets it today —
+# ops/challenge.nix holds the mechanics and `sudo sfi-challenge`, which
+# rehearses them and changes nothing; gating a real verb is a separate
+# decision, and that module lists the candidates.
+#
 # Declaring `sfi.ops.commands.<name> = { description, script }` yields:
 #   - a script `sfi-<name>` on the system PATH (writeShellApplication, so
 #     `set -euo pipefail` and shellcheck at build time);
@@ -29,11 +39,26 @@
 let
   cfg = config.sfi.ops;
 
+  # A verb is gated when its own module asked for it, or when this host
+  # named it in sfi.ops.challenge.verbs.
+  challengeOf = name: c:
+    if c.challenge != null then c.challenge
+    else if lib.elem name cfg.challenge.verbs then
+      "this host requires the admin key for sfi-${name} (sfi.ops.challenge.verbs)"
+    else null;
+
   mkCommand = name: c:
-    pkgs.writeShellApplication {
+    let reason = challengeOf name c;
+    in pkgs.writeShellApplication {
       name = "sfi-${name}";
       runtimeInputs = c.runtimeInputs;
-      text = c.script;
+      # The gate runs first and exits non-zero when the operator cannot
+      # prove the key; `set -e` from writeShellApplication stops the verb
+      # there. It also journals the argv before the body runs.
+      text = lib.optionalString (reason != null) ''
+        ${cfg.challenge.package}/bin/sfi-ops-challenge ${lib.escapeShellArg reason} \
+          -- ${lib.escapeShellArg "sfi-${name}"} "$@"
+      '' + c.script;
     };
 
   commandPkgs = lib.mapAttrsToList mkCommand cfg.commands;
@@ -45,7 +70,9 @@ let
     text = ''
       echo "SFI ops verbs on this host (run as: sudo sfi-<verb>; each use is sudo-logged):"
       ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: c: ''
-        printf '  %-22s %s\n' ${lib.escapeShellArg "sfi-${name}"} ${lib.escapeShellArg c.description}
+        printf '  %-22s %s%s\n' ${lib.escapeShellArg "sfi-${name}"} \
+          ${lib.escapeShellArg (lib.optionalString (challengeOf name c != null) "[admin-key challenge] ")} \
+          ${lib.escapeShellArg c.description}
       '') cfg.commands)}
       echo
       echo "Ladder: observe with the read-only kubeconfig; nudge with these verbs"
@@ -54,6 +81,8 @@ let
   };
 in
 {
+  imports = [ ./challenge.nix ]; # the admin-key gate, for verbs that ask
+
   options.sfi.ops.commands = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule {
       options = {
@@ -75,6 +104,21 @@ in
           default = [ ];
           description = "Packages put on the command's PATH.";
         };
+        challenge = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          example = "arbitrary kubectl with the admin kubeconfig";
+          description = ''
+            One line saying what reach this verb has. Setting it gates
+            EVERY invocation behind the admin-key challenge
+            (ops/challenge.nix): the operator must decrypt a nonce with a
+            fleet admin age key before the verb body runs. Leave it null
+            for a verb that only nudges machinery. A verb that needs the
+            gate on one argument path leaves this null and calls
+            `''${config.sfi.ops.challenge.package}/bin/sfi-ops-challenge`
+            itself.
+          '';
+        };
       };
     });
     default = { };
@@ -88,6 +132,13 @@ in
 
   config = lib.mkIf (cfg.commands != { }) {
     environment.systemPackages = commandPkgs ++ [ index ];
+
+    # A misspelled name in the host's policy list would gate nothing and
+    # say nothing — the one failure this option must not have.
+    assertions = map (name: {
+      assertion = cfg.commands ? ${name};
+      message = "sfi.ops.challenge.verbs names '${name}', but this host declares no sfi-${name}: the challenge would gate nothing. Verbs on this host: ${lib.concatStringsSep ", " (lib.attrNames cfg.commands)}.";
+    }) cfg.challenge.verbs;
 
     # Same proven mechanism as auto-rebuild.nix's original carve-out: pin
     # the stable current-system path per verb, NOPASSWD, deployer only.
