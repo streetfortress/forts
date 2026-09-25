@@ -135,7 +135,11 @@ func Load(chartDir string) (*Contract, error) {
 	if c.Version != "v1" {
 		return nil, fmt.Errorf("%s: contract: %q (want v1)", name, c.Version)
 	}
-	if c.Secret.Values == "" {
+	// The default values path is only meaningful when the chart
+	// consumes a Secret. A contract with no keys declares no Secret
+	// (#460), and `fort add` must not write an `existingSecret` value
+	// that the chart never reads.
+	if c.Secret.Values == "" && len(c.Secret.Keys) > 0 {
 		c.Secret.Values = "existingSecret"
 	}
 	for typ := range c.Requires {

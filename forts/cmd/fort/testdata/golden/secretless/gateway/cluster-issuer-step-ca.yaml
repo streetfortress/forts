@@ -1,0 +1,28 @@
+# ACME issuer backed by the lab's step-ca — PER-LAB-CLUSTER, not shared
+# infrastructure: step-ca.lofi is a LAN address, so on cloud clusters this
+# issuer can never register (ErrRegisterACMEAccount, i/o timeout) and its
+# Ready=False wedged web3's infrastructure kustomization health checks for
+# hours (2026-09-11). A cluster's issuer set is exactly the CAs it can
+# reach. Copies live beside each lab cluster's gateway; luxor's is
+# identical. http01 solver routes attach to
+# the per-cluster Gateway (fleet/apps/<cluster>/gateway/) via the http
+# listener, taking precedence over its https redirect by exact path match.
+#
+# caBundle is the base64 of step-ca-root.pem (public; kept alongside for
+# reference): base64 -w0 step-ca-root.pem
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: step-ca
+spec:
+  acme:
+    server: https://step-ca.lofi:9000/acme/acme/directory
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJxekNDQVZHZ0F3SUJBZ0lRVUttYm9IRUxNYmJLM3JrUzl6UWNGakFLQmdncWhrak9QUVFEQWpBME1SUXcKRWdZRFZRUUtFd3RzYjJacElHeGhZaUJEUVRFY01Cb0dBMVVFQXhNVGJHOW1hU0JzWVdJZ1EwRWdVbTl2ZENCRApRVEFlRncweU5URXlNVE13TmpBek1UTmFGdzB6TlRFeU1URXdOakF6TVROYU1EUXhGREFTQmdOVkJBb1RDMnh2Clpta2diR0ZpSUVOQk1Sd3dHZ1lEVlFRREV4TnNiMlpwSUd4aFlpQkRRU0JTYjI5MElFTkJNRmt3RXdZSEtvWkkKemowQ0FRWUlLb1pJemowREFRY0RRZ0FFam4zbDZuN1VrZzZwVy9SWVh3eFNOSGpRWjQzR01WajAxTEE3Snc4dQpERUphMjZQbWk0VnBXMXJ0bXpsVklkYkR1NFozZW9QVmdaKytyK2NibTBOVE82TkZNRU13RGdZRFZSMFBBUUgvCkJBUURBZ0VHTUJJR0ExVWRFd0VCL3dRSU1BWUJBZjhDQVFFd0hRWURWUjBPQkJZRUZPa2FIZlFqT1RjTWZsd0wKc2pKZTBSMis5OU8wTUFvR0NDcUdTTTQ5QkFNQ0EwZ0FNRVVDSVFEZGZLSFROSUdKTWNKSlhYNzZRRGZ2ckJFcwpKOFBCOHJuZXpyZ0I3YkV2SmdJZ1RmbTVEZXNGelUxQ0U5MnRoSlpqanc3KzZGaERnQXhqZFRnaGtoRm81V2s9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    privateKeySecretRef:
+      name: step-ca-acme-account-key
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: homelab
+                namespace: traefik

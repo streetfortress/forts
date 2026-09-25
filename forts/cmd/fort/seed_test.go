@@ -464,3 +464,37 @@ func TestReadSetValueRefusesEmpty(t *testing.T) {
 		t.Fatal("an empty value must be refused, not encrypted")
 	}
 }
+
+// The secret-less shape downstream of `fort add` (#460): the app dir
+// carries no fort-side contract and no secrets.sops.yaml, and the chart
+// it pins declares no keys. `fort seed` must plan no Secret, and `fort
+// check` must not demand one.
+func TestSecretlessAppNeedsNoSeed(t *testing.T) {
+	const fort = "lab-fort"
+	tmp := t.TempDir()
+	copyManifest(t, "testdata", tmp, fort)
+	copyTree(t, "testdata/golden/secretless/moment-tally-website", filepath.Join(tmp, "fleet/apps", fort, "moment-tally-website"))
+
+	chartDir := "testdata/charts/moment-tally-website"
+	dir := filepath.Join("fleet/apps", fort, "moment-tally-website")
+	plans, err := planSeed(seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: chartDir, dirs: []string{dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || len(plans[0].files) != 0 {
+		t.Fatalf("want one plan with no Secret file, got %+v", plans)
+	}
+	var report strings.Builder
+	plans[0].report(&report, false)
+	if !strings.Contains(report.String(), "no Secret — the contract declares no keys") {
+		t.Errorf("seed report:\n%s", report.String())
+	}
+
+	findings, err := checkFort(checkOpts{root: tmp, chartDir: chartDir, charts: map[string]pulledChart{}}, fort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 || findings[0].level != "ok" {
+		t.Errorf("check: want one ok finding, got %+v", findings)
+	}
+}

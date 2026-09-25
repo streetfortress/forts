@@ -1,9 +1,12 @@
 # {{ .App }} — HelmRelease rendered by `fort add` from the chart's contract:
-# the `wire:` values paths are filled from the fort's providers by
+{{ if .ValuesYAML }}# the `wire:` values paths are filled from the fort's providers by
 # convention{{ if .Postgres }} (postgres → the shared sites-db, tenant `{{ .App }}`){{ end }}{{ if .Valkey }}{{ if .Postgres }};{{ end }}
-# (valkey → the shared valkey, ACL user `{{ .App }}`, db{{ .Valkey.DB }}){{ end }}; password-class
-# keys ride the {{ .SecretName }} Secret. Retry forever: the first install
-# races its providers (and a preview pin races the images) — never park
+# (valkey → the shared valkey, ACL user `{{ .App }}`, db{{ .Valkey.DB }}){{ end }}; {{ if .HasSecret }}password-class
+# keys ride the {{ .SecretName }} Secret{{ else }}the contract declares no
+# Secret key{{ end }}. Retry forever: the first install
+{{ else }}# the contract names no provider to wire and no Secret key, so
+# `values` stays empty. Retry forever: the first install
+{{ end }}# races its providers (and a preview pin races the images) — never park
 # on a failed release waiting for an ops nudge. Refine in place after
 # add: replicas for the node shape, non-secret env as values (never in
 # the Secret — a values change rolls pods), app-specific knobs.
@@ -25,5 +28,7 @@ spec:
   upgrade:
     remediation:
       retries: -1
+{{- if .ValuesYAML }}
   values:
 {{ .ValuesYAML }}
+{{- end }}

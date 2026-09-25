@@ -20,7 +20,7 @@ that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.m
 | | default | override |
 |---|---|---|
 | app, namespace, release, dir | the chart's name | `--name` |
-| the Secret the chart consumes | `<app>-env` in namespace `<app>` | the contract's `secret.values` names the values path |
+| the Secret the chart consumes | `<app>-env` in namespace `<app>`, when the contract declares keys at all | the contract's `secret.values` names the values path |
 | hostname | `<app>.<fort>.<zone>` — zone = the manifest's `[dns] zone` on a cloud fort, `lofi` in the lab | `--hostname` |
 | issuer | `letsencrypt` on a cloud fort, `step-ca` in the lab | — |
 | version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts | `--chart-dir` reads a local chart (tests, chart authors) |
@@ -99,6 +99,39 @@ until seed creates it, the repo's pre-merge guard. `forts.contract.yaml`
 is the fort-side **full form** of the chart's contract — every key with
 its source, the `external` ones carried through for you to point at a
 source the seeder can read.
+
+**The secret-less app.** A contract that declares no `secret.keys`
+declares no Secret, and add renders none of the machinery for it: no
+`secrets.sops.yaml` (neither the file nor the kustomization entry that
+guards it), no fort-side `forts.contract.yaml`, and no `existingSecret`
+in the HelmRelease values — a `values:` block that would otherwise be
+empty is left out altogether. The report says so where the seed line
+normally goes:
+
+```
+fleet/apps/sfi-x/   (chart 0.1.0)
+● gateway/
+  …
+○ kustomization.yaml             + gateway, moment-tally-website
+● moment-tally-website/
+  ● kustomization.yaml
+  ● namespace.yaml
+  ● release.yaml                 wire: none; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.1.0
+  ● route.yaml                   HTTPRoute moment-tally-website.sfi-x.lofi → moment-tally-website:3000
+  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+
+staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.
+then: review, commit, PR — flux applies on merge.
+```
+
+moment-tally-website is the case: a stateless SSR site whose only
+runtime config is embedded in every served page, so it is plain values.
+`fort seed` plans no Secret for such a dir and `fort check` demands
+none. The day a genuinely secret env var appears, the chart adds
+`secret.keys` and the next `fort add` — or a hand-written
+`secrets.sops.yaml` plus its kustomization entry — restores the full
+shape.
 
 **The gateway.** One `Gateway homelab` in `traefik` per fort with a
 single http listener, a catch-all `http→https` 301 (cert-manager's

@@ -311,7 +311,12 @@ func effectiveContract(o seedOpts, dir string) (*FullForm, *contract.Contract, s
 			keys = append(keys, NamedSpec{name, s})
 		}
 	}
-	ff.Secrets = []SecretFile{{File: "secrets.sops.yaml", Name: app + "-env", Namespace: app, Keys: keys}}
+	// No keys means no Secret (#460): the chart declares none, the
+	// overlay adds none, so seed creates no file and `fort check`
+	// demands none. `fort add` renders the same shape.
+	if len(keys) > 0 {
+		ff.Secrets = []SecretFile{{File: "secrets.sops.yaml", Name: app + "-env", Namespace: app, Keys: keys}}
+	}
 	return ff, c, fmt.Sprintf("chart contract (%s %s)%s", pin.url, version, map[bool]string{true: " + overlay", false: ""}[overlay != nil]), nil
 }
 
@@ -767,6 +772,9 @@ func parseDotenv(s string) map[string]string {
 // report prints the ◆ lines for one dir. Never a value.
 func (p *seedPlan) report(w io.Writer, written bool) {
 	fmt.Fprintf(w, "%s/   (%s)\n", p.dir, p.source)
+	if len(p.files) == 0 {
+		fmt.Fprintln(w, "  no Secret — the contract declares no keys")
+	}
 	for _, f := range p.files {
 		var note string
 		switch {

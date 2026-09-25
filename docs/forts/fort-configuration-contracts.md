@@ -83,7 +83,9 @@ the tree.
 contract: v1
 
 # The one Secret the chart consumes (values path naming it + the keys it
-# must carry). The chart never creates it.
+# must carry). The chart never creates it. OPTIONAL: omit the whole block
+# when the chart has no secrets, and the fort renders none of the Secret
+# machinery (below).
 secret:
   values: existingSecret        # values path naming the Secret
   keys:
@@ -218,6 +220,16 @@ Conventions that make the output deterministic (no flags for these):
 | s3 | bucket `<fort>-<app>` |
 | hostname | `<app>.<fort>.streetfortress.cloud` unless `--hostname` (apex domains are always explicit) |
 | HelmRelease | `install.remediation.retries: -1` and `upgrade.remediation.retries: -1` — retry until ready, never park on a failed state waiting for an ops nudge |
+
+**Secret-less base case** (chart with `http` only — moment-tally-website
+today). A contract that declares no `secret.keys` declares no Secret,
+and `fort add` renders none of it: no `secrets.sops.yaml`, no entry for
+it in the app kustomization, no fort-side `forts.contract.yaml`, and no
+`secret.values` key in the HelmRelease values. `fort seed` plans no
+Secret for the dir and `fort check` demands none. The app dir is then
+`namespace.yaml`, `repository.yaml`, `step-ca-root.pem`, `release.yaml`,
+`route.yaml`, and the kustomization — which is the shape sfi-prod's
+hand-written `moment-tally-website/` already has.
 
 **Base case** (chart with `secret` + `http` only — sfi-website today):
 

@@ -101,6 +101,11 @@ type plan struct {
 type view struct {
 	Fort, App, Hostname, Zone, Issuer, SecretName string
 	Lab                                           bool
+	// HasSecret: the effective contract declares at least one key, so
+	// the app consumes a Secret. False is the secret-less shape (#460)
+	// — no secrets.sops.yaml, no fort-side full form, no
+	// `existingSecret` value the chart never reads.
+	HasSecret bool
 	// Archive: the sites-db instance ships base backups + WAL to B2 —
 	// the production profile. Lab and none render no archive at all,
 	// and say so in cluster.yaml (docs/infra/backups.md: no lab fort
@@ -257,7 +262,9 @@ func planAdd(o addOpts) (*plan, error) {
 
 	// --- providers: outputs by convention, instance on first need,
 	// tenant registration otherwise.
-	values := map[string]any{c.Secret.Values: v.SecretName}
+	// The Secret entry is added after the full form is derived: only a
+	// contract with keys names a Secret (#460).
+	values := map[string]any{}
 	outputs := map[string]map[string]string{} // "type.handle" → non-secret outputs
 	passwordVar := map[string]ctrVar{}        // "type.handle" → var
 	// The sites-db archive key, when this add creates the instance on a
@@ -396,16 +403,25 @@ func planAdd(o addOpts) (*plan, error) {
 	}
 	v.Vars, v.Keys, p.externals = vars, keys, append(externals, dbExternals...)
 	sort.Slice(v.Vars, func(i, j int) bool { return v.Vars[i].Name < v.Vars[j].Name })
+	// The effective key set decides the shape: a chart that declares no
+	// keys — and a chart whose only keys are optional templates that
+	// --without dropped — gets no Secret machinery at all.
+	v.HasSecret = len(v.Keys) > 0
+	if v.HasSecret {
+		values[c.Secret.Values] = v.SecretName
+	}
 
 	// --- release values
-	var vb bytes.Buffer
-	enc := yaml.NewEncoder(&vb)
-	enc.SetIndent(2)
-	if err := enc.Encode(values); err != nil {
-		return nil, err
+	if len(values) > 0 {
+		var vb bytes.Buffer
+		enc := yaml.NewEncoder(&vb)
+		enc.SetIndent(2)
+		if err := enc.Encode(values); err != nil {
+			return nil, err
+		}
+		enc.Close()
+		v.ValuesYAML = strings.TrimRight(indent(vb.String(), "    "), "\n")
 	}
-	enc.Close()
-	v.ValuesYAML = strings.TrimRight(indent(vb.String(), "    "), "\n")
 
 	// --- gateway: instance on first http need, listener + cert after.
 	if c.HTTP != nil {
@@ -452,8 +468,10 @@ func planAdd(o addOpts) (*plan, error) {
 		p.add(action{path: filepath.Join(appDir, "monitoring.yaml"), mark: '●', note: "PodMonitor " + app + "-" + v.Component + " (rules are policy: by hand)", content: render("app/monitoring.yaml.gotpl")})
 	}
 	p.add(action{path: filepath.Join(appDir, "kustomization.yaml"), mark: '●', content: render("app/kustomization.yaml.gotpl")})
-	p.add(action{path: filepath.Join(appDir, contract.FileName), mark: '●', note: fmt.Sprintf("pre-`fort seed` full form, %d keys", len(v.Keys)), content: render("app/forts.contract.yaml.gotpl")})
-	p.add(action{path: filepath.Join(appDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
+	if v.HasSecret {
+		p.add(action{path: filepath.Join(appDir, contract.FileName), mark: '●', note: fmt.Sprintf("pre-`fort seed` full form, %d keys", len(v.Keys)), content: render("app/forts.contract.yaml.gotpl")})
+		p.add(action{path: filepath.Join(appDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
+	}
 
 	if createdGateway {
 		rootAdds = append([]string{"gateway"}, rootAdds...)
@@ -618,7 +636,11 @@ func (p *plan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing written (add --write).")
 		return
 	}
-	fmt.Fprintf(w, "staged. next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
+	if p.seeds() {
+		fmt.Fprintf(w, "staged. next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
+	} else {
+		fmt.Fprintln(w, "staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.")
+	}
 	if len(p.externals) > 0 {
 		fmt.Fprintln(w, "external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):")
 		for _, k := range p.externals {
@@ -630,6 +652,17 @@ func (p *plan) report(w io.Writer, written bool) {
 		}
 	}
 	fmt.Fprintln(w, "then: review, commit, PR — flux applies on merge.")
+}
+
+// seeds reports whether the plan leaves a ◆ file for `fort seed`. A
+// secret-less app on a fort that needs no provider leaves none (#460).
+func (p *plan) seeds() bool {
+	for _, a := range p.actions {
+		if a.mark == '◆' {
+			return true
+		}
+	}
+	return false
 }
 
 // creates reports whether the plan writes the directory's kustomization

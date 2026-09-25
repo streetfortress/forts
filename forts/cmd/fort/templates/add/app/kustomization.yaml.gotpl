@@ -4,10 +4,12 @@ resources:
   - namespace.yaml
   - repository.yaml
   - release.yaml
+{{- if .HasSecret }}
   # {{ .SecretName }}, seeded from forts.contract.yaml (the pre-`fort seed`
   # full form; shrinks to nothing once the CLI reads the chart's own
   # contract). Listed-but-absent = the pre-merge kustomize guard.
   - secrets.sops.yaml
+{{- end }}
 {{- if .HTTP }}
   - route.yaml
 {{- end }}

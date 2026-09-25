@@ -247,17 +247,27 @@ func yamlPath(t *testing.T, file, path string) any {
 // generated code).
 func TestAddFreshCloudFort(t *testing.T) {
 	// testdata manifest: linode, dns zone example.cloud, profile production
-	testAddFresh(t, "cloud-fort", "testdata/golden/fresh-cloud")
+	testAddFresh(t, "cloud-fort", "testdata/golden/fresh-cloud", "sfi-website", "0.3.0")
 }
 
 // The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
 // a sites-db born with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {
-	testAddFresh(t, "lab-fort", "testdata/golden/fresh-lab")
+	testAddFresh(t, "lab-fort", "testdata/golden/fresh-lab", "sfi-website", "0.3.0")
 }
 
-func testAddFresh(t *testing.T, fort, golden string) {
+// The secret-less shape (#460): moment-tally-website ships a contract
+// with `http:` and nothing else, so add renders no Secret machinery —
+// no secrets.sops.yaml in the app kustomization, no fort-side
+// forts.contract.yaml, no existingSecret value, and no ◆ line in the
+// report. The app also requires no provider, so the fort gets a gateway
+// and the app dir only.
+func TestAddSecretlessChart(t *testing.T) {
+	testAddFresh(t, "lab-fort", "testdata/golden/secretless", "moment-tally-website", "0.1.0")
+}
+
+func testAddFresh(t *testing.T, fort, golden, chart, version string) {
 	t.Helper()
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
@@ -270,9 +280,9 @@ func testAddFresh(t *testing.T, fort, golden string) {
 
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,
-		ref:      "oci://gitea.zen.lofi/sfi/sfi-website",
-		version:  "0.3.0",
-		chartDir: "testdata/charts/sfi-website",
+		ref:      "oci://gitea.zen.lofi/sfi/" + chart,
+		version:  version,
+		chartDir: "testdata/charts/" + chart,
 		without:  map[string]bool{},
 	})
 	if err != nil {
