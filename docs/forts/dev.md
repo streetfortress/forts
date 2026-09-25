@@ -1,11 +1,11 @@
-# The dev fort's dispatch loop — `pickup`, `scout`, herdr, and what survives
+# The dev fort's dispatch loop — `pickup`, `scout`, `review`, herdr, and what survives
 
 One command on macmini turns a gitea issue into a PR from a dev fort, and
 comes back with a pointer to the running session (#418; the laptop half
 is `gotea dispatch`, sfi/gotea#37). This page is the fort half: what
-`pickup` and `scout` do, what herdr is for, how a human continues a task,
-and what is and is not durable on a host that is replaced rather than
-repaired.
+`pickup`, `scout` and `review` do, what herdr is for, how a human continues
+a task, and what is and is not durable on a host that is replaced rather
+than repaired.
 The host, the identity and the repo policy are
 [`docs/infra/dev-forts.md`](../infra/dev-forts.md).
 
@@ -104,6 +104,39 @@ A fix smaller than the issue describing it is allowed. The `scout` skill in
 `.files` says how: file the issue first, rename the branch to `issue-<n>`,
 then open the PR — which puts the work back on the path
 `pickup-transcript` already knows, since it looks for exactly that branch.
+
+## `review <owner/repo> <n> --note <question> [--model <name>]`
+
+The third verb (`gotea review`, sfi/gotea#68), for the session sent at a
+thread somebody has **already written**, whose output is a comment on that
+thread. `pickup` expects a PR and `scout` expects issues; neither asks an
+agent for an opinion on what is in front of it. Sessions wrote that comment
+anyway, as a side effect of other work — sfi/patrol#53, sfi/symbology#235 —
+so a human had to start a session for some other reason to get one. The same
+two fragments do the checkout and the hand-off, and the report is the same.
+An issue and a pull read the same way here: gitea numbers them together, and
+`gotea review` resolves a pull URL to the same identity.
+
+| | `pickup` | `review` |
+| --- | --- | --- |
+| label | `owner/repo#n`, the join key | `review:<owner/repo>#<n>@<YYYYmmdd-HHMMSS>` (UTC), reported back as `label=`. **Never the identity alone**: that is `pickup`'s label, and `pickup` reports an open workspace rather than opening a second one, so a review of an issue an agent already works on would stop there and never start |
+| worktree | `issue-<n>`, reused when it exists | `review-<stamp>` off `origin/HEAD`, always new, as a scout's is — the agent must read the code to answer the question |
+| `PICKUP_TASK` | the identity | **unset**, so the Stop hook posts nothing: the comment on the thread is the record, and there is no `issue-<n>` branch for the hook to find |
+| `OTEL_RESOURCE_ATTRIBUTES` | `repo=…,issue=<n>` | `repo=…,issue=review-<n>`. The number says which thread the money went on; the `review-` prefix keeps it out of the row a dispatch of the same issue writes, because an opinion is not the work and a dashboard (#437) that added the two would overstate what the issue cost to do |
+| prompt | `/pickup owner/repo#n` | `/review owner/repo#n <question>` — the question is required, as a scout's is |
+| swept by | `gotea sessions --prune`, when gitea closes the issue | the same sweep, on the scout rule: the issue closes for the work, not for the opinion, so a closed issue must never close a review whose agent still runs |
+
+**A plain comment, not a gitea review of type `COMMENT`.** A plain comment
+behaves the same on an issue and on a pull, and it claims nothing about
+approval — which the agent cannot give anyway, since the repo policy
+whitelists approvals to `sf1tzp`
+([`docs/infra/dev-forts.md`](../infra/dev-forts.md)). It posts as
+`sfi-agent`, as every session does today; a distinct author per session is
+#532.
+
+**What no view shows yet.** `gotea catch-up` has four buckets — merged,
+opened for review, filed, closed — and a comment lands in none of them, so
+the weekly ritual cannot see what a review produced. Follow-on work.
 
 **What an unattended interactive Claude needs answered first.** The
 print-mode design of the first draft had no dialogs; an interactive
@@ -281,7 +314,8 @@ exists — a session that stopped at a blocker looks exactly like one that
 opened a PR. The token is display-only metadata under the `pickup` source,
 so it never contends with that detection, and the laptop's `config.toml`
 (`.files`, `shell/config/herdr.toml`) gives `$pickup` its colour. A scout
-reports no token: it has no `PICKUP_TASK`, so the hook returns first.
+and a review report no token: neither has `PICKUP_TASK`, so the hook returns
+first.
 
 ## The first raise: what to verify
 

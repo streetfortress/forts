@@ -152,8 +152,9 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
-- [dev](dev.md) — the dev fort's dispatch loop: `pickup`, herdr as the
-  supervisor, the resume path, what survives the fort (#418)
+- [dev](dev.md) — the dev fort's dispatch loop: `pickup`, `scout` and
+  `review`, herdr as the supervisor, the resume path, what survives the
+  fort (#418)
 - [destroy](destroy.md) — the side-effects half, gated on the merge
 - [fort configuration contracts](fort-configuration-contracts.md) — the
   contract schema, overlays, the gate, chart-author guidelines (the #144
