@@ -1,0 +1,27 @@
+# moment-tally-website's chart as a single-chart OCI artifact (OCIRepository +
+# HelmRelease.chartRef). MAIN PIN: this fort follows the main branch of
+# sfi/moment-tally-website via the immutable per-commit prereleases its
+# chart-preview workflow publishes on every push to main
+# (0.0.0-main.<run>.g<sha>, appVersion = <sha> so it pulls that commit's
+# images). The semver filter follows main without a commit here per
+# merge, so this file names no version — the OCIRepository status
+# records the exact revision running. Renovate never sees a 0.0.0-
+# prerelease. A fort that must hold still pins a plain `tag:` instead.
+#
+# certSecretRef: source-controller pods do NOT inherit the node's step-ca
+# trust (unlike containerd image pulls), so the registry's CA is provided
+# explicitly, generated from the local step-ca-root.pem copy by this
+# app's kustomization.yaml.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: moment-tally-website
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://gitea.zen.lofi/sfi/moment-tally-website
+  ref:
+    semver: ">=0.0.0-0"
+    semverFilter: '^0\.0\.0-main\.'
+  certSecretRef:
+    name: moment-tally-website-oci-ca

@@ -1,8 +1,9 @@
 # fort add — a chart's fort-side tree, from its contract
 
 ```
-fort add <fort> <oci-ref> (--version X | --follow-pr N) [--name app] [--hostname fqdn]
-         [--http service:port] [--without type,...] [--chart-dir path] [--write]
+fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app]
+         [--hostname fqdn] [--http service:port] [--without type,...]
+         [--chart-dir path] [--write]
 ```
 
 `add` turns a chart into everything a fort needs to run it: the app's
@@ -23,7 +24,7 @@ that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.m
 | the Secret the chart consumes | `<app>-env` in namespace `<app>`, when the contract declares keys at all | the contract's `secret.values` names the values path |
 | hostname | `<app>.<fort>.<zone>` — zone = the manifest's `[dns] zone` on a cloud fort, `lofi` in the lab | `--hostname` |
 | issuer | `letsencrypt` on a cloud fort, `step-ca` in the lab | — |
-| version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts | `--chart-dir` reads a local chart (tests, chart authors) |
+| version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts; `--follow-main` follows main's | `--chart-dir` reads a local chart (tests, chart authors) |
 | optional providers | provisioned — the out-of-the-box result is the full topology | `--without valkey` drops an *optional* requirement; a required one is refused |
 | the Service the fleet routes to | the contract's `http` block | `--http service:port`, for a chart that ships no contract; refused against a contract that declares `http` |
 
@@ -234,6 +235,35 @@ and is tagged, move the pin to the tag**: the registry's cleanup rule
 deletes preview packages by age, and a fort left on the filter goes
 `FetchFailed` (the drill fort, 2026-09-14) — the stored artifact keeps
 serving, but nothing new ever arrives.
+
+## Following main
+
+`--follow-main` is the same mechanism on the other preview line:
+`0.0.0-main.<run>.g<sha>`, published by the chart repo's `chart-preview`
+workflow on every push to main. The filter is `^0\.0\.0-main\.` and the
+file names no version — every merge in the chart repo reaches the fort
+on the next reconcile, with no commit here.
+
+This is the **staging** pin (#456). A tag holds still, a PR filter
+points at one unmerged branch, and a staging fort wants neither: it
+runs what main says, continuously. `sfi-stage-d95cc36` follows
+moment-tally-website this way.
+
+Three things the pin asks of the chart repo and of a fort that takes it:
+
+- **The chart repo must publish the main line.** A chart whose
+  `chart-preview` workflow runs on `pull_request` only has no
+  `0.0.0-main.*` package, and `add` (and later `fort check`) says so:
+  `Could not locate a version matching provided version string`.
+- **The registry cleanup rule must reach the main line and keep it.**
+  The rule deletes `0.0.0-` packages by age. A retention window shorter
+  than the gap between merges to main empties the filter, and the fort
+  goes `FetchFailed` — the same failure a fort left on a merged PR's
+  filter reaches.
+- **Nothing pins the fort to a reviewed artifact.** Main is the review.
+  A fort that must hold still — production — pins a tag.
+
+Renovate is unaffected either way: it never sees a `0.0.0-` prerelease.
 
 ## After `--write`, by hand
 

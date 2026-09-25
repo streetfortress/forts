@@ -295,6 +295,11 @@ func TestReadChartPin(t *testing.T) {
 	if err != nil || pin == nil || pin.followPR != "189" || pin.url != "oci://x/y" {
 		t.Errorf("follow-pr pin: %+v %v", pin, err)
 	}
+	os.WriteFile(filepath.Join(dir, "m.yaml"), []byte("kind: OCIRepository\nspec:\n  url: oci://x/y\n  ref:\n    semver: \">=0.0.0-0\"\n    semverFilter: '^0\\.0\\.0-main\\.'\n"), 0o644)
+	pin, err = readChartPin(filepath.Join(dir, "m.yaml"))
+	if err != nil || pin == nil || !pin.followMain || pin.followPR != "" {
+		t.Errorf("follow-main pin: %+v %v", pin, err)
+	}
 	os.WriteFile(filepath.Join(dir, "t.yaml"), []byte("kind: OCIRepository\nspec:\n  url: oci://x/y\n  ref:\n    tag: \"0.1.6\"\n"), 0o644)
 	pin, _ = readChartPin(filepath.Join(dir, "t.yaml"))
 	if pin == nil || pin.version != "0.1.6" {

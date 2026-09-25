@@ -30,12 +30,13 @@ var addTemplates embed.FS
 // lays it down for a PR and prints what to seed.
 func add(args []string) error {
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return fmt.Errorf("usage: fort add <fort> <oci-ref> [--version X | --follow-pr N] [--name app] [--hostname fqdn] [--http service:port] [--without type,...] [--chart-dir path] [--write]")
+		return fmt.Errorf("usage: fort add <fort> <oci-ref> [--version X | --follow-pr N | --follow-main] [--name app] [--hostname fqdn] [--http service:port] [--without type,...] [--chart-dir path] [--write]")
 	}
 	o := addOpts{fort: args[0], ref: args[1], without: map[string]bool{}}
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.StringVar(&o.version, "version", "", "chart version to pin (a release tag)")
 	fs.StringVar(&o.followPR, "follow-pr", "", "follow a PR's per-commit preview charts instead of a tag")
+	fs.BoolVar(&o.followMain, "follow-main", false, "follow main's per-commit preview charts instead of a tag")
 	fs.StringVar(&o.name, "name", "", "app name (namespace, release, dir); default: chart name")
 	fs.StringVar(&o.hostname, "hostname", "", "public hostname; default <app>.<fort>.lofi (lab) / .<zone> (cloud)")
 	fs.StringVar(&o.http, "http", "", "the Service the fleet routes to, <service>:<port> — for a chart that ships no contract")
@@ -50,8 +51,14 @@ func add(args []string) error {
 			o.without[t] = true
 		}
 	}
-	if (o.version == "") == (o.followPR == "") && o.chartDir == "" {
-		return fmt.Errorf("pin the chart with exactly one of --version or --follow-pr")
+	pins := 0
+	for _, set := range []bool{o.version != "", o.followPR != "", o.followMain} {
+		if set {
+			pins++
+		}
+	}
+	if pins > 1 || (pins == 0 && o.chartDir == "") {
+		return fmt.Errorf("pin the chart with exactly one of --version, --follow-pr or --follow-main")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -78,6 +85,7 @@ func add(args []string) error {
 
 type addOpts struct {
 	root, fort, ref, version, followPR, name, hostname, http, chartDir string
+	followMain                                                         bool
 	without                                                            map[string]bool
 	write                                                              bool
 }
@@ -120,9 +128,12 @@ type view struct {
 	// the production profile. Lab and none render no archive at all,
 	// and say so in cluster.yaml (docs/infra/backups.md: no lab fort
 	// archives physically anywhere; "none, documented" is honest).
-	Archive                                     bool
-	BackupProfile                               string
-	ChartURL, ChartRepo, Version, PR            string
+	Archive                          bool
+	BackupProfile                    string
+	ChartURL, ChartRepo, Version, PR string
+	// Main: the fort follows the chart repo's main branch through its
+	// per-commit prereleases, rather than a tag or a PR.
+	Main                                        bool
 	HTTP                                        *contract.HTTP
 	Metrics                                     *contract.Metrics
 	Component                                   string
@@ -172,7 +183,7 @@ func planAdd(o addOpts) (*plan, error) {
 
 	chartDir, resolved := o.chartDir, o.version
 	if chartDir == "" {
-		dir, v, err := resolveChart(o.root, o.ref, o.version, o.followPR)
+		dir, v, err := resolveChart(o.root, chartPin{url: o.ref, version: o.version, followPR: o.followPR, followMain: o.followMain})
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +232,7 @@ func planAdd(o addOpts) (*plan, error) {
 		BackupProfile: entry.Backups.Profile,
 		ChartURL:      "oci://" + repoPath,
 		ChartRepo:     strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
-		Version:       resolved, PR: o.followPR,
+		Version:       resolved, PR: o.followPR, Main: o.followMain,
 		HTTP: c.HTTP, Metrics: c.Metrics,
 		GatewayPatchesComment: gatewayPatchesComment,
 		ValkeyPatchesComment:  valkeyPatchesComment,
@@ -475,8 +486,11 @@ func planAdd(o addOpts) (*plan, error) {
 	// --- the app dir
 	p.add(action{path: filepath.Join(appDir, "namespace.yaml"), mark: '●', content: render("app/namespace.yaml.gotpl")})
 	pin := "tag " + resolved
-	if o.followPR != "" {
+	switch {
+	case o.followPR != "":
 		pin = "semver filter on 0.0.0-pr." + o.followPR + ".* (now " + resolved + ")"
+	case o.followMain:
+		pin = "semver filter on 0.0.0-main.* (now " + resolved + ")"
 	}
 	p.add(action{path: filepath.Join(appDir, "repository.yaml"), mark: '●', note: "OCIRepository " + v.ChartURL + ", " + pin, content: render("app/repository.yaml.gotpl")})
 	ca, err := os.ReadFile(filepath.Join(o.root, "fleet/infrastructure/configs/step-ca-root.pem"))

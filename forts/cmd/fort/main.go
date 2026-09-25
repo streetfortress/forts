@@ -208,9 +208,9 @@ func usage() {
       a [baremetal] host: no stack by design) — with --refresh
       --expect-no-changes that is 'just iac-drift'.
 
-  add <fort> <oci-ref> (--version X | --follow-pr N) [--name app]
-      [--hostname fqdn] [--http service:port] [--without type,...]
-      [--chart-dir path] [--write]
+  add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main)
+      [--name app] [--hostname fqdn] [--http service:port]
+      [--without type,...] [--chart-dir path] [--write]
       render a chart's fort-side tree from the forts.contract.yaml it
       ships (docs/forts/fort-configuration-contracts.md): app dir + HelmRelease with the
       contract's wire: values filled by convention, gateway listener +
@@ -218,9 +218,11 @@ func usage() {
       registration (sites-db, valkey) after that, the seeding contract.
       New files + appended list entries only; prints the marked tree.
       --write lays it down for a PR, then seed the ◆ files. --follow-pr
-      pins a PR's per-commit preview charts via a semver filter. A chart
-      that ships no contract declares nothing: add renders the app dir
-      alone and says so; --http names the Service to route to.
+      pins a PR's per-commit preview charts via a semver filter, and
+      --follow-main pins main's — the staging pin, which names no
+      version. A chart that ships no contract declares nothing: add
+      renders the app dir alone and says so; --http names the Service
+      to route to.
 
   seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]
       produce the fort's sops-encrypted Secrets from contracts: the

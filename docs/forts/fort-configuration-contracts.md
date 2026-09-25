@@ -595,6 +595,16 @@ fort's pin becomes a plain `tag: 0.1.4` (a hand edit on the drill fort,
 Renovate elsewhere). Registry hygiene is a gitea package cleanup rule
 on `^0\.0\.0-pr\.` by age — admin settings, not repo code.
 
+A chart repo can publish the same shape for its main branch —
+`0.0.0-main.<run>.g<sha>` on every push to main — and a **staging** fort
+follows that line with `fort add --follow-main`
+(`semverFilter: '^0\.0\.0-main\.'`, deployments#456). The promotion
+ladder is then three rungs and one mechanism: a PR filter for the branch
+under review, the main filter for staging, a tag for production. The
+cleanup rule must widen to `^0\.0\.0-` to reach the main line, and its
+retention window must exceed the gap between merges to main — an empty
+filter is `FetchFailed`, exactly as on a merged PR.
+
 ### Adopting it on sfi-prod (the drift the gate would report today)
 
 sfi-prod runs 0.1.2 with a full fort-side contract. Bumping to 0.1.3 and
@@ -629,7 +639,7 @@ for the files the post-add report says to refine (release values, the
 root kustomization's comments) and for the seeding contract, where the
 human replaced `external` keys with sops refs. Implemented:
 
-- chart resolution by tag or `--follow-pr` (helm, lab CA), contract v1
+- chart resolution by tag, `--follow-pr` or `--follow-main` (helm, lab CA), contract v1
   parsing (`internal/contract`), `--chart-dir` for chart authors
 - the app dir; gateway from template on first http need, listener patch
   + certificate after; valkey from the cache template on first need, ACL

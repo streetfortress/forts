@@ -292,6 +292,19 @@ func TestAddContractlessChartHTTP(t *testing.T) {
 	})
 }
 
+// A staging fort follows the chart repo's main branch (#456): the tree
+// is the secret-less one above, and only the pin differs. repository.yaml
+// names no version — the semver filter picks the newest per-commit
+// prerelease of main on every reconcile — and the report says which
+// build the filter resolved to when the operator ran add.
+func TestAddFollowMain(t *testing.T) {
+	testAddFresh(t, addFixture{
+		fort: "lab-fort", golden: "testdata/golden/follow-main",
+		chart: "moment-tally-website", version: "0.0.0-main.7.g1492bd3",
+		followMain: true,
+	})
+}
+
 // addFixture is one replay of `fort add` on a fresh fort: the manifest
 // fixture, the golden tree, the chart (its OCI ref and its pin), and
 // the flags the operator typed.
@@ -299,6 +312,7 @@ type addFixture struct {
 	fort, golden, chart, version string
 	chartDir                     string // default: testdata/charts/<chart>
 	http                         string // --http <service>:<port>
+	followMain                   bool   // --follow-main
 }
 
 func testAddFresh(t *testing.T, f addFixture) {
@@ -319,11 +333,12 @@ func testAddFresh(t *testing.T, f addFixture) {
 
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,
-		ref:      "oci://gitea.zen.lofi/sfi/" + chart,
-		version:  version,
-		http:     f.http,
-		chartDir: chartDir,
-		without:  map[string]bool{},
+		ref:        "oci://gitea.zen.lofi/sfi/" + chart,
+		version:    version,
+		followMain: f.followMain,
+		http:       f.http,
+		chartDir:   chartDir,
+		without:    map[string]bool{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -420,5 +435,49 @@ func TestHTTPFlag(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "already routes to") {
 		t.Errorf("--http against a contract that declares http: err = %v", err)
+	}
+}
+
+// The pin is one of three forms, and `add` refuses any other count.
+// --follow-main resolves against main's per-commit prereleases, which a
+// PR's must stay outside of: semver ranks every numeric prerelease
+// identifier below every alphanumeric one, so `main.z` bounds the range
+// from above and `pr.*` sorts past it.
+func TestChartPinConstraint(t *testing.T) {
+	for _, c := range []struct {
+		pin  chartPin
+		want string
+	}{
+		{chartPin{version: "0.1.1"}, "0.1.1"},
+		{chartPin{followPR: "51"}, ">=0.0.0-pr.51.0 <0.0.0-pr.52.0"},
+		{chartPin{followMain: true}, ">=0.0.0-main.0 <0.0.0-main.z"},
+	} {
+		got, err := c.pin.constraint()
+		if err != nil || got != c.want {
+			t.Errorf("%+v: want %q, got %q (%v)", c.pin, c.want, got, err)
+		}
+	}
+	if _, err := (chartPin{followPR: "ninety"}).constraint(); err == nil {
+		t.Error("--follow-pr ninety: want an error")
+	}
+	if a, b := (chartPin{url: "oci://x/y", followMain: true}).key(), (chartPin{url: "oci://x/y"}).key(); a == b {
+		t.Errorf("a main pin and a tag pin share the cache key %q", a)
+	}
+}
+
+// Exactly one of --version, --follow-pr and --follow-main pins the
+// chart. The check runs before add reads the repo, so a bad count is an
+// error the operator gets immediately.
+func TestAddPinCount(t *testing.T) {
+	for _, args := range [][]string{
+		{"lab-fort", "oci://x/y"},
+		{"lab-fort", "oci://x/y", "--version", "0.1.1", "--follow-main"},
+		{"lab-fort", "oci://x/y", "--follow-pr", "51", "--follow-main"},
+		{"lab-fort", "oci://x/y", "--version", "0.1.1", "--follow-pr", "51"},
+	} {
+		err := add(args)
+		if err == nil || !strings.Contains(err.Error(), "exactly one of") {
+			t.Errorf("add %v: want the pin-count error, got %v", args, err)
+		}
 	}
 }

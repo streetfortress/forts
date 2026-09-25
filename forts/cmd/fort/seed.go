@@ -255,11 +255,11 @@ func effectiveContract(o seedOpts, dir string) (*FullForm, *contract.Contract, s
 	chartDir := o.chartDir
 	version := pin.version
 	if chartDir == "" {
-		key := pin.url + "@" + pin.version + "@" + pin.followPR
+		key := pin.key()
 		if pc, ok := o.charts[key]; ok {
 			chartDir, version = pc.dir, pc.version
 		} else {
-			d, v, err := resolveChart(o.root, pin.url, pin.version, pin.followPR)
+			d, v, err := resolveChart(o.root, *pin)
 			if err != nil {
 				return nil, nil, "", err
 			}
@@ -367,14 +367,11 @@ func parseOverlay(raw []byte) (*overlay, error) {
 	return ov, nil
 }
 
-type chartPin struct {
-	url, version, followPR string
-}
-
 var prFilter = regexp.MustCompile(`^\^0\\\.0\\\.0-pr\\\.(\d+)\\\.`)
+var mainFilter = regexp.MustCompile(`^\^0\\\.0\\\.0-main\\\.`)
 
 // readChartPin reads the dir's OCIRepository: a tag pin, or the
-// semver-filter form `fort add --follow-pr` writes.
+// semver-filter form `fort add --follow-pr` / `--follow-main` writes.
 func readChartPin(path string) (*chartPin, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -397,8 +394,9 @@ func readChartPin(path string) (*chartPin, error) {
 	if m := prFilter.FindStringSubmatch(doc.Spec.Ref.SemverFilter); m != nil {
 		pin.followPR = m[1]
 	}
-	if pin.version == "" && pin.followPR == "" {
-		return nil, fmt.Errorf("repository.yaml: OCIRepository has neither ref.tag nor a --follow-pr semverFilter")
+	pin.followMain = mainFilter.MatchString(doc.Spec.Ref.SemverFilter)
+	if pin.version == "" && pin.followPR == "" && !pin.followMain {
+		return nil, fmt.Errorf("repository.yaml: OCIRepository has neither ref.tag nor a --follow-pr or --follow-main semverFilter")
 	}
 	return pin, nil
 }

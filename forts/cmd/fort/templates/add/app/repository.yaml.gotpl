@@ -8,6 +8,16 @@
 # status records the exact revision running (at add time: {{ .Version }}).
 # Renovate never sees a 0.0.0- prerelease. Once the PR merges and is
 # tagged, this becomes a plain `tag:` pin.
+{{- else if .Main -}}
+# {{ .App }}'s chart as a single-chart OCI artifact (OCIRepository +
+# HelmRelease.chartRef). MAIN PIN: this fort follows the main branch of
+# {{ .ChartRepo }} via the immutable per-commit prereleases its
+# chart-preview workflow publishes on every push to main
+# (0.0.0-main.<run>.g<sha>, appVersion = <sha> so it pulls that commit's
+# images). The semver filter follows main without a commit here per
+# merge, so this file names no version — the OCIRepository status
+# records the exact revision running. Renovate never sees a 0.0.0-
+# prerelease. A fort that must hold still pins a plain `tag:` instead.
 {{- else -}}
 # {{ .App }}'s chart as a single-chart OCI artifact (OCIRepository +
 # HelmRelease.chartRef, ref.tag pinned = chart version). Published by the
@@ -25,7 +35,7 @@ metadata:
   name: {{ .App }}
   namespace: flux-system
 spec:
-{{- if .PR }}
+{{- if or .PR .Main }}
   interval: 10m
 {{- else }}
   interval: 1h
@@ -35,6 +45,9 @@ spec:
 {{- if .PR }}
     semver: ">=0.0.0-0"
     semverFilter: '^0\.0\.0-pr\.{{ .PR }}\.'
+{{- else if .Main }}
+    semver: ">=0.0.0-0"
+    semverFilter: '^0\.0\.0-main\.'
 {{- else }}
     tag: "{{ .Version }}"
 {{- end }}

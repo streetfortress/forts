@@ -268,10 +268,10 @@ func pinnedContract(o seedOpts, dir string) (*contract.Contract, error) {
 	}
 	chartDir := o.chartDir
 	if chartDir == "" {
-		key := pin.url + "@" + pin.version + "@" + pin.followPR
+		key := pin.key()
 		pc, ok := o.charts[key]
 		if !ok {
-			d, v, err := resolveChart(o.root, pin.url, pin.version, pin.followPR)
+			d, v, err := resolveChart(o.root, *pin)
 			if err != nil {
 				return nil, err
 			}
