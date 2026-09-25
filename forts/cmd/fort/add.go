@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -29,7 +30,7 @@ var addTemplates embed.FS
 // lays it down for a PR and prints what to seed.
 func add(args []string) error {
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return fmt.Errorf("usage: fort add <fort> <oci-ref> [--version X | --follow-pr N] [--name app] [--hostname fqdn] [--without type,...] [--chart-dir path] [--write]")
+		return fmt.Errorf("usage: fort add <fort> <oci-ref> [--version X | --follow-pr N] [--name app] [--hostname fqdn] [--http service:port] [--without type,...] [--chart-dir path] [--write]")
 	}
 	o := addOpts{fort: args[0], ref: args[1], without: map[string]bool{}}
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
@@ -37,6 +38,7 @@ func add(args []string) error {
 	fs.StringVar(&o.followPR, "follow-pr", "", "follow a PR's per-commit preview charts instead of a tag")
 	fs.StringVar(&o.name, "name", "", "app name (namespace, release, dir); default: chart name")
 	fs.StringVar(&o.hostname, "hostname", "", "public hostname; default <app>.<fort>.lofi (lab) / .<zone> (cloud)")
+	fs.StringVar(&o.http, "http", "", "the Service the fleet routes to, <service>:<port> — for a chart that ships no contract")
 	fs.StringVar(&o.chartDir, "chart-dir", "", "read the chart from a local dir instead of pulling (chart authors, tests)")
 	without := fs.String("without", "", "skip optional provider types (comma-separated)")
 	fs.BoolVar(&o.write, "write", false, "write the tree (default: print the plan)")
@@ -75,9 +77,9 @@ func add(args []string) error {
 }
 
 type addOpts struct {
-	root, fort, ref, version, followPR, name, hostname, chartDir string
-	without                                                      map[string]bool
-	write                                                        bool
+	root, fort, ref, version, followPR, name, hostname, http, chartDir string
+	without                                                            map[string]bool
+	write                                                              bool
 }
 
 // action is one planned change: a new file (content), an append to an
@@ -95,12 +97,20 @@ type plan struct {
 	resolved        string
 	actions         []action
 	externals       []contract.Key
+	// noContract: the chart ships no forts.contract.yaml, so this app
+	// has no key gate and the report says so (#461).
+	noContract bool
+	// http: the app has a gateway listener, a certificate and a route.
+	http bool
 }
 
 // view is the template context; conventions live here, not in flags.
 type view struct {
 	Fort, App, Hostname, Zone, Issuer, SecretName string
 	Lab                                           bool
+	// NoContract: the chart ships no contract at all (#461), so the
+	// generated comments must not credit one.
+	NoContract bool
 	// HasSecret: the effective contract declares at least one key, so
 	// the app consumes a Secret. False is the secret-less shape (#460)
 	// — no secrets.sops.yaml, no fort-side full form, no
@@ -179,9 +189,22 @@ func planAdd(o addOpts) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An absent contract is a supported shape: the chart declares
+	// nothing, so add plans nothing from it (#461). A contract that is
+	// there and does not load is still an error — fix it in the chart.
 	c, err := contract.Load(chartDir)
 	if err != nil {
-		return nil, fmt.Errorf("chart %s ships no usable contract (%v) — write the fort-side %s by hand for now", meta.Name, err, contract.FileName)
+		return nil, fmt.Errorf("chart %s ships a %s that does not load (%v) — fix it in the chart repo", meta.Name, contract.FileName, err)
+	}
+	if o.http != "" {
+		if c.HTTP != nil {
+			return nil, fmt.Errorf("the chart's contract already routes to %s:%d — --http is for a chart that declares no http", c.HTTP.Service, c.HTTP.Port)
+		}
+		h, err := parseHTTPFlag(o.http)
+		if err != nil {
+			return nil, err
+		}
+		c.HTTP = h
 	}
 
 	app := o.name
@@ -192,6 +215,7 @@ func planAdd(o addOpts) (*plan, error) {
 	repoPath := strings.SplitN(strings.TrimPrefix(o.ref, "oci://"), ":", 2)[0]
 	v := view{
 		Fort: o.fort, App: app, SecretName: app + "-env",
+		NoContract:    !c.Present,
 		Lab:           !entry.Cloud(),
 		Archive:       entry.Backups.Profile == "production",
 		BackupProfile: entry.Backups.Profile,
@@ -230,7 +254,7 @@ func planAdd(o addOpts) (*plan, error) {
 		}
 	}
 
-	p := &plan{root: o.root, fort: o.fort, app: app, resolved: resolved}
+	p := &plan{root: o.root, fort: o.fort, app: app, resolved: resolved, noContract: !c.Present, http: c.HTTP != nil}
 	apps := filepath.Join("fleet/apps", o.fort)
 	appDir := filepath.Join(apps, app)
 	if exists(o.root, appDir) {
@@ -490,6 +514,22 @@ func planAdd(o addOpts) (*plan, error) {
 	return p, nil
 }
 
+// parseHTTPFlag reads --http <service>:<port> — the ingress a chart
+// that ships no contract cannot declare (#461). The contract stays the
+// source of truth wherever there is one: the flag only fills the gap,
+// and planAdd refuses it against a contract that declares http.
+func parseHTTPFlag(s string) (*contract.HTTP, error) {
+	svc, port, ok := strings.Cut(s, ":")
+	if !ok || svc == "" || port == "" {
+		return nil, fmt.Errorf("--http %q: write it as <service>:<port>", s)
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return nil, fmt.Errorf("--http %q: %q is not a port number", s, port)
+	}
+	return &contract.HTTP{Service: svc, Port: n}, nil
+}
+
 // rewriteTemplate turns a chart template (`${postgres.db.password}`,
 // `${postgres.db.host}`) into the fort-side form: password outputs
 // become `${<handle>_password}` vars backed by a sops ref, non-secret
@@ -632,13 +672,27 @@ func (p *plan) report(w io.Writer, written bool) {
 		}
 	}
 	fmt.Fprintln(w)
+	if p.noContract {
+		fmt.Fprintf(w, "note: the chart ships no %s. This app gets no key gate: `fort check`\n", contract.FileName)
+		fmt.Fprintln(w, "      cannot see a chart bump that starts to need a key. The chart adopts the")
+		fmt.Fprintln(w, "      gate when it ships the file — docs/forts/fort-configuration-contracts.md.")
+		if !p.http {
+			fmt.Fprintln(w, "note: nothing declares an http service, so this app has no listener, no")
+			fmt.Fprintln(w, "      certificate and no route. It is reachable on the mesh and the LAN only.")
+			fmt.Fprintln(w, "      Add ingress with `fort add … --http <service>:<port>`.")
+		}
+		fmt.Fprintln(w)
+	}
 	if !written {
 		fmt.Fprintln(w, "dry run — nothing written (add --write).")
 		return
 	}
-	if p.seeds() {
+	switch {
+	case p.seeds():
 		fmt.Fprintf(w, "staged. next: seed the ◆ files (dependency order is derived):\n  fort seed %s --write\n", p.fort)
-	} else {
+	case p.noContract:
+		fmt.Fprintln(w, "staged. nothing to seed: the chart ships no contract, so the app has no Secret.")
+	default:
 		fmt.Fprintln(w, "staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.")
 	}
 	if len(p.externals) > 0 {

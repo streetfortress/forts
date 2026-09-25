@@ -2,7 +2,7 @@
 
 ```
 fort add <fort> <oci-ref> (--version X | --follow-pr N) [--name app] [--hostname fqdn]
-         [--without type,...] [--chart-dir path] [--write]
+         [--http service:port] [--without type,...] [--chart-dir path] [--write]
 ```
 
 `add` turns a chart into everything a fort needs to run it: the app's
@@ -25,6 +25,7 @@ that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.m
 | issuer | `letsencrypt` on a cloud fort, `step-ca` in the lab | — |
 | version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts | `--chart-dir` reads a local chart (tests, chart authors) |
 | optional providers | provisioned — the out-of-the-box result is the full topology | `--without valkey` drops an *optional* requirement; a required one is refused |
+| the Service the fleet routes to | the contract's `http` block | `--http service:port`, for a chart that ships no contract; refused against a contract that declares `http` |
 
 `add` is refused on a fort that is not a flux cluster, on a fort without
 an apps root (scaffold first), and on an app dir that already exists —
@@ -132,6 +133,43 @@ none. The day a genuinely secret env var appears, the chart adds
 `secret.keys` and the next `fort add` — or a hand-written
 `secrets.sops.yaml` plus its kustomization entry — restores the full
 shape.
+
+**The chart that ships no contract.** A chart declares its needs in the
+`forts.contract.yaml` it ships, and a chart that ships none declares
+nothing. `add` plans from that: no providers, no Secret, no route, and
+the app dir alone — `namespace.yaml`, `repository.yaml`,
+`release.yaml`, `step-ca-root.pem` and the kustomization. The report
+says what the absence costs, because nothing else can:
+
+```
+fleet/apps/sfi-x/   (chart 0.0.0-pr.48.108.g42d6bce)
+○ kustomization.yaml             + moment-tally-website
+● moment-tally-website/
+  ● kustomization.yaml
+  ● namespace.yaml
+  ● release.yaml                 wire: none; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.0.0-pr.48.108.g42d6bce
+  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+
+note: the chart ships no forts.contract.yaml. This app gets no key gate: `fort check`
+      cannot see a chart bump that starts to need a key. The chart adopts the
+      gate when it ships the file — docs/forts/fort-configuration-contracts.md.
+note: nothing declares an http service, so this app has no listener, no
+      certificate and no route. It is reachable on the mesh and the LAN only.
+      Add ingress with `fort add … --http <service>:<port>`.
+
+staged. nothing to seed: the chart ships no contract, so the app has no Secret.
+then: review, commit, PR — flux applies on merge.
+```
+
+`--http <service>:<port>` gives such an app its ingress: the gateway
+listener, the certificate and the route, exactly as a contract's `http`
+block produces them. Type what the chart exposes — for
+moment-tally-website that is `--http moment-tally-website:3000`. The
+contract wins wherever there is one: `--http` against a chart that
+declares `http` is refused, and the error names what the chart
+declares. A malformed contract is still an error too; absent and broken
+are different facts.
 
 **The gateway.** One `Gateway homelab` in `traefik` per fort with a
 single http listener, a catch-all `http→https` 301 (cert-manager's

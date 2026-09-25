@@ -47,20 +47,42 @@ func TestLoadNames(t *testing.T) {
 	}
 }
 
-// Neither name: the error must satisfy os.IsNotExist (three callers
-// branch on it to mean "this chart ships no contract") and name the
-// file an author should write.
+// Neither name: absent is not an error (#461). Load returns the empty
+// v1 contract with Present false — the chart declares nothing — and
+// Read still reports a not-exist error that names the file to write.
 func TestLoadAbsent(t *testing.T) {
 	dir := t.TempDir()
 	if Present(dir) {
 		t.Error("Present on an empty dir")
 	}
-	_, err := Load(dir)
-	if !os.IsNotExist(err) {
-		t.Fatalf("err = %v, want a not-exist error", err)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load on a dir with no contract: %v", err)
 	}
-	if !strings.Contains(err.Error(), FileName) {
-		t.Errorf("error = %q, want it to name %q — the name to write", err, FileName)
+	if c.Present {
+		t.Error("c.Present on a dir with no contract")
+	}
+	if c.Version != "v1" || c.HTTP != nil || c.Metrics != nil || len(c.Secret.Keys) != 0 || len(c.Requires) != 0 {
+		t.Errorf("want the empty v1 contract, got %+v", c)
+	}
+	_, _, rerr := Read(dir)
+	if !os.IsNotExist(rerr) {
+		t.Fatalf("Read err = %v, want a not-exist error", rerr)
+	}
+	if !strings.Contains(rerr.Error(), FileName) {
+		t.Errorf("error = %q, want it to name %q — the name to write", rerr, FileName)
+	}
+}
+
+// A contract that IS there and does not parse stays an error: absent
+// and malformed are different facts (#461).
+func TestLoadMalformedIsStillAnError(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, FileName, "contract: v1\nsecret: [not, a, mapping]\n")
+	if _, err := Load(dir); err == nil {
+		t.Fatal("want an error for a contract that does not parse")
+	} else if os.IsNotExist(err) {
+		t.Errorf("a malformed contract reported as absent: %v", err)
 	}
 }
 

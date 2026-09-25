@@ -1,0 +1,21 @@
+# moment-tally-website's chart as a single-chart OCI artifact (OCIRepository +
+# HelmRelease.chartRef, ref.tag pinned = chart version). Published by the
+# app repo's release workflow on `just tag X.Y.Z`; Renovate's flux
+# manager tracks ref.tag for bump PRs.
+#
+# certSecretRef: source-controller pods do NOT inherit the node's step-ca
+# trust (unlike containerd image pulls), so the registry's CA is provided
+# explicitly, generated from the local step-ca-root.pem copy by this
+# app's kustomization.yaml.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: moment-tally-website
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://gitea.zen.lofi/sfi/moment-tally-website
+  ref:
+    tag: "0.0.0-pr.48.108.g42d6bce"
+  certSecretRef:
+    name: moment-tally-website-oci-ca

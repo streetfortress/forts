@@ -247,14 +247,14 @@ func yamlPath(t *testing.T, file, path string) any {
 // generated code).
 func TestAddFreshCloudFort(t *testing.T) {
 	// testdata manifest: linode, dns zone example.cloud, profile production
-	testAddFresh(t, "cloud-fort", "testdata/golden/fresh-cloud", "sfi-website", "0.3.0")
+	testAddFresh(t, addFixture{fort: "cloud-fort", golden: "testdata/golden/fresh-cloud", chart: "sfi-website", version: "0.3.0"})
 }
 
 // The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
 // a sites-db born with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {
-	testAddFresh(t, "lab-fort", "testdata/golden/fresh-lab", "sfi-website", "0.3.0")
+	testAddFresh(t, addFixture{fort: "lab-fort", golden: "testdata/golden/fresh-lab", chart: "sfi-website", version: "0.3.0"})
 }
 
 // The secret-less shape (#460): moment-tally-website ships a contract
@@ -264,11 +264,50 @@ func TestAddFreshLabFort(t *testing.T) {
 // report. The app also requires no provider, so the fort gets a gateway
 // and the app dir only.
 func TestAddSecretlessChart(t *testing.T) {
-	testAddFresh(t, "lab-fort", "testdata/golden/secretless", "moment-tally-website", "0.1.0")
+	testAddFresh(t, addFixture{fort: "lab-fort", golden: "testdata/golden/secretless", chart: "moment-tally-website", version: "0.1.0"})
 }
 
-func testAddFresh(t *testing.T, fort, golden, chart, version string) {
+// The contract-less chart (#461): the same app at the pin it had before
+// sfi/moment-tally-website#51 shipped a contract. `add` plans from the
+// empty contract — no Secret, no provider, and no route, because
+// nothing declares an http service. The fort gets the app dir alone,
+// and the report says what the missing contract costs.
+func TestAddContractlessChart(t *testing.T) {
+	testAddFresh(t, addFixture{
+		fort: "lab-fort", golden: "testdata/golden/no-contract",
+		chart: "moment-tally-website", chartDir: "testdata/charts/moment-tally-website-bare",
+		version: "0.0.0-pr.48.108.g42d6bce",
+	})
+}
+
+// --http gives a contract-less app its ingress back (#461): the same
+// replay, plus the Service the chart exposes. It renders the gateway,
+// the certificate and the route that a contract's `http` block would
+// have produced.
+func TestAddContractlessChartHTTP(t *testing.T) {
+	testAddFresh(t, addFixture{
+		fort: "lab-fort", golden: "testdata/golden/no-contract-http",
+		chart: "moment-tally-website", chartDir: "testdata/charts/moment-tally-website-bare",
+		version: "0.0.0-pr.48.108.g42d6bce", http: "moment-tally-website:3000",
+	})
+}
+
+// addFixture is one replay of `fort add` on a fresh fort: the manifest
+// fixture, the golden tree, the chart (its OCI ref and its pin), and
+// the flags the operator typed.
+type addFixture struct {
+	fort, golden, chart, version string
+	chartDir                     string // default: testdata/charts/<chart>
+	http                         string // --http <service>:<port>
+}
+
+func testAddFresh(t *testing.T, f addFixture) {
 	t.Helper()
+	fort, golden, chart, version := f.fort, f.golden, f.chart, f.version
+	chartDir := f.chartDir
+	if chartDir == "" {
+		chartDir = "testdata/charts/" + chart
+	}
 	repo, err := repoRootFrom(mustGetwd(t))
 	if err != nil {
 		t.Skip("not inside the deployments checkout")
@@ -282,7 +321,8 @@ func testAddFresh(t *testing.T, fort, golden, chart, version string) {
 		root: tmp, fort: fort,
 		ref:      "oci://gitea.zen.lofi/sfi/" + chart,
 		version:  version,
-		chartDir: "testdata/charts/" + chart,
+		http:     f.http,
+		chartDir: chartDir,
 		without:  map[string]bool{},
 	})
 	if err != nil {
@@ -344,5 +384,41 @@ func testAddFresh(t *testing.T, fort, golden, chart, version string) {
 		if _, ok := want[rel]; !ok {
 			t.Errorf("%s: generated, not in the golden (UPDATE_GOLDEN=1 to accept)", rel)
 		}
+	}
+}
+
+// --http parses as <service>:<port>, and the chart's own contract wins
+// wherever there is one: the flag fills a gap, it never contradicts a
+// declaration (#461).
+func TestHTTPFlag(t *testing.T) {
+	for _, bad := range []string{"app", "app:", ":3000", "app:http", "app:0", "app:70000"} {
+		if h, err := parseHTTPFlag(bad); err == nil {
+			t.Errorf("--http %q parsed as %+v, want an error", bad, h)
+		}
+	}
+	h, err := parseHTTPFlag("moment-tally-website:3000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Service != "moment-tally-website" || h.Port != 3000 {
+		t.Errorf("parseHTTPFlag = %+v", h)
+	}
+
+	if _, err := repoRootFrom(mustGetwd(t)); err != nil {
+		t.Skip("not inside the deployments checkout")
+	}
+	tmp := t.TempDir()
+	copyManifest(t, "testdata", tmp, "lab-fort")
+	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps/lab-fort/kustomization.yaml"))
+	_, err = planAdd(addOpts{
+		root: tmp, fort: "lab-fort",
+		ref:      "oci://gitea.zen.lofi/sfi/moment-tally-website",
+		version:  "0.1.0",
+		http:     "moment-tally-website:3000",
+		chartDir: "testdata/charts/moment-tally-website",
+		without:  map[string]bool{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "already routes to") {
+		t.Errorf("--http against a contract that declares http: err = %v", err)
 	}
 }

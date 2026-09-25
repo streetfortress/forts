@@ -42,6 +42,13 @@ type Contract struct {
 	// LegacyFileName for a chart released before the rename. It is
 	// what lets `fort check` nudge such a chart.
 	File string `yaml:"-"`
+
+	// Present is false when the chart ships no contract at all, and
+	// Load returned the empty v1 contract (#461). A caller that must
+	// tell "the chart declares nothing" from "the chart declares this"
+	// reads this field; a caller that only reads the blocks does not
+	// have to, because every block of the empty contract is empty.
+	Present bool `yaml:"-"`
 }
 
 type Secret struct {
@@ -122,8 +129,18 @@ func Present(dir string) bool {
 }
 
 // Load reads dir's contract under either name (see Read).
+//
+// An absent contract is not an error. A chart that ships no contract
+// declares nothing — no keys, no providers, no route — which the fleet
+// supports everywhere (#461), so Load returns the empty v1 contract
+// with Present false. A contract that IS there and does not parse, or
+// does not say `contract: v1`, is still an error: absent and malformed
+// are different facts.
 func Load(chartDir string) (*Contract, error) {
 	raw, name, err := Read(chartDir)
+	if os.IsNotExist(err) {
+		return &Contract{Version: "v1"}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +148,7 @@ func Load(chartDir string) (*Contract, error) {
 	if err := yaml.Unmarshal(raw, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	c.File = name
+	c.File, c.Present = name, true
 	if c.Version != "v1" {
 		return nil, fmt.Errorf("%s: contract: %q (want v1)", name, c.Version)
 	}

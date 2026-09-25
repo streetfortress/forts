@@ -43,6 +43,15 @@ No rename, no flag day: a chart adopts the pattern by shipping the file,
 and the fort's copy shrinks to an overlay or disappears at the next
 `fort add`/adoption pass.
 
+Every verb takes that shape as it is. `fort add` plans from the empty
+contract (#461): no providers, no Secret, no route, and the app dir
+alone, with a report line for what the absence costs. `fort seed` runs
+whatever fort-side full form the dir commits. `fort check` skips an app
+dir that commits no full form and pins a chart with no contract — there
+is nothing to check it against. An absent contract is not an error
+anywhere; a contract that IS there and does not parse is an error
+everywhere.
+
 ### The name, and the old one
 
 Until #464 the file was called `secrets.contract.yaml` — a fossil of its
@@ -199,7 +208,7 @@ secret:
 
 ## What `fort add` renders
 
-`fort add <fort> <oci-ref>[:<version>] [--name <app>] [--hostname <fqdn>] [--dedicated <type>...] [--without <type>...]`
+`fort add <fort> <oci-ref>[:<version>] [--name <app>] [--hostname <fqdn>] [--http <service>:<port>] [--dedicated <type>...] [--without <type>...]`
 
 Pure generator: reads the chart's contract, the fort's manifest,
 and the existing fort tree; writes **new files** and **appends lines to
@@ -230,6 +239,19 @@ Secret for the dir and `fort check` demands none. The app dir is then
 `namespace.yaml`, `repository.yaml`, `step-ca-root.pem`, `release.yaml`,
 `route.yaml`, and the kustomization — which is the shape sfi-prod's
 hand-written `moment-tally-website/` already has.
+
+**Contract-less base case** (a chart that ships no contract —
+moment-tally-website before sfi/moment-tally-website#51). The chart
+declares nothing, so `fort add` renders the app dir and nothing else:
+`namespace.yaml`, `repository.yaml`, `step-ca-root.pem`,
+`release.yaml` and the kustomization. There is no `http` to read, so
+there is no listener, no certificate and no route, and the app is
+reachable on the mesh and the LAN only. `--http <service>:<port>` adds
+those three back — it is the operator's statement of what the chart
+exposes, and `fort add` refuses it against a chart whose contract
+declares `http`. The post-add report names the cost: this app has no
+key gate, because `fort check` has nothing to compare the committed
+Secret against. The chart takes the gate the day it ships the file.
 
 **Base case** (chart with `secret` + `http` only — sfi-website today):
 

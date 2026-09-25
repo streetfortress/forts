@@ -281,10 +281,13 @@ func pinnedContract(o seedOpts, dir string) (*contract.Contract, error) {
 		chartDir = pc.dir
 	}
 	c, err := contract.Load(chartDir)
-	if os.IsNotExist(err) {
-		return nil, nil
+	if err != nil {
+		return nil, err
 	}
-	return c, err
+	if !c.Present {
+		return nil, nil // the pinned chart ships no contract (#461)
+	}
+	return c, nil
 }
 
 // checkDeclared: the fort-side full form implements everything the

@@ -1,0 +1,18 @@
+# Serving cert for the https-moment-tally-website listener; issued by step-ca via the
+# ACME http01 gateway solver (challenge routes attach to the http listener).
+# Requires moment-tally-website.lab-fort.lofi to resolve to this node in lab
+# DNS (dnsmasq on 10.0.0.2) — the ACME server dials the hostname back.
+# Until it does, cert-manager retries harmlessly and the listener serves
+# its self-signed placeholder.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: moment-tally-website
+  namespace: traefik
+spec:
+  secretName: moment-tally-website-tls
+  dnsNames:
+    - moment-tally-website.lab-fort.lofi
+  issuerRef:
+    kind: ClusterIssuer
+    name: step-ca

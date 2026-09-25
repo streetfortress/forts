@@ -273,13 +273,13 @@ func effectiveContract(o seedOpts, dir string) (*FullForm, *contract.Contract, s
 	}
 	c, err := contract.Load(chartDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			if overlay != nil {
-				return nil, nil, "", fmt.Errorf("chart %s ships no contract for the overlay to extend", pin.url)
-			}
-			return nil, nil, "", nil
-		}
 		return nil, nil, "", err
+	}
+	if !c.Present {
+		if overlay != nil {
+			return nil, nil, "", fmt.Errorf("chart %s ships no contract for the overlay to extend", pin.url)
+		}
+		return nil, nil, "", nil
 	}
 	app := filepath.Base(dir)
 	ov, err := parseOverlay(overlay)
