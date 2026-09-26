@@ -5,8 +5,7 @@
 # meets (uv-managed pythons, npm native modules). No k3s, no flux, no
 # backups: a dev fort is transient, and nothing on it is precious
 # (forts#12). Rendered by `fort scaffold` for a manifest with a [dev]
-# table; mutually exclusive with production.nix and with the hand-managed
-# interactive.nix + dotfiles.nix pair.
+# table; mutually exclusive with production.nix.
 #
 # What makes it a boundary rather than a laptop: the only credentials on
 # the box are the fort's own (the agent bundle #414 mints per fort), SSH
@@ -57,10 +56,9 @@ in
     ./shell.nix # the prompt, keys and aliases at a herdr pane (#557)
   ];
 
-  # The one hardened profile with a Home Manager user: agent's, and only
-  # agent's — the flake's uniform module set still declares steven's HM
-  # config, who does not exist here (same force as production.nix).
-  home-manager.users = lib.mkForce { agent = import ../home/agent.nix; };
+  # The one profile with a Home Manager user: agent's. The flake wires
+  # Home Manager in and declares nobody; this is the declaration.
+  home-manager.users.agent = import ../home/agent.nix;
   sfi.dotfiles.user = "agent";
   programs.zsh.enable = true; # the login shell below
   sfi.shell.enable = true; # every dev fort: a person reads the prompt at a pane

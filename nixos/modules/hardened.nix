@@ -3,8 +3,7 @@
 # profile's job: production.nix adds `deployer` and the public/cluster
 # ports, dev-fort.nix adds `agent` and nothing public. Split out of
 # production.nix so the two profiles are the same lines, not drifting
-# copies. Mutually exclusive with interactive.nix + dotfiles.nix (the
-# hand-managed lab-host pair).
+# copies.
 #
 #   - SSH answers on the wireguard mesh only. The public/LAN interface
 #     serves exactly `sfi.hardened.publicTCPPorts` (+ 51820/udp, which IS

@@ -39,8 +39,8 @@ Host devbox
 **The account is the fort's shape, not a field.** A `[dev]` fort answers
 as `agent` (`dev-fort.nix`), a cluster fort as `deployer`
 (`production.nix`), and a peer with no manifest is a hand-managed
-interactive host — `steven`'s (`interactive.nix` on NixOS, or the ubuntu
-holdouts soundship and devbox). That answers the open question of how the
+interactive host — `steven`'s: the ubuntu holdouts soundship and devbox
+(no NixOS host carries an interactive profile any more). That answers the open question of how the
 interactive hosts get an entry: being in peers.json without a manifest
 *is* the declaration. peers.json stays three fields per peer.
 

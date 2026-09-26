@@ -17,8 +17,7 @@ let
   server = if meshIp != null then meshIp else "127.0.0.1";
 in
 {
-  # Read access to the rendered file; production.nix adds deployer,
-  # interactive.nix adds steven.
+  # Read access to the rendered file; production.nix adds deployer.
   users.groups.kubeops = { };
 
   # Everyday kubectl resolves to the RO config for every login shell —

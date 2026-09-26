@@ -40,7 +40,7 @@ import (
 // The account table is the manifest's shape, not a field: a [dev] fort
 // answers as agent (dev-fort.nix), a cluster fort as deployer
 // (production.nix), and a peer with no manifest is a hand-managed
-// interactive host — steven's (interactive.nix, or the ubuntu holdouts).
+// interactive host — steven's (the ubuntu holdouts; no NixOS interactive profile exists).
 // peers.json stays three fields per peer; nothing is added to it here.
 
 const (

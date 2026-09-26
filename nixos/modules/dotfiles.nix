@@ -1,7 +1,7 @@
 # Clone sfi/.fortfiles — the agent's operating config: CLAUDE.md, the
 # skills (kb, pickup, scout, review) and herdr.toml — to ~/.fortfiles for
-# the user this host carries (`sfi.dotfiles.user`, agent on a dev fort —
-# #413, #546). Home Manager points three out-of-store symlinks into that
+# the user this host carries (`sfi.dotfiles.user`, which the importing
+# profile must set: agent, from dev-fort.nix — #413, #546). Home Manager points three out-of-store symlinks into that
 # checkout (home/base.nix); this module only provides the working checkout
 # the symlinks expect, and keeps it current at boot.
 #
@@ -36,9 +36,10 @@ let
   dir = "${home}/.fortfiles";
 in
 {
+  # No default on purpose: the profile that imports this names its account,
+  # and an import without one is a mistake the eval should report here.
   options.sfi.dotfiles.user = lib.mkOption {
     type = lib.types.str;
-    default = "steven";
     description = "The account whose ~/.fortfiles this host clones and keeps current.";
   };
 

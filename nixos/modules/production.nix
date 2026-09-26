@@ -1,17 +1,14 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
 # Imported by every flux fort's hosts/<name>/default.nix (`fort scaffold`
-# renders it unconditionally for a cluster fort, #272; dotfiles.nix +
-# interactive.nix are for hand-managed lab hosts; the profiles are
-# mutually exclusive). The hardening itself — mesh-only SSH, UTC, the
+# renders it unconditionally for a cluster fort, #272; dev-fort.nix is the
+# other profile, and the two are mutually exclusive). The hardening itself — mesh-only SSH, UTC, the
 # closure trims, root-only nix — is hardened.nix (#417), shared with
 # dev-fort.nix; this module is what a CLUSTER fort adds on top:
-#   - No Home Manager payload, and no steven at all: interactive.nix isn't
-#     imported here, so the only login account is the unprivileged `deployer`
-#     below. The home-manager.users force is CORRECTNESS-load-bearing, not just
-#     a size trim — the flake's uniform VM module set still declares HM config
-#     for steven, who does not exist on this host, and the force is what keeps
-#     that from evaluating. (It's also the size lever for the 6 GB uncompressed
-#     custom-image cap: lab images measure 2.8-4.3 GB with the home stack.)
+#   - No Home Manager payload: the only login account is the unprivileged
+#     `deployer` below, and the home-manager.users force below keeps it so
+#     against any shared module that would declare one. (Also the size
+#     lever for the 6 GB uncompressed custom-image cap: lab images measured
+#     2.8-4.3 GB with a home stack.)
 #   - The public/LAN interface serves exactly 80/443; the cluster and edge
 #     ports re-open on the mesh interface only.
 #   - deployer is a plain user: no wheel, so no path to root from SSH (the
@@ -27,9 +24,9 @@
 {
   imports = [ ./hardened.nix ];
 
-  # Empty the HM user set wholesale rather than removing users.steven's entry —
-  # one mkForce, and any future HM user added by a shared module is excluded
-  # from production by default instead of sneaking into the image.
+  # Empty the HM user set wholesale: one mkForce, and a Home Manager user
+  # added by any shared module is excluded from production by default
+  # instead of sneaking into the image.
   home-manager.users = lib.mkForce { };
 
   # The production operator account: SSH in over the mesh, watch the machinery,
@@ -37,8 +34,8 @@
   # writes go through git, not a shell (#90 adds the read-only kubeconfig
   # this account uses), and no nix daemon access (hardened.nix keeps it
   # root-only): deployer observes the cluster, not the store; rebuilds
-  # arrive as replacement images. Key set matches interactive.nix for
-  # now; trim to the ops devices when vetting settles.
+  # arrive as replacement images. Key set is the operator's devices, the
+  # same list dev-fort.nix carries for agent; trim it when vetting settles.
   users.users.deployer = {
     extraGroups = [
       # Read the ops-ro kubeconfig (ops-kubeconfig.nix, #90).
