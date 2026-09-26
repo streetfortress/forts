@@ -52,7 +52,7 @@ in
   imports = [
     ./hardened.nix
     ./lab-host.nix
-    ./dotfiles.nix # ~agent/.files, the checkout the HM symlinks point into
+    ./dotfiles.nix # ~agent/.fortfiles, the checkout the HM symlinks point into
     ./auto-rebuild.nix # the gc window below is its option
     ./shell.nix # the prompt, keys and aliases at a herdr pane (#557)
   ];

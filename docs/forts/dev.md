@@ -49,7 +49,7 @@ environment exist before Claude's first metric:
 4. **Claude** — `herdr agent start <repo>-<n> --kind claude --pane <root
    pane> -- --permission-mode bypassPermissions [--model <name>]`, then
    `herdr agent prompt … "/pickup owner/repo#n [<note>]"`. The standing instruction
-   is the `pickup` skill in `.files` (`shell/config/claude-skills/pickup`),
+   is the `pickup` skill in `sfi/.fortfiles` (`skills/pickup`),
    linked into `~/.claude/skills` like `kb`; there is no prompt file.
    `--model` is `gotea dispatch --model` arriving: the name is passed to
    `claude` as given and the set of valid names is the CLI's, not ours —
@@ -105,7 +105,7 @@ from having no identity differs:
 | swept by | `gotea sessions --prune`, when gitea closes the issue | the same sweep, when the agent is quiet and the stamp is over a day old: nothing will ever close to say a scout is done |
 
 A fix smaller than the issue describing it is allowed. The `scout` skill in
-`.files` says how: file the issue first, rename the branch to `issue-<n>`,
+`sfi/.fortfiles` says how: file the issue first, rename the branch to `issue-<n>`,
 then open the PR — which puts the work back on the path
 `pickup-transcript` already knows, since it looks for exactly that branch.
 
@@ -177,8 +177,8 @@ same TUI on the fort as on the laptop.
   `modules/shell.nix` (#557), rendered into `/etc/zshrc`; nothing at the
   pane comes from the dotfiles clone.
 - **The config** is the laptop's: `~/.config/herdr/config.toml` is
-  linked from `.files` (`shell/config/herdr.toml`) in `home/base.nix`,
-  like the rest of the dotfiles.
+  linked from `~/.fortfiles` (`herdr.toml`) in `home/base.nix`, like
+  `CLAUDE.md` and the skills — the three paths that repo holds.
 - **Everything in a workspace is the server's child.** Stopping or
   restarting `herdr.service` stops every task in flight — the one way a
   dispatched task dies short of the fort itself. Home Manager does not
@@ -319,7 +319,7 @@ screen, so it reports that a turn finished and never whether the work
 exists — a session that stopped at a blocker looks exactly like one that
 opened a PR. The token is display-only metadata under the `pickup` source,
 so it never contends with that detection, and the laptop's `config.toml`
-(`.files`, `shell/config/herdr.toml`) gives `$pickup` its colour. A scout
+(`sfi/.fortfiles`, `herdr.toml`) gives `$pickup` its colour. A scout
 and a review report no token: neither has `PICKUP_TASK`, so the hook returns
 first.
 
