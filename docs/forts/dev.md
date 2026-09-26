@@ -173,7 +173,9 @@ same TUI on the fort as on the laptop.
   use; the unit is the declared state, and what a fresh boot has before
   anyone dials in. Panes are the login shell, zsh, which is where the
   OTEL variables and the Claude token come from — the manager's own PATH
-  is bare and stays so.
+  is bare and stays so. The prompt, vi mode and the keys at that pane are
+  `modules/shell.nix` (#557), rendered into `/etc/zshrc`; nothing at the
+  pane comes from the dotfiles clone.
 - **The config** is the laptop's: `~/.config/herdr/config.toml` is
   linked from `.files` (`shell/config/herdr.toml`) in `home/base.nix`,
   like the rest of the dotfiles.

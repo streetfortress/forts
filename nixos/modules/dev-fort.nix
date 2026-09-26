@@ -54,6 +54,7 @@ in
     ./lab-host.nix
     ./dotfiles.nix # ~agent/.files, the checkout the HM symlinks point into
     ./auto-rebuild.nix # the gc window below is its option
+    ./shell.nix # the prompt, keys and aliases at a herdr pane (#557)
   ];
 
   # The one hardened profile with a Home Manager user: agent's, and only
@@ -62,6 +63,7 @@ in
   home-manager.users = lib.mkForce { agent = import ../home/agent.nix; };
   sfi.dotfiles.user = "agent";
   programs.zsh.enable = true; # the login shell below
+  sfi.shell.enable = true; # every dev fort: a person reads the prompt at a pane
 
   users.users.agent = {
     isNormalUser = true;
