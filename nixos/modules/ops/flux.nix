@@ -6,6 +6,13 @@
 # windows safe (sfi-k8s-scale refuses to scale an unsuspended workload).
 # Suspension is NOT auto-restored — sfi-flux-resume closes the window,
 # and the Fleet Overview flux table shows what's suspended meanwhile.
+# The patch names --field-manager=flux-client-side-apply, and that flag is
+# what makes the sentence above true (#554): under the default Override
+# policy kustomize-controller reverts a field that a kubectl field manager
+# wrote, at the next apply of the owning Kustomization (10m on a fort),
+# but it keeps a field that flux-client-side-apply owns while git does not
+# declare that field. Both verbs then read spec.suspend back and fail when
+# the value is not the requested one.
 #
 # All use the admin kubeconfig internally: that narrow, sudo-logged use
 # is exactly what the framework exists to permit. The flux CRDs arrive
@@ -78,8 +85,19 @@ let
     fi
 
     kubectl -n "$matched_ns" patch "$matched_type/$requested_name" \
-      --type=merge -p '{"spec":{"suspend":${value}}}'
-    echo "${done}: $matched_type/$requested_name -n $matched_ns"
+      --type=merge --field-manager=flux-client-side-apply \
+      -p '{"spec":{"suspend":${value}}}'
+
+    # A patch that kubectl accepted is not yet a window: read the object
+    # back and say what it holds. An empty read is the <none> the menu
+    # prints for an object that declares no spec.suspend.
+    observed=$(kubectl -n "$matched_ns" get "$matched_type/$requested_name" \
+      -o jsonpath='{.spec.suspend}' 2>/dev/null || true)
+    if [ "$observed" != "${value}" ]; then
+      echo "error: $matched_type/$requested_name -n $matched_ns reads back spec.suspend=''${observed:-<none>}, not ${value} — the patch did not hold" >&2
+      exit 1
+    fi
+    echo "${done}: $matched_type/$requested_name -n $matched_ns (spec.suspend=$observed)"
   '';
 in
 {
