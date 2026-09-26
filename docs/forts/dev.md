@@ -25,6 +25,10 @@ so `ssh sfi-dev pickup …` finds it through the login shell. Deterministic
 prep first, the hand-off to Claude last, so the worktree and the task's
 environment exist before Claude's first metric:
 
+0. **The knowledge base** — `knowledge-sync` pulls `~/src/sfi/knowledge`
+   (`--ff-only`; clones it if the boot run missed the mesh), so the
+   session reads today's knowledge base before CLAUDE.md sends it there.
+   Best-effort: a miss logs and the dispatch goes on.
 1. **The checkout** — `~/src/<owner>/<repo>`, cloned over gitea's ssh
    with the fort's key (host key pinned by `dev-fort.nix`), or fetched
    with `--prune` when it exists.
