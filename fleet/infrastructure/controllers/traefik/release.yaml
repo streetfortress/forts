@@ -83,9 +83,26 @@ spec:
     # JSON so the fluent-bit kubernetes filter (Merge_Log) lifts the access
     # log fields — the caddy-log-pipeline equivalent as ingress moves to
     # traefik (#54).
+    #
+    # Filtered: a line is written when ANY filter matches (error status,
+    # retried, or slower than the knee), so the happy path is dropped.
+    # Unfiltered, every 200 cost ~1.1 KiB of JSON — about a third of the
+    # compressed response bytes it described — shipped again over the mesh
+    # to luxor's Loki, where nothing reads it: the symbology dashboard's
+    # request layer is traefik's Prometheus metrics (podmonitors.yaml),
+    # and the only LogQL rule on this stream (TraefikBackendErrors,
+    # loki-rules.yaml) wants 5xx, which the filter keeps. Found on
+    # sfi-stage-d95cc36's capacity run (2026-09-26): traefik was the
+    # fort's whole log volume. 1s is the knee the k6 runs settled on, so a
+    # slow 200 still lands. statusCodes is a string in the chart (rendered
+    # as --accesslog.filters.statuscodes), not a list.
     accessLog:
       enabled: true
       format: json
+      filters:
+        statusCodes: "400-599"
+        retryAttempts: true
+        minDuration: "1s"
 
     ingressRoute:
       dashboard:
