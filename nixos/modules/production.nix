@@ -19,7 +19,7 @@
 #     interactive break-glass is deliberately absent: use the provider's
 #     rescue boot (or guestfish on the disk locally) — these boxes are
 #     replaced, not repaired.
-{ lib, pkgs, ... }:
+{ lib, ... }:
 
 {
   imports = [ ./hardened.nix ];
@@ -51,7 +51,11 @@
     ];
     isNormalUser = true;
     description = "SFI production operator";
-    shell = pkgs.bashInteractive;
+    # No `shell` here: an isNormalUser follows users.defaultUserShell, and
+    # one module decides it. That is bashInteractive on a fort that carries
+    # no shell module, and zsh where the host imports modules/shell.nix and
+    # enables sfi.shell — the module's ticking clock and vi-mode indicator
+    # are zsh-only (#576).
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"

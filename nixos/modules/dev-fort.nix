@@ -60,13 +60,15 @@ in
   # Home Manager in and declares nobody; this is the declaration.
   home-manager.users.agent = import ../home/agent.nix;
   sfi.dotfiles.user = "agent";
-  programs.zsh.enable = true; # the login shell below
-  sfi.shell.enable = true; # every dev fort: a person reads the prompt at a pane
+  # Every dev fort: a person reads the prompt at a pane. The module also
+  # turns programs.zsh on and sets users.defaultUserShell, so zsh is the
+  # login shell of every account that does not pin one — agent's included
+  # (#576).
+  sfi.shell.enable = true;
 
   users.users.agent = {
     isNormalUser = true;
     description = "SFI coding agent";
-    shell = pkgs.zsh;
     # A user manager that outlives the login: the herdr server (#418,
     # home/agent.nix) lives in it, so a task keeps running after the
     # dispatching ssh session ends.

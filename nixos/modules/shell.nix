@@ -5,6 +5,19 @@
 # deployer, or someone at a herdr pane on a dev fort. An agent's Bash tool
 # calls are non-interactive and read none of this.
 #
+# ZSH IS THAT SHELL (#558, #576). The module turns programs.zsh on itself
+# and makes zsh the default login shell, so deployer and agent read the
+# same rc and both get the whole list above. It used to wait for a host to
+# enable zsh; a cluster fort never did, so deployer read the bash branch
+# and two promises of this header went unkept there — the clock did not
+# tick and the vi mode showed no indicator (#576).
+#
+# The bash branch stays, reduced, for the contexts that are still bash:
+# `sudo sfi-root` execs `bash -l` (ops/root.nix), and a person runs `bash`
+# at a zsh prompt. Its prompt, keys, fzf and aliases work; the tick and the
+# mode indicator cannot, for reasons that belong to the shell and not to
+# this module (the bash block below says which).
+#
 # Why nix and not a runtime checkout (#557, sfi/.fortfiles#4): a cluster
 # fort has no Home Manager user and clones nothing, so nix content is the
 # only thing that reaches both profiles; and the rebuild is the FAST path
@@ -12,19 +25,20 @@
 # pulls at boot and never again. The rate-of-change argument that put the
 # shell in a dotfiles repo (sfi/.fortfiles#1) had that backwards.
 #
-# System level, not home-manager, for the same reason: /etc/bashrc and
-# /etc/zshrc reach deployer (bash, production.nix) and agent (zsh,
-# dev-fort.nix) alike. The zsh half is guarded on programs.zsh.enable —
-# a cluster fort runs bash and gets no zsh — and the zsh-vi-mode plugin
-# is loaded HERE, not by Home Manager, so the module owns the whole key
-# chain: the plugin, then fzf after it (zvm_after_init_commands), then
-# the Ctrl-R widget that starts with an empty query.
+# System level, not home-manager, for the same reason: /etc/zshrc and
+# /etc/bashrc reach deployer (production.nix) and agent (dev-fort.nix)
+# alike, and a cluster fort has no Home Manager user at all. The
+# zsh-vi-mode plugin is loaded HERE, not by Home Manager, so the module
+# owns the whole key chain: the plugin, then fzf after it
+# (zvm_after_init_commands), then the Ctrl-R widget that starts with an
+# empty query.
 #
 # The guard is the import, like modules/ops/root.nix: a host gets this
 # only by naming the module and setting enable. dev-fort.nix enables it
 # for every dev fort; a cluster fort's own default.nix opts in (staging
-# does; production is #558's decision). Not in modules/ops/: this is not
-# a verb.
+# does). #558 accepted the module for sfi-prod-439bf72 and settled the zsh
+# question above; the production host's own import is a separate change.
+# Not in modules/ops/: this is not a verb.
 #
 # Left out of the personal profile on purpose: the kubectl/KUBECONFIG
 # block (fd over a ~/.kube that a fort does not have printed two errors
@@ -96,7 +110,7 @@ in
   options.sfi.shell.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "The fort's interactive shell for a person at a pane: starship with a ticking UTC clock, fzf history, vi mode, eza/bat/fd/ripgrep and the aliases file — for bash always, for zsh when programs.zsh is enabled.";
+    description = "The fort's interactive shell for a person at a pane: zsh with starship, a ticking UTC clock, an fzf history, vi mode, eza/bat/fd/ripgrep and the aliases file. This makes zsh the default login shell of the host. A bash context keeps the prompt, the keys and the aliases, but its clock stamps the draw time and its vi mode has no indicator (#576).";
   };
 
   config = lib.mkIf cfg.enable {
@@ -109,23 +123,51 @@ in
     environment.etc."sfi/shell/aliases.sh".source = ./shell/aliases.sh;
     environment.sessionVariables.STARSHIP_CONFIG = "/etc/sfi/shell/starship.toml";
 
-    # bash: deployer's shell on a cluster fort, and the other shell on a
-    # dev fort. vi mode here too — the operator is the same person at
-    # both prompts.
+    # zsh, and zsh as the login shell: the module owns both halves of the
+    # promise instead of waiting for a host to enable zsh (#558, #576). An
+    # account that does not pin a shell — deployer (production.nix), agent
+    # (dev-fort.nix) — follows users.defaultUserShell, because nixpkgs
+    # gives every isNormalUser `useDefaultShell = true`
+    # (config/users-groups.nix). A fort that does not import this module
+    # keeps the nixpkgs default of bashInteractive.
+    programs.zsh.enable = true;
+    users.defaultUserShell = pkgs.zsh;
+
+    # root keeps bash, deliberately: `sudo sfi-root` execs `bash -l`
+    # (ops/root.nix), and a fort's break-glass shell must not depend on the
+    # ergonomics module. nixpkgs sets root's shell with mkDefault, so this
+    # assignment wins.
+    users.users.root.shell = pkgs.bashInteractive;
+
+    # zsh: the prompt of the person at a pane. The order is the point, and
+    # the let-block above says why for each part.
+    programs.zsh.interactiveShellInit =
+      zshViMode + zshStarship + zshClock + zshKeys + ''
+        source ${aliases}
+      '';
+
+    # bash: the reduced prompt, for a bash context — `sudo sfi-root`'s
+    # `bash -l`, a `bash` run at a zsh prompt, an account that pins bash.
+    # The prompt, the vi keys, fzf and the aliases all work. Two facts of
+    # the zsh prompt cannot follow them here (#576 measured both):
+    #   - The clock stamps the time of the DRAW and never ticks after it.
+    #     A tick needs a timer that redraws a prompt already on screen:
+    #     zsh has TMOUT + TRAPALRM + `zle reset-prompt`, bash has no
+    #     equivalent, and TMOUT in bash ends the shell instead.
+    #   - The character shows the insert symbol in both vi modes.
+    #     `starship init bash` passes no --keymap to `starship prompt`
+    #     (`starship init zsh` passes --keymap="$KEYMAP"), so starship
+    #     never learns the mode and vimcmd_symbol never renders. readline
+    #     can print an indicator of its own (`set show-mode-in-prompt on`),
+    #     but it prints at the start of the LAST prompt line, which is the
+    #     line starship's character owns — two symbols for one fact. The
+    #     module does not set it.
     programs.bash.interactiveShellInit = ''
       set -o vi
       eval "$(${pkgs.starship}/bin/starship init bash)"
       eval "$(${pkgs.fzf}/bin/fzf --bash)"
       . ${aliases}
     '';
-
-    # zsh: only where a host enables it (dev-fort.nix does; a cluster fort
-    # does not, and /etc/zshrc is not rendered there at all).
-    programs.zsh.interactiveShellInit = lib.mkIf config.programs.zsh.enable (
-      zshViMode + zshStarship + zshClock + zshKeys + ''
-        source ${aliases}
-      ''
-    );
 
     # /etc/zshrc writes promptInit AFTER interactiveShellInit, and nixpkgs
     # defaults that option to `prompt suse`. starship's zsh init assigns
@@ -134,7 +176,7 @@ in
     # dev fort showed the suse theme (#575). Empty is safe: zsh has
     # prompt_sp and prompt_cr on by default, so the theme was the only
     # thing that block added.
-    programs.zsh.promptInit = lib.mkIf config.programs.zsh.enable "";
+    programs.zsh.promptInit = "";
 
     # `ls` cannot live in aliases.sh: both /etc/bashrc and /etc/zshrc emit
     # environment.shellAliases after interactiveShellInit, and nixpkgs sets
