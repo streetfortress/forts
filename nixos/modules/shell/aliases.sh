@@ -19,8 +19,10 @@ alias gd='git diff'
 alias gl='git log --date=short --pretty="%h  %cd  %s"'
 alias gfs='git fetch; git status'
 
-# readers — the module installs every tool named here
-alias ls='eza -la --group-directories-last'
+# readers — the module installs every tool named here.
+# `ls` is NOT here: /etc/bashrc and /etc/zshrc emit
+# environment.shellAliases after this file, and nixpkgs sets `ls` there. The
+# module holds the eza alias in environment.shellAliases instead (#575).
 alias cat='bat -p --paging=never'
 alias grep='rg'
 tree() {

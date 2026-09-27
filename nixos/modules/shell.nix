@@ -126,5 +126,20 @@ in
         source ${aliases}
       ''
     );
+
+    # /etc/zshrc writes promptInit AFTER interactiveShellInit, and nixpkgs
+    # defaults that option to `prompt suse`. starship's zsh init assigns
+    # PROMPT once (the bash init assigns PS1 inside PROMPT_COMMAND, which is
+    # why only zsh lost the prompt), so `prompt suse` replaced it and every
+    # dev fort showed the suse theme (#575). Empty is safe: zsh has
+    # prompt_sp and prompt_cr on by default, so the theme was the only
+    # thing that block added.
+    programs.zsh.promptInit = lib.mkIf config.programs.zsh.enable "";
+
+    # `ls` cannot live in aliases.sh: both /etc/bashrc and /etc/zshrc emit
+    # environment.shellAliases after interactiveShellInit, and nixpkgs sets
+    # `ls = "ls --color=tty"` there (#575). The nixpkgs value is a
+    # mkDefault, so this one wins and `l` and `ll` survive.
+    environment.shellAliases.ls = "eza -la --group-directories-last";
   };
 }
