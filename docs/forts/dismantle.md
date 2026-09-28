@@ -28,6 +28,7 @@ dismantle sfi-x   (cloud: linode)
 ○ wireguard/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
 ◆ wireguard/ssh_config           re-rendered without sfi-x
 ◆ wireguard/known_hosts          - the sfi-x line
+○ provisioning/console-passwords.yaml   - the sfi-x entry (its console passphrase, #524)
 ! residue — 3 file(s) still mention sfi-x; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):
     README.md: 2 mention(s)   (doc)
     fleet/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
@@ -38,8 +39,15 @@ dismantle sfi-x   (cloud: linode)
 staged. Next: triage the residue, commit, PR — then fort destroy after the merge.
 ```
 
-Two things deserve the explanation:
+Three things deserve the explanation:
 
+- **The console passphrase is withdrawn by name.** It is the one
+  credential of a fort that does NOT live in
+  `nixos/secrets/<host>.yaml`, because an operator reads it and the host
+  must not (`docs/nixos/operations.md`, "The console login"). Removing
+  the host's secrets file therefore does not remove it, so dismantle
+  unsets the fort's entry in the registry. Without that step a retired
+  fort's passphrase outlives the fort.
 - **`sops updatekeys` is load-bearing.** Removing a recipient from
   `.sops.yaml` changes nothing by itself: the departed cluster key keeps
   decrypting every shared `fleet/infrastructure` file until they are

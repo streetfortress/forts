@@ -19,8 +19,10 @@
 # it, and the same PR that ends the window removes both lines. Every
 # sudo invocation is logged with its full argument list, which is the
 # audit — there is no allowlist here and none is claimed. NOPASSWD
-# because no account on a fort has a password (production.nix), so a
-# password prompt would be a lockout, not a control.
+# because sudo must work for an operator who arrived over SSH, where no
+# password is ever typed: a fort sets one only for the getty, and only
+# where it imports ops/console.nix (#524). A password prompt here would
+# be a lockout on every other fort, not a control.
 { config, lib, pkgs, ... }:
 let
   cfg = config.sfi.ops.root;

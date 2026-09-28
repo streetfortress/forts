@@ -55,17 +55,18 @@ func dismantle(args []string) error {
 }
 
 type dismantlePlan struct {
-	root, host string
-	entry      manifest.Host
-	removes    []string // repo-relative paths (files or dirs)
-	edits      []dEdit
-	sshConfig  string   // wireguard/ssh_config re-rendered without the host ("" = nothing to do)
-	knownHosts string   // wireguard/known_hosts without the host's line ("" = nothing to do)
-	rekey      []string // sops files under the shared infrastructure rule
-	rustfsUser string   // the fort's identity to withdraw from luxor's provider contract
-	residue    []string // "path: N mention(s)"
-	crossRefs  []string // other forts' contracts sourcing from this fort
-	notes      []string
+	root, host  string
+	entry       manifest.Host
+	removes     []string // repo-relative paths (files or dirs)
+	edits       []dEdit
+	sshConfig   string   // wireguard/ssh_config re-rendered without the host ("" = nothing to do)
+	knownHosts  string   // wireguard/known_hosts without the host's line ("" = nothing to do)
+	rekey       []string // sops files under the shared infrastructure rule
+	rustfsUser  string   // the fort's identity to withdraw from luxor's provider contract
+	consolePass bool     // the fort has an entry in the console-password registry
+	residue     []string // "path: N mention(s)"
+	crossRefs   []string // other forts' contracts sourcing from this fort
+	notes       []string
 }
 
 type dEdit struct {
@@ -172,6 +173,12 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if entry.Backups.Backed() && secretHasKey(root, rustfsUsers, rustfsPVUser(host)) {
 		p.rustfsUser = rustfsPVUser(host)
 	}
+	// The console password (#524) is the one credential of this fort
+	// that lives outside nixos/secrets/<host>.yaml, because an OPERATOR
+	// reads it and the host must not. Removing the host's secrets file
+	// therefore does not remove it: withdraw the registry entry too, or
+	// a retired fort's passphrase outlives the fort.
+	p.consolePass = sopsHasKey(filepath.Join(root, consoleRegistry), host)
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
 	if p.entry.Backups.Profile == "production" {
 		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
@@ -181,6 +188,14 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 }
 
 func (p *dismantlePlan) apply(tool secretsTool) error {
+	if p.consolePass {
+		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, consoleRegistry), `["`+p.host+`"]`); err != nil {
+			return fmt.Errorf("withdrawing %s from %s: %w", p.host, consoleRegistry, err)
+		}
+		if err := tool.GitAdd(consoleRegistry); err != nil {
+			return err
+		}
+	}
 	if p.rustfsUser != "" {
 		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, rustfsUsers), `["stringData"]["`+p.rustfsUser+`"]`); err != nil {
 			return fmt.Errorf("withdrawing %s from %s: %w", p.rustfsUser, rustfsUsers, err)
@@ -253,6 +268,9 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	}
 	for _, rel := range p.rekey {
 		fmt.Fprintf(w, "◆ %-32s sops updatekeys (lost the %s recipient)\n", rel, p.host)
+	}
+	if p.consolePass {
+		fmt.Fprintf(w, "○ %-32s - the %s entry (its console passphrase, #524)\n", consoleRegistry, p.host)
 	}
 	if len(p.crossRefs) > 0 {
 		fmt.Fprintln(w, "! cross-fort sops refs INTO this fort — those contracts lose their source (fort check will fail them):")

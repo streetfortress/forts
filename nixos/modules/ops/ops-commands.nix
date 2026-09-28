@@ -11,8 +11,11 @@
 #      kubeconfig internally, but only retriggers machinery that git
 #      already governs. Verbs nudge MACHINERY, never desired state —
 #      nothing here edits a cluster resource's spec.
-#   3. ADMIN    — an explicit `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` or a
-#      root shell at the console: the actual break-glass event.
+#   3. ADMIN    — an explicit `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` as
+#      root, through ops/root.nix in a declared window: the actual
+#      break-glass event. The console is NOT this rung. Where a host
+#      imports ops/console.nix (#524) the console gives a `deployer`
+#      login, which holds rungs 1 and 2 and nothing more.
 #
 # A verb that widens REACH rather than nudging machinery can ask for a
 # second factor: `challenge = "<reason>"` makes the verb prove live

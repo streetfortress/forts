@@ -81,8 +81,12 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		NetworkInterfaces: libvirt.DomainNetworkInterfaceArray{
 			&libvirt.DomainNetworkInterfaceArgs{Bridge: pulumi.String(libvirtBridge)},
 		},
-		// Serial console so `virsh console <host>` works (the lab's
-		// break-glass path once it gets a root password, #142).
+		// Serial console so `virsh console <host>` works. It is the
+		// lab's recovery path when the mesh is gone, and what it
+		// offers is a `deployer` login, not a root one: the host must
+		// import nixos/modules/ops/console.nix and carry
+		// deployer-password-hash (#524). Without that import the
+		// console shows a login prompt no account can answer.
 		Consoles: libvirt.DomainConsoleArray{
 			&libvirt.DomainConsoleArgs{Type: pulumi.String("pty"), TargetType: pulumi.String("serial"), TargetPort: pulumi.String("0")},
 		},

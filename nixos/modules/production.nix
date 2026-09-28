@@ -15,10 +15,13 @@
 #     carve-outs are the pinned NOPASSWD `sfi-*` ops verbs from
 #     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
 #     the pull loop against vetted main; `sfi-ops` lists them). Root
-#     logins stay off (common.nix) and no account has a password, so
-#     interactive break-glass is deliberately absent: use the provider's
-#     rescue boot (or guestfish on the disk locally) — these boxes are
-#     replaced, not repaired.
+#     logins stay off (common.nix) and no account here has a password,
+#     so SSH on the mesh is the only login path this profile makes. A
+#     host that also imports ops/console.nix (#524) gives deployer a
+#     password a GETTY accepts and sshd still refuses — the door to
+#     `sudo sfi-nixos-rollback` when the mesh is the thing that broke.
+#     Without that import the offline paths are all there is: the
+#     provider's rescue boot, or guestfish on the disk locally.
 { lib, ... }:
 
 {
@@ -44,9 +47,10 @@
       # for the host half of the machinery: day-0 units (flux-bootstrap,
       # nixos-upgrade, k3s) fail before any kubeconfig can say why, and
       # without journal access the only readable evidence is
-      # `systemctl show`'s exit code. Lish is no help — no account has a
-      # password by design. Read-only, no sudo path; the grant is a group
-      # membership, not a verb.
+      # `systemctl show`'s exit code. Lish reaches this rung only where
+      # the host imports ops/console.nix (#524); without it no account
+      # has a password and the console offers nothing. Read-only, no
+      # sudo path; the grant is a group membership, not a verb.
       "systemd-journal"
     ];
     isNormalUser = true;

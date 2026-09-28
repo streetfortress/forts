@@ -56,6 +56,8 @@ func main() {
 		err = mint(os.Args[2:])
 	case "b2-key":
 		err = b2Key(os.Args[2:])
+	case "console-password":
+		err = consolePassword(os.Args[2:])
 	case "b2-buckets":
 		err = b2BucketsCmd(os.Args[2:])
 	case "check":
@@ -89,7 +91,8 @@ func usage() {
   (observed, from the live host) — are spec and status (#224).
 
   author  scaffold, mint, image, add, seed, dismantle, ssh-config
-  keys    b2-key (the B2 credentials no other verb creates)
+  keys    b2-key (the B2 credentials no other verb creates),
+          console-password (the fort's getty password)
   apply   provision, adopt, destroy
   read    check, preview, wg-conf
 
@@ -150,10 +153,32 @@ func usage() {
       Prompts for the credential it needs, or reads B2_KEY_ID /
       B2_APP_KEY: the account master key for minting, and
       sfi-b2-key-minting-key for everything else. Prints the plan and the grant; --write
-      creates it and prints the secret ONCE — the only verb that prints a
-      value, because there is nowhere else for it to go. An existing key
-      is never replaced (its secret is unrecoverable) and any drift from
-      the role's grant is named.
+      creates it and prints the secret ONCE — one of the two verbs that
+      print a value (console-password is the other), because there is
+      nowhere else for it to go. An existing key is never replaced (its
+      secret is unrecoverable) and any drift from the role's grant is
+      named.
+
+  console-password <host> [--write] [--rotate] [--show]
+      mint the console password for the host's deployer account (#524),
+      in two halves for two readers: the yescrypt hash into
+      nixos/secrets/<host>.yaml as deployer-password-hash, which the
+      HOST reads, and the passphrase into
+      provisioning/console-passwords.yaml, the registry an OPERATOR
+      reads. That file is one entry per fort, in the shape
+      wireguard/peers.json already has, encrypted to the admin age keys
+      and NOT to the fort. nixos/modules/ops/console.nix consumes the
+      hash, and only a getty accepts it — sshd refuses every password
+      (nixos/modules/common.nix). The door exists for one failure: the
+      mesh breaks, no operator reaches ssh, and sudo sfi-nixos-rollback
+      is the remedy. The registry is why the credential survives that
+      failure: a checkout and an admin age key read it with no network
+      at all. --write prints NO value; --show decrypts one fort's
+      passphrase, deliberately, one fort at a time. A [dev] fort is
+      refused: its account is agent, and the sfi-* sudo rules are pinned
+      to deployer. A hash the fort already carries is never replaced
+      without --rotate. fort dismantle withdraws the entry; fort check
+      traces all three halves.
 
   b2-buckets [--write]
       reconcile the B2 backup buckets with their declaration: each
