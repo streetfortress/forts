@@ -118,8 +118,11 @@ type mintPlan struct {
 	b2Status       string // "" = no B2 key in this fort's shape
 	b2Mint         bool   // apply must create it
 
-	// The agent identity bundle a [dev] fort carries (agent.go); nil otherwise.
-	agent *agentPlan
+	// The agent identity bundles a [dev] fort carries — one per account
+	// its [dev] table names (agent.go, #532); empty otherwise. claude is
+	// the fort's one Claude credential, shared by every account.
+	agents []*agentPlan
+	claude string
 }
 
 // giteaDeployKeys is the gitea client shared with fort destroy: the
@@ -242,9 +245,9 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if err := p.planBackups(take); err != nil {
 		return nil, err
 	}
-	// 2c. the agent identity bundle of a [dev] fort (agent.go) — its
-	// standing on gitea read now, registered by apply.
-	if err := p.planAgent(take, gitea); err != nil {
+	// 2c. the agent identity bundles of a [dev] fort (agent.go) — one per
+	// account, their standing on gitea read now, registered by apply.
+	if err := p.planAgents(take, gitea); err != nil {
 		return nil, err
 	}
 
@@ -376,11 +379,9 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 			return err
 		}
 	}
-	// Same shape for the agent's token: gitea shows it once.
-	if p.agent != nil && p.agent.mintToken {
-		if err := p.mintAgentToken(gitea); err != nil {
-			return err
-		}
+	// Same shape for each account's token: gitea shows it once.
+	if err := p.mintAgentTokens(gitea); err != nil {
+		return err
 	}
 
 	// Registering with luxor's rustfs-central: this fort's identity is
@@ -455,10 +456,8 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 		}
 		p.deployKey, p.registerOn = status, false
 	}
-	if p.agent != nil {
-		if err := p.registerAgent(gitea); err != nil {
-			return err
-		}
+	if err := p.registerAgents(gitea); err != nil {
+		return err
 	}
 	return nil
 }
@@ -563,7 +562,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	if p.deployKey != "" {
 		fmt.Fprintf(w, "· gitea deploy key flux-%s: %s\n", p.host, p.deployKey)
 	}
-	p.reportAgent(w)
+	p.reportAgents(w)
 	if p.b2Status != "" {
 		fmt.Fprintf(w, "· b2 application key %s\n", p.b2Status)
 	}

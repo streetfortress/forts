@@ -112,11 +112,13 @@ func usage() {
       file holds and fills gaps only — rotation is deliberate, never a
       side effect. Runs after scaffold --write, before add. Prints the
       plan; --write mints, encrypts, registers, stages. fort dismantle is
-      the inverse. A [dev] fort also gets the agent identity bundle:
-      an ssh key, a GPG signing key and a token on the sfi-agent user
-      (all titled agent-<host>, registered with the fleet gitea-token —
-      Sudo for the keys, basic auth for the token, no prompt) and the
-      fleet Claude credential copied in; fort destroy revokes the three.
+      the inverse. A [dev] fort also gets one identity bundle per account
+      its [dev] table names (#532): an ssh key, a GPG signing key and a
+      token on that account's gitea user, with that account's token
+      scopes (all titled agent-<host>, registered with the fleet
+      gitea-token — Sudo for the keys, basic auth for the token, no
+      prompt), plus the fleet Claude credential copied in once for the
+      fort; fort destroy revokes every bundle.
 
   b2-key <minting|pruning|audit|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
       mint a B2 credential no verb may create for itself, because these
@@ -256,8 +258,9 @@ func usage() {
       wireguard/ssh_config — one Host block per peer in peers.json, the
       fort name plus a role alias where one fort holds the role (sfi-dev,
       sfi-prod, sfi-stage), its mesh address, and the account its shape
-      answers on (a [dev] fort agent, a cluster fort deployer, a peer
-      with no manifest steven) — and wireguard/known_hosts, one line per
+      answers on (a cluster fort deployer, a peer with no manifest
+      steven), plus one block per further account of a [dev] fort
+      (sfi-scout, sfi-analyst — #532) — and wireguard/known_hosts, one line per
       fort with its ssh host key, keyed by fort name (HostKeyAlias) and
       mesh address. Both are committed; consumers Include the first and
       list the second as a UserKnownHostsFile. mint and dismantle keep

@@ -30,19 +30,34 @@ Host sfi-dev sfi-dev-831c637
   User agent
   HostKeyAlias sfi-dev-831c637
 
+# the scout account on sfi-dev-831c637 — the scout verb
+Host sfi-scout
+  Hostname 10.1.0.61
+  User scout
+  HostKeyAlias sfi-dev-831c637
+
 # hand-managed peer (no manifest)
 Host devbox
   Hostname 10.1.0.3
   User steven
 ```
 
-**The account is the fort's shape, not a field.** A `[dev]` fort answers
-as `agent` (`dev-fort.nix`), a cluster fort as `deployer`
-(`production.nix`), and a peer with no manifest is a hand-managed
-interactive host — `steven`'s: the ubuntu holdouts soundship and devbox
-(no NixOS host carries an interactive profile any more). That answers the open question of how the
-interactive hosts get an entry: being in peers.json without a manifest
-*is* the declaration. peers.json stays three fields per peer.
+**The account is the fort's shape, not a field.** A cluster fort answers
+as `deployer` (`production.nix`), and a peer with no manifest is a
+hand-managed interactive host — `steven`'s: the ubuntu holdouts soundship
+and devbox (no NixOS host carries an interactive profile any more). That
+answers the open question of how the interactive hosts get an entry: being
+in peers.json without a manifest *is* the declaration. peers.json stays
+three fields per peer.
+
+**A `[dev]` fort gets one block per account** (#532): the first account
+its `[[dev.accounts]]` list names answers on the fort's own name and its
+role alias, and every other account gets a block of its own under the
+alias the manifest gives it (`sfi-scout` → `User scout`). So the alias a
+caller dials selects the identity, and `HostKeyAlias` stays the fort —
+every account trusts the one host key the fort's `known_hosts` line
+carries. An account alias is suspended the way a role alias is: while two
+dev forts claim `sfi-scout`, it points at neither.
 
 **Role aliases** follow the naming convention (2026-09-12): a fort named
 `<role>-<7-hex sha>` has the stem as its role, and the alias exists while

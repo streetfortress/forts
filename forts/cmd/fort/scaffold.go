@@ -46,9 +46,13 @@ type hostView struct {
 	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
 	// is reached by cluster DNS rather than over the mesh.
 	Hub bool
-	// Dev: a dev fort ([dev], #413) — the dev host shape (agent account,
+	// Dev: a dev fort ([dev], #413) — the dev host shape (agent accounts,
 	// toolchains, no k3s/flux/backups) and no fleet surface at all.
 	Dev bool
+	// DevAccounts: the fort's Unix accounts, from [dev] (#532). The
+	// generated comment names them and the account the fort's own name
+	// answers as, so a reader of the host file sees who lives there.
+	DevAccounts []manifest.DevAccount
 }
 
 // scaffoldFile is one rendered file: repo-relative path + content — or,
@@ -182,6 +186,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		Provider:     entry.Provider,
 		Hub:          host == hubHost,
 		Dev:          entry.IsDev(),
+		DevAccounts:  entry.Accounts(),
 	}
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile

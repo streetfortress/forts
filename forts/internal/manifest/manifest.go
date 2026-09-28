@@ -7,8 +7,8 @@
 // mint, flux, the mesh: mesh_ip, [shape], [dns]. What a fort IS is not a
 // key: every fort is the hardened host profile, a mesh member (#272), and
 // — unless it says otherwise — a flux cluster. The one thing it can say
-// is [dev] (#413): a transient lab VM hosting one agent identity, no
-// cluster at all. A positive declaration, never the absence of flux.
+// is [dev] (#413): a transient lab VM hosting the agent accounts (#532),
+// no cluster at all. A positive declaration, never the absence of flux.
 // Exactly one provider table ([linode], [libvirt], [baremetal]) names the
 // backend that raises the host; it is decoded by that provider's own Spec
 // type and is opaque to everything else. Adding a provider = one file in
@@ -27,6 +27,8 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -59,7 +61,7 @@ type Host struct {
 	DNS     DNS     `toml:"dns"`
 	Backups Backups `toml:"backups"`
 	// Dev is the [dev] table when present: this fort is a dev fort
-	// (#413). Empty today; the presence is the declaration.
+	// (#413). It names the fort's accounts (#532).
 	Dev *DevSpec `toml:"dev"`
 
 	// Provider is the one provider table present; Spec its decoded form.
@@ -100,14 +102,156 @@ type Backups struct {
 }
 
 // DevSpec is the [dev] table (#413): a dev fort — a transient lab VM
-// with an unprivileged `agent` account, the dev toolchains and the
+// with unprivileged agent accounts, the dev toolchains and the
 // dotfiles, and NO cluster: no k3s, no flux, no fleet tree, no cluster
 // age key, no backups. scaffold renders the dev host shape, mint skips
-// the cluster identity, check expects no fleet dirs. It carries no keys
-// yet; the table's presence is the whole declaration.
+// the cluster identity, check expects no fleet dirs.
+//
+// The table names the fort's accounts (#532). One Unix account per role
+// holds one gitea identity: the kernel is the boundary, so a review
+// session cannot read the dispatch account's token, and the verb a
+// caller dials selects the author. Every name lives here and nowhere in
+// the Go code, because the mint is the half that leaves this repo later
+// (a CLI with a fort's names compiled in cannot serve a second fleet).
 //
 //	[dev]
-type DevSpec struct{}
+//
+//	[[dev.accounts]]
+//	user = "agent"
+//	verb = "pickup"
+//	gitea_user = "sfi-agent"
+//	email = "support@streetfortress.com"
+//	token_scopes = ["write:repository", "write:issue", "read:organization", "read:user", "write:misc"]
+//
+//	[[dev.accounts]]
+//	user = "scout"
+//	verb = "scout"
+//	gitea_user = "sfi-scout"
+//	email = "scout@streetfortress.com"
+//	ssh_alias = "sfi-scout"
+//	token_scopes = ["write:repository", "write:issue", "read:organization", "read:user", "write:misc"]
+type DevSpec struct {
+	Accounts []DevAccount `toml:"accounts"`
+}
+
+// DevAccount is one [[dev.accounts]] entry: a Unix account on the fort,
+// the gitea user it acts as, and the one verb it serves.
+//
+// The same word runs through every layer — the Unix account `scout`, the
+// gitea user `sfi-scout`, the ssh alias `sfi-scout`, the verb `scout` —
+// so a reader of a comment on gitea knows which session wrote it.
+type DevAccount struct {
+	// User is the Unix account. It names the account's secrets in
+	// nixos/secrets/<host>.yaml — <user>-ssh-key, <user>-gpg-key,
+	// <user>-gitea-token — and its home on the fort.
+	User string `toml:"user"`
+	// Verb is the one dispatch verb this account installs (`pickup`,
+	// `scout`, `review`). An account serves one verb and no other: `ssh
+	// sfi-scout pickup …` must fail as a missing command, so the
+	// identity is a property of the host and not a rule the caller
+	// remembers. nixos/home/agent.nix realizes the set.
+	Verb string `toml:"verb"`
+	// GiteaUser is the gitea user the bundle registers on. A human
+	// creates it and adds it to the sfi-agentic-dev team; mint refuses
+	// to invent one.
+	GiteaUser string `toml:"gitea_user"`
+	// Email is the address on that gitea user. The GPG uid carries it,
+	// and gitea marks a uid active only for an address the user holds —
+	// so a gitea user per role needs an address per role (gitea keeps
+	// every address unique across users).
+	Email string `toml:"email"`
+	// SSHAlias is the mesh name the verb is dialed by (`ssh sfi-scout
+	// review …`). The FIRST account answers on the fort's own name and
+	// on its role alias (`sfi-dev`), so it names none; every other
+	// account must name one, or nothing can reach it.
+	SSHAlias string `toml:"ssh_alias"`
+	// TokenScopes are the gitea scopes of this account's token. Per
+	// account, because the narrow token is the point: an analyst that
+	// only comments holds no write:repository, and Claude runs with
+	// permissions bypassed on a fort — a token that cannot push is a
+	// stronger boundary than a rule in a prompt.
+	TokenScopes []string `toml:"token_scopes"`
+}
+
+// DevVerbs are the dispatch verbs an account can serve. The set is
+// realized in nixos/home/agent.nix (one writeShellApplication per verb)
+// and in the gotea verbs that dial them; a typo here is an account that
+// installs nothing, so the manifest refuses one.
+var DevVerbs = []string{"pickup", "scout", "review"}
+
+// devNameRE is a Unix account name and an ssh alias: both are typed by
+// hand and both must survive a shell word with no quoting.
+var devNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// Validate: every field is required, because a dev fort with a
+// half-named account mints a bundle nobody can use.
+func (s *DevSpec) Validate() error {
+	if len(s.Accounts) == 0 {
+		return fmt.Errorf("[dev] names no accounts — add one [[dev.accounts]] per role (user, verb, gitea_user, email, token_scopes); the accounts are the fort's identities (#532)")
+	}
+	seen := map[string]map[string]bool{"user": {}, "verb": {}, "gitea_user": {}, "ssh_alias": {}}
+	unique := func(field, value string) error {
+		if seen[field][value] {
+			return fmt.Errorf("[[dev.accounts]] %s %q twice — one account per %s", field, value, field)
+		}
+		seen[field][value] = true
+		return nil
+	}
+	for i, a := range s.Accounts {
+		where := fmt.Sprintf("[[dev.accounts]] %d", i+1)
+		if !devNameRE.MatchString(a.User) {
+			return fmt.Errorf("%s: user %q — want a Unix account name (%s)", where, a.User, devNameRE)
+		}
+		if a.GiteaUser == "" {
+			return fmt.Errorf("%s (%s): gitea_user is required — a human creates the user and adds it to sfi-agentic-dev; mint never invents one", where, a.User)
+		}
+		if !strings.Contains(a.Email, "@") {
+			return fmt.Errorf("%s (%s): email %q — want the address on gitea user %s (the GPG uid carries it)", where, a.User, a.Email, a.GiteaUser)
+		}
+		if !slices.Contains(DevVerbs, a.Verb) {
+			return fmt.Errorf("%s (%s): verb %q — want one of %s", where, a.User, a.Verb, strings.Join(DevVerbs, ", "))
+		}
+		if len(a.TokenScopes) == 0 {
+			return fmt.Errorf("%s (%s): token_scopes is required — the scopes are the account's boundary, so no account inherits another's", where, a.User)
+		}
+		switch {
+		case i == 0 && a.SSHAlias != "":
+			return fmt.Errorf("%s (%s): the first account answers on the fort's name and its role alias, so it must not name ssh_alias %q", where, a.User, a.SSHAlias)
+		case i > 0 && !devNameRE.MatchString(a.SSHAlias):
+			return fmt.Errorf("%s (%s): ssh_alias %q — want the mesh name that dials this account (%s); without one nothing reaches it", where, a.User, a.SSHAlias, devNameRE)
+		}
+		// In field order, so the message a duplicate produces is the same
+		// on every run (a map's order is not).
+		dup := [][2]string{{"user", a.User}, {"verb", a.Verb}, {"gitea_user", a.GiteaUser}}
+		if a.SSHAlias != "" {
+			dup = append(dup, [2]string{"ssh_alias", a.SSHAlias})
+		}
+		for _, d := range dup {
+			if err := unique(d[0], d[1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Accounts is the fort's dev accounts, in manifest order; nil for a
+// cluster fort.
+func (h Host) Accounts() []DevAccount {
+	if h.Dev == nil {
+		return nil
+	}
+	return h.Dev.Accounts
+}
+
+// DefaultAccount is the account the fort's own name answers as — the
+// first one the manifest lists. nil for a cluster fort.
+func (h Host) DefaultAccount() *DevAccount {
+	if as := h.Accounts(); len(as) > 0 {
+		return &as[0]
+	}
+	return nil
+}
 
 // IsDev says whether this is a dev fort — the one shape that is not a
 // flux cluster.
@@ -356,6 +500,9 @@ func (h Host) Validate(host string) error {
 		}
 		if h.Libvirt() == nil {
 			return fail("[dev] needs the [libvirt] table — a dev fort is a lab VM on the hypervisor (forts#12)")
+		}
+		if err := h.Dev.Validate(); err != nil {
+			return fail("%v", err)
 		}
 	}
 	if err := h.Spec.Validate(host, h); err != nil {

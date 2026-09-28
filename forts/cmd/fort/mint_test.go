@@ -297,7 +297,13 @@ func TestMintDevFort(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n")
+	// Two accounts (#532): the dispatch account, which rides the fort's
+	// own name, and a narrower one with its own alias and scopes.
+	accounts := []manifest.DevAccount{
+		testAccount("agent", "pickup", "sfi-agent", "write:repository", "write:issue"),
+		testAccount("analyst", "review", "sfi-analyst", "write:issue"),
+	}
+	write(manifest.Path(host), devManifest("10.1.0.96", "10.0.0.96", accounts...))
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}
 	gitea, registered := newFakeGitea(t, st), &st.deploy
@@ -312,7 +318,7 @@ func TestMintDevFort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.newFile || len(p.missing) != 9 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
+	if !p.newFile || len(p.missing) != 13 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
 		t.Fatalf("plan: newFile=%v missing=%v register=%v canary=%q rekey=%v edits=%d", p.newFile, p.missing, p.registerOn, p.canaryPath, p.rekey, len(p.edits))
 	}
 	for _, k := range []string{keyK3sToken, keyAge} {
@@ -320,13 +326,20 @@ func TestMintDevFort(t *testing.T) {
 			t.Errorf("dev fort must not mint %s", k)
 		}
 	}
-	for _, k := range []string{keyAgentSSH, keyAgentSSHPub, keyAgentGPG, keyAgentToken, keyAgentClaude} {
+	for _, k := range []string{keyAgentClaude,
+		keyAccountSSH("agent"), keyAccountSSHPub("agent"), keyAccountGPG("agent"), keyAccountToken("agent"),
+		keyAccountSSH("analyst"), keyAccountSSHPub("analyst"), keyAccountGPG("analyst"), keyAccountToken("analyst")} {
 		if !contains(p.missing, k) {
 			t.Errorf("dev fort must mint %s", k)
 		}
 	}
-	if p.agent == nil || !p.agent.mintToken || !p.agent.registerSSH || !p.agent.registerGPG || p.agent.claude != "fleet-claude-secret" {
-		t.Fatalf("agent plan: %+v", p.agent)
+	if len(p.agents) != 2 || p.claude != "fleet-claude-secret" {
+		t.Fatalf("agent plans: %d, claude %q", len(p.agents), p.claude)
+	}
+	for _, a := range p.agents {
+		if !a.mintToken || !a.registerSSH || !a.registerGPG {
+			t.Fatalf("%s plan: %+v", a.account.User, a)
+		}
 	}
 	if err := p.apply(tool, gitea); err != nil {
 		t.Fatal(err)
@@ -335,26 +348,38 @@ func TestMintDevFort(t *testing.T) {
 	p.report(&sb, true)
 	rep := sb.String()
 	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "dev fort") || !strings.Contains(rep, "registered flux-"+host) ||
-		!strings.Contains(rep, "ssh key agent-"+host+": registered") || !strings.Contains(rep, "registered + verified (key id "+p.agent.gpg.keyID) || !strings.Contains(rep, "token agent-"+host+": minted") || !strings.Contains(rep, "fleet-wide") {
+		!strings.Contains(rep, "ssh key agent-"+host+": registered") || !strings.Contains(rep, "registered + verified (key id "+p.agents[0].gpg.keyID) || !strings.Contains(rep, "token agent-"+host+": minted") || !strings.Contains(rep, "fleet-wide") {
 		t.Errorf("dev report:\n%s", rep)
 	}
-	// the bundle on the user: one of each, the gpg key verified by the signature mint sent
-	if len(st.keys) != 1 || st.keys[0].Title != "agent-"+host || len(st.gpg) != 1 || !st.gpg[0].Verified || len(st.tokens) != 1 || st.tokens[0].Name != "agent-"+host || strings.Join(st.tokens[0].Scopes, ",") != strings.Join(agentTokenScopes, ",") {
-		t.Errorf("user bundle: keys=%+v gpg=%+v tokens=%+v", st.keys, st.gpg, st.tokens)
+	// One bundle per gitea user: one of each, the gpg key verified by the
+	// signature mint sent, the token with that account's own scopes.
+	for _, a := range p.agents {
+		u := st.user(a.account.GiteaUser)
+		if len(u.keys) != 1 || u.keys[0].Title != "agent-"+host || len(u.gpg) != 1 || !u.gpg[0].Verified {
+			t.Errorf("%s bundle: keys=%+v gpg=%+v", a.account.GiteaUser, u.keys, u.gpg)
+		}
+		if len(u.tokens) != 1 || u.tokens[0].Name != "agent-"+host || strings.Join(u.tokens[0].Scopes, ",") != strings.Join(a.account.TokenScopes, ",") {
+			t.Errorf("%s token: %+v", a.account.GiteaUser, u.tokens)
+		}
 	}
-	// the secrets file holds the minted token and the fleet claude token, and no value was printed
+	// the secrets file holds each minted token and the fleet claude token, and no value was printed
 	sec := readFile(t, filepath.Join(tmp, "nixos/secrets", host+".yaml"))
-	if !strings.Contains(sec, keyAgentToken+": minted-agent-"+host) || !strings.Contains(sec, keyAgentClaude+": fleet-claude-secret") || !strings.Contains(sec, "BEGIN PGP PRIVATE KEY BLOCK") {
+	if !strings.Contains(sec, keyAccountToken("agent")+": minted-sfi-agent-agent-"+host) || !strings.Contains(sec, keyAccountToken("analyst")+": minted-sfi-analyst-agent-"+host) ||
+		!strings.Contains(sec, keyAgentClaude+": fleet-claude-secret") || !strings.Contains(sec, "BEGIN PGP PRIVATE KEY BLOCK") {
 		t.Errorf("secrets file:\n%s", sec)
 	}
-	if strings.Contains(rep, "minted-agent-") || strings.Contains(rep, "fleet-claude-secret") {
+	if strings.Contains(rep, "minted-sfi-") || strings.Contains(rep, "fleet-claude-secret") {
 		t.Errorf("report leaks a value:\n%s", rep)
 	}
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
 		t.Error("a dev fort must not touch the fleet .sops.yaml")
 	}
-	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); !strings.Contains(sc, "# dev fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User agent\n") {
-		t.Errorf("a dev fort answers as agent:\n%s", sc)
+	// The fort's own name answers as the first account; the second has its
+	// own alias (#532).
+	sc := readFile(t, filepath.Join(tmp, sshConfigPath))
+	if !strings.Contains(sc, "# dev fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User agent\n") ||
+		!strings.Contains(sc, "Host sfi-analyst\n  Hostname 10.1.0.96\n  User analyst\n  HostKeyAlias "+host+"\n") {
+		t.Errorf("a dev fort answers as each of its accounts:\n%s", sc)
 	}
 	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
 		t.Error("nixos rule missing")
@@ -373,8 +398,13 @@ func TestMintDevFort(t *testing.T) {
 	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || p2.registerOn {
 		t.Errorf("re-run plan: missing=%v edits=%d register=%v", p2.missing, len(p2.edits), p2.registerOn)
 	}
-	if a := p2.agent; a == nil || a.mintToken || a.registerSSH || a.registerGPG || a.verifyGPG || a.gpg.keyID != p.agent.gpg.keyID || !strings.Contains(a.tokStatus, "registered") {
-		t.Errorf("re-run agent plan: %+v", p2.agent)
+	if len(p2.agents) != 2 {
+		t.Fatalf("re-run agent plans: %d", len(p2.agents))
+	}
+	for i, a := range p2.agents {
+		if a.mintToken || a.registerSSH || a.registerGPG || a.verifyGPG || a.gpg.keyID != p.agents[i].gpg.keyID || !strings.Contains(a.tokStatus, "registered") {
+			t.Errorf("re-run %s plan: %+v", a.account.User, a)
+		}
 	}
 	// round trip: dismantle without a fleet rule to remove
 	d, err := planDismantle(tmp, host)

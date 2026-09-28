@@ -1,6 +1,6 @@
-# Dev fort profile (#413): the hardened host with an `agent` instead of a
-# `deployer`. hardened.nix + lab-host.nix, an unprivileged account that
-# BUILDS (unlike deployer, which only observes), Home Manager with the dev
+# Dev fort profile (#413): the hardened host with agent accounts instead
+# of a `deployer`. hardened.nix + lab-host.nix, unprivileged accounts that
+# BUILD (unlike deployer, which only observes), Home Manager with the dev
 # toolchains and the dotfiles, nix-ld for the prebuilt binaries a dev box
 # meets (uv-managed pythons, npm native modules). No k3s, no flux, no
 # backups: a dev fort is transient, and nothing on it is precious
@@ -8,18 +8,28 @@
 # table; mutually exclusive with production.nix.
 #
 # What makes it a boundary rather than a laptop: the only credentials on
-# the box are the fort's own (the agent bundle #414 mints per fort), SSH
-# answers on the mesh only (hardened.nix), the agent has no wheel and no
-# ops verbs — the pull loop is the only way config reaches this host —
-# and the box is replaced, not repaired. That is what makes an unattended
-# Claude with permissions bypassed sane here (#418) and nowhere else.
+# the box are the fort's own (the bundles #414 mints per fort and per
+# account), SSH answers on the mesh only (hardened.nix), no account has
+# wheel or an ops verb — the pull loop is the only way config reaches this
+# host — and the box is replaced, not repaired. That is what makes an
+# unattended Claude with permissions bypassed sane here (#418) and
+# nowhere else.
+#
+# ONE ACCOUNT PER ROLE (#532). A session used to post on gitea as
+# sfi-agent whatever it was doing, so a thread holding two sessions could
+# not say which one wrote which comment. Now the verb dials an account
+# (`ssh sfi-scout scout …`), the account holds one gitea identity, and the
+# kernel keeps them apart: each account's secrets are owner plus mode
+# 0400, so the analyst cannot read the agent's token even with
+# permissions bypassed. The alternative — a credential selected inside the
+# session, or a fort per role — is weighed on #532.
 #
 # The dispatch loop (#418, docs/forts/dev.md): `ssh sfi-dev pickup
 # <owner/repo> <n>` preps a worktree and hands the task to Claude inside a
 # herdr workspace; herdr is the supervisor — its server runs as a user
-# service in agent's lingering manager (home/agent.nix), the package comes
-# from the second nixpkgs input (below), and macmini watches it over the
-# mesh with `herdr --remote`.
+# service in each account's lingering manager (home/agent.nix), the
+# package comes from the second nixpkgs input (below), and macmini watches
+# it over the mesh with `herdr --remote`.
 #
 # The fort also carries its own telemetry (#437): an OpenTelemetry
 # collector that takes Claude Code's usage metrics and events on
@@ -37,8 +47,8 @@
 
 let
   # gitea's host key, from the one pin auto-rebuild.nix carries
-  # ("[gitea.zen.lofi]:30022 ssh-rsa AAAA…" → type + material), so the
-  # agent's first clone over ssh never meets a trust prompt.
+  # ("[gitea.zen.lofi]:30022 ssh-rsa AAAA…" → type + material), so an
+  # account's first clone over ssh never meets a trust prompt.
   giteaParts = lib.splitString " " config.sfi.auto-rebuild.gitKnownHosts;
   giteaKey = "${lib.elemAt giteaParts 1} ${lib.elemAt giteaParts 2}";
   # The fort's name, stamped on everything its collector ships (below):
@@ -46,52 +56,93 @@ let
   # keys on — a dev fort is a cluster of none, and the alternative was a
   # second label meaning the same thing.
   host = config.networking.hostName;
+
+  # THE ACCOUNTS (#532). One per role: the Unix account, the one dispatch
+  # verb it installs, the gitea user it acts as, and the address on that
+  # user. The same word runs through every layer — the account `scout`,
+  # the gitea user `sfi-scout`, the ssh alias `sfi-scout`, the verb
+  # `scout` — so the author of a comment says which session wrote it.
+  #
+  # This list is written TWICE, here and in each dev fort's manifest
+  # ([dev].accounts, which `fort mint` reads for the bundles). Nix cannot
+  # read the manifest: provisioning/forts is outside the flake's root
+  # (nixos/), and a flake sees nothing above it. So the two are kept equal
+  # by a test instead — TestDevAccountsMatchDevFortModule in
+  # forts/cmd/fort compares this list, field by field, with every [dev]
+  # manifest. Keep the fields on one line each; the test reads them.
+  #
+  # An account's email must be an address ITS gitea user holds: gitea
+  # keeps every address unique across users, and marks a GPG uid active
+  # only for an address that user owns. git signs with the uid, so a
+  # mismatch shows the commits as unverified.
+  accounts = [
+    { user = "agent"; verb = "pickup"; giteaUser = "sfi-agent"; email = "support@streetfortress.com"; }
+    { user = "scout"; verb = "scout"; giteaUser = "sfi-scout"; email = "scout@streetfortress.com"; }
+    { user = "analyst"; verb = "review"; giteaUser = "sfi-analyst"; email = "analyst@streetfortress.com"; }
+  ];
+  users = map (a: a.user) accounts;
+  byUser = f: lib.listToAttrs (map (a: lib.nameValuePair a.user (f a)) accounts);
+
+  # The devices that dispatch. Mesh-only reach (hardened.nix); the key set
+  # matches deployer's for now — trim to the dispatching devices when #415
+  # settles it. Every account takes the same set: who may dial is the
+  # fort's boundary, and WHICH account they dial is what selects the
+  # identity.
+  dispatchKeys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBuuLb9A36fWGYZexMb2soTxpHFB0HVQTHqR8vihvFMD"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqO0N5rBif1+bFwnluWEmrkaoTAtqTrP/vONG6/fQKl"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhrjrcm0Mb4gSMGM/GiWXvkZj3a2ej7/MOcw0Qujx+M"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFSfukFhjws+MpZu+qMqgVCoIitc43jGeqEnGMcF4ydQ"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEdgJK6LiKUZ+fQQZX28B1v82hCl1z4RxomJLn5pHiPH"
+  ];
 in
 {
   imports = [
     ./hardened.nix
     ./lab-host.nix
-    ./dotfiles.nix # ~agent/.fortfiles, the checkout the HM symlinks point into
+    ./dotfiles.nix # ~<account>/.fortfiles, the checkout the HM symlinks point into
     ./auto-rebuild.nix # the gc window below is its option
     ./shell.nix # the prompt, keys and aliases at a herdr pane (#557)
   ];
 
-  # The one profile with a Home Manager user: agent's. The flake wires
-  # Home Manager in and declares nobody; this is the declaration.
-  home-manager.users.agent = import ../home/agent.nix;
-  sfi.dotfiles.user = "agent";
+  # The one profile with Home Manager users: the accounts', and only
+  # theirs. The flake wires Home Manager in and declares nobody; this is
+  # the declaration. Each home is home/agent.nix applied to its account,
+  # so a home differs from another only in the identity it reads and the
+  # verb it installs.
+  home-manager.users = byUser (a: import ../home/agent.nix a);
+  sfi.dotfiles.users = users;
   # Every dev fort: a person reads the prompt at a pane. The module also
   # turns programs.zsh on and sets users.defaultUserShell, so zsh is the
-  # login shell of every account that does not pin one — agent's included
+  # login shell of every account that does not pin one — all three here
   # (#576).
   sfi.shell.enable = true;
 
-  users.users.agent = {
+  # The accounts. Same shape for each: the role is the identity it holds,
+  # never a different grant on the host.
+  users.users = byUser (a: {
     isNormalUser = true;
-    description = "SFI coding agent";
+    # No colon — the GECOS field is colon-separated.
+    description = "SFI coding agent — the ${a.verb} verb, as ${a.giteaUser} on gitea";
     # A user manager that outlives the login: the herdr server (#418,
     # home/agent.nix) lives in it, so a task keeps running after the
-    # dispatching ssh session ends.
+    # dispatching ssh session ends. One server per account.
     linger = true;
-    # Read the host journal — the OBSERVE rung for a host with no other
-    # operator account (same grant as deployer's, production.nix).
-    extraGroups = [ "systemd-journal" ];
-    # Mesh-only reach (hardened.nix); the key set matches deployer's for
-    # now — trim to the dispatching devices when #415 settles it.
-    openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBuuLb9A36fWGYZexMb2soTxpHFB0HVQTHqR8vihvFMD"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqO0N5rBif1+bFwnluWEmrkaoTAtqTrP/vONG6/fQKl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhrjrcm0Mb4gSMGM/GiWXvkZj3a2ej7/MOcw0Qujx+M"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFSfukFhjws+MpZu+qMqgVCoIitc43jGeqEnGMcF4ydQ"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEdgJK6LiKUZ+fQQZX28B1v82hCl1z4RxomJLn5pHiPH"
-    ];
-  };
+    # systemd-journal: read the host journal — the OBSERVE rung for a host
+    # with no other operator account (same grant as deployer's,
+    # production.nix). agents: the fort's one Claude credential (below).
+    extraGroups = [ "systemd-journal" "agents" ];
+    openssh.authorizedKeys.keys = dispatchKeys;
+  });
 
-  # agent builds: `nix develop`, `nix build` in the checkouts. hardened.nix
-  # keeps root; this appends.
-  nix.settings.allowed-users = [ "agent" ];
+  # The group that reads the fort's Claude credential, and nothing else.
+  users.groups.agents = { };
+
+  # The accounts build: `nix develop`, `nix build` in the checkouts.
+  # hardened.nix keeps root; this appends.
+  nix.settings.allowed-users = users;
 
   # herdr from the second nixpkgs input (flake.nix): the fleet pin predates
   # the package. An overlay, so home/agent.nix says `pkgs.herdr` like
@@ -122,7 +173,9 @@ in
   # Disk metrics, dev-fort shaped (#453). The default path list
   # (disk-usage-metrics.nix) is cluster-shaped — /var/lib/rancher/k3s,
   # the PVC dir, /root/.cache/nix — and sizes none of what a dev fort
-  # actually accumulates: the agent's home. Each pickup (#418) leaves a
+  # actually accumulates: the accounts' homes. One set of paths per
+  # account (#532): three homes now hold clones, and which one grows is
+  # the question the metric answers. Each pickup (#418) leaves a
   # worktree and a transcript behind, and nothing removes either (gotea
   # sessions --prune closes the workspace and keeps the worktree on
   # purpose: the branch is pushed, the PR is the record, and a fort is
@@ -140,10 +193,13 @@ in
   # the same handful either way). ~/.claude is a total — its children are
   # one dir per project path, i.e. per worktree again.
   sfi.disk-usage-metrics = {
-    paths = [
-      { path = "/home/agent/worktrees"; depth = 1; } # <repo>/issue-<n>
-      { path = "/home/agent/src"; depth = 2; } # <owner>/<repo>, the checkouts worktrees hang off
-      "/home/agent/.claude" # transcripts; die with the fort, sized while it lives
+    paths = (lib.concatMap
+      (a: [
+        { path = "/home/${a.user}/worktrees"; depth = 1; } # <repo>/issue-<n>
+        { path = "/home/${a.user}/src"; depth = 2; } # <owner>/<repo>, the checkouts worktrees hang off
+        "/home/${a.user}/.claude" # transcripts; die with the fort, sized while it lives
+      ])
+      accounts) ++ [
       "/nix/store"
       { path = "/var/log"; depth = 1; }
     ];
@@ -167,24 +223,34 @@ in
     ];
   };
 
-  # The agent's git transport dials gitea over the mesh on 30022; pin the
-  # host key system-wide so the first clone is hands-off.
+  # The accounts' git transport dials gitea over the mesh on 30022; pin
+  # the host key system-wide so the first clone is hands-off.
   programs.ssh.knownHosts."gitea.zen.lofi" = {
     hostNames = [ "gitea.zen.lofi" "[gitea.zen.lofi]:30022" ];
     publicKey = giteaKey;
   };
 
-  # The agent identity bundle (#414): minted per fort by `fort mint`,
-  # revoked by `fort destroy`. Owned by agent, read by the tools in
-  # home/agent.nix (git's ssh transport, the gpg import, tea's login,
-  # Claude Code's session). agent-claude-oauth-token is the one fleet-wide
-  # value among them — billing is the subscription, not the API.
-  sops.secrets = {
-    agent-ssh-key = { owner = "agent"; mode = "0400"; };
-    agent-gpg-key = { owner = "agent"; mode = "0400"; };
-    agent-gitea-token = { owner = "agent"; mode = "0400"; };
-    agent-claude-oauth-token = { owner = "agent"; mode = "0400"; };
-  };
+  # The identity bundles (#414, #532): minted per fort AND PER ACCOUNT by
+  # `fort mint`, revoked by `fort destroy`. Each key is owned by the one
+  # account that reads it (git's ssh transport, the gpg import, tea's
+  # login — home/agent.nix), mode 0400: this is the boundary between the
+  # roles, and it is the kernel's, not a prompt's.
+  #
+  # agent-claude-oauth-token is the one fleet-wide value among them —
+  # billing is the subscription, not the API — so it is root-owned and
+  # read by the `agents` group instead. Its name predates the accounts and
+  # is not the `agent` account's: renaming it would re-key every fort's
+  # secrets file for nothing.
+  sops.secrets = lib.mkMerge (
+    [{ agent-claude-oauth-token = { group = "agents"; mode = "0440"; }; }]
+    ++ map
+      (a: {
+        "${a.user}-ssh-key" = { owner = a.user; mode = "0400"; };
+        "${a.user}-gpg-key" = { owner = a.user; mode = "0400"; };
+        "${a.user}-gitea-token" = { owner = a.user; mode = "0400"; };
+      })
+      accounts
+  );
 
   # ---- telemetry (#437) --------------------------------------------------
   # One collector per fort, the [dev] profile's telemetry contract: Claude

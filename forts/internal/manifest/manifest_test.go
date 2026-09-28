@@ -170,10 +170,29 @@ func TestLoadAll(t *testing.T) {
 	}
 }
 
+// devAccounts is a valid [dev] account list: the shape every dev-fort
+// fixture needs, since [dev] with no account is a refusal.
+const devAccounts = `
+[[dev.accounts]]
+user = "agent"
+verb = "pickup"
+gitea_user = "sfi-agent"
+email = "support@streetfortress.com"
+token_scopes = ["write:repository", "write:issue"]
+
+[[dev.accounts]]
+user = "analyst"
+verb = "review"
+gitea_user = "sfi-analyst"
+email = "analyst@streetfortress.com"
+ssh_alias = "sfi-analyst"
+token_scopes = ["write:issue", "read:repository"]
+`
+
 // [dev] (#413): a positive declaration with its own invariants — no
 // backups, no cluster seed, a lab VM.
 func TestDev(t *testing.T) {
-	base := "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
+	base := "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
 	h, err := Parse("dev-fort", []byte(base))
 	if err != nil {
 		t.Fatal(err)
@@ -181,18 +200,88 @@ func TestDev(t *testing.T) {
 	if !h.IsDev() || h.Cluster() {
 		t.Errorf("want a dev fort that is not a cluster: dev=%v cluster=%v", h.IsDev(), h.Cluster())
 	}
+	if got := h.Accounts(); len(got) != 2 || got[0].User != "agent" || got[1].SSHAlias != "sfi-analyst" {
+		t.Errorf("accounts %+v", got)
+	}
+	if d := h.DefaultAccount(); d == nil || d.User != "agent" || d.Verb != "pickup" {
+		t.Errorf("the first account is the fort's own: %+v", d)
+	}
 	plain, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
 	if err != nil || plain.IsDev() || !plain.Cluster() {
 		t.Errorf("a fort without [dev] is a cluster: %v dev=%v", err, plain.IsDev())
 	}
+	if plain.Accounts() != nil || plain.DefaultAccount() != nil {
+		t.Error("a cluster fort has no accounts")
+	}
 	for name, raw := range map[string]string{
-		"backups": "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n",
-		"cluster": "mesh_ip = \"10.1.0.96\"\nk3s_cluster_init = false\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
-		"cloud":   "mesh_ip = \"10.1.0.96\"\n[dev]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"dev\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
-		"unknown": "mesh_ip = \"10.1.0.96\"\n[dev]\nagent = \"sfi-agent\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+		"backups": "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+		"cluster": "mesh_ip = \"10.1.0.96\"\nk3s_cluster_init = false\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
+		"cloud":   "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"dev\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
+		"unknown": "mesh_ip = \"10.1.0.96\"\n[dev]\nagent = \"sfi-agent\"\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
 	} {
 		if _, err := Parse("dev-fort", []byte(raw)); err == nil {
 			t.Errorf("%s: want a refusal", name)
+		}
+	}
+}
+
+// The account list is the fort's identities (#532): every field is
+// required, the names are unique, and only the first account rides the
+// fort's own name.
+func TestDevAccounts(t *testing.T) {
+	dev := func(accounts string) error {
+		raw := "mesh_ip = \"10.1.0.96\"\n[dev]\n" + accounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
+		_, err := Parse("dev-fort", []byte(raw))
+		return err
+	}
+	one := func(fields ...string) string {
+		return "[[dev.accounts]]\n" + strings.Join(fields, "\n") + "\n"
+	}
+	full := []string{`user = "agent"`, `verb = "pickup"`, `gitea_user = "sfi-agent"`, `email = "support@streetfortress.com"`, `token_scopes = ["write:issue"]`}
+	if err := dev(one(full...)); err != nil {
+		t.Fatalf("a complete account: %v", err)
+	}
+	for name, want := range map[string]string{
+		"no accounts":  "names no accounts",
+		"no user":      "want a Unix account name",
+		"bad user":     "want a Unix account name",
+		"no verb":      "want one of pickup",
+		"bad verb":     "want one of pickup",
+		"no gitea":     "gitea_user is required",
+		"no email":     "want the address on gitea user",
+		"no scopes":    "token_scopes is required",
+		"first alias":  "must not name ssh_alias",
+		"second alias": "without one nothing reaches it",
+		"twice":        "user \"agent\" twice",
+	} {
+		var raw string
+		switch name {
+		case "no accounts":
+			raw = ""
+		case "no user":
+			raw = one(full[1:]...)
+		case "bad user":
+			raw = one(append([]string{`user = "Agent One"`}, full[1:]...)...)
+		case "no verb":
+			raw = one(full[0], full[2], full[3], full[4])
+		case "bad verb":
+			raw = one(full[0], `verb = "dispatch"`, full[2], full[3], full[4])
+		case "no gitea":
+			raw = one(full[0], full[1], full[3], full[4])
+		case "no email":
+			raw = one(full[0], full[1], full[2], full[4])
+		case "no scopes":
+			raw = one(full[:4]...)
+		case "first alias":
+			raw = one(append(append([]string{}, full...), `ssh_alias = "sfi-dev"`)...)
+		case "second alias":
+			raw = one(full...) + one(`user = "scout"`, `verb = "scout"`, `gitea_user = "sfi-scout"`, `email = "scout@streetfortress.com"`, `token_scopes = ["write:issue"]`)
+		case "twice":
+			raw = one(full...) + one(append(append([]string{}, full...), `ssh_alias = "sfi-two"`)...)
+		}
+		err := dev(raw)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: want %q, got %v", name, want, err)
 		}
 	}
 }

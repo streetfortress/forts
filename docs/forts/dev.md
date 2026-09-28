@@ -9,6 +9,20 @@ than repaired.
 The host, the identity and the repo policy are
 [`docs/infra/dev-forts.md`](../infra/dev-forts.md).
 
+**One verb per account** (#532). A dev fort carries one Unix account per
+role, and each account installs its own verb and nothing else — so the
+alias a caller dials decides both what the session does and who it is on
+gitea:
+
+| verb | ssh alias | Unix account | gitea author |
+| --- | --- | --- | --- |
+| `pickup` | `sfi-dev` | `agent` | `sfi-agent` |
+| `scout` | `sfi-scout` | `scout` | `sfi-scout` |
+| `review` | `sfi-analyst` | `analyst` | `sfi-analyst` |
+
+`ssh sfi-scout pickup …` fails as a missing command. Everything below is
+the same on every account except the identity it reads.
+
 ```
 gotea dispatch sfi/deployments#123                  macmini: the vault task, the fort, then
   └─ ssh sfi-dev pickup sfi/deployments 123         the fort: worktree + workspace + Claude
@@ -20,8 +34,9 @@ gotea dispatch sfi/deployments#123                  macmini: the vault task, the
 
 ## `pickup <owner/repo> <n> [--model <name>] [--note <text>]`
 
-`nixos/home/agent.nix` — a `writeShellApplication` on the agent's PATH,
-so `ssh sfi-dev pickup …` finds it through the login shell. Deterministic
+`nixos/home/agent.nix` — a `writeShellApplication` on the `agent`
+account's PATH, so `ssh sfi-dev pickup …` finds it through the login
+shell. Deterministic
 prep first, the hand-off to Claude last, so the worktree and the task's
 environment exist before Claude's first metric:
 
@@ -88,10 +103,12 @@ environment exist before Claude's first metric:
 
 ## `scout <owner/repo> --note <question> [--model <name>]`
 
-The same prep and the same report for the session that has **no issue
-behind it** (`gotea scout`, sfi/gotea#51): the one sent to look at
-something nobody has written down yet, whose output is issues rather than a
-PR. Sharing is real — the checkout and the Claude hand-off are one pair of
+Dialled as `ssh sfi-scout scout …`: the same prep and the same report for
+the session that has **no issue behind it** (`gotea scout`, sfi/gotea#51)
+— the one sent to look at something nobody has written down yet, whose
+output is issues rather than a PR. It files them as `sfi-scout`, and it
+pushes a branch like a dispatch does, because a fix smaller than its issue
+is allowed (below). Sharing is real — the checkout and the Claude hand-off are one pair of
 shell fragments in `agent.nix`, used by both verbs — so only what follows
 from having no identity differs:
 
@@ -111,8 +128,9 @@ then open the PR — which puts the work back on the path
 
 ## `review <owner/repo> <n> --note <question> [--model <name>]`
 
-The third verb (`gotea review`, sfi/gotea#68), for the session sent at a
-thread somebody has **already written**, whose output is a comment on that
+Dialled as `ssh sfi-analyst review …`: the third verb (`gotea review`,
+sfi/gotea#68), for the session sent at a thread somebody has **already
+written**, whose output is a comment on that
 thread. `pickup` expects a PR and `scout` expects issues; neither asks an
 agent for an opinion on what is in front of it. Sessions wrote that comment
 anyway, as a side effect of other work — sfi/patrol#53, sfi/symbology#235 —
@@ -135,8 +153,9 @@ behaves the same on an issue and on a pull, and it claims nothing about
 approval — which the agent cannot give anyway, since the repo policy
 whitelists approvals to `sf1tzp`
 ([`docs/infra/dev-forts.md`](../infra/dev-forts.md)). It posts as
-`sfi-agent`, as every session does today; a distinct author per session is
-#532.
+`sfi-analyst` (#532), and that account's token holds no
+`write:repository`: a review cannot push a branch at all, which is a
+stronger boundary than the instruction not to.
 
 **What no view shows yet.** `gotea catch-up` has four buckets — merged,
 opened for review, filed, closed — and a comment lands in none of them, so
@@ -166,8 +185,11 @@ same TUI on the fort as on the laptop.
   issue's. The pin is a plain nixos-unstable revision, so the fort
   fetches herdr from cache.nixos.org rather than building rust + zig on
   4 vCPUs. Delete the input at the next fleet bump.
-- **The server** is a Home Manager user service, `herdr.service`, in the
-  agent's lingering manager: always on, `WantedBy default.target`, after
+- **The server** is a Home Manager user service, `herdr.service`, in each
+  account's lingering manager — one server per account, on the socket in
+  its own home (`~/.config/herdr/herdr.sock`), so `herdr --remote
+  sfi-scout` shows the scout's workspaces and no others (#532). Always
+  on, `WantedBy default.target`, after
   `agent-identity` (the integration installed, the Claude token in the
   manager's environment). herdr would start a server itself on first
   use; the unit is the declared state, and what a fresh boot has before
@@ -301,7 +323,7 @@ leaves behind, and where:
 |---|---|---|
 | the work | the branch on gitea | the skill pushes as it goes |
 | the report | the PR, its description kept current | the skill |
-| the transcript | a comment on the PR (or the issue, when the task stopped before a PR) with `claude-session-<id>.jsonl.gz` attached | `pickup-transcript`, the Stop hook: one comment per session, found by its marker and updated in place, the attachment replaced — after the dispatched turn and after every human continuation. tea has no attachment verb, so it is the REST API with the fort's token; `.gz` is in gitea's allowed types, `.jsonl` is not |
+| the transcript | a comment on the PR (or the issue, when the task stopped before a PR) with `claude-session-<id>.jsonl.gz` attached | `pickup-transcript`, the Stop hook: one comment per session, found by its marker and updated in place, the attachment replaced — after the dispatched turn and after every human continuation. tea has no attachment verb, so it is the REST API with the account's own token; `.gz` is in gitea's allowed types, `.jsonl` is not |
 | the session pointer | the vault task (`agentSession`) | `gotea dispatch` |
 | the metrics and events | luxor — Prometheus series on `:9464` labelled `repo`, `issue`; Loki events with the same labels | the fort's collector (#437) |
 | the worktree, `~/.claude/projects`, the herdr workspace | the fort — nothing else | die with it |
@@ -349,3 +371,17 @@ task), each a claim above:
   the transcript comment with its attachment.
 - `herdr machine add … --label <host>` saved on macmini; `gotea
   sessions` lists the workspace.
+
+The accounts (#532) add four claims to the same checklist, on the first
+dispatch after `fort mint` seeds their bundles:
+
+- `ssh sfi-scout scout …` files its issues as `sfi-scout`, and `ssh
+  sfi-analyst review …` comments as `sfi-analyst`.
+- A commit from either account shows **Verified** under that account's
+  user: the GPG uid, `user.email` and the address on the gitea user are
+  one identity, and gitea matches them by the address.
+- `ssh sfi-scout pickup sfi/deployments 1` fails as a missing command.
+- In a `scout` or `analyst` session, `cat
+  /run/secrets/agent-gitea-token` is permission denied. That is the
+  boundary the option was chosen for, and permissions are bypassed in
+  that session.

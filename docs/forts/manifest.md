@@ -58,10 +58,25 @@ disk = "/dev/nvme0n1"        # the writer's target (docs/forts/baremetal.md)
 
 ```toml
 # sfi-dev-c86dd7b — a dev fort (#413): a transient lab VM hosting one
-# agent identity; no cluster.
+# agent account per role (#532); no cluster.
 mesh_ip = "10.1.0.61"
 
 [dev]                        # THE declaration: dev-fort.nix, no k3s/flux/backups
+
+[[dev.accounts]]             # the accounts, in order; the first one answers
+user = "agent"               # on the fort's own name and its sfi-dev alias
+verb = "pickup"
+gitea_user = "sfi-agent"
+email = "support@streetfortress.com"
+token_scopes = ["write:repository", "write:issue", "read:organization", "read:user", "write:misc"]
+
+[[dev.accounts]]
+user = "analyst"
+verb = "review"
+gitea_user = "sfi-analyst"
+email = "analyst@streetfortress.com"
+ssh_alias = "sfi-analyst"    # required on every account after the first
+token_scopes = ["write:issue", "read:repository", "read:organization", "read:user", "write:misc"]
 
 [backups]
 profile = "none"             # required with [dev] — nothing on it is precious
@@ -88,11 +103,28 @@ no wheel), gets the deploy key (auto-rebuild's pull credential), carries
 adds `production.nix` (deployer-only), `fleet/clusters/<host>` and the
 cluster key. The one different shape is a positive declaration, never
 the absence of flux: **`[dev]`** (#413) makes the host a dev fort —
-`dev-fort.nix` (an unprivileged `agent` that builds, the toolchains, the
+`dev-fort.nix` (unprivileged accounts that build, the toolchains, the
 dotfiles, nix-ld) with no k3s, no flux, no fleet tree, no cluster age key.
-The table is empty today; its presence is the whole declaration. It
-requires `[backups] profile = "none"`, refuses `k3s_cluster_init`, and
+It requires `[backups] profile = "none"`, refuses `k3s_cluster_init`, and
 is `[libvirt]`-only for now (forts#12: a lab VM on the hypervisor).
+
+**`[[dev.accounts]]` names the fort's identities** (#532). One entry per
+role, and every field is required: `user` (the Unix account, which also
+names its keys in `nixos/secrets/<host>.yaml`), `verb` (`pickup`, `scout`
+or `review` — the one verb that account installs), `gitea_user`, `email`
+(an address that user holds on gitea; the GPG uid carries it) and
+`token_scopes` (the account's own, so an analyst holds no
+`write:repository`). `ssh_alias` is the mesh name that dials the account
+and is required on every entry **after the first** — the first answers on
+the fort's own name and on its role alias. The names are unique within the
+fort, and the list must not be empty: a dev fort with no account mints
+nothing and nobody can log in.
+
+`fort mint` reads this list and holds no account name of its own, because
+the CLI leaves this repo later. Nix cannot read it — `provisioning/forts`
+sits outside the flake's root — so `nixos/modules/dev-fort.nix` carries
+the same list, and a test in `forts/cmd/fort`
+(`TestDevAccountsMatchDevFortModule`) compares the two field by field.
 
 **One provider table, opaque to everyone but its backend.** `[linode]`,
 `[libvirt]` and `[baremetal]` are decoded by their own Go types

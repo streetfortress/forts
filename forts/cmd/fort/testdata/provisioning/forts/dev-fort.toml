@@ -1,7 +1,23 @@
-# Test fixture: a dev fort ([dev], #413) — a lab VM with no cluster.
+# Test fixture: a dev fort ([dev], #413) — a lab VM with no cluster, and
+# one Unix account per role (#532).
 mesh_ip = "10.1.0.96"
 
 [dev]
+
+[[dev.accounts]]
+user = "agent"
+verb = "pickup"
+gitea_user = "sfi-agent"
+email = "support@streetfortress.com"
+token_scopes = ["write:repository", "write:issue"]
+
+[[dev.accounts]]
+user = "analyst"
+verb = "review"
+gitea_user = "sfi-analyst"
+email = "analyst@streetfortress.com"
+ssh_alias = "sfi-analyst"
+token_scopes = ["write:issue", "read:repository"]
 
 [backups]
 profile = "none"

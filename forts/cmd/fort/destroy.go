@@ -145,9 +145,10 @@ func destroy(args []string) error {
 
 // revokeIdentities: the deploy key fort mint registered — the one
 // off-repo identity of the flux half (the flux age identity died with
-// the sops rule) — a dev fort's agent bundle on the sfi-agent user
-// (everything titled agent-<host>: ssh key, gpg key, token; #414), and
-// the B2 application keys. Both warned rather than
+// the sops rule) — a dev fort's agent bundles, one per account its
+// retired manifest names (everything titled agent-<host> on each
+// account's gitea user: ssh key, gpg key, token; #414, #532) — and the B2
+// application keys. Both warned rather than
 // fatal: the minting credential is an operational input
 // (docs/infra/backups.md), and a destroy must not be blocked waiting for
 // it. A B2 key is scoped to its fort's prefix, so what it can still
@@ -159,18 +160,26 @@ func revokeIdentities(root, host string) {
 	} else {
 		fmt.Println("  deploy key:", msg)
 	}
-	// The GPG key has no title on gitea: its id comes from the retired
-	// secrets file, read back from the commit that deleted it.
-	keyID, err := retiredGPGKeyID(root, host, sopsCLI{root: root}.Decrypt)
+	// Who to revoke on, and which GPG key: the accounts come from the
+	// retired manifest and their key ids from the retired secrets file,
+	// both read back from the commit that deleted them (a GPG key has no
+	// title on gitea).
+	byHand := fmt.Sprintf(" — delete agent-%s (ssh key, gpg key, token) by hand on every agent user of that fort\n", host)
+	accounts, err := retiredAccounts(root, host, sopsCLI{root: root}.Decrypt)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — the gpg key (if any) stays; find it by key id on the sfi-agent user and delete it by hand\n", err)
+		fmt.Fprintf(os.Stderr, "warning: agent identity: %v\n", err)
 	}
-	if g, err := giteaClient(root); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — delete agent-%s (ssh key, gpg key, token) by hand on the sfi-agent user\n", err, host)
-	} else if msg, err := revokeAgentIdentity(g, host, keyID); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: agent identity: %v — delete agent-%s (ssh key, gpg key, token) by hand on the sfi-agent user\n", err, host)
-	} else {
-		fmt.Println("  agent identity:", msg)
+	switch g, err := giteaClient(root); {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "warning: agent identity: %v%s", err, byHand)
+	case len(accounts) == 0:
+		fmt.Println("  agent identity: no account in the retired manifest (not a dev fort, or a fort minted before #532 — check agent-" + host + " by hand)")
+	default:
+		if msg, err := revokeAgentIdentities(g, host, accounts); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: agent identity: %v (done: %s)%s", err, msg, byHand)
+		} else {
+			fmt.Println("  agent identity:", msg)
+		}
 	}
 	if msg, err := revokeB2Key(host); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)

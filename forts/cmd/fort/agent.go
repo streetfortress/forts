@@ -12,33 +12,49 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"gopkg.in/yaml.v3"
 )
 
-// The agent identity bundle (#414): what a dev fort ([dev], #413)
-// carries so the coding agent on it acts on gitea as `sfi-agent` with
-// credentials that are the fort's own — minted per fort, sops-seeded
-// beside the host's other secrets, revoked with the fort by `fort
-// destroy`. A compromised fort revokes alone.
+// The agent identity bundles (#414, #532): what a dev fort ([dev],
+// #413) carries so each agent account on it acts on gitea as its own
+// user with credentials that are the fort's own — minted per fort,
+// sops-seeded beside the host's other secrets, revoked with the fort by
+// `fort destroy`. A compromised fort revokes alone.
 //
-//	agent-ssh-key (+ .pub)     git transport, registered on the user under
-//	                           the title agent-<host>
-//	agent-gpg-key              commit signing (armored secret key, no
+// ONE BUNDLE PER ACCOUNT. The manifest's [dev] table names the accounts
+// (user, gitea_user, verb, email, token_scopes) and this file holds no
+// name of its own: the mint is the half that leaves this repo later, and
+// a CLI with a fort's account names compiled in cannot serve a second
+// fleet. Every key of the secrets file is prefixed with the Unix account
+// that reads it — the same prefix dev-fort.nix gives the sops secret:
+//
+//	<user>-ssh-key (+ .pub)    git transport, registered on that account's
+//	                           gitea user under the title agent-<host>
+//	<user>-gpg-key             commit signing (armored secret key, no
 //	                           passphrase), registered AND verified on the
 //	                           user so gitea shows the commits Verified.
 //	                           gitea keeps only the bare primary-key packet
 //	                           (no uid), so destroy finds it by key id,
 //	                           derived from the retired secrets file in git
 //	                           history
-//	agent-gitea-token          a personal access token named agent-<host>,
-//	                           tea's login and pickup's API credential
+//	<user>-gitea-token         a personal access token named agent-<host>,
+//	                           tea's login and the verb's API credential,
+//	                           with the account's own token_scopes
 //	agent-claude-oauth-token   FLEET secret copied from
 //	                           provisioning/secrets.yaml — the one-year
-//	                           token `claude setup-token` prints; billing
-//	                           is the subscription, not the API
+//	                           token `claude setup-token` prints. One per
+//	                           fort, not one per account (the name predates
+//	                           the accounts): billing is the subscription,
+//	                           not the API, and dev-fort.nix gives every
+//	                           account the same value through a group
+//
+// The title is agent-<host> on EVERY account, on purpose: `gotea
+// agent-policy` reads the fort out of it (bundleHost, src/agent-policy.ts),
+// and the gitea user already says which account it is.
 //
 // One credential does all of it: the fleet gitea-token mint already
 // holds for the deploy key. gitea lets an admin's token act as another
@@ -52,34 +68,28 @@ import (
 // the web form, which the API cannot do. A GPG key is verified over the
 // API by signing the string GET /user/gpg_key_token returns.
 
-const (
-	keyAgentSSH    = "agent-ssh-key"
-	keyAgentSSHPub = "agent-ssh-key.pub"
-	keyAgentGPG    = "agent-gpg-key"
-	keyAgentToken  = "agent-gitea-token"
-	keyAgentClaude = "agent-claude-oauth-token"
+// keyAgentClaude is the one key of the bundle that is not per account.
+const keyAgentClaude = "agent-claude-oauth-token"
 
-	agentUser  = "sfi-agent"
-	agentEmail = "support@streetfortress.com"
-)
-
-// agentTokenScopes is one list, fleet-wide: gitea scopes are global per
-// token, so the token is the revocation unit and the sfi-agentic-dev
-// team is the permission unit. No write:user — keys are registered by
-// mint, not by the agent.
-var agentTokenScopes = []string{"write:repository", "write:issue", "read:organization", "read:user", "write:misc"}
+// The per-account keys of nixos/secrets/<host>.yaml. The Unix account is
+// the prefix, so a reader of the file sees which account each key is for
+// and dev-fort.nix derives the same names.
+func keyAccountSSH(user string) string    { return user + "-ssh-key" }
+func keyAccountSSHPub(user string) string { return user + "-ssh-key.pub" }
+func keyAccountGPG(user string) string    { return user + "-gpg-key" }
+func keyAccountToken(user string) string  { return user + "-gitea-token" }
 
 // fleetSecret reads a key of provisioning/secrets.yaml; a variable so
 // tests can supply one without an age key for the fleet file.
 var fleetSecret = secret
 
-// agentPlan is the bundle's half of a mint plan: restored where the
+// agentPlan is one account's half of a mint plan: restored where the
 // secrets file has it, minted where not, and its standing on gitea.
 type agentPlan struct {
+	account   manifest.DevAccount
 	ssh       sshKey
 	gpg       gpgKey
 	token     string // "" until apply mints it (shown exactly once by gitea)
-	claude    string
 	sshStatus string
 	gpgStatus string
 	tokStatus string
@@ -90,36 +100,67 @@ type agentPlan struct {
 	mintToken   bool // apply must create the token
 }
 
-func (p *mintPlan) planAgent(take func(string) (string, bool), gitea *giteaDeployKeys) error {
+// planAgents plans one bundle per account the manifest names, plus the
+// fort's one Claude credential. A cluster fort has none of it.
+func (p *mintPlan) planAgents(take func(string) (string, bool), gitea *giteaDeployKeys) error {
 	if !p.entry.IsDev() {
 		return nil
 	}
-	a := &agentPlan{}
+	if v, ok := take(keyAgentClaude); ok {
+		p.claude = v
+	} else {
+		v, err := fleetSecret(p.root, keyAgentClaude)
+		if err != nil || v == "" {
+			return fmt.Errorf("no %s in provisioning/secrets.yaml — the Claude credential is a FLEET secret (billing is the subscription; the token `claude setup-token` prints on a machine logged into the plan, valid a year). Seed it once with:\n  sops --config .sops.yaml set provisioning/secrets.yaml '[\"%s\"]' '\"<token>\"'", keyAgentClaude, keyAgentClaude)
+		}
+		p.claude = v
+	}
+	for _, account := range p.entry.Accounts() {
+		a, err := p.planAgent(account, take, gitea)
+		if err != nil {
+			// The first failure of a new account is gitea answering 404
+			// for a user nobody created: mint registers a bundle and never
+			// invents the user it belongs to.
+			hint := ""
+			if strings.Contains(err.Error(), "404") {
+				hint = fmt.Sprintf(" — does the gitea user %s exist? A human creates it, sets %s on it and adds it to sfi-agentic-dev; then re-run (#532)", account.GiteaUser, account.Email)
+			}
+			return fmt.Errorf("%s (%s): %w%s", account.User, account.GiteaUser, err, hint)
+		}
+		p.agents = append(p.agents, a)
+	}
+	return nil
+}
+
+func (p *mintPlan) planAgent(account manifest.DevAccount, take func(string) (string, bool), gitea *giteaDeployKeys) (*agentPlan, error) {
+	a := &agentPlan{account: account}
+	user := account.User
 	title := "agent-" + p.host
+	g := gitea.as(account.GiteaUser)
 	var err error
 
 	// The ssh key, with the same public-half consistency check as the host key.
-	if v, ok := take(keyAgentSSH); ok {
+	if v, ok := take(keyAccountSSH(user)); ok {
 		a.ssh, err = sshKeyFrom(v, title)
 	} else {
 		a.ssh, err = newSSHKey(title)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if pub, ok := p.have[keyAgentSSHPub]; ok && strings.TrimSpace(pub) != strings.TrimSpace(a.ssh.public) {
-		return fmt.Errorf("%s: %s does not match %s", p.secretsPath, keyAgentSSHPub, keyAgentSSH)
+	if pub, ok := p.have[keyAccountSSHPub(user)]; ok && strings.TrimSpace(pub) != strings.TrimSpace(a.ssh.public) {
+		return nil, fmt.Errorf("%s: %s does not match %s", p.secretsPath, keyAccountSSHPub(user), keyAccountSSH(user))
 	} else if !ok {
-		p.missing = append(p.missing, keyAgentSSHPub)
+		p.missing = append(p.missing, keyAccountSSHPub(user))
 	}
 
-	if v, ok := take(keyAgentGPG); ok {
-		a.gpg, err = gpgKeyFrom(v)
+	if v, ok := take(keyAccountGPG(user)); ok {
+		a.gpg, err = gpgKeyFrom(v, keyAccountGPG(user))
 	} else {
-		a.gpg, err = newGPGKey(title)
+		a.gpg, err = newGPGKey(account, title)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// The token: no public half to compare, so the guard is by name
@@ -127,36 +168,27 @@ func (p *mintPlan) planAgent(take func(string) (string, bool), gitea *giteaDeplo
 	// neither. One without the other is a stale token or a hand
 	// revocation, and either is resolved deliberately.
 	inFile := false
-	if v, ok := take(keyAgentToken); ok {
+	if v, ok := take(keyAccountToken(user)); ok {
 		a.token, inFile = v, true
-	}
-	if v, ok := take(keyAgentClaude); ok {
-		a.claude = v
-	} else {
-		v, err := fleetSecret(p.root, keyAgentClaude)
-		if err != nil || v == "" {
-			return fmt.Errorf("no %s in provisioning/secrets.yaml — the Claude credential is a FLEET secret (billing is the subscription; the token `claude setup-token` prints on a machine logged into the plan, valid a year). Seed it once with:\n  sops --config .sops.yaml set provisioning/secrets.yaml '[\"%s\"]' '\"<token>\"'", keyAgentClaude, keyAgentClaude)
-		}
-		a.claude = v
 	}
 
 	// Standing on gitea, read-only: a mismatch refuses before anything is written.
-	keys, err := gitea.userKeys()
+	keys, err := g.keys()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	a.sshStatus, a.registerSSH, err = keyStanding(keys, title, a.ssh.public, "ssh key", p.secretsPath, keyAgentSSH)
+	a.sshStatus, a.registerSSH, err = keyStanding(keys, title, a.ssh.public, "ssh key", p.secretsPath, keyAccountSSH(user))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	gpgs, err := gitea.userGPGKeys()
+	gpgs, err := g.gpgKeys()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	a.gpgStatus, a.registerGPG, a.verifyGPG = gpgStanding(gpgs, a.gpg.keyID)
-	tokens, err := gitea.agentTokens()
+	tokens, err := g.tokens()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	onGitea := false
 	for _, t := range tokens {
@@ -168,41 +200,50 @@ func (p *mintPlan) planAgent(take func(string) (string, bool), gitea *giteaDeplo
 	case inFile && onGitea:
 		a.tokStatus = "registered (name-only match: gitea never shows a token twice)"
 	case inFile && !onGitea:
-		return fmt.Errorf("%s holds %s but no token named %s exists on %s — revoked by hand? remove it from the secrets file (sops --config nixos/.sops.yaml unset %s '[\"%s\"]') and re-run to mint a new one", p.secretsPath, keyAgentToken, title, agentUser, p.secretsPath, keyAgentToken)
+		return nil, fmt.Errorf("%s holds %s but no token named %s exists on %s — revoked by hand? remove it from the secrets file (sops --config nixos/.sops.yaml unset %s '[\"%s\"]') and re-run to mint a new one", p.secretsPath, keyAccountToken(user), title, account.GiteaUser, p.secretsPath, keyAccountToken(user))
 	case !inFile && onGitea:
-		return fmt.Errorf("a token named %s exists on %s but %s has no %s — a stale token from an earlier mint; delete it deliberately (fort destroy %s revokes it, or the user's settings) and re-run", title, agentUser, p.secretsPath, keyAgentToken, p.host)
+		return nil, fmt.Errorf("a token named %s exists on %s but %s has no %s — a stale token from an earlier mint; delete it deliberately (fort destroy %s revokes it, or the user's settings) and re-run", title, account.GiteaUser, p.secretsPath, keyAccountToken(user), p.host)
 	default:
-		a.tokStatus = "would mint (scopes " + strings.Join(agentTokenScopes, ", ") + ")"
+		a.tokStatus = "would mint (scopes " + strings.Join(account.TokenScopes, ", ") + ")"
 		a.mintToken = true
 	}
-	p.agent = a
-	return nil
+	return a, nil
 }
 
-// applyAgent: the token first (gitea shows it exactly once, so it must
+// applyAgents: the tokens first (gitea shows one exactly once, so it must
 // be in hand before the secrets file renders), then — after the secrets
-// file is written, so a failure here leaves a re-run that restores from
+// file is written, so a failure there leaves a re-run that restores from
 // the file and registers the gap — the keys.
-func (p *mintPlan) mintAgentToken(gitea *giteaDeployKeys) error {
-	tok, err := gitea.createAgentToken("agent-" + p.host)
-	if err != nil {
-		return err
-	}
-	p.agent.token, p.agent.mintToken = tok, false
-	p.agent.tokStatus = "minted agent-" + p.host + " (scopes " + strings.Join(agentTokenScopes, ", ") + ")"
-	return nil
-}
-
-func (p *mintPlan) registerAgent(gitea *giteaDeployKeys) error {
-	a := p.agent
-	if a.registerSSH {
-		if err := gitea.addUserKey("agent-"+p.host, a.ssh.public); err != nil {
+func (p *mintPlan) mintAgentTokens(gitea *giteaDeployKeys) error {
+	title := "agent-" + p.host
+	for _, a := range p.agents {
+		if !a.mintToken {
+			continue
+		}
+		tok, err := gitea.as(a.account.GiteaUser).createToken(title, a.account.TokenScopes)
+		if err != nil {
 			return err
 		}
-		a.sshStatus, a.registerSSH = "registered agent-"+p.host, false
+		a.token, a.mintToken = tok, false
+		a.tokStatus = "minted " + title + " (scopes " + strings.Join(a.account.TokenScopes, ", ") + ")"
 	}
-	if a.registerGPG || a.verifyGPG {
-		token, err := gitea.gpgToken()
+	return nil
+}
+
+func (p *mintPlan) registerAgents(gitea *giteaDeployKeys) error {
+	title := "agent-" + p.host
+	for _, a := range p.agents {
+		g := gitea.as(a.account.GiteaUser)
+		if a.registerSSH {
+			if err := g.addKey(title, a.ssh.public); err != nil {
+				return err
+			}
+			a.sshStatus, a.registerSSH = "registered "+title, false
+		}
+		if !a.registerGPG && !a.verifyGPG {
+			continue
+		}
+		token, err := g.gpgToken()
 		if err != nil {
 			return err
 		}
@@ -211,12 +252,12 @@ func (p *mintPlan) registerAgent(gitea *giteaDeployKeys) error {
 			return err
 		}
 		if a.registerGPG {
-			if err := gitea.addGPGKey(a.gpg.public, sig); err != nil {
+			if err := g.addGPGKey(a.gpg.public, sig); err != nil {
 				return err
 			}
 			a.gpgStatus = "registered + verified (key id " + a.gpg.keyID + ")"
 		} else {
-			if err := gitea.verifyGPGKey(a.gpg.keyID, sig); err != nil {
+			if err := g.verifyGPGKey(a.gpg.keyID, sig); err != nil {
 				return err
 			}
 			a.gpgStatus = "verified (key id " + a.gpg.keyID + ", was registered unverified)"
@@ -226,34 +267,39 @@ func (p *mintPlan) registerAgent(gitea *giteaDeployKeys) error {
 	return nil
 }
 
+// agentValue answers for every key of the bundle: the fort's Claude
+// credential, and each account's own three.
 func (p *mintPlan) agentValue(key string) (string, bool) {
-	if p.agent == nil {
-		return "", false
+	if key == keyAgentClaude && p.claude != "" {
+		return p.claude, true
 	}
-	switch key {
-	case keyAgentSSH:
-		return p.agent.ssh.private, true
-	case keyAgentSSHPub:
-		return p.agent.ssh.public, true
-	case keyAgentGPG:
-		return p.agent.gpg.private, true
-	case keyAgentToken:
-		return p.agent.token, true
-	case keyAgentClaude:
-		return p.agent.claude, true
+	for _, a := range p.agents {
+		switch user := a.account.User; key {
+		case keyAccountSSH(user):
+			return a.ssh.private, true
+		case keyAccountSSHPub(user):
+			return a.ssh.public, true
+		case keyAccountGPG(user):
+			return a.gpg.private, true
+		case keyAccountToken(user):
+			return a.token, true
+		}
 	}
 	return "", false
 }
 
-func (p *mintPlan) reportAgent(w io.Writer) {
-	a := p.agent
-	if a == nil {
+func (p *mintPlan) reportAgents(w io.Writer) {
+	if len(p.agents) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "· %s ssh key agent-%s: %s\n", agentUser, p.host, a.sshStatus)
-	fmt.Fprintf(w, "· %s gpg key %s (uid comment agent-%s): %s\n", agentUser, a.gpg.keyID, p.host, a.gpgStatus)
-	fmt.Fprintf(w, "· %s token agent-%s: %s\n", agentUser, p.host, a.tokStatus)
-	fmt.Fprintf(w, "· claude credential: %s from provisioning/secrets.yaml — fleet-wide, outside this fort's revocation unit\n", keyAgentClaude)
+	title := "agent-" + p.host
+	for _, a := range p.agents {
+		acc := a.account
+		fmt.Fprintf(w, "· %s (%s account, %s verb) ssh key %s: %s\n", acc.GiteaUser, acc.User, acc.Verb, title, a.sshStatus)
+		fmt.Fprintf(w, "· %s gpg key %s (uid comment %s): %s\n", acc.GiteaUser, a.gpg.keyID, title, a.gpgStatus)
+		fmt.Fprintf(w, "· %s token %s: %s\n", acc.GiteaUser, title, a.tokStatus)
+	}
+	fmt.Fprintf(w, "· claude credential: %s from provisioning/secrets.yaml — fleet-wide, one per fort, outside this fort's revocation unit\n", keyAgentClaude)
 }
 
 // keyStanding is deployKeyStatus's rule for any titled key list: every
@@ -308,12 +354,12 @@ func gpgConfig() *packet.Config {
 	return &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA, DefaultHash: crypto.SHA256}
 }
 
-// newGPGKey mints an ed25519 primary (signing) key with the agent's
-// name and email — the user's activated address, so the uid is active
-// on registration — and the fort's title as the uid comment. No
+// newGPGKey mints an ed25519 primary (signing) key with the account's
+// gitea user and its email — the address that user holds, so the uid is
+// active on registration — and the fort's title as the uid comment. No
 // passphrase: the fort's protection is the sops file and the host.
-func newGPGKey(comment string) (gpgKey, error) {
-	e, err := openpgp.NewEntity(agentUser, comment, agentEmail, gpgConfig())
+func newGPGKey(account manifest.DevAccount, comment string) (gpgKey, error) {
+	e, err := openpgp.NewEntity(account.GiteaUser, comment, account.Email, gpgConfig())
 	if err != nil {
 		return gpgKey{}, err
 	}
@@ -326,16 +372,18 @@ func newGPGKey(comment string) (gpgKey, error) {
 		return gpgKey{}, err
 	}
 	w.Close()
-	return gpgKeyFrom(priv.String())
+	return gpgKeyFrom(priv.String(), "a fresh key")
 }
 
-func gpgKeyFrom(armored string) (gpgKey, error) {
+// gpgKeyFrom reads an armored secret key; `what` names it in an error (the
+// secrets-file key it came from).
+func gpgKeyFrom(armored, what string) (gpgKey, error) {
 	el, err := openpgp.ReadArmoredKeyRing(strings.NewReader(armored))
 	if err != nil {
-		return gpgKey{}, fmt.Errorf("%s: %w", keyAgentGPG, err)
+		return gpgKey{}, fmt.Errorf("%s: %w", what, err)
 	}
 	if len(el) != 1 || el[0].PrivateKey == nil {
-		return gpgKey{}, fmt.Errorf("%s: want exactly one secret key, got %d", keyAgentGPG, len(el))
+		return gpgKey{}, fmt.Errorf("%s: want exactly one secret key, got %d", what, len(el))
 	}
 	e := el[0]
 	var pub bytes.Buffer
@@ -377,9 +425,9 @@ type giteaToken struct {
 	Scopes []string `json:"scopes"`
 }
 
-// do sends a request as the fleet token; as the agent when sudo is set
-// (gitea's Sudo header: an admin's token acting as another user).
-func (g *giteaDeployKeys) do(method, path string, body any, sudo bool) (*http.Response, error) {
+// do sends a request as the fleet token; as another user when sudo names
+// one (gitea's Sudo header: an admin's token acting as that user).
+func (g *giteaDeployKeys) do(method, path string, body any, sudo string) (*http.Response, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -396,8 +444,8 @@ func (g *giteaDeployKeys) do(method, path string, body any, sudo bool) (*http.Re
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if sudo {
-		req.Header.Set("Sudo", agentUser)
+	if sudo != "" {
+		req.Header.Set("Sudo", sudo)
 	}
 	return g.client.Do(req)
 }
@@ -406,7 +454,7 @@ func (g *giteaDeployKeys) do(method, path string, body any, sudo bool) (*http.Re
 // token as the password, the token's owner (an admin) as the user.
 func (g *giteaDeployKeys) doBasic(method, path string, body any) (*http.Response, error) {
 	if g.admin == "" {
-		resp, err := g.do("GET", "/user", nil, false)
+		resp, err := g.do("GET", "/user", nil, "")
 		if err != nil {
 			return nil, err
 		}
@@ -461,34 +509,52 @@ func decode(resp *http.Response, into any, what string) error {
 	return json.NewDecoder(resp.Body).Decode(into)
 }
 
-func (g *giteaDeployKeys) userKeys() ([]giteaKey, error) {
-	resp, err := g.do("GET", "/user/keys?limit=100", nil, true)
+// giteaUser is the fleet client bound to one gitea user: every route
+// below acts as that user, so a fort with one account per role (#532)
+// says which one on every call rather than carrying a default.
+type giteaUser struct {
+	*giteaDeployKeys
+	login string
+}
+
+func (g *giteaDeployKeys) as(login string) *giteaUser { return &giteaUser{g, login} }
+
+func (u *giteaUser) keys() ([]giteaKey, error) {
+	resp, err := u.do("GET", "/user/keys?limit=100", nil, u.login)
 	if err != nil {
 		return nil, err
 	}
 	var keys []giteaKey
-	return keys, decode(resp, &keys, "listing "+agentUser+"'s ssh keys")
+	return keys, decode(resp, &keys, "listing "+u.login+"'s ssh keys")
 }
 
-func (g *giteaDeployKeys) addUserKey(title, pub string) error {
-	resp, err := g.do("POST", "/user/keys", map[string]any{"title": title, "key": strings.TrimSpace(pub), "read_only": false}, true)
+func (u *giteaUser) addKey(title, pub string) error {
+	resp, err := u.do("POST", "/user/keys", map[string]any{"title": title, "key": strings.TrimSpace(pub), "read_only": false}, u.login)
 	if err != nil {
 		return err
 	}
-	return decode(resp, nil, "registering ssh key "+title+" on "+agentUser)
+	return decode(resp, nil, "registering ssh key "+title+" on "+u.login)
 }
 
-func (g *giteaDeployKeys) userGPGKeys() ([]giteaGPGKey, error) {
-	resp, err := g.do("GET", "/user/gpg_keys?limit=100", nil, true)
+func (u *giteaUser) deleteKey(id int) error {
+	resp, err := u.do("DELETE", fmt.Sprintf("/user/keys/%d", id), nil, u.login)
+	if err != nil {
+		return err
+	}
+	return decode(resp, nil, fmt.Sprintf("deleting ssh key id %d on %s", id, u.login))
+}
+
+func (u *giteaUser) gpgKeys() ([]giteaGPGKey, error) {
+	resp, err := u.do("GET", "/user/gpg_keys?limit=100", nil, u.login)
 	if err != nil {
 		return nil, err
 	}
 	var keys []giteaGPGKey
-	return keys, decode(resp, &keys, "listing "+agentUser+"'s gpg keys")
+	return keys, decode(resp, &keys, "listing "+u.login+"'s gpg keys")
 }
 
-func (g *giteaDeployKeys) gpgToken() (string, error) {
-	resp, err := g.do("GET", "/user/gpg_key_token", nil, true)
+func (u *giteaUser) gpgToken() (string, error) {
+	resp, err := u.do("GET", "/user/gpg_key_token", nil, u.login)
 	if err != nil {
 		return "", err
 	}
@@ -498,60 +564,108 @@ func (g *giteaDeployKeys) gpgToken() (string, error) {
 		return "", err
 	}
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("gpg verification token: %s %s", resp.Status, strings.TrimSpace(string(b)))
+		return "", fmt.Errorf("gpg verification token for %s: %s %s", u.login, resp.Status, strings.TrimSpace(string(b)))
 	}
 	return string(b), nil
 }
 
-func (g *giteaDeployKeys) addGPGKey(armoredPublic, armoredSignature string) error {
-	resp, err := g.do("POST", "/user/gpg_keys", map[string]any{"armored_public_key": armoredPublic, "armored_signature": armoredSignature}, true)
+func (u *giteaUser) addGPGKey(armoredPublic, armoredSignature string) error {
+	resp, err := u.do("POST", "/user/gpg_keys", map[string]any{"armored_public_key": armoredPublic, "armored_signature": armoredSignature}, u.login)
 	if err != nil {
 		return err
 	}
-	return decode(resp, nil, "registering the gpg key on "+agentUser)
+	return decode(resp, nil, "registering the gpg key on "+u.login)
 }
 
-func (g *giteaDeployKeys) verifyGPGKey(keyID, armoredSignature string) error {
-	resp, err := g.do("POST", "/user/gpg_key_verify", map[string]any{"key_id": keyID, "armored_signature": armoredSignature}, true)
+func (u *giteaUser) verifyGPGKey(keyID, armoredSignature string) error {
+	resp, err := u.do("POST", "/user/gpg_key_verify", map[string]any{"key_id": keyID, "armored_signature": armoredSignature}, u.login)
 	if err != nil {
 		return err
 	}
-	return decode(resp, nil, "verifying gpg key "+keyID+" on "+agentUser)
+	return decode(resp, nil, "verifying gpg key "+keyID+" on "+u.login)
 }
 
-func (g *giteaDeployKeys) agentTokens() ([]giteaToken, error) {
-	resp, err := g.doBasic("GET", "/users/"+agentUser+"/tokens?limit=100", nil)
+func (u *giteaUser) deleteGPGKey(id int) error {
+	resp, err := u.do("DELETE", fmt.Sprintf("/user/gpg_keys/%d", id), nil, u.login)
+	if err != nil {
+		return err
+	}
+	return decode(resp, nil, fmt.Sprintf("deleting gpg key id %d on %s", id, u.login))
+}
+
+func (u *giteaUser) tokens() ([]giteaToken, error) {
+	resp, err := u.doBasic("GET", "/users/"+u.login+"/tokens?limit=100", nil)
 	if err != nil {
 		return nil, err
 	}
 	var toks []giteaToken
-	return toks, decode(resp, &toks, "listing "+agentUser+"'s tokens")
+	return toks, decode(resp, &toks, "listing "+u.login+"'s tokens")
 }
 
-func (g *giteaDeployKeys) createAgentToken(name string) (string, error) {
-	resp, err := g.doBasic("POST", "/users/"+agentUser+"/tokens", map[string]any{"name": name, "scopes": agentTokenScopes})
+// createToken mints the token and returns the value gitea shows once.
+// The scopes are the account's own (the manifest's token_scopes): gitea
+// scopes are global per token, so the token is the revocation unit and
+// the narrow one is what keeps a review session off `git push`.
+func (u *giteaUser) createToken(name string, scopes []string) (string, error) {
+	resp, err := u.doBasic("POST", "/users/"+u.login+"/tokens", map[string]any{"name": name, "scopes": scopes})
 	if err != nil {
 		return "", err
 	}
 	var t giteaToken
-	if err := decode(resp, &t, "minting token "+name+" on "+agentUser); err != nil {
+	if err := decode(resp, &t, "minting token "+name+" on "+u.login); err != nil {
 		return "", err
 	}
 	if t.Token == "" {
-		return "", fmt.Errorf("minting token %s: gitea answered without the value", name)
+		return "", fmt.Errorf("minting token %s on %s: gitea answered without the value", name, u.login)
 	}
 	return t.Token, nil
 }
 
-// --- destroy's half: everything titled agent-<host> on the user goes,
-// and the GPG key with the given key id ("" = none known: not a dev
-// fort, or its secrets file could not be read back — destroy says
+func (u *giteaUser) deleteToken(id int) error {
+	resp, err := u.doBasic("DELETE", fmt.Sprintf("/users/%s/tokens/%d", u.login, id), nil)
+	if err != nil {
+		return err
+	}
+	return decode(resp, nil, fmt.Sprintf("deleting token id %d on %s", id, u.login))
+}
+
+// --- destroy's half: on every account's gitea user, everything titled
+// agent-<host> goes, and the GPG key with that account's key id ("" =
+// none known: the secrets file could not be read back — destroy says
 // which). Not found is not an error (a cluster fort never had a bundle).
 
-func revokeAgentIdentity(g *giteaDeployKeys, host, gpgKeyID string) (string, error) {
+// retiredAccount is one account of a retired fort: the gitea user to
+// revoke on, and the key id of the GPG key it signed with. Both come out
+// of git history, because destroy runs after dismantle deleted the
+// manifest and the secrets file.
+type retiredAccount struct {
+	unixUser  string
+	giteaUser string
+	gpgKeyID  string
+}
+
+// revokeAgentIdentities deletes every account's bundle. One message per
+// account, joined — a partial revocation must say which half happened,
+// so an error carries what was already done.
+func revokeAgentIdentities(g *giteaDeployKeys, host string, accounts []retiredAccount) (string, error) {
 	title := "agent-" + host
+	var lines []string
+	for _, account := range accounts {
+		msg, err := revokeAgentIdentity(g.as(account.giteaUser), title, account.gpgKeyID)
+		if err != nil {
+			return strings.Join(lines, "; "), fmt.Errorf("%s: %w", account.giteaUser, err)
+		}
+		lines = append(lines, msg)
+	}
+	if len(lines) == 0 {
+		return "no account to revoke (not a dev fort, or its retired manifest names none)", nil
+	}
+	return strings.Join(lines, "; "), nil
+}
+
+func revokeAgentIdentity(u *giteaUser, title, gpgKeyID string) (string, error) {
 	var done []string
-	keys, err := g.userKeys()
+	keys, err := u.keys()
 	if err != nil {
 		return "", err
 	}
@@ -559,16 +673,12 @@ func revokeAgentIdentity(g *giteaDeployKeys, host, gpgKeyID string) (string, err
 		if k.Title != title {
 			continue
 		}
-		resp, err := g.do("DELETE", fmt.Sprintf("/user/keys/%d", k.ID), nil, true)
-		if err != nil {
-			return "", err
-		}
-		if err := decode(resp, nil, fmt.Sprintf("deleting ssh key %s (id %d)", title, k.ID)); err != nil {
+		if err := u.deleteKey(k.ID); err != nil {
 			return "", err
 		}
 		done = append(done, fmt.Sprintf("ssh key id %d", k.ID))
 	}
-	gpgs, err := g.userGPGKeys()
+	gpgs, err := u.gpgKeys()
 	if err != nil {
 		return "", err
 	}
@@ -576,16 +686,12 @@ func revokeAgentIdentity(g *giteaDeployKeys, host, gpgKeyID string) (string, err
 		if gpgKeyID == "" || !strings.EqualFold(k.KeyID, gpgKeyID) {
 			continue
 		}
-		resp, err := g.do("DELETE", fmt.Sprintf("/user/gpg_keys/%d", k.ID), nil, true)
-		if err != nil {
-			return "", err
-		}
-		if err := decode(resp, nil, fmt.Sprintf("deleting gpg key %s (id %d)", k.KeyID, k.ID)); err != nil {
+		if err := u.deleteGPGKey(k.ID); err != nil {
 			return "", err
 		}
 		done = append(done, "gpg key "+k.KeyID)
 	}
-	toks, err := g.agentTokens()
+	toks, err := u.tokens()
 	if err != nil {
 		return "", err
 	}
@@ -593,66 +699,97 @@ func revokeAgentIdentity(g *giteaDeployKeys, host, gpgKeyID string) (string, err
 		if t.Name != title {
 			continue
 		}
-		resp, err := g.doBasic("DELETE", fmt.Sprintf("/users/%s/tokens/%d", agentUser, t.ID), nil)
-		if err != nil {
-			return "", err
-		}
-		if err := decode(resp, nil, fmt.Sprintf("deleting token %s (id %d)", title, t.ID)); err != nil {
+		if err := u.deleteToken(t.ID); err != nil {
 			return "", err
 		}
 		done = append(done, fmt.Sprintf("token id %d", t.ID))
 	}
 	if len(done) == 0 {
-		return "nothing under " + title + " on " + agentUser + " (not a dev fort, or already revoked)", nil
+		return "nothing under " + title + " on " + u.login + " (already revoked)", nil
 	}
-	return "revoked " + title + " on " + agentUser + " (" + strings.Join(done, ", ") + ")", nil
+	return "revoked " + title + " on " + u.login + " (" + strings.Join(done, ", ") + ")", nil
 }
 
-// retiredGPGKeyID recovers the key id of a retired fort's signing key.
-// Destroy runs after dismantle deleted nixos/secrets/<host>.yaml, and
-// gitea's list shows a GPG key as a bare primary-key packet — no uid, no
-// title — so the only handle is the key itself: the commit that deleted
-// the file still holds it, encrypted to the admin key, and the id
-// derives from it. "" when the file never existed, or held no
-// agent-gpg-key (a cluster fort); an error only when a file that should
-// decrypt did not.
-func retiredGPGKeyID(root, host string, decrypt func(path string) ([]byte, error)) (string, error) {
+// retiredAccounts recovers what a retired dev fort's accounts were.
+// Destroy runs after dismantle deleted both the manifest and
+// nixos/secrets/<host>.yaml, so both come from the commit that deleted
+// them: the manifest names the accounts and their gitea users, and the
+// secrets file holds each account's GPG key — gitea lists a GPG key as a
+// bare primary-key packet (no uid, no title), so the key itself is the
+// only handle.
+//
+// nil when the fort was never a dev fort. An error only when a file that
+// should decrypt did not, or when the manifest names accounts whose keys
+// cannot be read: destroy then prints the warning and leaves the keys.
+func retiredAccounts(root, host string, decrypt func(path string) ([]byte, error)) ([]retiredAccount, error) {
+	raw, err := retiredFile(root, manifest.Path(host))
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	entry, err := manifest.Parse(host, raw)
+	if err != nil {
+		return nil, fmt.Errorf("the retired %s: %w", manifest.Path(host), err)
+	}
+	if !entry.IsDev() {
+		return nil, nil
+	}
+	var out []retiredAccount
+	for _, a := range entry.Accounts() {
+		out = append(out, retiredAccount{unixUser: a.User, giteaUser: a.GiteaUser})
+	}
 	rel := filepath.Join("nixos/secrets", host+".yaml")
-	sha, err := exec.Command("git", "-C", root, "log", "-1", "--format=%H", "--diff-filter=D", "origin/main", "--", rel).Output()
+	secrets, err := retiredFile(root, rel)
 	if err != nil {
-		return "", fmt.Errorf("git log %s: %w", rel, err)
+		return out, err
 	}
-	if strings.TrimSpace(string(sha)) == "" {
-		return "", nil
-	}
-	raw, err := exec.Command("git", "-C", root, "show", strings.TrimSpace(string(sha))+"^:"+rel).Output()
-	if err != nil {
-		return "", fmt.Errorf("git show %s before its deletion: %w", rel, err)
+	if secrets == nil {
+		return out, fmt.Errorf("no retired %s in git history — the signing keys stay; find them by uid comment agent-%s on each user and delete them by hand", rel, host)
 	}
 	dir, err := os.MkdirTemp("", "fort-retired-")
 	if err != nil {
-		return "", err
+		return out, err
 	}
 	defer os.RemoveAll(dir)
 	tmp := filepath.Join(dir, host+".yaml")
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return "", err
+	if err := os.WriteFile(tmp, secrets, 0o600); err != nil {
+		return out, err
 	}
 	plain, err := decrypt(tmp)
 	if err != nil {
-		return "", fmt.Errorf("decrypting the retired %s from git history: %w", rel, err)
+		return out, fmt.Errorf("decrypting the retired %s from git history: %w", rel, err)
 	}
 	var have map[string]string
 	if err := yaml.Unmarshal(plain, &have); err != nil {
-		return "", fmt.Errorf("%s (retired): %w", rel, err)
+		return out, fmt.Errorf("%s (retired): %w", rel, err)
 	}
-	armored, ok := have[keyAgentGPG]
-	if !ok {
-		return "", nil
+	for i, account := range out {
+		armored, ok := have[keyAccountGPG(account.unixUser)]
+		if !ok {
+			continue
+		}
+		k, err := gpgKeyFrom(armored, keyAccountGPG(account.unixUser))
+		if err != nil {
+			return out, err
+		}
+		out[i].gpgKeyID = k.keyID
 	}
-	k, err := gpgKeyFrom(armored)
+	return out, nil
+}
+
+// retiredFile is a deleted file's last content: the commit that removed
+// it from origin/main still holds the version before it. nil when the
+// path was never deleted there (it never existed, or it is still live).
+func retiredFile(root, rel string) ([]byte, error) {
+	sha, err := exec.Command("git", "-C", root, "log", "-1", "--format=%H", "--diff-filter=D", "origin/main", "--", rel).Output()
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("git log %s: %w", rel, err)
 	}
-	return k.keyID, nil
+	if strings.TrimSpace(string(sha)) == "" {
+		return nil, nil
+	}
+	raw, err := exec.Command("git", "-C", root, "show", strings.TrimSpace(string(sha))+"^:"+rel).Output()
+	if err != nil {
+		return nil, fmt.Errorf("git show %s before its deletion: %w", rel, err)
+	}
+	return raw, nil
 }
