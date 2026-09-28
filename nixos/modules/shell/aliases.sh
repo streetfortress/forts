@@ -33,11 +33,15 @@ tree() {
   fi
 }
 
-alias ff='fastfetch'
-
-# tools only some hosts carry (just is the agent's, from home/base.nix)
+# tools only some hosts carry (just and fastfetch are the agent's, from
+# home/base.nix). fastfetch left modules/shell.nix's package set in #582:
+# it carries imagemagick, librsvg and the codec libraries to draw a logo,
+# which is 219.5 MiB a cluster fort does not need.
 if command -v just >/dev/null 2>&1; then
   alias j='just'
+fi
+if command -v fastfetch >/dev/null 2>&1; then
+  alias ff='fastfetch'
 fi
 
 # typos

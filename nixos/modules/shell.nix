@@ -5,6 +5,14 @@
 # deployer, or someone at a herdr pane on a dev fort. An agent's Bash tool
 # calls are non-interactive and read none of this.
 #
+# A FORT MARKS ITS OWN PANE (#582). The prompt is an option —
+# sfi.shell.starshipSettings, an attrset — and the file starship reads is
+# generated from it, so a fort's own default.nix sets one path and keeps
+# every other key. [hostname].style is the label: bright-black on a dev
+# fort, bright-yellow on sfi-stage-d95cc36, bright-red on sfi-prod-439bf72.
+# The let-block below says why the module's own values are mkDefault
+# definitions in `config` and not the option's `default`.
+#
 # ZSH IS THAT SHELL (#558, #576). The module turns programs.zsh on itself
 # and makes zsh the default login shell, so deployer and agent read the
 # same rc and both get the whole list above. It used to wait for a host to
@@ -36,20 +44,147 @@
 # The guard is the import, like modules/ops/root.nix: a host gets this
 # only by naming the module and setting enable. dev-fort.nix enables it
 # for every dev fort; a cluster fort's own default.nix opts in (staging
-# does). #558 accepted the module for sfi-prod-439bf72 and settled the zsh
-# question above; the production host's own import is a separate change.
-# Not in modules/ops/: this is not a verb.
+# does). sfi-prod-439bf72 imports it too: #558 weighed the cost against the
+# posture of production.nix, settled the zsh question above, and a person
+# accepted the module on 2026-09-27 — that host's comment carries the
+# numbers. Not in modules/ops/: this is not a verb.
 #
 # Left out of the personal profile on purpose: the kubectl/KUBECONFIG
 # block (fd over a ~/.kube that a fort does not have printed two errors
 # before every prompt — sfi/.fortfiles#7), Homebrew/zplug/install.py, fnm,
 # the alacritty theme sync, tmux.conf, claude-settings-sync, nvim's
-# config. A fort has none of what those serve.
+# config. A fort has none of what those serve. fastfetch left the list for
+# a different reason (#582, the package set below says it): the logo costs
+# an image and codec stack, and a dev fort already has the tool from
+# home/base.nix.
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.sfi.shell;
   aliases = "/etc/sfi/shell/aliases.sh";
+
+  # THE PROMPT CONFIG IS AN ATTRSET, not a checked-in TOML file (#582): a
+  # fort sets one path in its own default.nix and keeps every other key.
+  # pkgs.formats.toml renders the merged attrset back into the file
+  # starship reads, so the module still owns one prompt and a fort owns its
+  # own label. The rendered file is not byte-identical to the TOML that
+  # used to live in modules/shell/starship.toml — the generator writes
+  # ordinary double-quoted strings where that file used a folded
+  # multi-line string and TOML literal strings — and starship reads the
+  # same values from it.
+  starshipFormat = pkgs.formats.toml { };
+
+  # The shared prompt. These values reach the option as ONE mkDefault PER
+  # LEAF (the config block below), and the option's own `default` stays
+  # empty on purpose: the module system drops an option default as soon as
+  # one definition exists, so a fort that set
+  # `sfi.shell.starshipSettings.hostname.style` would have taken the whole
+  # rest of the prompt with it. With per-leaf defaults a fort's plain
+  # assignment wins the path it names, and nothing else moves (lib.mkForce
+  # also works, and is not necessary).
+  #
+  # The fort label lives in [hostname].style: bright-black is a dev fort
+  # (the default here), sfi-stage-d95cc36 sets bright-yellow and
+  # sfi-prod-439bf72 sets bright-red. A person holds several fort shells
+  # open, and the prompt is the only label on each one.
+  starshipDefaults = {
+    "$schema" = "https://starship.rs/config-schema.json";
+    add_newline = false;
+
+    # One module per line. The TOML file wrote this as a folded multi-line
+    # string with backslash continuations, which is the same single-line
+    # value.
+    format = lib.concatStrings [
+      "$line_break"
+      "$username"
+      "$hostname"
+      "$kubernetes"
+      "$directory"
+      "$fill"
+      "$python"
+      "$git_branch"
+      "$git_state"
+      "$git_status"
+      "$time"
+      "$line_break $character"
+    ];
+
+    username = {
+      show_always = true;
+      style_user = "bright-blue";
+      format = "[$user]($style)";
+    };
+
+    hostname = {
+      ssh_only = false;
+      style = "bright-black";
+      format = "[ 🌀 $hostname]($style) ";
+    };
+
+    directory = {
+      style = "blue";
+      truncation_length = 5;
+      truncate_to_repo = false;
+      format = "$path(bright-white)";
+    };
+
+    character = {
+      success_symbol = "[>](bold bright-black) ";
+      error_symbol = "[>](bold bright-black) ";
+      vimcmd_symbol = "[:](bold bright-red) ";
+    };
+
+    fill.symbol = " ";
+
+    git_branch = {
+      format = "[$branch(:$remote_branch)]($style) ";
+      style = "bright-blue";
+    };
+
+    # A backslash before a bracket or a parenthesis is starship's escape
+    # for the literal character, so every one of these strings carries a
+    # real backslash. The TOML file wrote them as literal strings ('…');
+    # Nix needs the doubled backslash to mean the same byte.
+    git_state.format = "[$state \\($progress_current/$progress_total\\)]($style) ";
+
+    git_status = {
+      style = "green";
+      untracked = "[$count U](red)[ / ](white)";
+      modified = "[$count M](yellow)";
+      staged = "[ / ](white)[$count S](green)";
+      diverged = "\\[!!!\\] ";
+      ahead = "\\[$count ahead\\] ";
+      behind = "\\[$count behind\\] ";
+      format = "[$ahead_behind](purple)$untracked$modified$staged --(bright-black) ";
+    };
+
+    cmd_duration = {
+      format = "[\\($duration\\)]($style)";
+      style = "bright-yellow";
+    };
+
+    time = {
+      disabled = false;
+      style = "bright-black";
+      utc_time_offset = "0";
+      format = "[$time UTC]($style)";
+    };
+
+    shell = {
+      disabled = false;
+      format = " [$indicator]($style)";
+    };
+
+    python = {
+      disabled = false;
+      format = "[\\[($virtualenv) $version\\]](green) | ";
+    };
+
+    kubernetes = {
+      disabled = false;
+      format = "[ ⎈ ](blue)[($context)](bright-blue) : ";
+    };
+  };
 
   # zsh: starship, with the personal profile's guard against a stale
   # zle-keymap-select widget (starship#3418; harmless where it never
@@ -107,19 +242,42 @@ let
   '';
 in
 {
-  options.sfi.shell.enable = lib.mkOption {
-    type = lib.types.bool;
-    default = false;
-    description = "The fort's interactive shell for a person at a pane: zsh with starship, a ticking UTC clock, an fzf history, vi mode, eza/bat/fd/ripgrep and the aliases file. This makes zsh the default login shell of the host. A bash context keeps the prompt, the keys and the aliases, but its clock stamps the draw time and its vi mode has no indicator (#576).";
+  options.sfi.shell = {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "The fort's interactive shell for a person at a pane: zsh with starship, a ticking UTC clock, an fzf history, vi mode, eza/bat/fd/ripgrep and the aliases file. This makes zsh the default login shell of the host. A bash context keeps the prompt, the keys and the aliases, but its clock stamps the draw time and its vi mode has no indicator (#576).";
+    };
+
+    starshipSettings = lib.mkOption {
+      type = starshipFormat.type;
+      default = { };
+      example = lib.literalExpression ''{ hostname.style = "bright-red"; }'';
+      description = "The starship prompt, as the attrset this module renders to /etc/sfi/shell/starship.toml. The module sets every key of the shared prompt at mkDefault priority, so a fort's own default.nix can set one path and keep the rest: `sfi.shell.starshipSettings.hostname.style = \"bright-red\"` marks a production pane and changes nothing else (#582). The keys are starship's own (https://starship.rs/config/).";
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [ starship fzf eza bat fd ripgrep fastfetch ];
+    # The readers a person needs at a pane, and nothing whose closure a
+    # cluster fort pays for twice. fastfetch is NOT here (#582): it pulls
+    # imagemagick, librsvg, x265, libjxl and libpulseaudio to draw a logo —
+    # 219.5 MiB over 99 store paths, against 41.8 MiB over 9 for the six
+    # tools below. #558 accepted this module for sfi-prod-439bf72 on the
+    # 41.8 MiB figure, which it measured one day before fastfetch joined
+    # the list (#566). A dev fort still has fastfetch and its `ff` alias
+    # through home/base.nix; a cluster fort has neither, and aliases.sh
+    # guards the alias.
+    environment.systemPackages = with pkgs; [ starship fzf eza bat fd ripgrep ];
 
-    # The prompt config and the aliases as files in this repo: STARSHIP_CONFIG
+    # The prompt config and the aliases as files in /etc: STARSHIP_CONFIG
     # is how starship finds a config outside ~/.config, and a session
-    # variable reaches login shells and the user manager alike.
-    environment.etc."sfi/shell/starship.toml".source = ./shell/starship.toml;
+    # variable reaches login shells and the user manager alike. The prompt
+    # file is generated from cfg.starshipSettings, so the fort that
+    # overrode a key gets its own file; the aliases are still a file in
+    # this repo.
+    sfi.shell.starshipSettings = lib.mapAttrsRecursive (_path: lib.mkDefault) starshipDefaults;
+    environment.etc."sfi/shell/starship.toml".source =
+      starshipFormat.generate "starship.toml" cfg.starshipSettings;
     environment.etc."sfi/shell/aliases.sh".source = ./shell/aliases.sh;
     environment.sessionVariables.STARSHIP_CONFIG = "/etc/sfi/shell/starship.toml";
 
