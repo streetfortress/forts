@@ -20,8 +20,10 @@
 #     host that also imports ops/console.nix (#524) gives deployer a
 #     password a GETTY accepts and sshd still refuses — the door to
 #     `sudo sfi-nixos-rollback` when the mesh is the thing that broke.
-#     Without that import the offline paths are all there is: the
-#     provider's rescue boot, or guestfish on the disk locally.
+#     Without that import the console offers only the GRUB menu that
+#     precedes it (3 s, qcow-runtime.nix / upstream linode-config.nix,
+#     #523), and then the offline paths: the provider's rescue boot, or
+#     guestfish on the disk locally.
 { lib, ... }:
 
 {

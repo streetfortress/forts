@@ -82,11 +82,15 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 			&libvirt.DomainNetworkInterfaceArgs{Bridge: pulumi.String(libvirtBridge)},
 		},
 		// Serial console so `virsh console <host>` works. It is the
-		// lab's recovery path when the mesh is gone, and what it
-		// offers is a `deployer` login, not a root one: the host must
-		// import nixos/modules/ops/console.nix and carry
+		// lab's recovery path when the mesh is gone, and it shows two
+		// things in turn. First the GRUB menu, for 3 s, because
+		// nixos/modules/qcow-runtime.nix gives GRUB its own serial
+		// terminal (#523) — a previous generation, or init=/bin/sh, on
+		// a host that does not start. Then a `deployer` login, not a
+		// root one, and only where the host imports
+		// nixos/modules/ops/console.nix and carries
 		// deployer-password-hash (#524). Without that import the
-		// console shows a login prompt no account can answer.
+		// login prompt appears and no account can answer it.
 		Consoles: libvirt.DomainConsoleArray{
 			&libvirt.DomainConsoleArgs{Type: pulumi.String("pty"), TargetType: pulumi.String("serial"), TargetPort: pulumi.String("0")},
 		},

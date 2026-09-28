@@ -22,6 +22,15 @@
 # mkDefault list is DROPPED (not merged) whenever anything else defines
 # the option normally — common's loglevel/lsm params do, and losing
 # console=ttyS0 would kill the virsh-console break-glass path.
+#
+# The serial line carries TWO stages, and the kernel parameter is only the
+# second one (#523). GRUB has its own terminal set, and it defaults to the
+# VGA screen alone: without the `serial` + `terminal_*` block below, an
+# operator on `virsh console` sees nothing until the getty starts — which
+# is precisely the moment a host with a broken boot never reaches. Upstream
+# linode-config.nix writes all three parts (timeout, GRUB serial, kernel
+# console), which is why Lish break-glass works on the Linode fort; this
+# module used to write one of them.
 { lib, modulesPath, ... }:
 
 {
@@ -37,7 +46,31 @@
   boot.growPartition = lib.mkDefault true;
   boot.kernelParams = [ "console=ttyS0" ]; # normal priority — see header
   boot.loader.grub.device = lib.mkDefault "/dev/vda";
-  boot.loader.timeout = lib.mkDefault 0;
+
+  # Three seconds of menu, not zero. install-grub.pl writes `set timeout=0`
+  # with `set timeout_style=menu`: GRUB starts the default entry at once and
+  # polls for no key, so nobody can pick a previous generation or append
+  # init=/bin/sh. Three seconds is the whole break-glass window for a host
+  # that does not start far enough to offer the console login
+  # (ops/console.nix, #524), and it costs every qcow fort three seconds per
+  # boot. mkDefault: a host that wants a longer window sets its own.
+  boot.loader.timeout = lib.mkDefault 3;
+
+  # GRUB's serial terminal — the first stage of the console path (#523).
+  # install-grub.pl appends extraConfig after its gfxterm block and before
+  # the menu entries, so this is the last word on the terminal set.
+  #
+  # `--append` rather than upstream's bare `terminal_output serial`: the
+  # libvirt domain (forts/pulumi/libvirt.go) attaches a VNC screen as well
+  # as the serial pty, and the menu belongs on both. The speed is nominal —
+  # qemu's pty chardev ignores the baud rate — and 9600n8 is both GRUB's own
+  # default and what an option-less `console=ttyS0` gives the kernel, so the
+  # two ends still agree if this config ever reaches a real UART.
+  boot.loader.grub.extraConfig = ''
+    serial --speed=9600 --unit=0 --word=8 --parity=no --stop=1
+    terminal_input --append serial
+    terminal_output --append serial
+  '';
 
   # Pin the image file name to what the image flow expects
   # (result/nixos.qcow2); the upstream default embeds the NixOS label,
