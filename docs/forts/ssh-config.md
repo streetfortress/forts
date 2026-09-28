@@ -35,17 +35,12 @@ Host sfi-scout
   Hostname 10.1.0.61
   User scout
   HostKeyAlias sfi-dev-831c637
-
-# hand-managed peer (no manifest)
-Host devbox
-  Hostname 10.1.0.3
-  User steven
 ```
 
 **The account is the fort's shape, not a field.** A cluster fort answers
 as `deployer` (`production.nix`), and a peer with no manifest is a
-hand-managed interactive host — `steven`'s: the ubuntu holdouts soundship
-and devbox (no NixOS host carries an interactive profile any more). That
+hand-managed interactive host — `steven`'s: the ubuntu holdout soundship
+(no NixOS host carries an interactive profile any more). That
 answers the open question of how the interactive hosts get an entry: being
 in peers.json without a manifest *is* the declaration. peers.json stays
 three fields per peer.
@@ -108,27 +103,9 @@ Include ~/deployments/wireguard/ssh_config
 UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/wireguard/known_hosts
 ```
 
-`~/deployments` is the checkout; devbox and macmini both have one. New
+`~/deployments` is the checkout; macmini has one. New
 keys ssh learns are appended to the first `UserKnownHostsFile`; the
 rendered one is read-only in practice.
-
-**An off-mesh client** (macmini until it joins, #418's laptop half)
-layers its route on top, because off-mesh is a property of the client,
-not of the fort:
-
-```
-# above the Include: reach the mesh through devbox, and devbox on the LAN
-Host sfi-* luxor soundship
-  ProxyJump devbox
-Host devbox
-  Hostname 10.0.0.3
-
-Include ~/deployments/wireguard/ssh_config
-```
-
-The `.files` side — pointing `~/.ssh/config` at the checkout's copy the
-way the dotfiles already symlink into `~/.files` — is a `.files` change
-and not made here; the two lines above are all it is.
 
 ## `fort wg-conf <member>` — a Mac joins the mesh
 
@@ -171,7 +148,7 @@ The join, for an always-on Mac on the lab LAN (macmini):
 3. `fort wg-conf macmini` → paste everything below the app's `PrivateKey`
    line into the tunnel. Save, activate.
 4. PR, merge. The forts pick the peer up on their next auto-rebuild; the
-   ubuntu members (soundship, devbox) still need the `.files` mirror and
+   ubuntu members (soundship) still need the `.files` mirror and
    `just wireguard` until they retire (#183).
 5. Re-run `fort wg-conf macmini` after any peers.json change and paste
    again — the app has no other way to learn it. The forts' side of the
