@@ -4,7 +4,15 @@
 #   1. OBSERVE  — the read-only kubeconfig (ops-kubeconfig.nix) plus the
 #      host journal (deployer is in systemd-journal, production.nix): look
 #      at anything, change nothing. Day-0 failures (flux-bootstrap before
-#      flux exists) are only diagnosable from this rung.
+#      flux exists) are only diagnosable from this rung. A few verbs
+#      declared here BELONG TO THIS RUNG rather than the next one:
+#      sfi-flux-status, sfi-k8s-logs and sfi-nixos-revision read and
+#      print, and their reach is the read-only kubeconfig's own — the
+#      built-in `view` role already carries every object they show,
+#      pods/log included (#185). They are verbs and not a group
+#      membership because a verb journals who read what, and because the
+#      operator needs them in the window where rung 1 has no mesh and no
+#      token to render from.
 #   2. NUDGE    — curated `sudo sfi-<component>-<action>` verbs declared
 #      through this module: each one is a narrow, audited escalation
 #      (sudo-logged per invocation) that may use root and the admin
@@ -78,8 +86,9 @@ let
           ${lib.escapeShellArg c.description}
       '') cfg.commands)}
       echo
-      echo "Ladder: observe with the read-only kubeconfig; nudge with these verbs"
-      echo "(machinery only, never desired state); full admin is console break-glass."
+      echo "Ladder: observe with the read-only kubeconfig, or with the verbs marked"
+      echo "READ ONLY above; nudge with the rest (machinery only, never desired"
+      echo "state); full admin is console break-glass."
     '';
   };
 in

@@ -285,6 +285,7 @@ in
     ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
     ./ops/systemd.nix # sfi-systemd-restart nixos-upgrade (#212)
     ./ops/nixos-rollback.nix # sfi-nixos-rollback: prior generation + pin
+    ./ops/nixos-revision.nix # sfi-nixos-revision: what the host runs (#185)
   ];
 
   config = lib.mkIf cfg.enable {

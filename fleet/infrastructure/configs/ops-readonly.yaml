@@ -15,14 +15,26 @@
 # PVs, CRD listing, kubectl-top metrics).
 #
 # The long-lived token Secret is populated by kubernetes from the
-# annotation; nixos/modules/ops-kubeconfig.nix renders it into
+# annotation; nixos/modules/ops/ops-kubeconfig.nix renders it into
 # /var/lib/sfi/kubeconfig-ro on each node for local use and
 # `just fetch-kubeconfig`.
+#
+# THE HOST APPLIES THIS FILE TOO (#185). ops-kubeconfig.nix hands it to
+# k3s's own add-on directory, so k3s applies it at start — before flux
+# exists. Rung 1 of the intervention ladder therefore exists from first
+# boot, which is what the drill fort's flux deadlock needed and did not
+# have. Every object carries `kustomize.toolkit.fluxcd.io/prune: disabled`
+# so the fleet can stop listing the file without kustomize-controller
+# garbage-collecting the host's copy (lab-dns.nix's coredns override is
+# the precedent). The fleet still lists it until every fort has
+# reconciled that annotation.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: ops-ro
   namespace: kube-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
 ---
 apiVersion: v1
 kind: Secret
@@ -31,12 +43,15 @@ metadata:
   namespace: kube-system
   annotations:
     kubernetes.io/service-account.name: ops-ro
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
 type: kubernetes.io/service-account-token
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: ops-ro-cluster-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
 rules:
   # Cluster-scoped reads the namespaced-shaped `view` role does not carry.
   - apiGroups: [""]
@@ -80,6 +95,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: ops-ro-view
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -93,6 +110,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: ops-ro-cluster-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

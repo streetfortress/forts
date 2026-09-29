@@ -133,6 +133,7 @@ in
     ./ops/ops-commands.nix
     ./ops/flux.nix
     ./ops/workloads.nix
+    ./ops/logs.nix
     ./ops/systemd.nix
   ];
 
