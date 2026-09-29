@@ -267,7 +267,7 @@ in
     # the list (#566). A dev fort still has fastfetch and its `ff` alias
     # through home/base.nix; a cluster fort has neither, and aliases.sh
     # guards the alias.
-    environment.systemPackages = with pkgs; [ starship fzf eza bat fd ripgrep ];
+    environment.systemPackages = with pkgs; [ starship fzf eza bat fd ripgrep vim ];
 
     # The prompt config and the aliases as files in /etc: STARSHIP_CONFIG
     # is how starship finds a config outside ~/.config, and a session
@@ -280,6 +280,34 @@ in
       starshipFormat.generate "starship.toml" cfg.starshipSettings;
     environment.etc."sfi/shell/aliases.sh".source = ./shell/aliases.sh;
     environment.sessionVariables.STARSHIP_CONFIG = "/etc/sfi/shell/starship.toml";
+
+    # $EDITOR: vim ships above so a fort with no Home Manager profile
+    # gets a real editor at the pane. nixpkgs sets EDITOR = mkDefault
+    # "nano" (programs/environment.nix); this plain assignment wins over
+    # that mkDefault, the same way the `ls` alias below wins over
+    # nixpkgs's own mkDefault. home/base.nix's Home Manager EDITOR =
+    # "nvim" is a different, later-sourced variable, so this line does
+    # not touch the dev-fort accounts — it is for deployer
+    # (production.nix, no Home Manager user) and any other zsh account
+    # this module reaches without one (#630).
+    environment.variables.EDITOR = "vim";
+
+    # zsh's own first-run check — not a NixOS default; the generated
+    # /etc/zshrc carries none — runs on every login where none of
+    # ~/.zshenv, ~/.zprofile, ~/.zshrc, ~/.zlogin exist. Home Manager
+    # creates ~/.zshrc for the dev-fort accounts (programs.zsh.enable,
+    # home/base.nix); an account with no Home Manager profile —
+    # deployer, production.nix's mkForce — never gets one, and the
+    # message repeats on every SSH login (#630). An empty ~/.zshrc
+    # silences it: zsh checks only that one of the four files exists,
+    # never its content. tmpfiles' `f` line creates a file if it is
+    # missing and never truncates one that is already there, so this is
+    # a no-op for the three accounts Home Manager already covers.
+    systemd.tmpfiles.rules = lib.mapAttrsToList
+      (name: u: "f ${u.home}/.zshrc 0644 ${name} ${u.group} -")
+      (lib.filterAttrs
+        (name: u: u.shell == pkgs.zsh && !(config.home-manager.users ? ${name}))
+        config.users.users);
 
     # zsh, and zsh as the login shell: the module owns both halves of the
     # promise instead of waiting for a host to enable zsh (#558, #576). An
