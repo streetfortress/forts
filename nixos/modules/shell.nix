@@ -118,7 +118,7 @@ let
     hostname = {
       ssh_only = false;
       style = "bright-black";
-      format = "[ 🌀 $hostname]($style) ";
+      format = "[ ⛫ $hostname]($style) ";
     };
 
     directory = {
