@@ -53,14 +53,19 @@ let
       Group = "users";
     };
 
+    # `timeout`: git over https has no connect timeout of its own, and a
+    # gitea whose mesh address resolves but does not answer (wg0 down
+    # mid-switch — see wireguard.nix on stopIfChanged) costs the kernel's
+    # SYN retry window, ~2 min per connect, before it fails. A switch
+    # blocks on this unit's job; a bounded miss keeps the switch short.
     script = ''
       set -eu
       dir="${config.users.users.${user}.home}/.fortfiles"
       if [ -d "$dir/.git" ]; then
-        git -C "$dir" pull --ff-only \
+        timeout 60 git -C "$dir" pull --ff-only \
           || echo "fortfiles: pull failed, keeping existing checkout" >&2
       else
-        git clone "${repo}" "$dir" \
+        timeout 60 git clone "${repo}" "$dir" \
           || echo "fortfiles: clone failed (gitea unreachable?)" >&2
       fi
     '';

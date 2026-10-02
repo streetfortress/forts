@@ -110,6 +110,21 @@ in
       Restart = "on-failure";
       RestartSec = "15s";
     };
+    # A changed service is, by default, STOPPED at the start of a switch
+    # and started again at its end (X-StopIfChanged), with activation and
+    # the per-user unit phase in between. On a cluster fort those two
+    # moments are milliseconds apart. On a dev fort the user phase walks
+    # every lingering agent manager and re-runs its oneshots, and those
+    # dial gitea over the mesh this unit has just torn down: gitea.zen.lofi
+    # still resolves (the /etc/hosts pin, lab-dns.nix), the packets leave
+    # by the LAN default route and black-hole, and each connect burns the
+    # kernel's SYN retry window (~2 min) before it fails. The devbox
+    # removal (#646, 2026-10-02) held sfi-dev-831c637's switch for 13 min
+    # that way, and wg0 never came back up. Restart instead: the restart
+    # phase runs AFTER the user phase, so the mesh stays up through
+    # activation and the agents' oneshots, and a peers.json rollout is one
+    # down/up on every fort alike.
+    stopIfChanged = false;
   };
 
   # If wg0 is down the run fails and the file freezes — covered by the
