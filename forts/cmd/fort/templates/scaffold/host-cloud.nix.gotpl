@@ -86,12 +86,13 @@
   # needs (#618); costs disk, so a fort opts in by name.
   sfi.k3s.auditLog.enable = true;
 {{ end }}
-  # 4 GB-SKU parity with staging-k3s, both proven there 2026-09-11/12:
-  # sqlite datastore instead of embedded etcd (#164 — k3s-server with
-  # etcd was 1.3 GB of the node; sqlite→etcd migrates in place later if
-  # an HA join ever happens, the reverse does not; k3s_cluster_init in
-  # the manifest)…
-  services.k3s.clusterInit = {{ if .ClusterInit }}true{{ else }}false{{ end }};
+  # The k3s datastore, from [cluster] datastore in the manifest
+  # (modules/k3s-server.nix maps it to services.k3s.clusterInit). 4 GB-SKU
+  # parity with staging-k3s, both proven there 2026-09-11/12: sqlite
+  # instead of embedded etcd (#164 — k3s-server with etcd was 1.3 GB of
+  # the node; sqlite→etcd migrates in place later if an HA join ever
+  # happens, the reverse does not)…
+  sfi.k3s.datastore = "{{ .Datastore }}";
 
   # …and zram swap (#163): swapless 4 GB nodes hit page-cache thrash as
   # a cliff (memory PSI full-stalls while the kernel re-reads evicted

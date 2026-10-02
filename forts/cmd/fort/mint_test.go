@@ -45,7 +45,7 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}

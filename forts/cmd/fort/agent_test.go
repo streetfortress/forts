@@ -464,7 +464,7 @@ func TestRetiredAccounts(t *testing.T) {
 	}
 	write(manifest.Path("gone"), devManifest("10.1.0.96", "10.0.0.96",
 		testAccount("agent", "pickup", "sfi-agent"), testAccount("analyst", "review", "sfi-analyst")))
-	write(manifest.Path("cluster"), "mesh_ip = \"10.1.0.97\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.97\"\n")
+	write(manifest.Path("cluster"), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.97\"\n")
 	plain, _ := yaml.Marshal(map[string]string{
 		keyAccountGPG("agent"):   agent.private,
 		keyAccountGPG("analyst"): analyst.private,

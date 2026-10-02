@@ -4,6 +4,8 @@
 # replay against COMMITTED trees keep the real ones.
 mesh_ip = "10.1.0.99"
 
+[cluster]                    # a flux cluster; datastore unset = sqlite, the default
+
 [backups]
 profile = "lab"
 

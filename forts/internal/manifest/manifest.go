@@ -4,11 +4,15 @@
 // program) so the generators cannot drift.
 //
 // The neutral top level is the contract every consumer reads — scaffold,
-// mint, flux, the mesh: mesh_ip, [shape], [dns]. What a fort IS is not a
-// key: every fort is the hardened host profile, a mesh member (#272), and
-// — unless it says otherwise — a flux cluster. The one thing it can say
-// is [dev] (#413): a transient lab VM hosting the agent accounts (#532),
-// no cluster at all. A positive declaration, never the absence of flux.
+// mint, flux, the mesh: mesh_ip, [shape], [dns]. Every fort is the
+// hardened host profile and a mesh member (#272); what a fort IS beyond
+// that is one shape table, and exactly one (#426): [cluster] — a flux
+// cluster: k3s, flux, the fleet tree — or [dev] (#413) — a transient lab
+// VM hosting the agent accounts (#532), no cluster at all. Both are
+// positive declarations; neither is the absence of the other, and a
+// cluster-only key has no neutral level to sit at (k3s_cluster_init
+// did, and the loader special-cased it next to [dev]; datastore lives
+// in [cluster] now).
 // Exactly one provider table ([linode], [libvirt], [baremetal]) names the
 // backend that raises the host; it is decoded by that provider's own Spec
 // type and is opaque to everything else. Adding a provider = one file in
@@ -51,22 +55,20 @@ type Host struct {
 	// MeshEndpoint is where other peers dial this host (peers.json's
 	// wg_endpoint_ip). Optional: see Endpoint for the defaults.
 	MeshEndpoint string `toml:"mesh_endpoint"`
-	// ClusterInit: k3s embedded etcd (true, the default) or sqlite (false).
-	// A scaffold seed only — the host file is hand-maintained after.
-	ClusterInit *bool `toml:"k3s_cluster_init"`
 	// StateVersion seeds system.stateVersion at scaffold time.
 	StateVersion string `toml:"nixos_state_version"`
 
 	Shape   Shape   `toml:"shape"`
 	DNS     DNS     `toml:"dns"`
 	Backups Backups `toml:"backups"`
-	// Cluster is the [cluster] table when present: what this fort's
-	// k3s does beyond the per-fort-identical standard (#626). Absent on
-	// a fort that opts into nothing, so a fort inherits nothing by
-	// silence; refused with [dev], which has no cluster.
+	// Cluster is the [cluster] table: this fort is a flux cluster (#426)
+	// — k3s on the datastore it names, flux, fleet/clusters + fleet/apps,
+	// the cluster age key — and what its k3s does beyond the
+	// per-fort-identical standard (#626). Exactly one of Cluster and
+	// Dev is present; the table can be empty (every key has a default).
 	Cluster *ClusterSpec `toml:"cluster"`
-	// Dev is the [dev] table when present: this fort is a dev fort
-	// (#413). It names the fort's accounts (#532).
+	// Dev is the [dev] table: this fort is a dev fort (#413). It names
+	// the fort's accounts (#532).
 	Dev *DevSpec `toml:"dev"`
 
 	// Provider is the one provider table present; Spec its decoded form.
@@ -106,18 +108,29 @@ type Backups struct {
 	Profile string `toml:"profile"`
 }
 
-// ClusterSpec is the [cluster] table (#626): the second toggle the
-// manifest carries, for the same reason as the first ([backups]
-// profile): every cluster fort audits the same WAY, and not every fort
-// pays the same disk for it. A 4 GB Linode SKU with a 25 GB disk and
-// the lab hub with 450 GB do not carry the same log.
+// ClusterSpec is the [cluster] table: the shape of a flux cluster
+// (#426), and the one place a key that only a cluster has can live.
 //
 //	[cluster]
+//	datastore = "sqlite"    # sqlite (single node, the default) | etcd (embedded, cluster-init)
 //	audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
 //
-// k3s_cluster_init stays a top-level key for now; a later change can
-// move it in here.
+// datastore is a positive word, not a negated boolean: the reader asks
+// "which datastore", not "was cluster-init set". scaffold renders
+// `sfi.k3s.datastore = "<value>"` from it, and modules/k3s-server.nix
+// maps that to services.k3s.clusterInit (etcd = true).
+//
+// audit_logging (#626) is the second toggle the manifest carries, for
+// the same reason as the first ([backups] profile): every cluster fort
+// audits the same WAY, and not every fort pays the same disk for it. A
+// 4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
+// carry the same log.
 type ClusterSpec struct {
+	// Datastore is k3s's datastore: "sqlite" (a single node, the
+	// default — every fort today) or "etcd" (embedded, cluster-init;
+	// the opt-in for an HA join, and a third of a 4 GB node, #163/#164).
+	// sqlite→etcd migrates in place; the reverse is a repave.
+	Datastore string `toml:"datastore"`
 	// AuditLogging: the API server writes an audit log under
 	// /var/log/kube-audit (modules/k3s-audit.nix), and the fleet's
 	// fluent-bit tails it into Loki as job="kube-audit". Default false.
@@ -127,7 +140,33 @@ type ClusterSpec struct {
 	AuditLogging bool `toml:"audit_logging"`
 }
 
-// AuditLogging is [cluster] audit_logging, false when the table is absent.
+// Datastores are the accepted values of [cluster] datastore.
+var Datastores = []string{"sqlite", "etcd"}
+
+// DefaultDatastore is what a [cluster] table that names none means.
+const DefaultDatastore = "sqlite"
+
+// Validate: a typo is not a default.
+func (s *ClusterSpec) Validate() error {
+	if s.Datastore != "" && !slices.Contains(Datastores, s.Datastore) {
+		return fmt.Errorf("[cluster] datastore %q: want one of %s", s.Datastore, strings.Join(Datastores, ", "))
+	}
+	return nil
+}
+
+// Datastore is the cluster's k3s datastore, the default when the table
+// names none; "" for a dev fort, which has no k3s.
+func (h Host) Datastore() string {
+	switch {
+	case h.Cluster == nil:
+		return ""
+	case h.Cluster.Datastore == "":
+		return DefaultDatastore
+	}
+	return h.Cluster.Datastore
+}
+
+// AuditLogging is [cluster] audit_logging, false when unset.
 func (h Host) AuditLogging() bool { return h.Cluster != nil && h.Cluster.AuditLogging }
 
 // DevSpec is the [dev] table (#413): a dev fort — a transient lab VM
@@ -282,14 +321,17 @@ func (h Host) DefaultAccount() *DevAccount {
 	return nil
 }
 
-// IsDev says whether this is a dev fort — the one shape that is not a
-// flux cluster.
+// IsDev says whether this is a dev fort ([dev]) — the one shape that is
+// not a flux cluster.
 func (h Host) IsDev() bool { return h.Dev != nil }
 
-// IsCluster says whether this fort is a flux cluster: fleet/clusters +
-// fleet/apps trees, the cluster age key, the canary, k3s. Every fort
-// but a dev one.
-func (h Host) IsCluster() bool { return !h.IsDev() }
+// IsCluster says whether this fort is a flux cluster ([cluster]):
+// fleet/clusters + fleet/apps trees, the cluster age key, the canary,
+// k3s. Validate holds exactly one of IsCluster and IsDev true.
+func (h Host) IsCluster() bool { return h.Cluster != nil }
+
+// ShapeTables lists the shape tables, for error text.
+const ShapeTables = "[cluster] (a flux cluster) or [dev] (a dev fort)"
 
 // Profiles are the accepted values of [backups] profile.
 var Profiles = []string{"lab", "production", "none"}
@@ -516,6 +558,21 @@ func (h Host) Validate(host string) error {
 	default:
 		return fail("[backups] profile %q: want one of %s", h.Backups.Profile, strings.Join(Profiles, ", "))
 	}
+	// The shape tables are handled like the provider tables (#426):
+	// exactly one, and a key only one shape has lives in that shape's
+	// table — so [dev] next to a cluster key is an unknown key or two
+	// tables, never a special case.
+	switch {
+	case h.IsCluster() && h.IsDev():
+		return fail("[dev] and [cluster] together — a dev fort has no cluster; a fort has exactly one of %s", ShapeTables)
+	case !h.IsCluster() && !h.IsDev():
+		return fail("no shape table — add %s; a fort says what it is", ShapeTables)
+	}
+	if h.IsCluster() {
+		if err := h.Cluster.Validate(); err != nil {
+			return fail("%v", err)
+		}
+	}
 	if h.IsDev() {
 		// A dev fort has nothing to back up and nothing to cluster; the
 		// manifest must not pretend otherwise. Lab VM only for now: the
@@ -523,12 +580,6 @@ func (h Host) Validate(host string) error {
 		// cloud or hardware dev fort would be its own declaration.
 		if h.Backups.Profile != "none" {
 			return fail("[dev] requires [backups] profile = \"none\" — a dev fort is transient and owns nothing worth a copy")
-		}
-		if h.ClusterInit != nil {
-			return fail("[dev] and k3s_cluster_init together — a dev fort has no cluster")
-		}
-		if h.Cluster != nil {
-			return fail("[dev] and [cluster] together — a dev fort has no cluster")
 		}
 		if h.Libvirt() == nil {
 			return fail("[dev] needs the [libvirt] table — a dev fort is a lab VM on the hypervisor (forts#12)")

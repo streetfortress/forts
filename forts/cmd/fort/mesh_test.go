@@ -48,10 +48,10 @@ token_scopes = ["write:issue", "read:repository"]
 `
 
 var testManifests = map[string]string{
-	"luxor":            "mesh_ip = \"10.1.0.5\"\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 16\ndisk = \"450G\"\n[libvirt]\nip = \"10.0.0.5\"\n",
+	"luxor":            "mesh_ip = \"10.1.0.5\"\n[cluster]\ndatastore = \"etcd\"\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 16\ndisk = \"450G\"\n[libvirt]\nip = \"10.0.0.5\"\n",
 	"sfi-dev-abc1234":  "mesh_ip = \"10.1.0.61\"\n[dev]\n" + testDevAccounts + "\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 8\ndisk = \"80G\"\n[libvirt]\nip = \"10.0.0.61\"\n",
-	"sfi-prod-1111111": "mesh_ip = \"10.1.0.54\"\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p1\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
-	"sfi-prod-2222222": "mesh_ip = \"10.1.0.55\"\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p2\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
+	"sfi-prod-1111111": "mesh_ip = \"10.1.0.54\"\n[cluster]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p1\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
+	"sfi-prod-2222222": "mesh_ip = \"10.1.0.55\"\n[cluster]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p2\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
 }
 
 func testHosts(t *testing.T) map[string]manifest.Host {

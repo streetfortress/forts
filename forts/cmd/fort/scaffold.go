@@ -26,7 +26,12 @@ type hostView struct {
 	LanGateway   string
 	LanDNS       []string
 	StateVersion string
-	ClusterInit  bool
+	// Datastore is [cluster] datastore (#426), resolved: the host sets
+	// sfi.k3s.datastore, and modules/k3s-server.nix maps it to
+	// services.k3s.clusterInit. Always rendered on a cluster host — the
+	// datastore is a positive declaration, with no silent default in
+	// the host file.
+	Datastore string
 	// BackupProfile is [backups] profile from the manifest. Empty when
 	// the manifest says "none": the host then imports no pv-backup module
 	// and declares nothing, rather than importing it disabled — a host
@@ -173,7 +178,7 @@ func scaffoldShape(e manifest.Host) string {
 			s += " " + l.Region + " " + l.Type
 		}
 	}
-	return s
+	return s + ", k3s on " + e.Datastore()
 }
 
 // renderScaffold is the pure half: manifest → files.
@@ -185,7 +190,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		LanGateway:   "10.0.0.1",
 		LanDNS:       []string{"10.0.0.2", "8.8.8.8"},
 		StateVersion: "25.11",
-		ClusterInit:  true,
+		Datastore:    entry.Datastore(),
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
 		Hub:          host == hubHost,
@@ -221,9 +226,6 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	}
 	if entry.StateVersion != "" {
 		view.StateVersion = entry.StateVersion
-	}
-	if entry.ClusterInit != nil {
-		view.ClusterInit = *entry.ClusterInit
 	}
 	if view.MeshIP == "" {
 		// cluster-vars.yaml's MESH_IP is mandatory (#99): every fort is a

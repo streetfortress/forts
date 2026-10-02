@@ -8,7 +8,9 @@
 # (fort adopt: imported, no repave) — the first of the playbook-era VMs to
 # move.
 mesh_ip = "10.1.0.15"
-k3s_cluster_init = false
+
+[cluster]
+datastore = "sqlite"
 
 [backups]
 profile = "lab"   # luxor's rustfs only — reproducible, and not an original

@@ -81,7 +81,7 @@ func TestRenderScaffold(t *testing.T) {
 		}
 	}
 	l := lab["nixos/hosts/lab-fort/default.nix"]
-	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.99", "services.k3s.clusterInit = true", "zramSwap"} {
+	for _, s := range []string{"../../modules/qcow-runtime.nix", `address = [ "10.0.0.99/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.99", `sfi.k3s.datastore = "sqlite";`, "zramSwap"} {
 		if !strings.Contains(l, s) {
 			t.Errorf("lab default.nix lacks %q", s)
 		}
@@ -155,6 +155,25 @@ func TestRenderScaffold(t *testing.T) {
 		t.Errorf("lab shape must render the audit block too:\n%s", got)
 	}
 
+	// [cluster] datastore (#426): the fixtures name none and get the
+	// default, sqlite (asserted above); "etcd" renders the etcd line on
+	// both shapes, and never the raw services.k3s.clusterInit — the
+	// module owns that mapping.
+	for _, name := range []string{"lab-fort", "cloud-fort"} {
+		etcd := hosts[name]
+		etcd.Cluster = &manifest.ClusterSpec{Datastore: "etcd"}
+		got := byPath(render(t, name, etcd))["nixos/hosts/"+name+"/default.nix"]
+		if !strings.Contains(got, `sfi.k3s.datastore = "etcd";`) || strings.Contains(got, `"sqlite"`) {
+			t.Errorf("%s: datastore = \"etcd\" must render the etcd line and no sqlite:\n%s", name, got)
+		}
+		if clusterInitLine.MatchString(got) || strings.Contains(got, "k3s_cluster_init") {
+			t.Errorf("%s: the host file names the datastore, not clusterInit:\n%s", name, got)
+		}
+	}
+	if !strings.Contains(c, `sfi.k3s.datastore = "sqlite";`) {
+		t.Errorf("cloud-fort: the default datastore is sqlite, rendered out loud:\n%s", c)
+	}
+
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
 	if _, err := renderScaffold("lab-fort", h); err == nil {
@@ -166,7 +185,7 @@ func TestRenderScaffold(t *testing.T) {
 	// when the manifest names one, everything else as the lab VM.
 	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
 	m := metal["nixos/hosts/metal-fort/default.nix"]
-	for _, s := range []string{"../../modules/baremetal-runtime.nix", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.97", "services.k3s.clusterInit = false", "zramSwap", `profile = "production";`, "docs/forts/baremetal.md"} {
+	for _, s := range []string{"../../modules/baremetal-runtime.nix", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "../../modules/production.nix", "../../modules/flux-bootstrap.nix", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", `profile = "production";`, "docs/forts/baremetal.md"} {
 		if !strings.Contains(m, s) {
 			t.Errorf("metal default.nix lacks %q", s)
 		}
@@ -261,7 +280,7 @@ func TestRenderScaffoldDev(t *testing.T) {
 			t.Errorf("dev default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "clusterInit", "interactive.nix", "dotfiles.nix"} {
+	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "sfi.k3s", "interactive.nix", "dotfiles.nix"} {
 		if strings.Contains(d, s) {
 			t.Errorf("dev default.nix should not carry %q", s)
 		}

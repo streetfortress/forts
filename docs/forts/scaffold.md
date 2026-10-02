@@ -68,17 +68,18 @@ Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
 `lan_gateway`, `lan_dns`; `[baremetal]` `mac`, which turns the LAN
 block's `en*` name match into a MAC match; `[linode]` `region` + `type`
-for the header comment), `mesh_ip`, and the
-optional seeds `nixos_state_version`,
-`k3s_cluster_init`. The lab defaults
+for the header comment), `mesh_ip`, `[cluster] datastore` (rendered as
+the host's `sfi.k3s.datastore` line, `sqlite` when unset; #426), and the
+optional seed `nixos_state_version`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
 `25.11`.
 
 A manifest without `mesh_ip` is refused (by the loader, so every verb
 says so): every fort is a mesh member (`MESH_IP` is mandatory), and a
 hardened host without a mesh address has no login path at all. Every fort
-is the hardened profile and a flux cluster — there is no key for either
-(#272).
+is the hardened profile — there is no key for it (#272) — and a
+`[cluster]` fort is a flux cluster; the shape table is required, so a
+manifest with neither `[cluster]` nor `[dev]` is refused too.
 
 ## The dev shape
 

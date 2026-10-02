@@ -15,7 +15,7 @@ func TestFleetTree(t *testing.T) {
 	root := t.TempDir()
 	mk := func(rel string) { os.MkdirAll(filepath.Join(root, rel), 0o755) }
 	shared := fleetShared{infra: map[string]string{}}
-	cluster := manifest.Host{}
+	cluster := manifest.Host{Cluster: &manifest.ClusterSpec{}}
 
 	got := checkFleetFort(root, "a", cluster, shared)
 	if len(got) != 3 || got[0].level != "error" || got[0].dir != "nixos/hosts/a" {

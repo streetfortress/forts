@@ -117,17 +117,19 @@
     dns = [ {{ range $i, $d := .LanDNS }}{{ if $i }} {{ end }}"{{ $d }}"{{ end }} ];
   };
 
-{{- if .ClusterInit }}
-  # Single-node server with embedded etcd (server config and the k3s-token
-  # requirement come from modules/k3s-server.nix). Set k3s_cluster_init =
-  # false in the manifest for a lean sqlite datastore instead.
-  services.k3s.clusterInit = true;
+{{- if eq .Datastore "etcd" }}
+  # Single-node server with embedded etcd ([cluster] datastore = "etcd"
+  # in the manifest): cluster-init, the opt-in for an HA join. Server
+  # config and the k3s-token requirement come from modules/k3s-server.nix,
+  # which maps the datastore to services.k3s.clusterInit.
+  sfi.k3s.datastore = "etcd";
 {{- else }}
-  # Single-node server on the sqlite datastore (k3s_cluster_init = false
-  # in the manifest): a single node buys nothing from etcd, and k3s-server
+  # Single-node server on the sqlite datastore ([cluster] datastore in
+  # the manifest): a single node buys nothing from etcd, and k3s-server
   # with etcd was a third of a 4 GB node (#163/#164). Server config and
-  # the k3s-token requirement come from modules/k3s-server.nix.
-  services.k3s.clusterInit = false;
+  # the k3s-token requirement come from modules/k3s-server.nix, which
+  # maps the datastore to services.k3s.clusterInit.
+  sfi.k3s.datastore = "sqlite";
 {{- end }}
 
   # zram swap (#163): swapless 4 GB nodes hit page-cache thrash as a

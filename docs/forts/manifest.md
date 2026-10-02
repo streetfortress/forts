@@ -9,8 +9,10 @@ from a sibling is `cp`, three edits, `fort check --all`.
 
 ```toml
 # sfi-prod-439bf72 — THE production fort, on Linode.   ← the fort's history lives here
-mesh_ip = "10.1.0.54"        # WireGuard mesh address (mandatory for a flux cluster)
-k3s_cluster_init = false     # optional scaffold seed: sqlite datastore, not etcd
+mesh_ip = "10.1.0.54"        # WireGuard mesh address (mandatory: every fort is a mesh member)
+
+[cluster]                    # THE shape table — exactly one of [cluster] | [dev]
+datastore = "sqlite"         # sqlite (single node, the default) | etcd (embedded, cluster-init)
 
 [dns]                        # public name — the cloud backend's A + wildcard,
 zone = "streetfortress.cloud" # and the mesh peer's default endpoint
@@ -27,13 +29,12 @@ type = "g6-standard-2"
 ```toml
 # staging-k3s — the staging fort, on the lab hypervisor.
 mesh_ip = "10.1.0.13"
-k3s_cluster_init = false
+
+[cluster]                    # a flux cluster; datastore unset = sqlite
+audit_logging = true         # the API server's audit log, shipped to Loki (#626)
 
 [backups]
 profile = "lab"
-
-[cluster]                    # optional: what this fort's k3s does beyond the standard
-audit_logging = true         # the API server's audit log, shipped to Loki (#626)
 
 [shape]                      # what libvirt realizes (lab defaults 2 / 4 / 40G)
 vcpus = 2
@@ -47,7 +48,9 @@ ip = "10.0.0.40"             # the static LAN address baked into the image
 ```toml
 # sfi-fort-zenbook — gitea's home, on lab hardware (a laptop on a dock).
 mesh_ip = "10.1.0.6"
-k3s_cluster_init = false
+
+[cluster]
+datastore = "sqlite"
 
 [backups]
 profile = "production"
@@ -93,23 +96,45 @@ disk = "80G"
 ip = "10.0.0.61"
 ```
 
-**The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` / `k3s_cluster_init` /
+**The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` /
 `nixos_state_version`, `[shape]`, `[dns]`, `[backups]` — this is what scaffold, mint,
 add, check, the pulumi program and the mesh read. Every consumer reads the
 same Go struct (`forts/internal/manifest`), so the generators cannot drift.
+A key that only one shape has does not sit here: `k3s_cluster_init` did,
+and the loader had to special-case it next to `[dev]` (#426).
 
-**A fort is always hardened, on the mesh — and, unless it says
-otherwise, flux-managed.** There is no `production` or `flux_cluster`
-key (#272): every fort imports the hardened profile (mesh-scoped SSH,
-no wheel), gets the deploy key (auto-rebuild's pull credential), carries
-`protect: true` on its stack, and `mesh_ip` is required. A cluster fort
-adds `production.nix` (deployer-only), `fleet/clusters/<host>` and the
-cluster key. The one different shape is a positive declaration, never
-the absence of flux: **`[dev]`** (#413) makes the host a dev fort —
+**A fort is always hardened, on the mesh — and one shape table says what
+it is.** There is no `production` or `flux_cluster` key (#272): every fort
+imports the hardened profile (mesh-scoped SSH, no wheel), gets the deploy
+key (auto-rebuild's pull credential), carries `protect: true` on its
+stack, and `mesh_ip` is required. Beyond that the manifest carries
+**exactly one of `[cluster]` and `[dev]`**, handled like the provider
+tables — required, strict keys, decoded by its own Spec — and both are
+positive declarations, neither the absence of the other. **`[cluster]`**
+(#426) makes the host a flux cluster: `k3s-server.nix` on the datastore
+it names, `production.nix` (deployer-only), `fleet/clusters/<host>`,
+`fleet/apps/<host>` and the cluster key. The table can be empty; every
+key in it has a default. **`[dev]`** (#413) makes the host a dev fort —
 `dev-fort.nix` (unprivileged accounts that build, the toolchains, the
 dotfiles, nix-ld) with no k3s, no flux, no fleet tree, no cluster age key.
-It requires `[backups] profile = "none"`, refuses `k3s_cluster_init`, and
-is `[libvirt]`-only for now (forts#12: a lab VM on the hypervisor).
+It requires `[backups] profile = "none"` and is `[libvirt]`-only for now
+(forts#12: a lab VM on the hypervisor). A `[cluster]` key next to `[dev]`
+is two shape tables, refused structurally, not a special case.
+
+**`[cluster] datastore` is k3s's datastore**, and a positive word rather
+than a negated boolean: the reader asks *which datastore*, not *was
+cluster-init set*. `sqlite` (the default — every fort today is a single
+node, and k3s-server with etcd was a third of a 4 GB node, #163/#164) or
+`etcd` (embedded, cluster-init — the opt-in for an HA join; sqlite→etcd
+migrates in place, the reverse is a repave). No `sfi.` prefix and no
+nesting: TOML dotted keys nest tables, and everything in a manifest is
+ours — if k3s ever needs its own group it becomes `[cluster.k3s]` then.
+scaffold renders `sfi.k3s.datastore = "<value>"` into the host file, always
+(a declaration, not a silent default), and `modules/k3s-server.nix` maps
+the word to `services.k3s.clusterInit`, so no host file sets `clusterInit`
+itself. On a host that predates the key the line is a hand edit, and a
+test in `forts/cmd/fort` (`TestDatastoreMatchesHostFile`) keeps the
+manifest and the host file equal.
 
 **`[[dev.accounts]]` names the fort's identities** (#532). One entry per
 role, and every field is required: `user` (the Unix account, which also
@@ -170,8 +195,11 @@ imperative, and provider dirs arrive on first need. A checked `[[apps]]`
 membership was designed and parked (#269) until a sibling cut shows the
 tree copy is the pain.
 
-No toggles for the standard components either — with one exception that
-earned its way in. Monitoring stays per-fort identical (the shared
+No toggles for the standard components either — with the exceptions that
+earned their way in. There are no `[production]` / `[staging]` tables:
+those are not shapes but the same `[cluster]` with a different
+`[backups]` profile and provider table, both of which the manifest
+already says. Monitoring stays per-fort identical (the shared
 infrastructure layer is, by design, and per-app monitoring is
 contract-driven), but **`[backups] profile` is the first real second
 variant**: every fort's volumes are backed up the same *way* and not to
@@ -208,6 +236,7 @@ carry the same log.
 
 ```toml
 [cluster]
+datastore = "sqlite"    # the shape's own key, above
 audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
 ```
 
@@ -218,19 +247,18 @@ so a fort inherits nothing by silence. `true` renders
 docs/nixos/operations.md says what the log is for). Scaffold never
 overwrites a host file, so on a fort that predates the key the line is a
 hand edit, as `sfi.pv-backup.profile` was — and a test in `forts/cmd/fort`
-keeps the two equal: a manifest that says `true` must set the option,
-and a host that sets the option must say so in its manifest. `[dev]`
-refuses the table: a dev fort has no API server. `[cluster]` is a new
-table; `k3s_cluster_init` stays a top-level key until a later change
-moves it in.
+(`TestAuditLoggingMatchesHostFile`) keeps the two equal: a manifest that
+says `true` must set the option, and a host that sets the option must say
+so in its manifest. `[dev]` refuses the table: a dev fort has no API
+server.
 
 ## Who reads it
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, `[dev]` picks the dev shape and drops the fleet surface, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
-| `go test ./cmd/fort` (the mirror tests) | `[dev]` ↔ the accounts in `modules/dev-fort.nix`; `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
-| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a cluster fort (`[dev]` skips them and the k3s token); `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
+| `scaffold` | everything: the provider table picks the host shape, the shape table picks cluster or dev (`[dev]` drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block, `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
+| `go test ./cmd/fort` (the mirror tests) | `[dev]` ↔ the accounts in `modules/dev-fort.nix`; `[cluster] datastore` ↔ `sfi.k3s.datastore` and `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (`[dev]` skips them and the k3s token); `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
