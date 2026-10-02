@@ -60,6 +60,11 @@ type Host struct {
 	Shape   Shape   `toml:"shape"`
 	DNS     DNS     `toml:"dns"`
 	Backups Backups `toml:"backups"`
+	// Cluster is the [cluster] table when present: what this fort's
+	// k3s does beyond the per-fort-identical standard (#626). Absent on
+	// a fort that opts into nothing, so a fort inherits nothing by
+	// silence; refused with [dev], which has no cluster.
+	Cluster *ClusterSpec `toml:"cluster"`
 	// Dev is the [dev] table when present: this fort is a dev fort
 	// (#413). It names the fort's accounts (#532).
 	Dev *DevSpec `toml:"dev"`
@@ -100,6 +105,30 @@ type Backups struct {
 	// to its own rustfs would be circular.
 	Profile string `toml:"profile"`
 }
+
+// ClusterSpec is the [cluster] table (#626): the second toggle the
+// manifest carries, for the same reason as the first ([backups]
+// profile): every cluster fort audits the same WAY, and not every fort
+// pays the same disk for it. A 4 GB Linode SKU with a 25 GB disk and
+// the lab hub with 450 GB do not carry the same log.
+//
+//	[cluster]
+//	audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
+//
+// k3s_cluster_init stays a top-level key for now; a later change can
+// move it in here.
+type ClusterSpec struct {
+	// AuditLogging: the API server writes an audit log under
+	// /var/log/kube-audit (modules/k3s-audit.nix), and the fleet's
+	// fluent-bit tails it into Loki as job="kube-audit". Default false.
+	// scaffold renders `sfi.k3s.auditLog.enable = true` from it; on a
+	// host that already exists the block is a hand edit, and a test in
+	// cmd/fort keeps the manifest and the host file equal.
+	AuditLogging bool `toml:"audit_logging"`
+}
+
+// AuditLogging is [cluster] audit_logging, false when the table is absent.
+func (h Host) AuditLogging() bool { return h.Cluster != nil && h.Cluster.AuditLogging }
 
 // DevSpec is the [dev] table (#413): a dev fort — a transient lab VM
 // with unprivileged agent accounts, the dev toolchains and the
@@ -257,10 +286,10 @@ func (h Host) DefaultAccount() *DevAccount {
 // flux cluster.
 func (h Host) IsDev() bool { return h.Dev != nil }
 
-// Cluster says whether this fort is a flux cluster: fleet/clusters +
+// IsCluster says whether this fort is a flux cluster: fleet/clusters +
 // fleet/apps trees, the cluster age key, the canary, k3s. Every fort
 // but a dev one.
-func (h Host) Cluster() bool { return !h.IsDev() }
+func (h Host) IsCluster() bool { return !h.IsDev() }
 
 // Profiles are the accepted values of [backups] profile.
 var Profiles = []string{"lab", "production", "none"}
@@ -497,6 +526,9 @@ func (h Host) Validate(host string) error {
 		}
 		if h.ClusterInit != nil {
 			return fail("[dev] and k3s_cluster_init together — a dev fort has no cluster")
+		}
+		if h.Cluster != nil {
+			return fail("[dev] and [cluster] together — a dev fort has no cluster")
 		}
 		if h.Libvirt() == nil {
 			return fail("[dev] needs the [libvirt] table — a dev fort is a lab VM on the hypervisor (forts#12)")

@@ -49,6 +49,20 @@ spec:
             Read_From_Tail On
             Strip_Underscores On
 
+        # The API server's audit log (#626), one JSON event per line,
+        # written by k3s under /var/log on the forts whose manifest says
+        # [cluster] audit_logging = true (modules/k3s-audit.nix). Fleet-
+        # wide on purpose: a tail on a path that does not exist reads
+        # nothing, so a fort that does not audit pays nothing.
+        [INPUT]
+            Name tail
+            Path /var/log/kube-audit/audit.log
+            Parser json
+            Tag audit.*
+            DB /var/lib/fluent-bit/tail-audit.db
+            Mem_Buf_Limit 8MB
+            Skip_Long_Lines On
+
       filters: |
         [FILTER]
             Name kubernetes
@@ -76,6 +90,19 @@ spec:
       # envsubst is STRICT, so any ${...} outside cluster-vars fails the
       # whole layer (the #102 grafana-dashboards lesson). Bare $accessors
       # pass through envsubst untouched.
+      #
+      # The audit stream (#626) keeps the identity label set and nothing
+      # more: the user, the verb, the resource and the namespace are
+      # unbounded and stay in the line — `| json | user_username="..."`
+      # reads them (observability/labels.md in the KB). An audit event
+      # carries no host field, so host comes from the pod's NODE_NAME env
+      # (the `env` block below), which fluent-bit expands at config load.
+      # `$${NODE_NAME}` is the escaped spelling: flux's envsubst turns
+      # `$$` into one `$` and leaves the name alone, so it reaches
+      # fluent-bit as the plain env reference — spelled bare, it would
+      # fail the layer as a var cluster-vars does not define. Only this
+      # YAML comment may say so: a comment inside the block scalar is
+      # data, and `fort check` reads it as flux would.
       outputs: |
         [OUTPUT]
             Name loki
@@ -95,6 +122,26 @@ spec:
             labels job=systemd, cluster=${CLUSTER_NAME}, host=$HOSTNAME
             line_format json
             Retry_Limit False
+
+        # The audit stream (#626): identity labels only, host from the
+        # NODE_NAME env (escaped for flux; the comment above says why).
+        [OUTPUT]
+            Name loki
+            Match audit.*
+            Host 10.1.0.5
+            Port 31100
+            labels job=kube-audit, cluster=${CLUSTER_NAME}, host=$${NODE_NAME}
+            line_format json
+            Retry_Limit False
+
+    # The node's name for the audit stream's host label (above). The
+    # HOSTNAME env var in a DaemonSet pod is the pod's name, not the
+    # node's.
+    env:
+      - name: NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
 
     # k3s logs via CRI symlinks under /var/log; no docker dir to mount.
     # /var/lib/fluent-bit persists the tail/journald cursors across restarts

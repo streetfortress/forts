@@ -32,6 +32,10 @@ type hostView struct {
 	// and declares nothing, rather than importing it disabled — a host
 	// that is not an origin should read as one.
 	BackupProfile string
+	// AuditLogging is [cluster] audit_logging (#626): the host sets
+	// sfi.k3s.auditLog.enable. False renders nothing — a fort that does
+	// not audit carries no block, as with "none" above.
+	AuditLogging bool
 	// Cloud hosts (a cloud provider table): the linode-runtime shape —
 	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
 	Cloud        bool
@@ -187,6 +191,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		Hub:          host == hubHost,
 		Dev:          entry.IsDev(),
 		DevAccounts:  entry.Accounts(),
+		AuditLogging: entry.AuditLogging(),
 	}
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile

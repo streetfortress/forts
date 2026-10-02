@@ -4,6 +4,9 @@ mesh_ip = "10.1.0.98"
 [backups]
 profile = "production"
 
+[cluster]
+audit_logging = true
+
 [dns]
 zone = "example.cloud"
 name = "cloud-fort"

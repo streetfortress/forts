@@ -56,6 +56,17 @@ func TestParse(t *testing.T) {
 	if s := (Shape{}).WithLabDefaults(); s.Vcpus != 2 || s.Memory != 4 || s.Disk != "40G" {
 		t.Errorf("lab defaults: %+v", s)
 	}
+	// [cluster] (#626): absent means false — a fort inherits nothing by
+	// silence — and the key present means exactly what it says.
+	if h.Cluster != nil || h.AuditLogging() {
+		t.Errorf("lab audits without asking: %+v", h.Cluster)
+	}
+	if a, err := Parse("lab", []byte(lab+"\n[cluster]\naudit_logging = true\n")); err != nil || !a.AuditLogging() {
+		t.Errorf("[cluster] audit_logging = true: %v %+v", err, a.Cluster)
+	}
+	if a, err := Parse("lab", []byte(lab+"\n[cluster]\naudit_logging = false\n")); err != nil || a.AuditLogging() || a.Cluster == nil {
+		t.Errorf("[cluster] audit_logging = false: %v %+v", err, a.Cluster)
+	}
 
 	c, err := Parse("sfi-prod", []byte(cloud))
 	if err != nil {
@@ -130,6 +141,11 @@ func TestParseRefuses(t *testing.T) {
 		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
 		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
 		{"wrong type", "k3s_cluster_init = \"yes\"\nmesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "k3s_cluster_init"},
+		// [cluster] (#626): a typo is not a default, and a dev fort has
+		// no API server to audit.
+		{"unknown cluster key", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\naudit_loging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key cluster.audit_loging"},
+		{"cluster wrong type", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\naudit_logging = \"yes\"\n[libvirt]\nip = \"10.0.0.1\"\n", "audit_logging"},
+		{"dev with cluster", "mesh_ip = \"10.1.0.1\"\n[dev]\n[[dev.accounts]]\nuser = \"agent\"\nverb = \"pickup\"\ngitea_user = \"sfi-agent\"\nemail = \"a@b.c\"\ntoken_scopes = [\"write:issue\"]\n[backups]\nprofile = \"none\"\n[cluster]\naudit_logging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "[dev] and [cluster] together"},
 		{"baremetal missing ip", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nmac = \"f8:ce:72:02:05:07\"\n", "[baremetal]: ip is required"},
 		{"baremetal bad mac", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"f8ce.7202.0507x\"\n", "[baremetal]: mac"},
 		{"baremetal upper mac", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"F8:CE:72:02:05:07\"\n", "lowercase"},
@@ -197,8 +213,8 @@ func TestDev(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !h.IsDev() || h.Cluster() {
-		t.Errorf("want a dev fort that is not a cluster: dev=%v cluster=%v", h.IsDev(), h.Cluster())
+	if !h.IsDev() || h.IsCluster() {
+		t.Errorf("want a dev fort that is not a cluster: dev=%v cluster=%v", h.IsDev(), h.IsCluster())
 	}
 	if got := h.Accounts(); len(got) != 2 || got[0].User != "agent" || got[1].SSHAlias != "sfi-analyst" {
 		t.Errorf("accounts %+v", got)
@@ -207,7 +223,7 @@ func TestDev(t *testing.T) {
 		t.Errorf("the first account is the fort's own: %+v", d)
 	}
 	plain, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
-	if err != nil || plain.IsDev() || !plain.Cluster() {
+	if err != nil || plain.IsDev() || !plain.IsCluster() {
 		t.Errorf("a fort without [dev] is a cluster: %v dev=%v", err, plain.IsDev())
 	}
 	if plain.Accounts() != nil || plain.DefaultAccount() != nil {

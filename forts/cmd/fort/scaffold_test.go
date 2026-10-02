@@ -140,6 +140,21 @@ func TestRenderScaffold(t *testing.T) {
 		t.Errorf(`profile "none" must render no pv-backup wiring at all:\n%s`, nf)
 	}
 
+	// [cluster] audit_logging (#626) reaches the host file the same way:
+	// the fixture cloud fort says true and gets the block, the lab fort
+	// says nothing and carries no trace of it.
+	if !strings.Contains(c, "sfi.k3s.auditLog.enable = true;") {
+		t.Errorf("cloud-fort: audit_logging = true must set sfi.k3s.auditLog.enable:\n%s", c)
+	}
+	if strings.Contains(l, "auditLog") {
+		t.Errorf("lab-fort: no [cluster] table must render no audit wiring:\n%s", l)
+	}
+	audit := hosts["lab-fort"]
+	audit.Cluster = &manifest.ClusterSpec{AuditLogging: true}
+	if got := byPath(render(t, "lab-fort", audit))["nixos/hosts/lab-fort/default.nix"]; !strings.Contains(got, "sfi.k3s.auditLog.enable = true;") {
+		t.Errorf("lab shape must render the audit block too:\n%s", got)
+	}
+
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
 	if _, err := renderScaffold("lab-fort", h); err == nil {

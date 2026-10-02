@@ -99,7 +99,7 @@ func check(args []string) error {
 		// The console failsafe (#524): its two halves live in different
 		// files, and either one alone fails quietly (console.go).
 		findings = append(findings, consoleFindings(root, fort)...)
-		if entry.Cluster() && exists(root, filepath.Join("fleet/apps", fort)) {
+		if entry.IsCluster() && exists(root, filepath.Join("fleet/apps", fort)) {
 			cf, err := checkFort(o, fort)
 			if err != nil {
 				return err

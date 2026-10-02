@@ -153,7 +153,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if !exists(root, filepath.Join("nixos/hosts", host, "default.nix")) {
 		need = append(need, filepath.Join("nixos/hosts", host, "default.nix"))
 	}
-	if entry.Cluster() {
+	if entry.IsCluster() {
 		for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
 			if !exists(root, rel) {
 				need = append(need, rel)
@@ -189,7 +189,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	// A dev fort ([dev], #413) has no cluster: no k3s token, no cluster
 	// age key, no fleet rule, no canary. Host key, wireguard key and the
 	// deploy key (auto-rebuild's pull credential) are every fort's.
-	if entry.Cluster() {
+	if entry.IsCluster() {
 		if v, ok := take(keyK3sToken); ok {
 			p.k3sToken = v
 		} else if p.k3sToken, err = newToken(); err != nil {
@@ -220,7 +220,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if p.hostRecip, err = sshToAge(p.hostKey.public); err != nil {
 		return nil, err
 	}
-	if entry.Cluster() {
+	if entry.IsCluster() {
 		if v, ok := take(keyAge); ok {
 			p.cluster, err = ageKeyFrom(v)
 		} else {
@@ -290,7 +290,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if err := p.planMesh(string(peers)); err != nil {
 		return nil, err
 	}
-	if !entry.Cluster() {
+	if !entry.IsCluster() {
 		// No fleet rule, no infra recipient, no canary; the deploy key
 		// still — auto-rebuild.nix pulls main with it.
 		status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
@@ -533,7 +533,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		return ""
 	}
 	fmt.Fprintf(w, "  host age recipient %s%s\n", p.hostRecip, throwaway(keySSHHost))
-	if p.entry.Cluster() {
+	if p.entry.IsCluster() {
 		fmt.Fprintf(w, "  cluster recipient  %s%s\n", p.cluster.recipient, throwaway(keyAge))
 	}
 	switch {

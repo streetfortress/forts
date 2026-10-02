@@ -84,6 +84,13 @@
     enable = true;
     profile = "{{ .BackupProfile }}";
   };
+{{ end }}{{ if .AuditLogging }}
+  # [cluster] audit_logging = true in this fort's manifest (#626). The
+  # API server writes an audit log under /var/log/kube-audit (policy and
+  # rotation in modules/k3s-audit.nix) and the fleet's fluent-bit ships
+  # it to Loki as job="kube-audit". The record a bounded admin window
+  # needs (#618); costs disk, so a fort opts in by name.
+  sfi.k3s.auditLog.enable = true;
 {{ end }}
 {{- if .Baremetal }}
   # Static address on the lab LAN — matches [baremetal] ip in

@@ -95,6 +95,23 @@ data:
 	if got := envsubstFindings("x", "a", "", vars); len(got) != 0 {
 		t.Errorf("empty stream: %+v", got)
 	}
+	// `$$` is flux's escape (#626): `$${NODE_NAME}` lands as `${NODE_NAME}`
+	// for fluent-bit, and is not a reference envsubst resolves. A bare
+	// `${NODE_NAME}` next to it still is.
+	escaped := `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit
+data:
+  a: "labels job=kube-audit, cluster=${CLUSTER_NAME}, host=$${NODE_NAME}"
+`
+	if got := envsubstFindings("fleet/infrastructure/controllers", "a", escaped, vars); len(got) != 0 {
+		t.Errorf("escaped reference must pass: %+v", got)
+	}
+	if got := envsubstFindings("x", "a", escaped+"  b: ${NODE_NAME}\n", vars); len(got) != 1 || !strings.Contains(got[0].msg, "${NODE_NAME}") {
+		t.Errorf("bare reference beside an escaped one must fail: %+v", got)
+	}
 }
 
 func TestKustomizeBuild(t *testing.T) {

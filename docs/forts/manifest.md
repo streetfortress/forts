@@ -32,6 +32,9 @@ k3s_cluster_init = false
 [backups]
 profile = "lab"
 
+[cluster]                    # optional: what this fort's k3s does beyond the standard
+audit_logging = true         # the API server's audit log, shipped to Loki (#626)
+
 [shape]                      # what libvirt realizes (lab defaults 2 / 4 / 40G)
 vcpus = 2
 memory = 4
@@ -196,11 +199,37 @@ The profile names a DESTINATION SET, never individual targets: there are
 exactly two object stores at fleet level, and enumerating endpoints per
 fort is how they drift.
 
+**`[cluster] audit_logging` is the second exception** (#626), for the
+same reason as the first: every cluster fort audits the same *way* — the
+policy, the rotation and the stream are one module and one fluent-bit
+config, fleet-wide — and not every fort pays the same disk for it. A
+4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
+carry the same log.
+
+```toml
+[cluster]
+audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
+```
+
+**Default false, and the key is absent on a fort that does not audit**,
+so a fort inherits nothing by silence. `true` renders
+`sfi.k3s.auditLog.enable = true` into the host file
+(`modules/k3s-audit.nix` holds the policy and the rotation caps,
+docs/nixos/operations.md says what the log is for). Scaffold never
+overwrites a host file, so on a fort that predates the key the line is a
+hand edit, as `sfi.pv-backup.profile` was — and a test in `forts/cmd/fort`
+keeps the two equal: a manifest that says `true` must set the option,
+and a host that sets the option must say so in its manifest. `[dev]`
+refuses the table: a dev fort has no API server. `[cluster]` is a new
+table; `k3s_cluster_init` stays a top-level key until a later change
+moves it in.
+
 ## Who reads it
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, `[dev]` picks the dev shape and drops the fleet surface, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block |
+| `scaffold` | everything: the provider table picks the host shape, `[dev]` picks the dev shape and drops the fleet surface, `mesh_ip` → `MESH_IP`, the seeds, `[backups] profile` → the host's `sfi.pv-backup` block, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
+| `go test ./cmd/fort` (the mirror tests) | `[dev]` ↔ the accounts in `modules/dev-fort.nix`; `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a cluster fort (`[dev]` skips them and the k3s token); `[backups] profile` — the restic password and rustfs credentials it copies in, and on `production` the B2 application key it mints |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort) |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |

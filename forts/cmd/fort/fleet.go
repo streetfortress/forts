@@ -45,6 +45,12 @@ var infraLayers = []string{"fleet/infrastructure/controllers", "fleet/infrastruc
 // CronJob shipped through it and stopped luxor's apps layer (2026-09-16).
 var varRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}`)
 
+// escapedRE matches what flux's envsubst leaves alone: `$$` is one
+// literal `$`, so `$${NODE_NAME}` reaches the cluster as `${NODE_NAME}`
+// for the next interpreter (fluent-bit's own env expansion, #626). The
+// gate blanks these before it looks for references.
+var escapedRE = regexp.MustCompile(`\$\$`)
+
 const substituteDisabled = "kustomize.toolkit.fluxcd.io/substitute"
 
 // fleetShared is the once-per-run half: the shared layers' builds (a
@@ -101,7 +107,7 @@ func orphanFindings(root string, hosts map[string]bool) []finding {
 // dir is checked, and a fleet dir that turned up anyway is the finding.
 func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) []finding {
 	var out []finding
-	if !entry.Cluster() {
+	if !entry.IsCluster() {
 		if !exists(root, filepath.Join("nixos/hosts", fort)) {
 			out = append(out, finding{"error", filepath.Join("nixos/hosts", fort), "missing — a dev fort has a manifest and a nix host dir (fort scaffold renders it)"})
 		}
@@ -347,7 +353,7 @@ func envsubstFindings(layer, fort, built string, vars map[string]bool) []finding
 			continue
 		}
 		unknown := map[string]bool{}
-		for _, m := range varRE.FindAllStringSubmatch(chunk, -1) {
+		for _, m := range varRE.FindAllStringSubmatch(escapedRE.ReplaceAllString(chunk, ""), -1) {
 			if !vars[m[1]] {
 				unknown[m[1]] = true
 			}

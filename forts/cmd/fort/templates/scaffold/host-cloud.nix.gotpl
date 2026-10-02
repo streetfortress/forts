@@ -78,6 +78,13 @@
     enable = true;
     profile = "{{ .BackupProfile }}";
   };
+{{ end }}{{ if .AuditLogging }}
+  # [cluster] audit_logging = true in this fort's manifest (#626). The
+  # API server writes an audit log under /var/log/kube-audit (policy and
+  # rotation in modules/k3s-audit.nix) and the fleet's fluent-bit ships
+  # it to Loki as job="kube-audit". The record a bounded admin window
+  # needs (#618); costs disk, so a fort opts in by name.
+  sfi.k3s.auditLog.enable = true;
 {{ end }}
   # 4 GB-SKU parity with staging-k3s, both proven there 2026-09-11/12:
   # sqlite datastore instead of embedded etcd (#164 — k3s-server with

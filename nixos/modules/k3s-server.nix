@@ -129,6 +129,9 @@ in
   # framework, and the flux verbs every k3s host should carry.
   imports = [
     ./lab-host.nix
+    # The API server's audit log, off until a host's manifest says
+    # [cluster] audit_logging = true (#626).
+    ./k3s-audit.nix
     ./ops/ops-kubeconfig.nix
     ./ops/ops-commands.nix
     ./ops/flux.nix
