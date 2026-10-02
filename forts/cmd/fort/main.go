@@ -174,11 +174,11 @@ func usage() {
       is the remedy. The registry is why the credential survives that
       failure: a checkout and an admin age key read it with no network
       at all. --write prints NO value; --show decrypts one fort's
-      passphrase, deliberately, one fort at a time. A [dev] fort is
-      refused: its account is agent, and the sfi-* sudo rules are pinned
-      to deployer. A hash the fort already carries is never replaced
-      without --rotate. fort dismantle withdraws the entry; fort check
-      traces all three halves.
+      passphrase, deliberately, one fort at a time. Every fort has the
+      door — a [dev] fort carries deployer too (ops/deployer.nix, #647).
+      A hash the fort already carries is never replaced without
+      --rotate. fort dismantle withdraws the entry; fort check traces
+      all three halves.
 
   b2-buckets [--write]
       reconcile the B2 backup buckets with their declaration: each

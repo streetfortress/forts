@@ -12,7 +12,7 @@
 # answer SSH on wg0 alone (hardened.nix), so one merged change that
 # breaks wireguard, or one generation that does not answer sshd, locks
 # every operator out of every fort at the same time. The policy this
-# module amends — "no account has a password" (production.nix, root.nix)
+# module amends — "no account has a password" (ops/deployer.nix, root.nix)
 # — assumes a fort is replaceable. The fleet is one estate now, and a
 # repave is not a remedy for a fault that repaves into the next host.
 #
@@ -24,7 +24,7 @@
 #   - The console is already behind one authentication: Lish needs the
 #     Linode account, `virsh console` needs SSH to soundship. This is the
 #     second factor of a path that has one, not a new front door.
-#   - deployer keeps no wheel (production.nix). After the login the
+#   - deployer keeps no wheel (ops/deployer.nix). After the login the
 #     operator holds rung 1 (the journal, the read-only kubeconfig) and
 #     rung 2 (the pinned NOPASSWD sfi-* verbs, ops/ops-commands.nix).
 #     sfi-nixos-rollback chooses among generations git already produced;
@@ -34,7 +34,11 @@
 #
 # The guard is the import, as in ops/root.nix: a host gets this only by
 # naming the module in its own hosts/<host>/default.nix and setting
-# enable. The credential is minted per fort by
+# enable. EVERY fort can: the account is ops/deployer.nix's, which
+# ops-commands.nix imports, so a dev fort has the same door as a cluster
+# fort (#647 — #524 had left dev forts out and this module refused them
+# at evaluation; that assertion is gone with the reason for it). The
+# credential is minted per fort by
 # `fort console-password <host> --write`, which writes the hash here and
 # the passphrase into provisioning/console-passwords.yaml — the registry
 # an operator reads with `--show`, encrypted to the admin age keys and
@@ -66,18 +70,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # ops/ops-commands.nix pins its sudo rules to `deployer`, so a login
-    # on a host without that account reaches no verb at all. A dev fort
-    # carries `agent` instead and is transient (dev-fort.nix), so it is
-    # out of scope; this says so at evaluation rather than at the
-    # console. The test is isNormalUser, not the presence of the attr:
-    # the hashedPasswordFile below defines `users.users.deployer` on
-    # every host that enables this, so presence would always be true.
-    assertions = [{
-      assertion = config.users.users.deployer.isNormalUser;
-      message = "sfi.ops.console.enable needs the `deployer` account (nixos/modules/production.nix): ops/ops-commands.nix pins every sfi-* sudo rule to deployer, so a console login on a host without it reaches no recovery verb. A dev fort carries `agent` and is repaved, not recovered.";
-    }];
-
     # neededForUsers is the supported path: sops-nix decrypts such a
     # secret to /run/secrets-for-users BEFORE it makes the users, so
     # there is no catch-22 with the hash the user declaration reads. Nor
@@ -96,7 +88,7 @@ in
     # /etc/shadow can lock an operator out. On a fort that is the
     # DECLARED posture and not an accident: root logins are off
     # (common.nix), root has no password and no authorized key, and
-    # `deployer` has no wheel (production.nix). mutableUsers = true hides
+    # `deployer` has no wheel (ops/deployer.nix). mutableUsers = true hides
     # the same fact rather than changing it — the assertion is what
     # NOTICES it. The console login this module adds is the answer to it:
     # the lockout the assertion warns about is what #524 is about, and

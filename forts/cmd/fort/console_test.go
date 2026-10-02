@@ -102,14 +102,13 @@ func TestConsolePassword(t *testing.T) {
 		}
 	}
 
-	// A dev fort is refused: its account is agent, and every sfi-* sudo
-	// rule is pinned to deployer.
-	if _, err := planConsolePassword(tmp, "dev-fort", false); err == nil || !strings.Contains(err.Error(), "[dev]") {
-		t.Fatalf("dev fort: want the refusal, got %v", err)
-	}
-	// No identity yet: mint first.
-	if _, err := planConsolePassword(tmp, "lab-fort", false); err == nil || !strings.Contains(err.Error(), "fort mint") {
-		t.Fatalf("without the secrets file: want the gate, got %v", err)
+	// No identity yet: mint first. A dev fort is a fort (#647): it meets
+	// the same gate and no refusal — deployer is ops/deployer.nix's on
+	// both shapes.
+	for _, host := range []string{"lab-fort", "dev-fort"} {
+		if _, err := planConsolePassword(tmp, host, false); err == nil || !strings.Contains(err.Error(), "fort mint") {
+			t.Fatalf("%s without the secrets file: want the mint gate, got %v", host, err)
+		}
 	}
 
 	write(secrets, "wireguard-private-key: ENC[x]\nsops: {}\n")

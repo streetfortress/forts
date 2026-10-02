@@ -1,19 +1,31 @@
-# Dev fort profile (#413): the hardened host with agent accounts instead
-# of a `deployer`. hardened.nix + lab-host.nix, unprivileged accounts that
-# BUILD (unlike deployer, which only observes), Home Manager with the dev
-# toolchains and the dotfiles, nix-ld for the prebuilt binaries a dev box
-# meets (uv-managed pythons, npm native modules). No k3s, no flux, no
-# backups: a dev fort is transient, and nothing on it is precious
-# (forts#12). Rendered by `fort scaffold` for a manifest with a [dev]
-# table; mutually exclusive with production.nix.
+# Dev fort profile (#413): the hardened host with agent accounts beside
+# the fort's `deployer`. hardened.nix + lab-host.nix, unprivileged
+# accounts that BUILD (unlike deployer, which only observes), Home Manager
+# with the dev toolchains and the dotfiles, nix-ld for the prebuilt
+# binaries a dev box meets (uv-managed pythons, npm native modules). No
+# k3s, no flux, no backups: a dev fort is transient, and nothing on it is
+# precious (forts#12). Rendered by `fort scaffold` for a manifest with a
+# [dev] table; mutually exclusive with production.nix.
 #
 # What makes it a boundary rather than a laptop: the only credentials on
 # the box are the fort's own (the bundles #414 mints per fort and per
-# account), SSH answers on the mesh only (hardened.nix), no account has
-# wheel or an ops verb — the pull loop is the only way config reaches this
-# host — and the box is replaced, not repaired. That is what makes an
-# unattended Claude with permissions bypassed sane here (#418) and
-# nowhere else.
+# account), SSH answers on the mesh only (hardened.nix), no agent account
+# has wheel or an ops verb — the pull loop is the only way config reaches
+# this host from a session — and the box is replaced, not repaired. That
+# is what makes an unattended Claude with permissions bypassed sane here
+# (#418) and nowhere else.
+#
+# THE OPERATOR IS A FORT'S, NOT A CLUSTER'S (#647). A dev fort is one of
+# our implementations ON TOP OF a fort, so it carries the fort's
+# maintenance hatch like every other: `deployer` (ops/deployer.nix), the
+# pinned sfi-* verbs auto-rebuild.nix already declared here
+# (sfi-nixos-rebuild, -rollback, -revision, sfi-systemd-restart), and the
+# getty login where the host enables ops/console.nix. #524 had left the
+# question open and console.nix refused a dev fort meanwhile; #647
+# answered it. The boundary above is unchanged: deployer is not in
+# `agents`, so it cannot read the fort's Claude credential, and a session
+# on an agent account reaches no verb — the kernel keeps the operator and
+# the agents apart, as it keeps the agents apart from each other.
 #
 # ONE ACCOUNT PER ROLE (#532). A session used to post on gitea as
 # sfi-agent whatever it was doing, so a thread holding two sessions could
@@ -84,10 +96,11 @@ let
   byUser = f: lib.listToAttrs (map (a: lib.nameValuePair a.user (f a)) accounts);
 
   # The devices that dispatch. Mesh-only reach (hardened.nix); the key set
-  # matches deployer's for now — trim to the dispatching devices when #415
-  # settles it. Every account takes the same set: who may dial is the
-  # fort's boundary, and WHICH account they dial is what selects the
-  # identity.
+  # matches deployer's (ops/deployer.nix) for now — trim to the
+  # dispatching devices when #415 settles it. Every agent account takes
+  # the same set: who may dial is the fort's boundary, and WHICH account
+  # they dial is what selects the identity. Who may OPERATE is deployer's
+  # list, kept apart on purpose.
   dispatchKeys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"
@@ -102,6 +115,7 @@ in
   imports = [
     ./hardened.nix
     ./lab-host.nix
+    ./ops/deployer.nix # the fort's operator account and the subject of the sfi-* verbs (#647)
     ./dotfiles.nix # ~<account>/.fortfiles, the checkout the HM symlinks point into
     ./auto-rebuild.nix # the gc window below is its option
     ./shell.nix # the prompt, keys and aliases at a herdr pane (#557)
@@ -130,18 +144,20 @@ in
     # home/agent.nix) lives in it, so a task keeps running after the
     # dispatching ssh session ends. One server per account.
     linger = true;
-    # systemd-journal: read the host journal — the OBSERVE rung for a host
-    # with no other operator account (same grant as deployer's,
-    # production.nix). agents: the fort's one Claude credential (below).
+    # systemd-journal: read the host journal — the OBSERVE rung, the same
+    # grant deployer holds (ops/deployer.nix); a session reads what its
+    # own units did. agents: the fort's one Claude credential (below).
     extraGroups = [ "systemd-journal" "agents" ];
     openssh.authorizedKeys.keys = dispatchKeys;
   });
 
-  # The group that reads the fort's Claude credential, and nothing else.
+  # The group that reads the fort's Claude credential, and nothing else —
+  # the agent accounts, not deployer.
   users.groups.agents = { };
 
   # The accounts build: `nix develop`, `nix build` in the checkouts.
-  # hardened.nix keeps root; this appends.
+  # hardened.nix keeps root; this appends the agent accounts and not
+  # deployer, which observes the host and never the store.
   nix.settings.allowed-users = users;
 
   # herdr from the second nixpkgs input (flake.nix): the fleet pin predates

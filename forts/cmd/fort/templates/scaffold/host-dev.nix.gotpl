@@ -11,9 +11,11 @@
 # is no hand-written hardware.nix.
 # DEV PROFILE ([dev] in the manifest, #413): no k3s, no flux, no backups.
 # SSH answers on the wireguard mesh address ONLY — reach it as
-# {{ range $i, $a := .DevAccounts }}{{ if $i }}, {{ end }}`{{ $a.User }}@{{ $.MeshIP }}` (the {{ $a.Verb }} verb){{ end }} — never the LAN IP. One account per
-# role (#532), each with its own gitea identity. No steven, no operator
-# account, no wheel; see modules/dev-fort.nix.
+# {{ range $i, $a := .DevAccounts }}{{ if $i }}, {{ end }}`{{ $a.User }}@{{ $.MeshIP }}` (the {{ $a.Verb }} verb){{ end }}, or as
+# `deployer@{{ .MeshIP }}` for the ops verbs — never the LAN IP. One account
+# per role (#532), each with its own gitea identity, beside the fort's
+# operator account `deployer` (modules/ops/deployer.nix, #647): the
+# pinned sfi-* verbs, no wheel. No steven; see modules/dev-fort.nix.
 { ... }:
 
 {
@@ -29,7 +31,8 @@
     # The dev profile: hardened.nix + lab-host.nix with an unprivileged
     # account per role, Home Manager with the dev toolchains and the
     # dotfiles, nix-ld for prebuilt binaries. Not the cluster profile:
-    # there is no cluster here and no operator account.
+    # there is no cluster here. The operator account is the fort's,
+    # ops/deployer.nix, which both profiles import (#647).
     ../../modules/dev-fort.nix
     ../../modules/auto-rebuild.nix # pull-based OS updates (#93); gc window set by dev-fort.nix
   ];
@@ -37,8 +40,10 @@
   networking.hostName = "{{ .Hostname }}";
 
   # Watch main; a changed host config lands within a minute or two of
-  # merging — or now, via `sudo sfi-nixos-rebuild` (#93). Note: no account
-  # here holds an ops verb; the loop is the only way config reaches this host.
+  # merging — or now, via `sudo sfi-nixos-rebuild` as deployer (#93).
+  # deployer holds the host's sfi-* verbs (sfi-nixos-rebuild, -rollback,
+  # -revision, sfi-systemd-restart); no agent account holds one, so from a
+  # session the loop is the only way config reaches this host.
   sfi.auto-rebuild.enable = true;
 
   # Static address on the hypervisor's LAN bridge — matches [libvirt] ip in

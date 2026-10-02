@@ -15,9 +15,10 @@ cd forts && go run ./cmd/fort <verb> …     # every verb
 
 Two shapes, one declaration apart: a fort is a flux cluster unless its
 manifest carries a `[dev]` table, which makes it a **dev fort** (#413) —
-the same hardened host with an `agent` instead of a `deployer`, the
-toolchains, and no cluster. The verbs know the difference from the
-manifest; nothing else changes hands ([manifest.md](manifest.md)).
+the same hardened host and the same `deployer` (#647), plus an account
+per agent role, the toolchains, and no cluster. The verbs know the
+difference from the manifest; nothing else changes hands
+([manifest.md](manifest.md)).
 
 ## Verbs by intent
 

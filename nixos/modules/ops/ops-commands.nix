@@ -1,8 +1,9 @@
 # SFI ops break-glass command framework.
 #
-# The intervention ladder on production-shaped hosts:
+# The intervention ladder on every fort — cluster forts and dev forts
+# alike (#647); a dev fort has the host rungs and no cluster ones:
 #   1. OBSERVE  — the read-only kubeconfig (ops-kubeconfig.nix) plus the
-#      host journal (deployer is in systemd-journal, production.nix): look
+#      host journal (deployer is in systemd-journal, ops/deployer.nix): look
 #      at anything, change nothing. Day-0 failures (flux-bootstrap before
 #      flux exists) are only diagnosable from this rung. A few verbs
 #      declared here BELONG TO THIS RUNG rather than the next one:
@@ -42,7 +43,9 @@
 #     /run/current-system/sw/bin/sfi-<name> NOPASSWD — same pinned
 #     stable-path pattern auto-rebuild.nix proved for sfi-rebuild-now
 #     (matched on the current-system link so it survives generation
-#     switches; on hosts without a deployer account it never matches);
+#     switches). The account is ./deployer.nix's, imported below, so the
+#     rule's subject exists on every host that declares a verb (#647) —
+#     there is no host where the verbs are present and unreachable;
 #   - a row in `sfi-ops`, the index verb that lists every available
 #     command with its description — discoverability is half the value.
 { config, lib, pkgs, ... }:
@@ -93,7 +96,10 @@ let
   };
 in
 {
-  imports = [ ./challenge.nix ]; # the admin-key gate, for verbs that ask
+  imports = [
+    ./challenge.nix # the admin-key gate, for verbs that ask
+    ./deployer.nix # the account every rule below names (#647)
+  ];
 
   options.sfi.ops.commands = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule {

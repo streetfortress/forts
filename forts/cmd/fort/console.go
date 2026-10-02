@@ -60,9 +60,11 @@ import (
 // leaves, after a shared console session, after a drill. So this is its
 // own verb with `--rotate` as the deliberate act.
 //
-// SCOPE: cluster forts. ops/ops-commands.nix pins every sfi-* sudo rule
-// to `deployer`; a [dev] fort has `agent` instead and is transient
-// (dev-fort.nix), so the verb refuses one.
+// SCOPE: every fort. ops/ops-commands.nix pins every sfi-* sudo rule to
+// `deployer`, and the account is ops/deployer.nix's on cluster forts and
+// dev forts alike (#647) — a dev fort is one of our implementations on
+// top of a fort, and the hatch is the fort's. This verb used to refuse a
+// [dev] fort while #524 left that question open; it no longer does.
 func consolePassword(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort console-password <host> [--write] [--rotate] [--show]")
@@ -141,12 +143,9 @@ func (p *consolePlan) mints() bool { return !p.haveHash || p.rotate }
 // file, the same property `fort check` relies on. So a dry run needs no
 // age key. Only --write and --show do.
 func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
-	entry, err := manifest.Load(root, host)
-	if err != nil {
+	// A manifest is the gate — cluster or [dev], both carry deployer.
+	if _, err := manifest.Load(root, host); err != nil {
 		return nil, err
-	}
-	if entry.IsDev() {
-		return nil, fmt.Errorf("%s is a [dev] fort: its login account is `agent`, and ops/ops-commands.nix pins every sfi-* sudo rule to `deployer` — a console login there reaches no recovery verb. A dev fort is transient (nixos/modules/dev-fort.nix); repave it instead", host)
 	}
 	p := &consolePlan{
 		root:        root,

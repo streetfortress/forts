@@ -1,7 +1,8 @@
 # The hardening every fort profile shares (#417): mesh-only admin surface,
-# a server clock, and the closure trims. Carries NO account — that is the
-# profile's job: production.nix adds `deployer` and the public/cluster
-# ports, dev-fort.nix adds `agent` and nothing public. Split out of
+# a server clock, and the closure trims. Carries NO account: the operator
+# account every fort shares is ops/deployer.nix (#647), and the profiles
+# add the rest — production.nix the cluster grant and the public/cluster
+# ports, dev-fort.nix the agent accounts and nothing public. Split out of
 # production.nix so the two profiles are the same lines, not drifting
 # copies.
 #
@@ -13,8 +14,9 @@
 #     9100 on every interface; here that is switched off and re-opened on
 #     wg0 only. (The exporter's openFirewall injects an iptables rule
 #     outside allowedTCPPorts, so it must be disabled explicitly.)
-#   - Only root talks to the nix daemon by default. A profile whose user
-#     builds (dev-fort.nix's agent) appends itself.
+#   - Only root talks to the nix daemon by default. A profile whose
+#     accounts build (dev-fort.nix's agent accounts) appends them;
+#     deployer never builds.
 { config, lib, ... }:
 
 let

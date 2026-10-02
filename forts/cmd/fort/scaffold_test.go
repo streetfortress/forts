@@ -239,12 +239,14 @@ func TestRenderScaffoldDev(t *testing.T) {
 		m[f.path] = string(f.content)
 	}
 	d := m["nixos/hosts/dev-fort/default.nix"]
-	for _, s := range []string{"../../modules/qcow-runtime.nix", "../../modules/dev-fort.nix", "../../modules/wireguard.nix", "../../modules/auto-rebuild.nix", "agent@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "dev-fort"`, "zramSwap", "DEV PROFILE"} {
+	// deployer@ is named beside the agent accounts: a dev fort carries the
+	// fort's operator account too (#647), and the header says how to reach it.
+	for _, s := range []string{"../../modules/qcow-runtime.nix", "../../modules/dev-fort.nix", "../../modules/wireguard.nix", "../../modules/auto-rebuild.nix", "agent@10.1.0.96", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "dev-fort"`, "zramSwap", "DEV PROFILE"} {
 		if !strings.Contains(d, s) {
 			t.Errorf("dev default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "clusterInit", "deployer", "interactive.nix", "dotfiles.nix"} {
+	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "clusterInit", "interactive.nix", "dotfiles.nix"} {
 		if strings.Contains(d, s) {
 			t.Errorf("dev default.nix should not carry %q", s)
 		}
