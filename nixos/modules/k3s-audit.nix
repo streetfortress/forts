@@ -26,7 +26,11 @@ let
   # The control plane talking to itself is the bulk of every API log and
   # not what the log exists to record. These are the users k3s's own
   # components authenticate as, and the groups its nodes and the
-  # platform namespaces' service accounts carry.
+  # platform namespaces' service accounts carry. A namespace is
+  # platform here when a controller converges it and no person works in
+  # it: cnpg-system runs the CNPG operator and its barman-cloud plugin
+  # (fleet/infrastructure/controllers/cnpg), which were the two largest
+  # sources in the stage fort's first hours of the stream (#653).
   platformUsers = [
     "system:apiserver"
     "system:kube-controller-manager"
@@ -40,6 +44,7 @@ let
     "system:serviceaccounts:kube-system"
     "system:serviceaccounts:flux-system"
     "system:serviceaccounts:monitoring"
+    "system:serviceaccounts:cnpg-system"
   ];
 
   # Rules apply first match wins, so the noise is dropped first and the
@@ -73,11 +78,23 @@ let
       # `kubectl create token` returns (serviceaccounts/token), the data
       # of a Secret, a TokenReview's token, and ConfigMaps, which are
       # bulky and sometimes hold what should have been a Secret.
+      #
+      # A Lease is here for the other reason: it carries no secret, it
+      # carries nothing a person wrote. Its body is a holder identity
+      # and a renew timestamp, rewritten every few seconds for as long
+      # as an operator runs. The group below quiets the lease of an
+      # operator that runs in a platform namespace; this rule reaches
+      # the one it cannot — CNPG gives each Cluster its own service
+      # account in the *tenant's* namespace (sites-db on this fort),
+      # and that account holds the primary-election lease, so a
+      # namespace list would need an edit for every new database
+      # (#653). The who, the verb and the name stay in the event.
       {
         level = "Metadata";
         resources = [
           { group = ""; resources = [ "secrets" "configmaps" "serviceaccounts/token" ]; }
           { group = "authentication.k8s.io"; resources = [ "tokenreviews" ]; }
+          { group = "coordination.k8s.io"; resources = [ "leases" ]; }
         ];
       }
       # The controllers' writes: who, what, when — flux reconciling and
