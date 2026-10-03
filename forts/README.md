@@ -36,10 +36,13 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
 
 ## The image is a birth input, not a resource
 
-The bootstrap image carries the host's pre-seeded key and is single-use
-by design (#42): built, injected, uploaded, consumed by instance
-creation, then deleted on both sides. Modeling that as a pulumi resource
-is wrong in both lifecycle directions:
+The bootstrap image is single-use by design (#42): built, uploaded,
+consumed by instance creation, then deleted on both sides. A lab or
+baremetal image carries the host's pre-seeded key; a Linode image no
+longer does — the key is `metadata.user_data` on the instance, set by
+`fort provision` and read by the initrd (#606, `nixos/modules/seed.nix`;
+the model is #605's). Modeling the image as a pulumi resource is wrong
+in both lifecycle directions:
 
 - *Deletion*: a deliberately-deleted resource is permanent drift —
   `--expect-no-changes` red forever, or `RetainOnDelete` gymnastics.

@@ -114,7 +114,8 @@
 
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host
-  # key (age.sshKeyPaths) injected into the image before first boot.
+  # key (age.sshKeyPaths), which the initrd places from the Linode
+  # Metadata channel before activation (modules/seed.nix, #606).
   # Secrets are split per-host, so this host only declares the keys it
   # actually carries — no declared-but-absent secrets to fail activation.
 

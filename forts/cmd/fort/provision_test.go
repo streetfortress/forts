@@ -33,3 +33,29 @@ func TestStackGate(t *testing.T) {
 		t.Errorf("gone birth: .bak is residue, want init; got %v %v", init, err)
 	}
 }
+
+// The seed goes out only when the apply creates the instance (PR #654
+// review): the stack export says whether one is already there.
+func TestHasResourceType(t *testing.T) {
+	born := `{"version":3,"deployment":{"manifest":{},"resources":[
+	 {"type":"pulumi:pulumi:Stack"},{"type":"pulumi:providers:linode"},
+	 {"type":"linode:index/firewall:Firewall"},{"type":"linode:index/instance:Instance"},
+	 {"type":"linode:index/instanceDisk:InstanceDisk"}]}}`
+	if has, err := hasResourceType([]byte(born), linodeInstanceType); !has || err != nil {
+		t.Errorf("born stack: want the instance found; got %v %v", has, err)
+	}
+	// a birth that failed after the firewall, before the instance: still needed
+	partial := `{"version":3,"deployment":{"manifest":{},"resources":[
+	 {"type":"pulumi:pulumi:Stack"},{"type":"pulumi:providers:linode"},{"type":"linode:index/firewall:Firewall"}]}}`
+	if has, err := hasResourceType([]byte(partial), linodeInstanceType); has || err != nil {
+		t.Errorf("partial birth: want no instance; got %v %v", has, err)
+	}
+	// a fresh stack exports a deployment with no resources key at all
+	fresh := `{"version":3,"deployment":{"manifest":{"time":"2026-10-02T00:00:00Z","magic":"x","version":"v3.263.0"}}}`
+	if has, err := hasResourceType([]byte(fresh), linodeInstanceType); has || err != nil {
+		t.Errorf("fresh stack: want no instance; got %v %v", has, err)
+	}
+	if _, err := hasResourceType([]byte("error: no stack"), linodeInstanceType); err == nil {
+		t.Error("garbage must be an error, not a false")
+	}
+}

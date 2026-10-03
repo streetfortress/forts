@@ -11,7 +11,7 @@
 // image's whole lifecycle around it. The full flow:
 //
 //	fort scaffold web3                  # render files → branch → PR
-//	fort image web3                     # (after the merge) nix build + host-key graft
+//	fort image web3                     # (after the merge) nix build; linode: that is the artifact (#606)
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
@@ -193,25 +193,31 @@ func usage() {
       (writeBuckets), prompted for or from B2_KEY_ID / B2_APP_KEY.
 
   image <host> [--from <built image>] [--out <dir>]
-      build the host's bootstrap image and graft its ssh identity in:
-      nix build ./nixos#<host>-{qcow|linode|baremetal} (the variant from
-      the manifest's provider table; --from skips the build), then guestfish
-      uploads ssh-host-key + .pub from nixos/secrets/<host>.yaml into
-      /etc/ssh — the key that decrypts the host's secrets on first boot
-      must never enter the nix store. Linode images get the 6 GiB raw /
-      5 GiB gzip caps asserted. Output: ~/.cache/forts/<host>-nixos.
-      {qcow2,img.gz,img}, the SECRET-BEARING single-use artifact provision
-      --image consumes and deletes — or, for a [baremetal] host, the one
-      you write to the machine's disk from a live ISO and then delete
-      (docs/forts/baremetal.md); the work dir is shredded. guestfish
-      comes from PATH, else nixpkgs; nix and sops must be on PATH.
+      build the host's bootstrap image: nix build ./nixos#<host>-{qcow|
+      linode|baremetal} (the variant from the manifest's provider table;
+      --from skips the build). The key that decrypts the host's secrets on
+      first boot must never enter the nix store, so it travels apart from
+      the build. linode: the build output IS the artifact, no secret inside
+      (#606) — the key arrives as metadata.user_data at provision and the
+      initrd places it before activation; the 6 GiB raw / 5 GiB gzip caps
+      are asserted. qcow, baremetal: guestfish grafts ssh-host-key + .pub
+      from nixos/secrets/<host>.yaml into /etc/ssh, until their NoCloud
+      channel lands (#605). Output: ~/.cache/forts/<host>-nixos.
+      {qcow2,img.gz,img} — for the grafted variants the SECRET-BEARING
+      single-use artifact provision --image consumes and deletes, or, for
+      a [baremetal] host, the one you write to the machine's disk from a
+      live ISO and then delete (docs/forts/baremetal.md); the work dir is
+      shredded. nix must be on PATH; a graft also needs sops, and
+      guestfish from PATH, else nixpkgs.
 
   provision <host> [--image <path>] [--yes]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
       the preview, or --yes confirms it — an agent, a script, CI; without
       a TTY and without --yes the verb refuses up front). With --image, the birth: create the stack if the host
-      has none, stage the injected single-use bootstrap image and record
-      it as the stack's forts:imageId — linode: upload the .img.gz;
+      has none, stage the single-use bootstrap image and record
+      it as the stack's forts:imageId — linode: upload the .img.gz, and
+      on every linode apply hand the host key seed to the program for
+      metadata.user_data (#606, read from nixos/secrets/<host>.yaml);
       libvirt: grow the .qcow2 to disk_size, the program streams it into
       the pool as the root disk — and once the host exists, release it
       (provider-side where applicable, and the local copy) (#42). Without

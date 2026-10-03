@@ -11,11 +11,18 @@
 # "couldn't find". Labels are stable on both disks: the image build
 # labels root "nixos" (make-disk-image), and Linode formats swap disks
 # it creates as "linode-swap".
+#
+# The seed reader (./seed.nix, #606) rides with this contract: a Linode
+# fort's image carries no host key; the key arrives through the Metadata
+# service at first boot, placed by the initrd before activation. A host
+# whose key is already on the root (the grafted images of today) boots
+# unchanged — the reader finds the key and returns.
 { lib, modulesPath, ... }:
 
 {
-  imports = [ ./platform.nix "${toString modulesPath}/virtualisation/linode-config.nix" ];
+  imports = [ ./platform.nix ./seed.nix "${toString modulesPath}/virtualisation/linode-config.nix" ];
   sfi.platform = "linode";
+  sfi.seed.enable = lib.mkDefault true;
 
   # mkForce: upstream sets device = "/dev/sda" at normal priority.
   # autoResize rides along unchanged (first boot grows the deployed fs

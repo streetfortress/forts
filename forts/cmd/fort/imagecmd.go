@@ -11,32 +11,36 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
-	"gopkg.in/yaml.v3"
 )
 
-// image builds a host's bootstrap image and grafts its ssh identity in
-// (#42, was provisioning/inject-host-key.sh): the nix build is generic —
-// the sops-encrypted secrets ride inside it — but the host key that
-// decrypts them at boot (sops-nix age.sshKeyPaths) must never enter the
-// nix store, so it is injected afterwards, read straight from the
-// sops-encrypted repo store (fort mint's custody model: no plaintext key
-// material at rest anywhere). guestfish mounts the root explicitly (not
-// virt-customize: libguestfs OS inspection cannot identify a NixOS
-// guest): /dev/sda for the linode variant's raw non-partitioned ext4,
-// /dev/sda1 for the qcow variant's single msdos partition, /dev/sda2 for
-// the baremetal variant's GPT (the ESP is partition 1).
+// image builds a host's bootstrap image (#42, was
+// provisioning/inject-host-key.sh). The nix build is generic: the
+// sops-encrypted secrets ride inside it, and the host key that decrypts
+// them at boot (sops-nix age.sshKeyPaths) must never enter the nix store.
+// How the key reaches the host depends on the variant (#605's decision):
 //
-// The output — ~/.cache/forts/<host>-nixos.{img.gz,qcow2,img} — is the
-// SECRET-BEARING, single-use artifact `fort provision <host> --image`
-// consumes and deletes on success — or, for a [baremetal] host, the one
-// a human writes to the machine's disk and then deletes
-// (docs/forts/baremetal.md). Linode images also get the #42 size caps
-// asserted (custom-image upload limits). An author-side verb: it touches
-// no provider.
+//   - linode: no graft (#606). The artifact is the plain build output,
+//     ~/.cache/forts/<host>-nixos.img.gz, with the #42 size caps asserted
+//     (custom-image upload limits). The key travels as metadata.user_data
+//     on the instance (`fort provision`) and the initrd places it before
+//     activation (nixos/modules/seed.nix). This verb reads no secret for
+//     a linode host and needs neither sops nor guestfish.
+//   - qcow, baremetal: the graft, until their NoCloud channel lands. The
+//     key is read straight from the sops-encrypted repo store (fort mint's
+//     custody model: no plaintext key material at rest anywhere) and
+//     guestfish mounts the root explicitly (not virt-customize: libguestfs
+//     OS inspection cannot identify a NixOS guest): /dev/sda1 for the qcow
+//     variant's single msdos partition, /dev/sda2 for the baremetal
+//     variant's GPT (the ESP is partition 1). The output is a
+//     SECRET-BEARING, single-use artifact `fort provision <host> --image`
+//     consumes and deletes on success — or, for a [baremetal] host, the
+//     one a human writes to the machine's disk and then deletes
+//     (docs/forts/baremetal.md).
 //
-// Tools: nix (the build; skipped with --from), sops, and guestfish —
-// from PATH, else nixpkgs' copy (ensureTool, as for virsh / xsltproc /
-// kustomize; the declared-prerequisites question is #160's).
+// An author-side verb: it touches no provider. Tools: nix (the build;
+// skipped with --from); for a grafted variant also sops, and guestfish
+// from PATH or, failing that, from nixpkgs (ensureTool, as for virsh /
+// xsltproc / kustomize; the declared-prerequisites question is #160's).
 func image(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort image <host> [--from <built image>] [--out <dir>]")
@@ -44,7 +48,7 @@ func image(args []string) error {
 	host := args[0]
 	fs := flag.NewFlagSet("image", flag.ContinueOnError)
 	from := fs.String("from", "", "an already-built image (result/nixos.qcow2, result/*.img.gz, result/nixos.img) — skips the nix build")
-	outDir := fs.String("out", "", "where the injected artifact goes (default ~/.cache/forts)")
+	outDir := fs.String("out", "", "where the artifact goes (default ~/.cache/forts)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -57,9 +61,6 @@ func image(args []string) error {
 		return err
 	}
 	v := imageVariant(host, entry)
-	if err := ensureTool("guestfish", "nixpkgs#libguestfs-with-appliance"); err != nil {
-		return err
-	}
 	if *outDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -67,26 +68,11 @@ func image(args []string) error {
 		}
 		*outDir = filepath.Join(home, ".cache", "forts")
 	}
-
-	// 1. the host's identity, from the sops file mint wrote
-	secretsPath := filepath.Join("nixos/secrets", host+".yaml")
-	if !exists(root, secretsPath) {
-		return fmt.Errorf("no %s — run `fort mint %s --write` first", secretsPath, host)
-	}
-	raw, err := sopsCLI{root: root}.Decrypt(filepath.Join(root, secretsPath))
-	if err != nil {
+	if err := os.MkdirAll(*outDir, 0o700); err != nil {
 		return err
 	}
-	var have map[string]string
-	if err := yaml.Unmarshal(raw, &have); err != nil {
-		return fmt.Errorf("%s: %w", secretsPath, err)
-	}
-	key, pub := have[keySSHHost], have[keySSHHostPub]
-	if key == "" || pub == "" {
-		return fmt.Errorf("%s lacks %s / %s — run `fort mint %s --write` first", secretsPath, keySSHHost, keySSHHostPub, host)
-	}
 
-	// 2. the generic image: built, or handed in
+	// 1. the generic image: built, or handed in
 	src := *from
 	if src == "" {
 		if _, err := exec.LookPath("nix"); err != nil {
@@ -102,11 +88,23 @@ func image(args []string) error {
 	if _, err := os.Stat(src); err != nil {
 		return err
 	}
+	out := filepath.Join(*outDir, host+"-nixos"+v.ext())
 
-	// 3. the work dir: private, shredded on exit whatever happens
-	if err := os.MkdirAll(*outDir, 0o700); err != nil {
+	// 2a. no graft: the build output is the artifact (#606)
+	if !v.grafts() {
+		return plainImage(v, host, src, out)
+	}
+
+	// 2b. the graft: the host's identity, from the sops file mint wrote
+	if err := ensureTool("guestfish", "nixpkgs#libguestfs-with-appliance"); err != nil {
 		return err
 	}
+	key, pub, err := hostKeyPair(sopsCLI{root: root}, root, host)
+	if err != nil {
+		return err
+	}
+
+	// 3. the work dir: private, shredded on exit whatever happens
 	work, err := os.MkdirTemp(*outDir, ".inject-"+host+".")
 	if err != nil {
 		return err
@@ -119,21 +117,9 @@ func image(args []string) error {
 		return err
 	}
 	img := filepath.Join(work, "nixos.img")
-	if v.variant == "linode" {
-		fmt.Printf("== unpacking %s\n", filepath.Base(src))
-		n, err := gunzipTo(src, img)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("   uncompressed: %d MiB (cap %d)\n", n>>20, linodeRawCap>>20)
-		if n > linodeRawCap {
-			return fmt.Errorf("image exceeds Linode's 6 GiB uncompressed cap")
-		}
-	} else {
-		fmt.Printf("== copying %s\n", filepath.Base(src))
-		if err := copyPrivate(src, img); err != nil {
-			return err
-		}
+	fmt.Printf("== copying %s\n", filepath.Base(src))
+	if err := copyPrivate(src, img); err != nil {
+		return err
 	}
 
 	// 4. the graft
@@ -146,22 +132,8 @@ func image(args []string) error {
 	}
 
 	// 5. the artifact
-	out := filepath.Join(*outDir, host+"-nixos"+v.ext())
-	if v.variant == "linode" {
-		fmt.Printf("== recompressing → %s\n", out)
-		n, err := gzipTo(img, out)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("   gzipped: %d MiB (cap %d)\n", n>>20, linodeGzCap>>20)
-		if n > linodeGzCap {
-			os.Remove(out)
-			return fmt.Errorf("image exceeds Linode's 5 GiB gzip cap")
-		}
-	} else {
-		if err := os.Rename(img, out); err != nil {
-			return err
-		}
+	if err := os.Rename(img, out); err != nil {
+		return err
 	}
 	fmt.Printf("== done. Single-use secret-bearing artifact: %s\n", out)
 	if b := entry.Baremetal(); b != nil {
@@ -175,6 +147,37 @@ func image(args []string) error {
 		return nil
 	}
 	fmt.Printf("== next: fort provision %s --image %s   (deletes it on success)\n", host, out)
+	return nil
+}
+
+// plainImage is the linode path: assert the #42 caps on the build output
+// and copy it to the artifact path `fort provision --image` expects. The
+// copy holds no secret; it goes under the same 0700 cache dir as the
+// grafted variants' artifacts, and provision still deletes it on success
+// (the single-use lifecycle is #605's step 3).
+func plainImage(v variantSpec, host, src, out string) error {
+	n, err := gunzipSize(src)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("   uncompressed: %d MiB (cap %d)\n", n>>20, linodeRawCap>>20)
+	if n > linodeRawCap {
+		return fmt.Errorf("image exceeds Linode's 6 GiB uncompressed cap")
+	}
+	st, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("   gzipped: %d MiB (cap %d)\n", st.Size()>>20, linodeGzCap>>20)
+	if st.Size() > linodeGzCap {
+		return fmt.Errorf("image exceeds Linode's 5 GiB gzip cap")
+	}
+	fmt.Printf("== copying %s → %s\n", filepath.Base(src), out)
+	if err := copyPrivate(src, out); err != nil {
+		return err
+	}
+	fmt.Printf("== done. Plain build output, no secret inside: %s\n", out)
+	fmt.Printf("== next: fort provision %s --image %s   (the host key arrives through the Metadata channel at first boot)\n", host, out)
 	return nil
 }
 
@@ -201,6 +204,12 @@ func imageVariant(host string, h manifest.Host) variantSpec {
 	}
 	return variantSpec{host, "qcow", "./nixos#" + host + "-qcow", "/dev/sda1"}
 }
+
+// grafts says whether the variant's artifact carries the host key. The
+// linode variant reads its seed from the Metadata channel at first boot
+// (#606); qcow and baremetal keep the graft until their NoCloud channel
+// lands (#605's order).
+func (v variantSpec) grafts() bool { return v.variant != "linode" }
 
 func (v variantSpec) ext() string {
 	switch v.variant {
@@ -265,6 +274,22 @@ func gunzipTo(src, dst string) (int64, error) {
 	}
 	defer out.Close()
 	return io.Copy(out, gz)
+}
+
+// gunzipSize is the uncompressed length of a .gz, read through once —
+// the #42 raw cap without a copy on disk.
+func gunzipSize(src string) (int64, error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer in.Close()
+	gz, err := gzip.NewReader(in)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", src, err)
+	}
+	defer gz.Close()
+	return io.Copy(io.Discard, gz)
 }
 
 func gzipTo(src, dst string) (int64, error) {

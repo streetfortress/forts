@@ -70,9 +70,11 @@ fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canar
                                  the fort's block in wireguard/ssh_config + its
                                  host key in wireguard/known_hosts (ssh-config.md)
                               → PR → merge
-fort image <host>             ← nix build (the variant from the manifest) + the host
-                                 key grafted in → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
-fort provision <host> --image <path>   ← pulumi up, you confirm; the single-use
+fort image <host>             ← nix build (the variant from the manifest); qcow and
+                                 baremetal get the host key grafted in, linode does not
+                                 (#606) → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
+fort provision <host> --image <path>   ← pulumi up, you confirm; linode: the host key
+                                          rides as metadata.user_data; the single-use
                                           image is released; state staged
                               → "<host>: provisioned" PR (state only) → merge
                                  (a [baremetal] host: no provision — you write

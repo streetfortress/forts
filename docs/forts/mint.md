@@ -30,8 +30,10 @@ Consequences worth knowing:
   orphan key. Rotation is a deliberate act — remove the key from the sops
   file first — never a side effect.
 - **The host's ssh key doubles as its age identity** (ssh-to-age): the
-  recipient in the sops rule is derived from it, and the image inject step
-  reads the same key back so the host boots already able to decrypt.
+  recipient in the sops rule is derived from it, and the birth reads the
+  same key back — `fort image` grafts it (qcow, baremetal) or `fort
+  provision` hands it to the Linode Metadata channel (#606) — so the host
+  boots already able to decrypt.
 - **Nothing is ever printed but public material**: the host's age
   recipient, the cluster's, the wireguard public key.
 

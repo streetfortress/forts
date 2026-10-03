@@ -27,6 +27,11 @@ func TestImageVariant(t *testing.T) {
 	if metal.variant != "baremetal" || metal.attr != "./nixos#metal-fort-baremetal" || metal.rootDev != "/dev/sda2" || metal.ext() != ".img" {
 		t.Errorf("metal: %+v", metal)
 	}
+	// the graft is the qcow and baremetal variants'; linode's key travels
+	// through the Metadata channel (#606)
+	if cloud.grafts() || !lab.grafts() || !metal.grafts() {
+		t.Errorf("grafts: cloud=%v lab=%v metal=%v", cloud.grafts(), lab.grafts(), metal.grafts())
+	}
 	s := guestfishScript("/dev/sda1", "/w")
 	for _, want := range []string{"run\nmount /dev/sda1 /\n", "upload /w/key /etc/ssh/ssh_host_ed25519_key\n", "upload /w/key.pub /etc/ssh/ssh_host_ed25519_key.pub\n", "chmod 0600 /etc/ssh/ssh_host_ed25519_key\n"} {
 		if !strings.Contains(s, want) {
@@ -51,6 +56,9 @@ func TestImageFiles(t *testing.T) {
 	gz := filepath.Join(dir, "raw.img.gz")
 	if n, err := gzipTo(raw, gz); err != nil || n <= 0 || n >= int64(len(payload)) {
 		t.Errorf("gzipTo: %d %v", n, err)
+	}
+	if n, err := gunzipSize(gz); err != nil || n != int64(len(payload)) {
+		t.Errorf("gunzipSize: %d %v", n, err)
 	}
 	back := filepath.Join(dir, "back.img")
 	if n, err := gunzipTo(gz, back); err != nil || n != int64(len(payload)) {

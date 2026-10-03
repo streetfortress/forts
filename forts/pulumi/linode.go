@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/seed"
 	"github.com/pulumi/pulumi-linode/sdk/v4/go/linode"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
@@ -37,18 +39,33 @@ func linodePlanDiskMB(instanceType string) (int, error) {
 	return out.Disk, nil
 }
 
-// Linode realizes a host on Linode: boot an instance from the pre-seeded
-// bootstrap image, attach a default-deny firewall at creation, and point
-// DNS at it. The host comes up already holding its sops identity (the
-// scaffold/inject step baked the host key into the image) and
-// flux-bootstraps itself — no SSH in the provisioning path.
+// Linode realizes a host on Linode: boot an instance from the bootstrap
+// image, attach a default-deny firewall at creation, hand it its ssh host
+// key through the Metadata service, and point DNS at it. The host comes up
+// holding its sops identity before activation (nixos/modules/seed.nix
+// reads metadata.user_data in the initrd, #606) and flux-bootstraps itself
+// — no SSH in the provisioning path.
 //
-// The image itself is NOT a resource here. It is secret-bearing and
-// single-use by design (#42): `fort provision --image` uploads it, sets
-// `forts:imageId` on the stack, and deletes it (provider-side and local)
-// once the instance exists. The root disk carries ignoreChanges on
-// `image` — it is a birth input, not a managed property, so neither the
-// image's deletion nor a later rebuild ever diffs a running host.
+// The image itself is NOT a resource here. It is a birth input (#42):
+// `fort provision --image` uploads it, sets `forts:imageId` on the stack,
+// and deletes it (provider-side and local) once the instance exists. The
+// root disk carries ignoreChanges on `image` — a birth input, not a
+// managed property, so neither the image's deletion nor a later rebuild
+// ever diffs a running host. Since #606 the image carries no secret; the
+// single-use lifecycle around it is #605's step 3 and still runs as is.
+//
+// The seed (#605 option 2): metadata.user_data on the instance, the one
+// value the image used to carry. `fort provision` reads the key pair from
+// nixos/secrets/<host>.yaml and hands the base64 value over in seed.Env
+// on every Linode apply; the program wraps it as a pulumi secret, so the
+// committed checkpoint holds ciphertext under the passphrase provider —
+// a second copy of the key, under the same admin keys, accepted and
+// recorded in docs/forts/provision.md. The instance ignores changes to
+// `metadatas`: Linode's metadata cannot change on a running instance (the
+// rebuild endpoint takes new metadata with new disks, and a rebuild is a
+// repave), the API never returns user_data (only has_user_data, so a
+// refresh reads it back empty), and a re-minted key must show as a
+// deliberate repave, not as a diff on a running host.
 //
 // The instance is built the explicit way — empty instance + disks +
 // config profile — rather than instance-from-image, because the implicit
@@ -128,6 +145,19 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		return err
 	}
 
+	// The seed, when this run carries one (fort provision does; a bare
+	// `pulumi preview` from forts/pulumi does not, and ignoreChanges keeps
+	// the recorded value for an existing instance either way). Secret from
+	// the first moment the engine sees it.
+	var metadatas linode.InstanceMetadataArrayInput
+	if ud := os.Getenv(seed.Env); ud != "" {
+		metadatas = linode.InstanceMetadataArray{
+			&linode.InstanceMetadataArgs{
+				UserData: pulumi.ToSecret(pulumi.String(ud)).(pulumi.StringOutput),
+			},
+		}
+	}
+
 	instance, err := linode.NewInstance(ctx, name, &linode.InstanceArgs{
 		Label:          pulumi.String(name),
 		Region:         pulumi.String(spec.Region),
@@ -135,6 +165,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		FirewallId:     firewall.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput),
 		PrivateIp:      pulumi.Bool(false),
 		BackupsEnabled: pulumi.Bool(false), // backups are #47's job, not the provider's
+		Metadatas:      metadatas,
 		// Empty shell: disks + boot config below own what runs on it.
 		Booted: pulumi.Bool(false),
 		// …and `booted` is therefore the InstanceConfig's to manage: a
@@ -142,7 +173,12 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		// this the next apply would "correct" it to false — which the
 		// provider implements as a shutdown (caught on the first
 		// `preview --refresh` after the fort went live, 2026-09-13).
-	}, append(opts, pulumi.IgnoreChanges([]string{"booted"}))...)
+		// `metadatas` for the reasons in the type comment: fixed for the
+		// instance's life, never read back, and a rotation is a repave.
+	}, append(opts,
+		pulumi.IgnoreChanges([]string{"booted", "metadatas"}),
+		pulumi.AdditionalSecretOutputs([]string{"metadatas"}),
+	)...)
 	if err != nil {
 		return err
 	}

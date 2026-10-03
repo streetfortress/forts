@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -10,11 +11,12 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
+	hostseed "gitea.zen.lofi/sfi/deployments/forts/internal/seed"
 )
 
-// provision is the birth flow (#42): the secret-bearing single-use image
-// is uploaded, consumed by `pulumi up`, then deleted on both sides. The
-// image is deliberately NOT a pulumi resource — it is a birth input
+// provision is the birth flow (#42): the single-use image is uploaded,
+// consumed by `pulumi up`, then deleted on both sides. The image is
+// deliberately NOT a pulumi resource — it is a birth input
 // (forts/README.md has the full argument); pulumi owns only the durable
 // surface (instance, firewall, DNS), and the apply is still the stock
 // CLI with inherited stdio: a human reads the preview and confirms.
@@ -22,13 +24,21 @@ import (
 // Without --image this is just a `pulumi up -s <host>` wrapper — the
 // stack's forts:imageId is already set from the birth run, and the
 // instance ignores changes to it.
+//
+// A Linode host's ssh host key travels separately from the image (#606):
+// every Linode apply reads the pair from nixos/secrets/<host>.yaml and
+// hands the seed to the program in the environment (hostseed.Env), which sets
+// it as metadata.user_data on the instance at creation, as a pulumi
+// secret. The host's initrd reads it from the Metadata service before
+// activation (nixos/modules/seed.nix). The read needs the admin age key,
+// as the token lookups in cloudEnv already do.
 func provision(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("provision needs the host first: fort provision <host> [--image <path>]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("provision", flag.ContinueOnError)
-	imagePath := fs.String("image", "", "injected bootstrap image (linode: .img.gz to upload; libvirt: the .qcow2 the volume is streamed from); deleted locally on success")
+	imagePath := fs.String("image", "", "bootstrap image from fort image (linode: .img.gz to upload; libvirt: the injected .qcow2 the volume is streamed from); deleted locally on success")
 	yes := fs.Bool("yes", false, "confirm the pulumi apply without a prompt (an agent, a script, CI)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -70,6 +80,33 @@ func provision(args []string) error {
 			return err
 		}
 	}
+	if entry.Cloud() {
+		// The seed for the Metadata channel, read only when this apply
+		// creates the instance (PR #654 review): a day-2 apply on a live
+		// host would otherwise put the key in plain text in the
+		// environment of pulumi and of every plugin it spawns, for
+		// nothing — the program ignores metadatas on an existing
+		// instance either way. The question is "does the stack hold an
+		// instance", not "was --image given": a retry of a failed birth
+		// runs without --image and must still create it with the seed.
+		// A replacement never creates one here — the root disk's image
+		// is gone after birth, so a replace is a repave through destroy
+		// and provision, which reads the seed again — and an instance
+		// deleted behind pulumi's back is the same story.
+		need, err := stackNeedsSeed(pulumiDir, host)
+		if err != nil {
+			return err
+		}
+		if need {
+			// A birth without a seed is a boot that stops in the initrd,
+			// and Lish is a worse place to learn that than here.
+			ud, err := hostSeedUserData(sopsCLI{root: root}, root, host)
+			if err != nil {
+				return fmt.Errorf("the host key seed for metadata.user_data: %w", err)
+			}
+			os.Setenv(hostseed.Env, ud)
+		}
+	}
 
 	var flow imageFlow
 	var imageID string
@@ -109,7 +146,9 @@ func provision(args []string) error {
 			fmt.Fprintf(os.Stderr, "host not confirmed — image %s left in place; %s\n", imageID, flow.Leftover(imageID))
 			return nil
 		}
-		// Single-use by design: the artifact carries the host's key.
+		// Single-use by design (#42). A libvirt artifact still carries the
+		// host's key; a Linode one no longer does (#606), and the release
+		// stays until #605's step 3 retires the lifecycle as a whole.
 		if err := flow.Release(ctx, imageID, *imagePath); err != nil {
 			return err
 		}
@@ -163,6 +202,50 @@ func stackGate(pulumiDir, host string, birth bool) (initNeeded bool, err error) 
 		return false, fmt.Errorf("host %q has no stack — a birth needs --image (fort image %s, then fort provision %s --image …)", host, host, host)
 	}
 	return true, nil
+}
+
+// linodeInstanceType is the resource type the Linode backend registers
+// for the instance (forts/pulumi/linode.go) as it appears in state.
+const linodeInstanceType = "linode:index/instance:Instance"
+
+// stackNeedsSeed asks the stack, not the flags, whether this apply creates
+// the Linode instance: no resource of the instance type in `pulumi stack
+// export` means the apply creates one and must carry the seed. The CLI
+// already holds the passphrase (cloudEnv), and the export is the same
+// deployment pulumi itself reads — more robust than the checkpoint file's
+// layout.
+func stackNeedsSeed(pulumiDir, host string) (bool, error) {
+	out, err := outputPulumi(pulumiDir, "stack", "export", "--stack", host)
+	if err != nil {
+		return false, fmt.Errorf("pulumi stack export %s (to decide whether this apply creates the instance): %s", host, lastLine(exitDetail(err)))
+	}
+	has, err := hasResourceType([]byte(out), linodeInstanceType)
+	if err != nil {
+		return false, fmt.Errorf("pulumi stack export %s: %w", host, err)
+	}
+	return !has, nil
+}
+
+// hasResourceType reads a `pulumi stack export` document for a resource
+// of the given type. A freshly initialised stack exports a deployment
+// with no resources at all.
+func hasResourceType(export []byte, typ string) (bool, error) {
+	var doc struct {
+		Deployment struct {
+			Resources []struct {
+				Type string `json:"type"`
+			} `json:"resources"`
+		} `json:"deployment"`
+	}
+	if err := json.Unmarshal(export, &doc); err != nil {
+		return false, fmt.Errorf("not a stack export: %w", err)
+	}
+	for _, r := range doc.Deployment.Resources {
+		if r.Type == typ {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // initStack is the one `pulumi stack init` — passphrase secrets provider,
