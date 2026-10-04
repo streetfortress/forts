@@ -274,6 +274,28 @@ Placement and ordering. On this nixpkgs, activation runs in the initrd, not stag
 
 The state and the provider. The committed checkpoint holds the seed as ciphertext in both inputs and outputs, with no plaintext and no base64 of the key anywhere in the file. Linode reports the instance with user data set. No bootstrap image was left behind, so the release step did its job. The only private images on the account are the two automatic recovery images of web2 and db2, which expire on 2026-10-07.
 
+### Verification results from [libvirt-nocloud-test](https://gitea.zen.lofi/sfi/deployments/pulls/664)
+
+```
+┌───────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│         fact          │                                                         result on the host                                                         │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ device and label      │ /dev/sr0, labelled, present before the unit started                                                                                │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ modules               │ ata_piix virtio_blk libata sr_mod isofs cdrom, on a pc-i440fx-noble machine                                                        │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ mount to key          │ 15 ms, 29 ms from the unit's first line                                                                                            │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ mkisofs on macmini    │ not on PATH; built from nixpkgs for darwin by the tool fallback and used by the provider                                           │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ volume and attachment │ libvirt-nocloud-test-seed.iso in the pool, attached as a read-only IDE CD-ROM with the cloudinit serial                            │
+├───────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ checkpoint            │ user data is ciphertext in inputs and outputs, no plaintext or base64 of the key anywhere, the stack config names the channel only │
+└───────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+The ordering matched the Linode host: the seed unit finished before the initrd activation unit, sops imported the key from there, the four secrets are in place, and the volume is not mounted in stage 2. k3s is Ready, the five flux pods run, and the mesh is up. The DNS coupling from #441 did not bite because a lab host reaches soundship over the LAN.
+
 ## preview
 
 The read-only half: `pulumi preview -s <host> --diff`, same environment.
