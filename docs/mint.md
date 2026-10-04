@@ -51,7 +51,7 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
-| · | gitea deploy key `flux-<host>`, read-only, on `sfi/deployments` | always; registered under `--write` only |
+| · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `repo`) | always; registered under `--write` only |
 | · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook

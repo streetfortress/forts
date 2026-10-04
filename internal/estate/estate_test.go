@@ -31,3 +31,29 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestForge(t *testing.T) {
+	for repo, want := range map[string][3]string{
+		"ssh://git@gitea.zen.lofi:30022/sfi/second-estate":   {"gitea.zen.lofi", "sfi", "second-estate"},
+		"ssh://git@gitea.zen.lofi:30022/sfi/deployments.git": {"gitea.zen.lofi", "sfi", "deployments"},
+		"https://gitea.example.org/acme/estate.git":          {"gitea.example.org", "acme", "estate"},
+	} {
+		e := Estate{Name: "e", Repo: repo}
+		host, owner, name, err := e.Forge()
+		if err != nil || host != want[0] || owner != want[1] || name != want[2] {
+			t.Errorf("%s: got %s %s %s %v, want %v", repo, host, owner, name, err, want)
+		}
+	}
+	e := Estate{Name: "second-estate", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"}
+	if api, _ := e.RepoAPI(); api != "https://gitea.zen.lofi/api/v1/repos/sfi/second-estate" {
+		t.Errorf("RepoAPI: %s", api)
+	}
+	if base, _ := e.APIBase(); base != "https://gitea.zen.lofi/api/v1" {
+		t.Errorf("APIBase: %s", base)
+	}
+	for _, bad := range []string{"ssh://git@gitea.zen.lofi:30022/sfi", "ssh://git@gitea.zen.lofi:30022/a/b/c", "ssh://gitea.zen.lofi/"} {
+		if _, _, _, err := (Estate{Repo: bad}).Forge(); err == nil {
+			t.Errorf("%s: want an error", bad)
+		}
+	}
+}

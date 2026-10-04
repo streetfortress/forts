@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"github.com/linode/linodego"
 )
@@ -278,14 +279,22 @@ func linodePowerOff(ctx context.Context, host string) error {
 	return nil
 }
 
-const (
-	giteaBase = "https://gitea.zen.lofi/api/v1"
-	giteaAPI  = giteaBase + "/repos/sfi/deployments"
-)
-
 // giteaClient is the deploy-key API as fort mint (register) and fort
-// destroy (revoke) reach it: the provisioning token, the lab CA.
+// destroy (revoke) reach it: the provisioning token, the lab CA, and the
+// repo — the estate's own (estate.toml `repo`), because the deploy key
+// is what flux clones that repo with. The route was a constant naming
+// sfi/deployments until sfi/deployments#673: the second estate's first
+// mint would have put its key on the first estate's repo.
 func giteaClient(root string) (*giteaDeployKeys, error) {
+	est, err := estate.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	api, err := est.RepoAPI()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", estate.Path, err)
+	}
+	base, _ := est.APIBase()
 	token, err := secret(root, "gitea-token")
 	if err != nil {
 		return nil, fmt.Errorf("no gitea-token in provisioning/secrets.yaml: %w", err)
@@ -297,7 +306,7 @@ func giteaClient(root string) (*giteaDeployKeys, error) {
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(ca)
 	client := &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
-	return &giteaDeployKeys{client: client, api: giteaAPI, base: giteaBase, token: token}, nil
+	return &giteaDeployKeys{client: client, api: api, base: base, token: token}, nil
 }
 
 // revokeDeployKey deletes the read-only key fort mint registered (title

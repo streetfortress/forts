@@ -14,6 +14,7 @@ package estate
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -115,3 +116,44 @@ func (e Estate) HasHub() bool { return e.Hub != "" }
 // address elsewhere. The shared layer carries remote_write and the log
 // shipper only then.
 func (e Estate) Pushes() bool { return e.Hub != "" || e.HubPush != "" }
+
+// Forge is where the estate's repo lives, read off Repo: the forge host
+// (no port — the ssh port in the URL is git's, the API answers on https),
+// the owner and the repo name. ssh://git@gitea.zen.lofi:30022/sfi/second-estate.git
+// is gitea.zen.lofi, sfi, second-estate. The deploy key fort mint
+// registers and fort destroy revokes goes on THIS repo, through this
+// host's API: the estate's repo is what flux clones, so it is where the
+// key must be (sfi/deployments#673's first finding — the path was a
+// constant naming sfi/deployments, and a second estate's key landed on
+// the first estate's repo).
+func (e Estate) Forge() (host, owner, name string, err error) {
+	u, err := url.Parse(e.Repo)
+	if err != nil {
+		return "", "", "", fmt.Errorf("repo %q: %w", e.Repo, err)
+	}
+	host = u.Hostname()
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if host == "" || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name>", e.Repo)
+	}
+	return host, parts[0], strings.TrimSuffix(parts[1], ".git"), nil
+}
+
+// APIBase is the forge's API root, https://<host>/api/v1 — gitea's.
+func (e Estate) APIBase() (string, error) {
+	host, _, _, err := e.Forge()
+	if err != nil {
+		return "", err
+	}
+	return "https://" + host + "/api/v1", nil
+}
+
+// RepoAPI is the estate repo's API route, <APIBase>/repos/<owner>/<name>:
+// the deploy keys hang off it.
+func (e Estate) RepoAPI() (string, error) {
+	host, owner, name, err := e.Forge()
+	if err != nil {
+		return "", err
+	}
+	return "https://" + host + "/api/v1/repos/" + owner + "/" + name, nil
+}
