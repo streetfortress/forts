@@ -331,7 +331,7 @@ func usage() {
       where it has one and PersistentKeepalive, every client without.
       No PrivateKey line — the app generated that key on the device and
       its public half is what peers.json holds; the member must already
-      be registered there (docs/nixos/mesh.md, "Adding a peer"). The way a
+      be registered there (docs/mesh.md, "Adding a peer"). The way a
       Mac joins the mesh: register, wg-conf, paste. Writes nothing.
 
   dismantle <host> [--write]

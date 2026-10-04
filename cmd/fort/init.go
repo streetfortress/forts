@@ -31,8 +31,8 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Hub, HubPush, Forts, Registry string
-	Admins                                             []string
+	Name, Repo, RepoGit, Hub, HubPush, Mesh, Forts, Registry string
+	Admins                                                   []string
 	// Push: the edges have a hub to push to (a fort here or an address
 	// elsewhere), so the layer carries remote_write and fluent-bit.
 	Push bool
@@ -51,13 +51,14 @@ func initCmd(args []string) error {
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<gitea>:<port>/<owner>/<name>)")
 	hub := fl.String("hub", "", "the fort of this estate that is the hub: the others' monitoring files render into its tree, their backups register with its rustfs")
 	hubPush := fl.String("hub-push", "", "a hub in another estate, by mesh address: the edges push to it (exclusive with --hub)")
+	meshNet := fl.String("mesh", "", "the estate's WireGuard subnet, CIDR (10.2.0.0/24); fort check keeps every mesh address inside it")
 	forts := fl.String("forts", defaultForts, "the framework's flake URL, inputs.forts of the estate flake")
 	registry := fl.String("registry", "gitea.zen.lofi", "the chart registry the gate logs into")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
@@ -72,7 +73,7 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush}
+	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush, Mesh: *meshNet}
 	if err := est.Validate(); err != nil {
 		return err
 	}
@@ -83,7 +84,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init births one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Mesh: est.Mesh, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
 	if err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ func initCmd(args []string) error {
 // a .gotpl rendered and the suffix dropped, anything else copied as is.
 func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
-		"estate.toml":                     "the estate: name, repo, hub",
+		"estate.toml":                     "the estate: name, repo, mesh, hub",
 		"README.md":                       "the estate's README: the layout, the first fort",
 		".gitignore":                      "",
 		".sops.yaml":                      "the flux rules: provisioning/, the shared infrastructure rule (+ fort-managed cluster recipients)",

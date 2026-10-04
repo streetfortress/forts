@@ -92,6 +92,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, est.Hub, parsed)...)
 		shared.findings = append(shared.findings, clusterMonitoringFindings(root, est.Hub, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
+		shared.findings = append(shared.findings, meshSubnetFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)

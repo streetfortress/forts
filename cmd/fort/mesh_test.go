@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -23,6 +24,9 @@ const testPeers = `{
   },
   "clients": {
     "laptop": {"wg_vpn_ip": "10.1.0.100", "public_key": "LT="}
+  },
+  "remotes": {
+    "forge": {"wg_vpn_ip": "10.1.0.4", "wg_endpoint_ip": "10.0.0.4", "wg_endpoint_port": 51821, "public_key": "FG="}
   }
 }
 `
@@ -174,6 +178,7 @@ func TestRenderWGConf(t *testing.T) {
 		"[Peer]\n# sfi-prod-1111111\nPublicKey = P1=\nAllowedIPs = 10.1.0.54/32\nEndpoint = p1.example.cloud:51820\nPersistentKeepalive = 25\n",
 		"[Peer]\n# devbox\nPublicKey = DB=\nAllowedIPs = 10.1.0.3/32\n# no fixed endpoint: it dials this host",
 		"[Peer]\n# laptop (roaming client: no endpoint, no keepalive)\nPublicKey = LT=\nAllowedIPs = 10.1.0.100/32\n",
+		"[Peer]\n# forge (linked from another estate)\nPublicKey = FG=\nAllowedIPs = 10.1.0.4/32\nEndpoint = 10.0.0.4:51821\nPersistentKeepalive = 25\n",
 	} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("luxor: missing %q in:\n%s", want, conf)
@@ -200,6 +205,37 @@ func TestRenderWGConf(t *testing.T) {
 	}
 	if _, err := renderWGConf(m, "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
 		t.Errorf("unknown member: %v", err)
+	}
+	// a roaming client dials the linked hosts too
+	if !strings.Contains(conf, "# forge (linked from another estate)") || !strings.Contains(conf, "Endpoint = 10.0.0.4:51821") {
+		t.Errorf("laptop remotes:\n%s", conf)
+	}
+	// a remote with no endpoint is refused by the parser
+	if _, err := parseMesh(`{"peers":{},"remotes":{"x":{"wg_vpn_ip":"10.1.0.9","public_key":"X="}}}`); err == nil || !strings.Contains(err.Error(), "remotes.x has no wg_endpoint_ip") {
+		t.Errorf("endpointless remote: %v", err)
+	}
+}
+
+func TestMeshSubnetFindings(t *testing.T) {
+	root := testTree(t)
+	hosts := testHosts(t)
+	if out := meshSubnetFindings(root, estate.Estate{}, hosts); out != nil {
+		t.Errorf("no mesh declared: want nothing, got %v", out)
+	}
+	out := meshSubnetFindings(root, estate.Estate{Mesh: "10.1.0.0/24"}, hosts)
+	if len(out) != 1 || out[0].level != "ok" || !strings.Contains(out[0].msg, "8 address(es)") {
+		t.Errorf("inside: %+v", out)
+	}
+	out = meshSubnetFindings(root, estate.Estate{Mesh: "10.2.0.0/24"}, hosts)
+	errs := 0
+	for _, f := range out {
+		if f.level == "error" {
+			errs++
+		}
+	}
+	// 6 peers + 1 client + 1 remote + 4 manifests, every one outside
+	if errs != 12 {
+		t.Errorf("outside: want 12 errors, got %d:\n%+v", errs, out)
 	}
 }
 

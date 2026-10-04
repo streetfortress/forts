@@ -2,5 +2,8 @@
   "peers": {
     "plain-fort": {"wg_vpn_ip": "10.1.0.96", "wg_endpoint_ip": "10.0.0.96", "public_key": "cGxhaW4tZm9ydC1maXh0dXJlLXB1YmxpYy1rZXk9PT09PT0="}
   },
-  "clients": {}
+  "clients": {},
+  "remotes": {
+    "forge": {"wg_vpn_ip": "10.1.0.4", "wg_endpoint_ip": "10.0.0.4", "wg_endpoint_port": 51821, "public_key": "Zm9yZ2UtbGlua2VkLWhvc3QtZml4dHVyZS1wdWJsaWMta2V5PT0="}
+  }
 }

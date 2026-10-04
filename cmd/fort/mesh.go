@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -42,8 +43,9 @@ import (
 // answers as deployer, the operator account the framework gives every
 // host (ops/deployer.nix), and a peer with no manifest is a hand-managed
 // interactive host — steven's (the ubuntu holdouts; no NixOS interactive
-// profile exists). peers.json stays three fields per peer; nothing is
-// added to it here. An account the estate adds to a fort is reached from
+// profile exists). peers.json stays three fields per peer, plus the
+// endpoint port where it is not the default; nothing is added to it
+// here. An account the estate adds to a fort is reached from
 // the client's own config, above the Include. A role alias two forts
 // claim is suspended: a replacement raised before the old fort is
 // dismantled must not send a verb to either one.
@@ -59,20 +61,38 @@ const (
 	wgPort = 51820
 )
 
-// meshPeer is one peers.json entry (either table). The field set is the
-// file's and nothing more — see docs/nixos/mesh.md.
+// meshPeer is one peers.json entry (any table). The field set is the
+// file's and nothing more — see docs/mesh.md. Port is the endpoint's
+// UDP port when it is not the mesh default: a host linked from another
+// estate listens for THIS mesh on a port of its own, beside its own
+// mesh's (deployments#674).
 type meshPeer struct {
 	IP        string `json:"wg_vpn_ip"`
 	Endpoint  string `json:"wg_endpoint_ip,omitempty"`
+	Port      int    `json:"wg_endpoint_port,omitempty"`
 	PublicKey string `json:"public_key"`
+}
+
+// endpointPort is the port the others dial: the entry's own, else the
+// mesh default every fort listens on.
+func (p meshPeer) endpointPort() int {
+	if p.Port != 0 {
+		return p.Port
+	}
+	return wgPort
 }
 
 // mesh is peers.json decoded: peers are mesh members (keepalive both
 // ways, an Endpoint where one is stable), clients roaming devices the
-// members accept but never dial.
+// members accept but never dial, remotes the hosts of OTHER estates that
+// link to this mesh (deployments#674) — dialed like a peer, with the
+// endpoint and port the link gave them, but not a fort of this estate:
+// no ssh_config block, no manifest, no known_hosts line. The linked
+// host's own peer set comes from its reconciler reading this file.
 type mesh struct {
 	Peers   map[string]meshPeer `json:"peers"`
 	Clients map[string]meshPeer `json:"clients"`
+	Remotes map[string]meshPeer `json:"remotes,omitempty"`
 }
 
 func parseMesh(text string) (mesh, error) {
@@ -85,6 +105,14 @@ func parseMesh(text string) (mesh, error) {
 	}
 	if m.Clients == nil {
 		m.Clients = map[string]meshPeer{}
+	}
+	if m.Remotes == nil {
+		m.Remotes = map[string]meshPeer{}
+	}
+	for name, r := range m.Remotes {
+		if r.Endpoint == "" {
+			return m, fmt.Errorf("%s: remotes.%s has no wg_endpoint_ip — a linked host is always-on and dialed; nothing learns its endpoint otherwise", peersPath, name)
+		}
 	}
 	return m, nil
 }
@@ -343,7 +371,7 @@ func renderWGConf(m mesh, member string) (string, error) {
 	if !isPeer {
 		var ok bool
 		if self, ok = m.Clients[member]; !ok {
-			return "", fmt.Errorf("%s is not in %s — register it first (docs/nixos/mesh.md, \"Adding a peer\"): the address and public key come from there", member, peersPath)
+			return "", fmt.Errorf("%s is not in %s — register it first (docs/mesh.md, \"Joining\"): the address and public key come from there", member, peersPath)
 		}
 	}
 	var sb strings.Builder
@@ -376,7 +404,7 @@ func renderWGConf(m mesh, member string) (string, error) {
 		fmt.Fprintf(&sb, "AllowedIPs = %s/32\n", p.IP)
 		switch {
 		case p.Endpoint != "":
-			fmt.Fprintf(&sb, "Endpoint = %s:%d\n", p.Endpoint, wgPort)
+			fmt.Fprintf(&sb, "Endpoint = %s:%d\n", p.Endpoint, p.endpointPort())
 		case isPeer && self.Endpoint != "":
 			sb.WriteString("# no fixed endpoint: it dials this host (learned from our keepalives)\n")
 		case isPeer:
@@ -401,7 +429,63 @@ func renderWGConf(m mesh, member string) (string, error) {
 			fmt.Fprintf(&sb, "AllowedIPs = %s/32\n", c.IP)
 		}
 	}
+	// A linked host of another estate: dialed at the endpoint and port
+	// the link gave it, kept alive like a peer. Every member dials it,
+	// a roaming client too — it is the gitea or the hub this mesh reaches.
+	for _, name := range sortedNames(m.Remotes) {
+		r := m.Remotes[name]
+		fmt.Fprintf(&sb, "\n[Peer]\n# %s (linked from another estate)\n", name)
+		fmt.Fprintf(&sb, "PublicKey = %s\n", r.PublicKey)
+		fmt.Fprintf(&sb, "AllowedIPs = %s/32\n", r.IP)
+		fmt.Fprintf(&sb, "Endpoint = %s:%d\n", r.Endpoint, r.endpointPort())
+		sb.WriteString("PersistentKeepalive = 25\n")
+	}
 	return sb.String(), nil
+}
+
+// meshSubnetFindings: when estate.toml declares the mesh, every address
+// in peers.json — a fort's, a client's, a linked host's — is inside it,
+// and so is every manifest's mesh_ip. Two estates whose meshes overlap
+// cannot link (deployments#674); the subnet is where that is caught,
+// before a host is born into it.
+func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
+	if est.Mesh == "" {
+		return nil
+	}
+	peersText, err := readOrEmpty(root, peersPath)
+	if err != nil {
+		return nil // meshFindings reports it
+	}
+	m, err := parseMesh(peersText)
+	if err != nil {
+		return nil
+	}
+	var out []finding
+	n := 0
+	check := func(table, name, ip string) {
+		n++
+		if !est.Contains(ip) {
+			out = append(out, finding{"error", peersPath, fmt.Sprintf("%s.%s is %s, outside the estate's mesh %s (estate.toml)", table, name, ip, est.Mesh)})
+		}
+	}
+	for _, name := range sortedNames(m.Peers) {
+		check("peers", name, m.Peers[name].IP)
+	}
+	for _, name := range sortedNames(m.Clients) {
+		check("clients", name, m.Clients[name].IP)
+	}
+	for _, name := range sortedNames(m.Remotes) {
+		check("remotes", name, m.Remotes[name].IP)
+	}
+	for _, h := range sortedNames(hosts) {
+		if !est.Contains(hosts[h].MeshIP) {
+			out = append(out, finding{"error", manifest.Path(h), fmt.Sprintf("mesh_ip %s is outside the estate's mesh %s (estate.toml)", hosts[h].MeshIP, est.Mesh)})
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("mesh %s — %d address(es) inside it", est.Mesh, n)})
+	}
+	return out
 }
 
 // --- the gate's view (fort check --all)

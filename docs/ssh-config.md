@@ -37,7 +37,8 @@ Host sfi-dev sfi-dev-831c637
 interactive host — `steven`'s: the ubuntu holdout soundship (no NixOS host
 carries an interactive profile any more). That answers the open question
 of how the interactive hosts get an entry: being in peers.json without a
-manifest *is* the declaration. peers.json stays three fields per peer.
+manifest *is* the declaration. peers.json stays three fields per peer, plus
+an endpoint port where it is not the default ([mesh.md](mesh.md)).
 
 **Other accounts on a fort are the estate's.** The manifest names no
 user, so this file has no block for one. A client that dials an account
@@ -120,7 +121,9 @@ PersistentKeepalive = 25
 ```
 
 Mirrors `wireguard.nix` exactly: every other peer with keepalive and,
-where it has one, an `Endpoint`; every roaming client with neither. A
+where it has one, an `Endpoint`; every roaming client with neither; every
+linked host of another estate (the `remotes` table, [mesh.md](mesh.md))
+with its endpoint and port. A
 member in the `clients` table gets no `ListenPort` (nobody dials it) and a
 note on the peers it cannot reach without a hand-set endpoint (soundship
 through the router's DDNS forward, which is not in peers.json).
@@ -131,7 +134,7 @@ The join, for an always-on Mac on the lab LAN (macmini):
    `PrivateKey` and the matching public key. The private key never
    leaves the app; this CLI never handles one.
 2. Register the peer by hand — it has no manifest — per
-   [`docs/nixos/mesh.md`](../nixos/mesh.md#joining-and-leaving): `.peers.macmini`
+   [`mesh.md`](mesh.md#joining): `.peers.macmini`
    with the next free lab address, `wg_endpoint_ip` = its LAN address (an
    always-on LAN host is a peer the others can dial, not a roaming
    client), and the app's public key. `fort ssh-config --write` in the

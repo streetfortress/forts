@@ -1,7 +1,7 @@
 # fort init — birth an estate
 
 ```
-fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--hub <host>] [--forts <flake url>] [--write]
+fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--hub <host>] [--forts <flake url>] [--write]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -13,7 +13,7 @@ every file that exists.
 ## What it renders
 
 ```
-● estate.toml                     the estate: name, repo, hub (if any)
+● estate.toml                     the estate: name, repo, mesh (if given), hub (if any)
 ● README.md                       the layout and the first fort
 ● .sops.yaml                      the flux rules: provisioning/, the shared infrastructure rule,
                                   the `# fort-managed` marker fort mint appends cluster recipients under
@@ -42,6 +42,7 @@ The estate's own, named in the report:
 ```toml
 name = "second-estate"
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
+mesh = "10.2.0.0/24"   # the WireGuard subnet; fort check keeps every mesh address in it (mesh.md)
 # hub = "luxor"          # the hub is a fort of this estate
 # hub_push = "10.1.0.5"  # or a hub in another estate, by mesh address
 ```

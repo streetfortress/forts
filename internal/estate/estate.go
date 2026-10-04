@@ -14,6 +14,7 @@ package estate
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -46,6 +47,13 @@ type Estate struct {
 	// metrics and logs to it, and that estate decides what it scrapes.
 	// Exclusive with Hub. No files render for it here.
 	HubPush string `toml:"hub_push"`
+	// Mesh is the estate's WireGuard subnet, CIDR (10.2.0.0/24). Every
+	// address in mesh/peers.json and every manifest's mesh_ip lies in
+	// it; fort check says so. Two estates link only when their meshes
+	// do not overlap (deployments#674), and this is where each one
+	// says what its mesh is. Optional: an estate with no mesh key is
+	// checked by nothing, as before.
+	Mesh string `toml:"mesh"`
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -96,7 +104,30 @@ func (e Estate) Validate() error {
 	if e.Hub != "" && e.HubPush != "" {
 		return fmt.Errorf("hub and hub_push together — a hub is either a fort of this estate or an address in another, not both")
 	}
+	if e.Mesh != "" {
+		p, err := netip.ParsePrefix(e.Mesh)
+		if err != nil || !p.Addr().Is4() || p != p.Masked() {
+			return fmt.Errorf("mesh %q — want the estate's WireGuard subnet as an IPv4 network address (10.2.0.0/24)", e.Mesh)
+		}
+	}
 	return nil
+}
+
+// Contains says whether an address lies in the estate's mesh. With no
+// mesh declared every address does: the key is optional.
+func (e Estate) Contains(ip string) bool {
+	if e.Mesh == "" {
+		return true
+	}
+	p, err := netip.ParsePrefix(e.Mesh)
+	if err != nil {
+		return false
+	}
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	return p.Contains(a)
 }
 
 // RepoGit is the URL with its .git suffix, the form the FluxInstance

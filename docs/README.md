@@ -164,6 +164,7 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [init](init.md) — birth an estate: the files every other verb assumes
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
+- [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
@@ -190,7 +191,7 @@ flux/
   apps/<host>/                   the apps root; fort add renders into it
   infrastructure/                the shared layer every cluster applies
 mesh/
-  peers.json                     who is on the mesh and where; mint adds, dismantle removes
+  peers.json                     who is on the mesh and where (mesh.md): mint adds, dismantle removes; remotes by hand
   ssh_config, known_hosts        rendered from peers.json + the manifests
 provisioning/
   secrets.yaml                   the fleet secrets (gitea token, restic password, ...)

@@ -19,13 +19,18 @@ let
   self = peersData.peers.${selfName};
   otherPeers = lib.filterAttrs (n: _: n != selfName) peersData.peers;
   clients = peersData.clients or {};
+  # The hosts of OTHER estates that link to this mesh (deployments#674):
+  # dialed like a peer, at the endpoint and the port the link gave them
+  # (a linked host listens for this mesh on a port beside its own mesh's).
+  # Not forts of this estate: no ssh, no manifest — docs/mesh.md.
+  remotes = peersData.remotes or {};
 
   mkMeshPeer = _name: p: {
     publicKey = p.public_key;
     allowedIPs = [ "${p.wg_vpn_ip}/32" ];
     persistentKeepalive = 25;
   } // lib.optionalAttrs (p ? wg_endpoint_ip) {
-    endpoint = "${p.wg_endpoint_ip}:51820";
+    endpoint = "${p.wg_endpoint_ip}:${toString (p.wg_endpoint_port or 51820)}";
   };
 
   mkClientPeer = _name: c: {
@@ -37,7 +42,7 @@ let
   # as the peer config itself (mesh peers + roaming clients).
   peerNames = pkgs.writeText "wireguard-peer-names" (lib.concatStringsSep "\n"
     (lib.mapAttrsToList (n: p: "${p.public_key}\t${n}")
-      (otherPeers // clients)));
+      (otherPeers // clients // remotes)));
 
   # dump fields per peer line: pubkey, psk, endpoint, allowed-ips,
   # latest-handshake (epoch, 0 = never), rx bytes, tx bytes, keepalive
@@ -91,7 +96,8 @@ in
     privateKeyFile = config.sops.secrets.wireguard-private-key.path;
     peers =
       (lib.mapAttrsToList mkMeshPeer otherPeers)
-      ++ (lib.mapAttrsToList mkClientPeer clients);
+      ++ (lib.mapAttrsToList mkClientPeer clients)
+      ++ (lib.mapAttrsToList mkMeshPeer remotes);
   };
 
   # A peer whose endpoint is a DNS NAME (a cloud fort's public FQDN in

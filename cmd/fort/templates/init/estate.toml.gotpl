@@ -2,6 +2,13 @@
 # Rendered by `fort init`; every verb reads it (docs/init.md in sfi/forts).
 name = "{{ .Name }}"
 repo = "{{ .Repo }}"
+{{- if .Mesh }}
+mesh = "{{ .Mesh }}"          # the WireGuard subnet; every mesh_ip and every peers.json address lies in it
+{{- else }}
+# mesh = "10.2.0.0/24"       # the WireGuard subnet of this estate; fort check keeps every
+                             # mesh_ip and every peers.json address inside it. Two estates
+                             # link only when their meshes do not overlap (deployments#674).
+{{- end }}
 {{- if .Hub }}
 hub = "{{ .Hub }}"
 {{- else if .HubPush }}

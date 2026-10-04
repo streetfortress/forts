@@ -24,7 +24,9 @@ func TestParse(t *testing.T) {
 		"no name":     {"repo = \"ssh://x/y\"\n", "name"},
 		"bad repo":    {"name = \"e\"\nrepo = \"git@gitea:sfi/e\"\n", "git URL"},
 		"bad hub":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nhub = \"Luxor\"\n", "hub"},
-		"unknown key": {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"10.1.0.0/24\"\n", "unknown key mesh"},
+		"unknown key": {"name = \"e\"\nrepo = \"ssh://x/y\"\nsubnet = \"10.1.0.0/24\"\n", "unknown key subnet"},
+		"bad mesh":    {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"10.2.0.4/24\"\n", "mesh"},
+		"mesh v6":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"fd00::/64\"\n", "mesh"},
 	} {
 		if _, err := Parse([]byte(tc.text)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: want %q, got %v", name, tc.want, err)
@@ -55,5 +57,18 @@ func TestForge(t *testing.T) {
 		if _, _, _, err := (Estate{Repo: bad}).Forge(); err == nil {
 			t.Errorf("%s: want an error", bad)
 		}
+	}
+}
+
+func TestMesh(t *testing.T) {
+	e, err := Parse([]byte("name = \"second-estate\"\nrepo = \"ssh://x/y\"\nmesh = \"10.2.0.0/24\"\n"))
+	if err != nil || e.Mesh != "10.2.0.0/24" {
+		t.Fatalf("mesh: %+v %v", e, err)
+	}
+	if !e.Contains("10.2.0.70") || e.Contains("10.1.0.4") || e.Contains("nope") {
+		t.Errorf("Contains")
+	}
+	if !(Estate{}).Contains("10.1.0.4") {
+		t.Errorf("no mesh declared: every address is inside")
 	}
 }
