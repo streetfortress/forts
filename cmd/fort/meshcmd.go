@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
@@ -230,7 +231,7 @@ func writeRendered(root string, tool secretsTool, sshConfig, knownHosts string) 
 	return nil
 }
 
-// fort wg-conf <member> — print a member's wg0 the way its WireGuard app
+// fort wg-conf <member> — print a member's mesh interface the way its WireGuard app
 // (or wg-quick) wants it, from peers.json. Read verb: nothing is
 // written, and no key is handled — the PrivateKey line is the device's
 // (mesh.go, renderWGConf).
@@ -246,7 +247,11 @@ func wgConf(args []string) error {
 	if err != nil {
 		return err
 	}
-	conf, err := renderWGConf(m, args[0])
+	est, err := estate.Load(root)
+	if err != nil {
+		return err
+	}
+	conf, err := renderWGConf(m, est.InterfaceName(), args[0])
 	if err != nil {
 		return err
 	}

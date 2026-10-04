@@ -33,7 +33,7 @@ import (
 //                            never trips "HOST IDENTIFICATION HAS CHANGED"
 //                            because the key is looked up by fort name
 //                            (HostKeyAlias), and the name carries the sha.
-//   - `fort wg-conf <member>` a member's own wg0 as the WireGuard app wants
+//   - `fort wg-conf <member>` a member's own mesh interface as the WireGuard app wants
 //                            it pasted — every other peer, the endpoints,
 //                            the keepalives — with the PrivateKey line left
 //                            to the device: the key never leaves it, and
@@ -359,14 +359,14 @@ func readOrEmpty(root, rel string) (string, error) {
 
 // --- wg-conf
 
-// renderWGConf is a member's own wg0 the way wireguard.nix builds a
+// renderWGConf is a member's own mesh interface the way wireguard.nix builds a
 // fort's: every other peer with a keepalive and, where it has one, an
 // Endpoint; every client with neither. The [Interface] carries no
 // PrivateKey — the WireGuard app generated that key on the device and
 // registered its public half in peers.json; the line the app wrote is
 // the one to keep. A client (roaming) member has no ListenPort — nobody
 // dials it.
-func renderWGConf(m mesh, member string) (string, error) {
+func renderWGConf(m mesh, iface, member string) (string, error) {
 	self, isPeer := m.Peers[member]
 	if !isPeer {
 		var ok bool
@@ -375,7 +375,7 @@ func renderWGConf(m mesh, member string) (string, error) {
 		}
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "# wg0 for %s — rendered by `fort wg-conf %s` from %s.\n", member, member, peersPath)
+	fmt.Fprintf(&sb, "# %s for %s — rendered by `fort wg-conf %s` from %s.\n", iface, member, member, peersPath)
 	sb.WriteString("# Paste below the PrivateKey line the WireGuard app generated (Add Empty\n")
 	sb.WriteString("# Tunnel): that key never leaves the device, and its public half is the one\n")
 	fmt.Fprintf(&sb, "# peers.json carries for %s:\n#   %s\n", member, self.PublicKey)

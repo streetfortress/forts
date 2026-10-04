@@ -54,6 +54,25 @@ type Estate struct {
 	// says what its mesh is. Optional: an estate with no mesh key is
 	// checked by nothing, as before.
 	Mesh string `toml:"mesh"`
+	// Interface is the WireGuard interface every host on this mesh gives
+	// it: one name per mesh, on every host that is on it — a fort's own
+	// interface and a linked host's link interface alike (deployments#674).
+	// At most 15 characters from [A-Za-z0-9_=+.-], the kernel's rule.
+	// Optional: an estate with no interface key is on wg0, as before.
+	Interface string `toml:"interface"`
+}
+
+// DefaultInterface is the mesh interface of an estate that names none.
+const DefaultInterface = "wg0"
+
+var interfaceRE = regexp.MustCompile(`^[A-Za-z0-9_=+.-]{1,15}$`)
+
+// InterfaceName is the estate's mesh interface, wg0 when none is named.
+func (e Estate) InterfaceName() string {
+	if e.Interface == "" {
+		return DefaultInterface
+	}
+	return e.Interface
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -103,6 +122,9 @@ func (e Estate) Validate() error {
 	}
 	if e.Hub != "" && e.HubPush != "" {
 		return fmt.Errorf("hub and hub_push together — a hub is either a fort of this estate or an address in another, not both")
+	}
+	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
+		return fmt.Errorf("interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Interface)
 	}
 	if e.Mesh != "" {
 		p, err := netip.ParsePrefix(e.Mesh)

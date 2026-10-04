@@ -26,7 +26,7 @@
 #     precedes it (3 s, qcow-runtime.nix / upstream linode-config.nix,
 #     #523), and then the offline paths: the provider's rescue boot, or
 #     a tool that edits the disk offline.
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   imports = [
@@ -52,7 +52,7 @@
   # 30432: sites-db's primary NodePort (flux/apps/<fort>/sites-db/
   # mesh-service.yaml), read by databasus-central on luxor (#327) — every
   # fort, like the edge pair, so the consumer can assume the coordinate.
-  networking.firewall.interfaces.wg0.allowedTCPPorts = [ 6443 10255 30432 30909 30993 ];
+  networking.firewall.interfaces.${config.sfi.mesh.interface}.allowedTCPPorts = [ 6443 10255 30432 30909 30993 ];
 
   # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at
   # the mesh address; pod traffic to the host's own wg0 IP ingresses on

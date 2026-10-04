@@ -37,6 +37,7 @@ jobs:
           set -euo pipefail
           nix eval --json .#nixosModules --apply builtins.attrNames
           nix eval --raw .#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
       - name: An estate born from fort init evaluates against this checkout

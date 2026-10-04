@@ -168,7 +168,7 @@ func TestRenderWGConf(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a peer with an endpoint: dials the ones with endpoints, is dialed by the rest
-	conf, err := renderWGConf(m, "luxor")
+	conf, err := renderWGConf(m, "wg0", "luxor")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,16 +184,22 @@ func TestRenderWGConf(t *testing.T) {
 			t.Errorf("luxor: missing %q in:\n%s", want, conf)
 		}
 	}
+	if !strings.HasPrefix(conf, "# wg0 for luxor") {
+		t.Errorf("luxor header:\n%s", conf)
+	}
+	if c, _ := renderWGConf(m, "wg-second", "luxor"); !strings.HasPrefix(c, "# wg-second for luxor") {
+		t.Errorf("named interface header:\n%s", c)
+	}
 	if strings.Contains(conf, "PrivateKey =") || strings.Contains(conf, "PublicKey = LX=") {
 		t.Errorf("luxor: a PrivateKey line, or itself as a peer:\n%s", conf)
 	}
 	// a peer with no endpoint of its own facing another without one
-	conf, _ = renderWGConf(m, "devbox")
+	conf, _ = renderWGConf(m, "wg0", "devbox")
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint on either side") {
 		t.Errorf("devbox↔soundship:\n%s", conf)
 	}
 	// a roaming client: no ListenPort, no clients, the DDNS note
-	conf, err = renderWGConf(m, "laptop")
+	conf, err = renderWGConf(m, "wg0", "laptop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +209,7 @@ func TestRenderWGConf(t *testing.T) {
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint in peers.json: a roaming client") || !strings.Contains(conf, "Endpoint = 10.0.0.5:51820") {
 		t.Errorf("laptop peers:\n%s", conf)
 	}
-	if _, err := renderWGConf(m, "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
+	if _, err := renderWGConf(m, "wg0", "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
 		t.Errorf("unknown member: %v", err)
 	}
 	// a roaming client dials the linked hosts too

@@ -2,7 +2,7 @@
 
 Every fort is a WireGuard mesh member, and `mesh/peers.json` is the one
 file that says who is on the estate's mesh and where. `wireguard.nix`
-builds each fort's `wg0` from it; `fort mint` adds a fort, `fort dismantle`
+builds each fort's mesh interface from it; `fort mint` adds a fort, `fort dismantle`
 removes one; [`ssh-config`](ssh-config.md) and `wg-conf` render the client
 side from it; `fort check --all` keeps it honest.
 
@@ -22,6 +22,26 @@ thing a new estate chooses: `fort init --mesh <cidr>`. The key is
 optional for an estate born before it existed; such an estate is checked
 by nothing, as before. The convention in the lab is that a fort's last
 octet follows its LAN address.
+
+## The interface
+
+One name per mesh, on every host that is on it:
+
+```toml
+interface = "wg-second"
+```
+
+A fort of the estate gives its own mesh that interface, and a host of
+another estate that links here gives its link interface the same name
+([links.md](links.md)), so `wg show wg-second` means the same thing on
+both. At most 15 characters from `A-Za-z0-9_=+.-`, the kernel's rule;
+`fort init --interface <name>` renders it. The modules read it through
+`sfi.mesh.interface` (estate.nix): `wireguard.nix` builds the interface,
+hardened.nix and production.nix open the admin ports on it, the metrics
+carry it as the `interface` label. An estate that names none is on
+`wg0`, as before; renaming a live estate's interface is a switch that
+stops one unit and starts another on every fort, so it is a decision per
+estate, not a default.
 
 ## The three tables
 

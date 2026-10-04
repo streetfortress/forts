@@ -56,6 +56,9 @@ type hostView struct {
 	// RepoURL: the estate's git URL (estate.toml), the FluxInstance's
 	// source and auto-rebuild's pull.
 	RepoURL string
+	// MeshInterface: the estate's mesh interface (estate.toml `interface`,
+	// else wg0), the name the cloud shape's split DNS hangs off.
+	MeshInterface string
 	// HubMeshIP: where the edge stack pushes (cluster-vars HUB_MESH_IP):
 	// the hub fort's mesh address, or estate.toml's hub_push. "" with no
 	// hub, and the layer init rendered then carries no push targets.
@@ -215,20 +218,21 @@ func hubMeshIP(root string, est estate.Estate) (string, error) {
 // hub's mesh address (hubMeshIP), "" for an estate with no hub.
 func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP string) ([]scaffoldFile, error) {
 	view := hostView{
-		RepoURL:      est.RepoGit(),
-		HubMeshIP:    hubIP,
-		Hostname:     host,
-		MeshIP:       entry.MeshIP,
-		LanPrefix:    24,
-		LanGateway:   "10.0.0.1",
-		LanDNS:       []string{"10.0.0.2", "8.8.8.8"},
-		StateVersion: "25.11",
-		Datastore:    entry.Datastore(),
-		Cloud:        entry.Cloud(),
-		Provider:     entry.Provider,
-		Hub:          host == est.Hub,
-		Plain:        !entry.IsCluster(),
-		AuditLogging: entry.AuditLogging(),
+		RepoURL:       est.RepoGit(),
+		MeshInterface: est.InterfaceName(),
+		HubMeshIP:     hubIP,
+		Hostname:      host,
+		MeshIP:        entry.MeshIP,
+		LanPrefix:     24,
+		LanGateway:    "10.0.0.1",
+		LanDNS:        []string{"10.0.0.2", "8.8.8.8"},
+		StateVersion:  "25.11",
+		Datastore:     entry.Datastore(),
+		Cloud:         entry.Cloud(),
+		Provider:      entry.Provider,
+		Hub:           host == est.Hub,
+		Plain:         !entry.IsCluster(),
+		AuditLogging:  entry.AuditLogging(),
 	}
 	if entry.Backups.Backed() {
 		view.BackupProfile = entry.Backups.Profile

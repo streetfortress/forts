@@ -77,5 +77,29 @@
           sops-nix.nixosModules.sops
         ];
       };
+
+      # The same fort linked to a second estate (modules/links.nix,
+      # deployments#674): the fixture host plus one link. CI evaluates it
+      # so the module's assertions, the interface, the firewall rules and
+      # the reconciler unit compose with a hardened host.
+      nixosConfigurations.linked-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/estate/nixos/hosts/plain-fort
+          sops-nix.nixosModules.sops
+          self.nixosModules.links
+          {
+            sfi.links.other-estate = {
+              repo = "https://gitea.zen.lofi/sfi/other-estate.git";
+              interface = "wg-other";
+              port = 51821;
+              address = "10.3.0.96";
+              openTCPPorts = [ 30022 443 ];
+            };
+          }
+        ];
+      };
     };
 }

@@ -84,7 +84,7 @@
   # answer — the dual-A ambiguity bit fluent-bit in #119). The in-cluster
   # half is coredns-custom. (Both come from modules/lab-dns.nix.)
   services.resolved.enable = true;
-  networking.wg-quick.interfaces.wg0.dns = [ "10.1.0.1" "~lofi" ];
+  networking.wg-quick.interfaces.{{ .MeshInterface }}.dns = [ "10.1.0.1" "~lofi" ];
 
   sfi.flux-bootstrap = {
     enable = true;

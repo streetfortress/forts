@@ -164,6 +164,7 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [init](init.md) — birth an estate: the files every other verb assumes
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
+- [links](links.md) — a host on another estate's mesh: `sfi.links`, the reconciler, the `remotes` entry
 - [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a

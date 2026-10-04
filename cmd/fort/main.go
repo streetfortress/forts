@@ -325,7 +325,7 @@ func usage() {
       stages.
 
   wg-conf <member>
-      print a mesh member's own wg0 the way the WireGuard app (or
+      print a mesh member's own mesh interface the way the WireGuard app (or
       wg-quick) wants it pasted, from peers.json: Address, ListenPort
       (peers, not roaming clients), every other peer with its Endpoint
       where it has one and PersistentKeepalive, every client without.

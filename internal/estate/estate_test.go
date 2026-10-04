@@ -25,6 +25,8 @@ func TestParse(t *testing.T) {
 		"bad repo":    {"name = \"e\"\nrepo = \"git@gitea:sfi/e\"\n", "git URL"},
 		"bad hub":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nhub = \"Luxor\"\n", "hub"},
 		"unknown key": {"name = \"e\"\nrepo = \"ssh://x/y\"\nsubnet = \"10.1.0.0/24\"\n", "unknown key subnet"},
+		"long iface":  {"name = \"e\"\nrepo = \"ssh://x/y\"\ninterface = \"wg-second-estate\"\n", "interface"},
+		"bad iface":   {"name = \"e\"\nrepo = \"ssh://x/y\"\ninterface = \"wg second\"\n", "interface"},
 		"bad mesh":    {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"10.2.0.4/24\"\n", "mesh"},
 		"mesh v6":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"fd00::/64\"\n", "mesh"},
 	} {
@@ -70,5 +72,12 @@ func TestMesh(t *testing.T) {
 	}
 	if !(Estate{}).Contains("10.1.0.4") {
 		t.Errorf("no mesh declared: every address is inside")
+	}
+	if (Estate{}).InterfaceName() != "wg0" {
+		t.Errorf("no interface declared: wg0")
+	}
+	e, err = Parse([]byte("name = \"second-estate\"\nrepo = \"ssh://x/y\"\ninterface = \"wg-second\"\n"))
+	if err != nil || e.InterfaceName() != "wg-second" {
+		t.Fatalf("interface: %+v %v", e, err)
 	}
 }

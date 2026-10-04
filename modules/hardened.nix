@@ -30,7 +30,7 @@ in
       TCP ports served on the public/LAN interface. Everything else the
       merged module set opens (22 from common.nix / openssh openFirewall,
       6443 + 80 + 443 from k3s-server.nix) is collapsed to this list and
-      re-opened, where wanted, on wg0 by the profile.
+      re-opened, where wanted, on the mesh interface by the profile.
     '';
   };
 
@@ -43,7 +43,9 @@ in
     nix.settings.allowed-users = [ "root" ];
 
     networking.firewall.allowedTCPPorts = lib.mkForce cfg.publicTCPPorts;
-    networking.firewall.interfaces.wg0.allowedTCPPorts = [ 22 9100 ];
+    # The mesh interface by the estate's name (estate.nix): wg0 unless
+    # estate.toml names it (deployments#674).
+    networking.firewall.interfaces.${config.sfi.mesh.interface}.allowedTCPPorts = [ 22 9100 ];
     services.prometheus.exporters.node.openFirewall = lib.mkForce false;
 
     # Closure trims: manuals and the default perl/rsync/strace set have no
