@@ -8,9 +8,9 @@
 #      layers virtualisation/disk-image.nix onto this config via
 #      extendModules. The variant owns the disk layout — GPT, an ESP as
 #      partition 1 (label `ESP`) and the root as partition 2 (ext4, label
-#      `nixos`; fort image's guestfish root device mirrors this) — and
-#      systemd-boot on the ESP. This module supplies what a machine needs
-#      that a VM does not.
+#      `nixos`) — and systemd-boot on the ESP. This module supplies what
+#      a machine needs that a VM does not. The image carries no host key
+#      (#659); the channel that places one on this platform is #658.
 #
 # What makes the image hardware-neutral, so scaffold and mint need to
 # know nothing about the box (the four facts a hand-generated

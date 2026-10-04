@@ -36,14 +36,14 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
 
 ## The image is a birth input, not a resource
 
-The bootstrap image is single-use by design (#42): built, uploaded,
-consumed by instance creation, then deleted on both sides. A baremetal
-image carries the host's pre-seeded key; a Linode or lab image no longer
-does — the key is `metadata.user_data` on the instance (#606), or a
-NoCloud `cidata` volume attached to the domain (#657), set by `fort
-provision` and read by the initrd (`nixos/modules/seed.nix`; the model
-is #605's). Modeling the image as a pulumi resource is wrong in both
-lifecycle directions:
+The bootstrap image is the plain build output of `fort image` (#42,
+#659): built, uploaded, consumed by instance creation, then deleted on
+both sides because nothing needs it afterwards. It carries no secret on
+any variant — the host's key is `metadata.user_data` on the instance
+(#606), or a NoCloud `cidata` volume attached to the domain (#657), set
+by `fort provision` and read by the initrd (`nixos/modules/seed.nix`;
+the model is #605's). Modeling the image as a pulumi resource is wrong
+in both lifecycle directions:
 
 - *Deletion*: a deliberately-deleted resource is permanent drift —
   `--expect-no-changes` red forever, or `RetainOnDelete` gymnastics.
@@ -56,9 +56,11 @@ Same shape as Packer→AMI→Terraform: the artifact is a pipeline step, IaC
 consumes its ID. So `fort provision --image` uploads via the Linode API,
 records the ID as stack config `forts:imageId` (committed provenance:
 which image this host was born from), execs `pulumi up`, and deletes the
-image provider-side and locally once the instance exists. The instance
-sets `ignoreChanges: ["image"]` — birth input, not managed property —
-which keeps refresh and drift green after the image is gone.
+image provider-side and locally once the instance exists — hygiene,
+because Linode bills a custom image for as long as it exists, not
+custody. The instance sets `ignoreChanges: ["image"]` — birth input, not
+managed property — which keeps refresh and drift green after the image
+is gone.
 
 ## Flow
 
@@ -97,7 +99,7 @@ provider needs `mkisofs` on the machine that runs the apply (nixpkgs'
 `cdrtools` when the host has none).
 
 ```
-fort image lab1                                      # nix build (KVM: devbox); no graft — the key rides on the seed volume
+fort image lab1                                      # nix build (KVM: devbox); the key rides on the seed volume, not in the image
 fort provision lab1 --image ~/.cache/forts/lab1-nixos.qcow2
 ```
 
@@ -167,7 +169,7 @@ Demonstration shape (#87 decision PR): everything compiles against the
 real SDKs but nothing has run against an account — the #42 checkboxes
 (image upload contract, boot-config quirks, end-to-end first boot) are
 the next session's spike. The libvirt backend
-defines + starts the VM from the injected qcow; every lab VM carries
+defines + starts the VM from the bootstrap qcow; every lab VM carries
 `provider: libvirt` (the playbooks are gone — the three that predated
 the backend were adopted in place). `fort
 scaffold` renders the host's generated surface (nix host dir in the lab

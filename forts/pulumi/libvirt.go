@@ -14,7 +14,7 @@ import (
 // Libvirt realizes a host on the lab hypervisor (soundship) — the lab VM
 // the create-nixos playbook used to define, as
 // resources: a qcow2 volume in the `images` pool streamed from the
-// injected image through the libvirt API (no root hop — libvirtd writes
+// bootstrap image through the libvirt API (no root hop — libvirtd writes
 // it), and a domain from that volume with the lab's fixed shape
 // (host-passthrough CPU, virtio disk, br0 bridge, serial + VNC console,
 // autostart — which the playbook never set). No firewall and no DNS:
@@ -23,10 +23,10 @@ import (
 //
 // The birth-input discipline is the same as Linode's but the artifact
 // is not consumed: the uploaded volume IS the root disk. `forts:imageId`
-// records the injected image's path (provenance); the volume ignores
-// changes to `source`, so the local single-use file is deleted after
-// the birth and a rebuilt image never proposes a disk replacement — a
-// repave is `pulumi destroy` + provision, deliberately.
+// records the image's path (provenance); the volume ignores changes to
+// `source`, so the local file is deleted after the birth (hygiene — it
+// holds no secret, #659) and a rebuilt image never proposes a disk
+// replacement — a repave is `pulumi destroy` + provision, deliberately.
 //
 // The seed (#657; the model is #605's option 2): the host's ssh host key
 // travels apart from the image, as a NoCloud cidata volume — the
@@ -39,7 +39,8 @@ import (
 // as for Linode) when the apply creates the domain, and records
 // `forts:seed = nocloud` on the stack: the program declares the volume
 // whenever that key is set, so a host born before the channel existed
-// (the three adopted lab VMs and the grafted dev fort) never sees a
+// (the three adopted lab VMs, and the dev fort born from an image that
+// carried the key) never sees a
 // spurious ISO proposed on a day-2 apply. userData is a pulumi secret
 // and ignored after creation, as the Linode instance ignores metadatas:
 // a rotation of the host key is a repave, never a diff on a running
@@ -78,7 +79,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 	shape := host.Shape.WithLabDefaults()
 	vcpus, memory := shape.Vcpus, shape.Memory
 
-	// The injected qcow2, set by `fort provision --image` — read at
+	// The bootstrap qcow2, set by `fort provision --image` — read at
 	// creation only (ignoreChanges below).
 	image := config.Require(ctx, "forts:imageId")
 
@@ -190,7 +191,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 	}
 
 	// Same outputs as the Linode backend, so `fort provision` gates the
-	// single-use image deletion on the same fact (the host exists).
+	// image deletion on the same fact (the host exists).
 	ctx.Export("ip", pulumi.String(spec.IP))
 	ctx.Export("domain", dom.Name)
 	ctx.Export("volume", vol.Name)

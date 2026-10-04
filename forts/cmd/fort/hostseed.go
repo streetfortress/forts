@@ -9,11 +9,11 @@ import (
 )
 
 // hostKeyPair is the host's ssh host key out of its sops file — the pair
-// `fort mint` wrote (ssh-host-key, ssh-host-key.pub). Two callers: the
+// `fort mint` wrote (ssh-host-key, ssh-host-key.pub). One caller: the
 // seed `fort provision` hands the pulumi program for the platform's
 // channel (Linode Metadata, #606; the NoCloud volume of a lab fort,
-// #657), and the graft `fort image` still performs for the baremetal
-// variant until its stick lands (#658).
+// #657). The baremetal channel (#658) will be the second. `fort image`
+// reads no key since #659.
 func hostKeyPair(tool secretsTool, root, host string) (private, public string, err error) {
 	secretsPath := filepath.Join("nixos/secrets", host+".yaml")
 	if !exists(root, secretsPath) {

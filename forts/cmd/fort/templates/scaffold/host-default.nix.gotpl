@@ -152,7 +152,9 @@
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host key
   # (age.sshKeyPaths){{ if eq .Provider "libvirt" }}, which the initrd places from the NoCloud cidata
-  # volume before activation (modules/seed.nix, #657){{ else }} injected into the image before first boot{{ end }}. Secrets are
+  # volume before activation (modules/seed.nix, #657){{ else if .Cloud }}, which the initrd places from the Linode
+  # Metadata channel before activation (modules/seed.nix, #606){{ else }}, which the baremetal
+  # channel (#658) will place before activation — the image carries no key{{ end }}. Secrets are
   # split per-host, so this host only declares the keys it actually carries —
   # no declared-but-absent secrets to fail activation.
 

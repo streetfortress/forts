@@ -24,7 +24,7 @@
 #     Without that import the console offers only the GRUB menu that
 #     precedes it (3 s, qcow-runtime.nix / upstream linode-config.nix,
 #     #523), and then the offline paths: the provider's rescue boot, or
-#     guestfish on the disk locally.
+#     a tool that edits the disk offline.
 { lib, ... }:
 
 {

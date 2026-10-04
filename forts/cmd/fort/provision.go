@@ -14,7 +14,7 @@ import (
 	hostseed "gitea.zen.lofi/sfi/deployments/forts/internal/seed"
 )
 
-// provision is the birth flow (#42): the single-use image is uploaded,
+// provision is the birth flow (#42): the bootstrap image is uploaded,
 // consumed by `pulumi up`, then deleted on both sides. The image is
 // deliberately NOT a pulumi resource — it is a birth input
 // (forts/README.md has the full argument); pulumi owns only the durable
@@ -25,22 +25,28 @@ import (
 // stack's forts:imageId is already set from the birth run, and the
 // instance ignores changes to it.
 //
-// The host's ssh host key travels separately from the image (#606, #657):
-// the apply that creates the host reads the pair from
-// nixos/secrets/<host>.yaml and hands the seed to the program in the
-// environment (hostseed.Env). The Linode program sets it as
-// metadata.user_data on the instance; the libvirt program writes it to a
-// NoCloud cidata volume attached to the domain. Both as a pulumi secret,
-// both read by the host's initrd before activation
+// The image holds no secret (#605, #659): it is the plain build output
+// of `fort image`. The host's ssh host key travels through the
+// platform's channel instead (#606, #657): the apply that creates the
+// host reads the pair from nixos/secrets/<host>.yaml and hands the seed
+// to the program in the environment (hostseed.Env). The Linode program
+// sets it as metadata.user_data on the instance; the libvirt program
+// writes it to a NoCloud cidata volume attached to the domain. Both as a
+// pulumi secret, both read by the host's initrd before activation
 // (nixos/modules/seed.nix). The read needs the admin age key, as the
 // token lookups in cloudEnv already do.
+//
+// The delete after the apply is hygiene, not custody: Linode bills a
+// custom image for as long as it exists, and the local copy is a few
+// GiB in the cache dir. A copy of the image that outlives the delete
+// gives an attacker nothing current.
 func provision(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("provision needs the host first: fort provision <host> [--image <path>]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("provision", flag.ContinueOnError)
-	imagePath := fs.String("image", "", "bootstrap image from fort image (linode: .img.gz to upload; libvirt: the injected .qcow2 the volume is streamed from); deleted locally on success")
+	imagePath := fs.String("image", "", "bootstrap image from fort image (linode: .img.gz to upload; libvirt: the .qcow2 the volume is streamed from); deleted locally on success")
 	yes := fs.Bool("yes", false, "confirm the pulumi apply without a prompt (an agent, a script, CI)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -116,7 +122,8 @@ func provision(args []string) error {
 		// Committed provenance: which channel the host was born through
 		// (#657). The libvirt program declares the seed volume only when
 		// this says so, so a host born before the channel — adopted, or
-		// grafted — never sees an empty ISO proposed on a day-2 apply.
+		// born from an image that carried the key — never sees an empty
+		// ISO proposed on a day-2 apply.
 		if err := runPulumi(pulumiDir, "config", "set", "seed", seedChannels[entry.Provider], "--stack", host); err != nil {
 			return fmt.Errorf("recording the seed channel: %w", err)
 		}
@@ -138,13 +145,13 @@ func provision(args []string) error {
 		// Committed provenance: the stack config records which image the
 		// host was born from; the program reads it at creation only.
 		if err := runPulumi(pulumiDir, "config", "set", "imageId", imageID, "--stack", host); err != nil {
-			return fmt.Errorf("recording imageId (image %s left in place): %w", imageID, err)
+			return fmt.Errorf("recording imageId (image %s stays staged): %w", imageID, err)
 		}
 	}
 
 	if err := runPulumi(pulumiDir, append([]string{"up", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		if flow != nil {
-			fmt.Fprintf(os.Stderr, "pulumi up failed — image %s left in place; rerun WITHOUT --image to retry (imageId is already set)\n", imageID)
+			fmt.Fprintf(os.Stderr, "pulumi up failed — image %s stays staged; rerun WITHOUT --image to retry (imageId is already set)\n", imageID)
 		}
 		return err
 	}
@@ -157,16 +164,16 @@ func provision(args []string) error {
 		// deletion on the host actually existing in stack outputs.
 		out, err := outputPulumi(pulumiDir, "stack", "output", "ip", "--stack", host)
 		if err != nil || strings.TrimSpace(out) == "" {
-			fmt.Fprintf(os.Stderr, "host not confirmed — image %s left in place; %s\n", imageID, flow.Leftover(imageID))
+			fmt.Fprintf(os.Stderr, "host not confirmed — image %s stays staged; %s\n", imageID, flow.Leftover(imageID))
 			return nil
 		}
-		// Single-use by design (#42). A libvirt artifact still carries the
-		// host's key; a Linode one no longer does (#606), and the release
-		// stays until #605's step 3 retires the lifecycle as a whole.
+		// Hygiene, not custody (#659): the image holds no secret. Linode
+		// bills a custom image while it exists, and the local copy is a
+		// few GiB; the host does not need either once it has booted.
 		if err := flow.Release(ctx, imageID, *imagePath); err != nil {
 			return err
 		}
-		fmt.Printf("single-use image %s released (provider-side where applicable, and local)\n", imageID)
+		fmt.Printf("image %s released (provider-side where applicable, and local) — the host no longer needs it\n", imageID)
 	}
 	return nil
 }

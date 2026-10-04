@@ -12,8 +12,8 @@
 // Design (settled on #87): no renames ever (rename = decommission +
 // provision); deleting the manifest is inert; destruction only by
 // explicit `pulumi destroy`, double-gated by protect on production
-// hosts. The single-use bootstrap image is deliberately NOT a resource
-// here — it is a birth input passed as stack config (see forts/README.md).
+// hosts. The bootstrap image is deliberately NOT a resource here — it is
+// a birth input passed as stack config (see forts/README.md).
 // Machine-to-machine traffic rides the WireGuard mesh — the only
 // provider-side surface is instance, firewall, DNS.
 package main

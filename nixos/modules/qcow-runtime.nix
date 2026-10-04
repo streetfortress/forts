@@ -7,8 +7,7 @@
 #   2. The `<host>-qcow` image (#95): the upstream `images.qemu` variant
 #      layers virtualisation/disk-image.nix onto this config via
 #      extendModules. The variant owns the disk layout (msdos, single
-#      root partition sda1, ext4 labeled `nixos` — mirrored by
-#      fort image's guestfish root device) but omits the
+#      root partition sda1, ext4 labeled `nixos`) but omits the
 #      qemu-guest profile, console=ttyS0, and a grub timeout; this module
 #      supplies them. Without the profile's virtio initrd modules the
 #      image can't find /dev/vda at boot.
@@ -20,8 +19,8 @@
 # fort's image carries no host key; the key arrives on the cidata volume
 # pulumi-libvirt attaches to the domain (forts/pulumi/libvirt.go), placed
 # by the initrd before activation. A host whose key is already on the
-# root (the grafted images of today, and every switch of a running host)
-# boots unchanged — the reader finds the key and returns.
+# root (a host born before the channel, and every switch of a running
+# host) boots unchanged — the reader finds the key and returns.
 #
 # Priorities: mkDefault wherever the image variant (or grub.nix's
 # internal device→devices wiring) defines the same value, so the extended

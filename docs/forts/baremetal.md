@@ -58,10 +58,10 @@ fort scaffold <host> --write  ← baremetal-runtime.nix, the LAN block by MAC
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
 fort add / fort seed          ← as for any fort
                               → PR → merge
-fort image <host>             ← nix build ./nixos#<host>-baremetal + the host
-                                 key grafted in (guestfish on partition 2)
+fort image <host>             ← nix build ./nixos#<host>-baremetal, no secret inside
                                  → ~/.cache/forts/<host>-nixos.img
-                              ← WRITE IT (below); delete the artifact
+                              ← WRITE IT (below)
+                              ← the host key: the stick, #658 (not built)
 fort check <host>             ← flux reconciles; the host rebuilds itself from main
 ```
 
@@ -73,12 +73,26 @@ identities mint registered (deploy key, B2 keys) with the same
 merged-main gate, skipping the pulumi steps — the machine itself is
 powered off and its disk wiped by hand.
 
+## The host key: the baremetal channel is not built
+
+The image carries no host key, on this variant as on every other
+(#659): the key travels apart from the image, through a channel the
+platform provides, and the initrd places it before activation
+([provision.md](provision.md#the-seed-the-host-key-arrives-through-the-platforms-channel)).
+The baremetal channel is the same NoCloud `cidata` layout the lab reads,
+on a USB stick, with a verb to write it — #658, deferred until the next
+machine (likely #125). Until it lands, an image written by the runbook
+below boots with no key on its root: sops-nix cannot decrypt, and wg0,
+k3s and flux never start. A baremetal birth waits for #658.
+`sfi-fort-zenbook`, the one baremetal fort, was born before the channel
+and keeps its key on the root; no rebuild touches it.
+
 ## Writing the image — the runbook
 
 The writer is the stock NixOS minimal ISO on a USB stick and `dd`. It
-keeps the birth identical to a VM's: the artifact `fort image` produced,
-host key grafted, single-use, is what boots — nothing is placed by hand
-on the machine, and the image is deleted after one use like any other.
+keeps the birth identical to a VM's: the artifact `fort image` produced
+is what boots, and nothing is placed by hand on the machine. The host
+key arrives through the channel above.
 
 **Before the machine is touched**: if it is being *repaved* (an existing
 host becoming a fort), everything on its disk is gone at step 4. Its data
@@ -112,11 +126,12 @@ interim has served through the name.
    (`boot.growPartition` + `autoResize`).
 5. **Reboot** into the disk (pull the stick). The firmware finds
    `\EFI\BOOT\BOOTX64.EFI` on the ESP without an entry. The first boot
-   is the ordinary fort first boot: sops decrypts with the grafted host
-   key, wg0 comes up, k3s and flux bootstrap.
-6. **Delete the artifact** on devbox (`shred -u`): it carries the host's
-   private key. With a provider this is `fort provision`'s release step;
-   here it is yours.
+   is the ordinary fort first boot: the initrd places the host key from
+   the channel, sops decrypts with it, wg0 comes up, k3s and flux
+   bootstrap.
+6. **Delete the artifact** on devbox when you like: it holds no secret,
+   and the host does not need it again. With a provider this is `fort
+   provision`'s release step.
 7. **Verify** from a mesh member: `ssh deployer@<mesh_ip>`, `sudo
    sfi-kubectl get nodes` if the host carries ops/kubectl.nix, `kubectl
    get gitrepository -n flux-system` through the ops-ro kubeconfig.
@@ -134,8 +149,9 @@ throwaway `[baremetal]` host scaffolded and imaged by the real verbs:
   path — no boot entry, no EFI variables touched.
 - `ESP` and `nixos` mounted by label; on a disk grown from 6 G to 20 G
   the root partition and filesystem grew on the next boot (19.7 G).
-- The grafted host key decrypted the sops file: wg0 came up with the
-  mesh address, k3s and flux-bootstrap started, 4 pods running.
+- The host key decrypted the sops file (grafted into the image at the
+  time; the channel is #658): wg0 came up with the mesh address, k3s and
+  flux-bootstrap started, 4 pods running.
 - A virtio NIC carrying the manifest's `mac` got `[baremetal] ip`. Then
   the dock case: booted with **no** matching NIC, one hot-plugged 30 s
   later under a *different name* (`ens5`, not `ens3`) still got the

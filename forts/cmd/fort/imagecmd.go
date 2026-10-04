@@ -13,38 +13,33 @@ import (
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
-// image builds a host's bootstrap image (#42, was
-// provisioning/inject-host-key.sh). The nix build is generic: the
-// sops-encrypted secrets ride inside it, and the host key that decrypts
-// them at boot (sops-nix age.sshKeyPaths) must never enter the nix store.
-// How the key reaches the host depends on the variant (#605's decision):
+// image builds a host's bootstrap image (#42). The nix build is generic:
+// the sops-encrypted secrets ride inside it, and the host key that
+// decrypts them at boot (sops-nix age.sshKeyPaths) must never enter the
+// nix store. The key does not enter the image either (#605's decision,
+// #659): it travels through a channel the platform provides, handed over
+// by `fort provision` when the apply creates the host, and the initrd
+// places it before activation (nixos/modules/seed.nix). So the artifact
+// is the plain build output on every variant — this verb reads no
+// secret and needs nix only (skipped with --from):
 //
-//   - linode: no graft (#606). The artifact is the plain build output,
-//     ~/.cache/forts/<host>-nixos.img.gz, with the #42 size caps asserted
-//     (custom-image upload limits). The key travels as metadata.user_data
-//     on the instance (`fort provision`) and the initrd places it before
-//     activation (nixos/modules/seed.nix).
-//   - qcow: no graft (#657). The artifact is the plain nixos.qcow2 from
-//     the build, copied to ~/.cache/forts/<host>-nixos.qcow2 (`fort
-//     provision` grows that copy to the manifest's disk before the
-//     upload, as before). The key travels as a NoCloud cidata volume
-//     pulumi-libvirt attaches to the domain, and the same initrd module
-//     places it.
-//     For both, this verb reads no secret and needs neither sops nor
-//     guestfish.
-//   - baremetal: the graft, until the NoCloud stick lands (#658). The
-//     key is read straight from the sops-encrypted repo store (fort mint's
-//     custody model: no plaintext key material at rest anywhere) and
-//     guestfish mounts the root explicitly (not virt-customize: libguestfs
-//     OS inspection cannot identify a NixOS guest): /dev/sda2 for the
-//     raw-efi variant's GPT (the ESP is partition 1). The output is a
-//     SECRET-BEARING artifact a human writes to the machine's disk and
-//     then deletes (docs/forts/baremetal.md).
+//   - linode: ~/.cache/forts/<host>-nixos.img.gz, with the #42 size caps
+//     asserted (custom-image upload limits). The channel is
+//     metadata.user_data on the instance (#606).
+//   - qcow: ~/.cache/forts/<host>-nixos.qcow2, a copy of the build's
+//     nixos.qcow2 (`fort provision` grows that copy to the manifest's
+//     disk before the upload, which is why it is a copy and not the store
+//     path). The channel is a NoCloud cidata volume pulumi-libvirt
+//     attaches to the domain (#657).
+//   - baremetal: ~/.cache/forts/<host>-nixos.img, the raw-efi build, which
+//     a human writes to the machine's disk (docs/forts/baremetal.md). The
+//     channel — the same cidata layout on a USB stick — is #658 and is
+//     not built yet, so a baremetal birth waits for it.
 //
-// An author-side verb: it touches no provider. Tools: nix (the build;
-// skipped with --from); for the grafted variant also sops, and guestfish
-// from PATH or, failing that, from nixpkgs (ensureTool, as for virsh /
-// xsltproc / kustomize; the declared-prerequisites question is #160's).
+// The graft this verb performed until #659 (guestfish writing the key
+// into the image; the baremetal variant kept it last) is gone, and with
+// it the single-use rule: the artifact holds nothing a copy could leak.
+// An author-side verb: it touches no provider.
 func image(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort image <host> [--from <built image>] [--out <dir>]")
@@ -94,74 +89,18 @@ func image(args []string) error {
 	}
 	out := filepath.Join(*outDir, host+"-nixos"+v.ext())
 
-	// 2a. no graft: the build output is the artifact (#606, #657)
-	if !v.grafts() {
-		return plainImage(v, host, src, out)
-	}
-
-	// 2b. the graft: the host's identity, from the sops file mint wrote
-	if err := ensureTool("guestfish", "nixpkgs#libguestfs-with-appliance"); err != nil {
-		return err
-	}
-	key, pub, err := hostKeyPair(sopsCLI{root: root}, root, host)
-	if err != nil {
-		return err
-	}
-
-	// 3. the work dir: private, shredded on exit whatever happens
-	work, err := os.MkdirTemp(*outDir, ".inject-"+host+".")
-	if err != nil {
-		return err
-	}
-	defer shredDir(work)
-	if err := os.WriteFile(filepath.Join(work, "key"), []byte(key), 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(work, "key.pub"), []byte(pub), 0o600); err != nil {
-		return err
-	}
-	img := filepath.Join(work, "nixos.img")
-	fmt.Printf("== copying %s\n", filepath.Base(src))
-	if err := copyPrivate(src, img); err != nil {
-		return err
-	}
-
-	// 4. the graft
-	fmt.Printf("== injecting /etc/ssh/ssh_host_ed25519_key via guestfish (%s)\n", v.rootDev)
-	cmd := exec.Command("guestfish", "--rw", "-a", img)
-	cmd.Stdin = strings.NewReader(guestfishScript(v.rootDev, work))
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("guestfish: %w", err)
-	}
-
-	// 5. the artifact
-	if err := os.Rename(img, out); err != nil {
-		return err
-	}
-	fmt.Printf("== done. Single-use secret-bearing artifact: %s\n", out)
-	if b := entry.Baremetal(); b != nil {
-		// No provider consumes this one: the writer is a human at the
-		// machine, and the artifact's deletion is a step of the runbook.
-		disk := b.Disk
-		if disk == "" {
-			disk = "<disk>"
-		}
-		fmt.Printf("== next: write it to %s from a live ISO (docs/forts/baremetal.md), then delete it — no provider consumes it\n", disk)
-		return nil
-	}
-	fmt.Printf("== next: fort provision %s --image %s   (deletes it on success)\n", host, out)
-	return nil
+	// 2. the artifact: the build output, copied
+	return plainImage(v, host, entry, src, out)
 }
 
-// plainImage is the linode and qcow path: copy the build output to the
-// artifact path `fort provision --image` expects, after the #42 caps for
-// a linode image. The copy holds no secret; it goes under the same 0700
-// cache dir as the grafted variant's artifact, and provision still
-// deletes it on success (the single-use lifecycle is #605's step 3). A
+// plainImage copies the build output to the artifact path `fort
+// provision --image` expects, after the #42 caps for a linode image. The
+// copy holds no secret; it goes under the 0700 cache dir because the
+// dir predates #659 and nothing else of the operator's lives there. A
 // copy and not the store path itself because provision's libvirt flow
-// grows the qcow2 in place (qemu-img resize) before the upload.
-func plainImage(v variantSpec, host, src, out string) error {
+// grows the qcow2 in place (qemu-img resize) before the upload, and the
+// store is read-only.
+func plainImage(v variantSpec, host string, entry manifest.Host, src, out string) error {
 	if v.variant == "linode" {
 		n, err := gunzipSize(src)
 		if err != nil {
@@ -185,6 +124,16 @@ func plainImage(v variantSpec, host, src, out string) error {
 		return err
 	}
 	fmt.Printf("== done. Plain build output, no secret inside: %s\n", out)
+	if b := entry.Baremetal(); b != nil {
+		// No provider consumes this one: the writer is a human at the
+		// machine. The host key's channel for this platform is #658.
+		disk := b.Disk
+		if disk == "" {
+			disk = "<disk>"
+		}
+		fmt.Printf("== next: write it to %s from a live ISO (docs/forts/baremetal.md); the host key's channel for baremetal is #658, not built yet\n", disk)
+		return nil
+	}
 	fmt.Printf("== next: fort provision %s --image %s   (the host key arrives through the %s channel at first boot)\n", host, out, v.channel())
 	return nil
 }
@@ -196,31 +145,25 @@ const (
 )
 
 // variantSpec is what the manifest's provider table decides about the
-// image: the flake attribute, the root device guestfish mounts, and the
-// artifact's file kind.
+// image: the flake attribute and the artifact's file kind.
 type variantSpec struct {
-	host, variant, attr, rootDev string
+	host, variant, attr string
 }
 
 func imageVariant(host string, h manifest.Host) variantSpec {
 	switch {
 	case h.Cloud():
-		return variantSpec{host, "linode", "./nixos#" + host + "-linode", "/dev/sda"}
+		return variantSpec{host, "linode", "./nixos#" + host + "-linode"}
 	case h.Baremetal() != nil:
 		// the raw-efi variant: GPT, ESP first, root second (#287)
-		return variantSpec{host, "baremetal", "./nixos#" + host + "-baremetal", "/dev/sda2"}
+		return variantSpec{host, "baremetal", "./nixos#" + host + "-baremetal"}
 	}
-	return variantSpec{host, "qcow", "./nixos#" + host + "-qcow", "/dev/sda1"}
+	return variantSpec{host, "qcow", "./nixos#" + host + "-qcow"}
 }
 
-// grafts says whether the variant's artifact carries the host key. The
-// linode variant reads its seed from the Metadata channel at first boot
-// (#606) and the qcow variant from the NoCloud volume (#657); baremetal
-// keeps the graft until the NoCloud stick lands (#658).
-func (v variantSpec) grafts() bool { return v.variant == "baremetal" }
-
-// channel names the seed channel of a variant that does not graft
-// (nixos/modules/seed.nix's names), for the verb's next-step line.
+// channel names the seed channel of a variant (nixos/modules/seed.nix's
+// names), for the verb's next-step line. The baremetal channel is #658
+// and has no name yet.
 func (v variantSpec) channel() string {
 	switch v.variant {
 	case "linode":
@@ -263,39 +206,6 @@ func findImage(dir, ext string) (string, error) {
 	return matches[0], nil
 }
 
-// guestfishScript: mount the root explicitly and upload the pair.
-func guestfishScript(rootDev, work string) string {
-	return strings.Join([]string{
-		"run",
-		"mount " + rootDev + " /",
-		"mkdir-p /etc/ssh",
-		"upload " + filepath.Join(work, "key") + " /etc/ssh/ssh_host_ed25519_key",
-		"upload " + filepath.Join(work, "key.pub") + " /etc/ssh/ssh_host_ed25519_key.pub",
-		"chmod 0600 /etc/ssh/ssh_host_ed25519_key",
-		"chmod 0644 /etc/ssh/ssh_host_ed25519_key.pub",
-		"",
-	}, "\n")
-}
-
-func gunzipTo(src, dst string) (int64, error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return 0, err
-	}
-	defer in.Close()
-	gz, err := gzip.NewReader(in)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", src, err)
-	}
-	defer gz.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return 0, err
-	}
-	defer out.Close()
-	return io.Copy(out, gz)
-}
-
 // gunzipSize is the uncompressed length of a .gz, read through once —
 // the #42 raw cap without a copy on disk.
 func gunzipSize(src string) (int64, error) {
@@ -312,34 +222,6 @@ func gunzipSize(src string) (int64, error) {
 	return io.Copy(io.Discard, gz)
 }
 
-func gzipTo(src, dst string) (int64, error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return 0, err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return 0, err
-	}
-	defer out.Close()
-	gz, err := gzip.NewWriterLevel(out, 6)
-	if err != nil {
-		return 0, err
-	}
-	if _, err := io.Copy(gz, in); err != nil {
-		return 0, err
-	}
-	if err := gz.Close(); err != nil {
-		return 0, err
-	}
-	st, err := out.Stat()
-	if err != nil {
-		return 0, err
-	}
-	return st.Size(), nil
-}
-
 // copyPrivate copies a (possibly read-only nix store) file to a 0600 copy.
 func copyPrivate(src, dst string) error {
 	in, err := os.Open(src)
@@ -354,30 +236,4 @@ func copyPrivate(src, dst string) error {
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
-}
-
-// shredDir overwrites every file in dir with zeros once and removes it —
-// the work dir held the plaintext key and a key-bearing image. Best
-// effort, as shred is on a journaling or CoW filesystem.
-func shredDir(dir string) {
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
-			io.CopyN(f, zeroReader{}, info.Size())
-			f.Close()
-		}
-		return nil
-	})
-	os.RemoveAll(dir)
-}
-
-type zeroReader struct{}
-
-func (zeroReader) Read(p []byte) (int, error) {
-	for i := range p {
-		p[i] = 0
-	}
-	return len(p), nil
 }

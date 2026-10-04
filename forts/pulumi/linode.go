@@ -51,8 +51,8 @@ func linodePlanDiskMB(instanceType string) (int, error) {
 // and deletes it (provider-side and local) once the instance exists. The
 // root disk carries ignoreChanges on `image` — a birth input, not a
 // managed property, so neither the image's deletion nor a later rebuild
-// ever diffs a running host. Since #606 the image carries no secret; the
-// single-use lifecycle around it is #605's step 3 and still runs as is.
+// ever diffs a running host. Since #606 the image carries no secret;
+// the delete is hygiene (Linode bills custom images), not custody (#659).
 //
 // The seed (#605 option 2): metadata.user_data on the instance, the one
 // value the image used to carry. `fort provision` reads the key pair from
@@ -85,8 +85,8 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		return fmt.Errorf("host %q: no [linode] table", name)
 	}
 
-	// Set by `fort provision --image` after uploading the injected
-	// artifact. It stays in Pulumi.<host>.yaml as committed provenance:
+	// Set by `fort provision --image` after uploading the artifact. It
+	// stays in Pulumi.<host>.yaml as committed provenance:
 	// the record of which image this host was born from.
 	imageID := config.Require(ctx, "forts:imageId")
 

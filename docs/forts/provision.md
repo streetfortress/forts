@@ -6,8 +6,8 @@ fort preview  (<host> | --all) [--refresh] [--expect-no-changes]
 fort adopt    <host> [--yes]
 ```
 
-`provision` is `pulumi up -s <host>` with the credentials, backend and
-image lifecycle handled for you, and nothing hidden: the stock CLI runs
+`provision` is `pulumi up -s <host>` with the credentials, backend,
+image upload and seed handled for you, and nothing hidden: the stock CLI runs
 with inherited stdio, you read the preview and type `yes`. The program
 (`forts/pulumi`) realises the [manifest](manifest.md) through a per-provider
 backend — `linode` for cloud forts, `libvirt` for the lab (soundship's
@@ -19,14 +19,13 @@ and is refused here: its image is written by hand
 
 ## The image is a birth input, not a resource
 
-The host boots from a single-use image. For a baremetal host the image
-still carries its ssh host key (grafted in by `fort image` from the sops
-file [`mint`](mint.md) wrote); for a Linode or lab host the image carries
-no secret and the key arrives through the platform's channel at first
-boot — the Metadata service, or a NoCloud `cidata` volume on the domain
+The host boots from the image `fort image` built: the plain build
+output, no secret inside, on every variant (#659). Its ssh host key —
+the age identity that decrypts the sops file [`mint`](mint.md) wrote —
+arrives through the platform's channel at first boot: the Metadata
+service, or a NoCloud `cidata` volume on the domain
 ([the seed](#the-seed-the-host-key-arrives-through-the-platforms-channel),
-#606, #657). Either way the host decrypts its secrets at its first
-activation.
+#606, #657). The host decrypts its secrets at its first activation.
 That image is deliberately **not** a pulumi resource: pulumi owns
 only the durable surface (instance, disks, boot config, firewall, DNS;
 or volume + domain in the lab). `--image` runs the birth flow around the
@@ -51,10 +50,17 @@ apply:
 5. **Release.** linode: delete the provider-side image, then the local
    file. libvirt: the local file only — the uploaded volume *is* the
    root disk (a different disk is a repave, never an in-place change).
+   This is hygiene, not custody: Linode bills a custom image for as long
+   as it exists, the local copy is a few GiB, and the host needs
+   neither once it has booted. The image holds no secret, so a copy
+   that outlives the delete — the provider's own, or one left by a
+   failed apply — gives an attacker nothing current (#605).
 
-If the apply fails, the image stays where it was and the message says
-so: rerun **without** `--image` (the id is already set). Without
-`--image`, `provision` is the plain day-2 apply.
+If the apply fails, the image stays staged and the message says so:
+rerun **without** `--image` (the id is already set). A Linode image a
+failed birth leaves behind costs money until a rerun or a hand delete
+removes it (#608). Without `--image`, `provision` is the plain day-2
+apply.
 
 After any apply, `forts/pulumi` is staged (state; at birth also
 `Pulumi.<host>.yaml`); commit it as its own PR. The instance is protected (`protect: true` on
@@ -63,33 +69,35 @@ every fort) from that point until [`destroy`](destroy.md).
 ## Building the image
 
 ```
-fort image <host>                              # nix build ./nixos#<host>-{qcow|linode|baremetal}; + the graft for baremetal
+fort image <host>                              # nix build ./nixos#<host>-{qcow|linode|baremetal}
 fort image <host> --from result/nixos.qcow2    # an image built by hand; skips the build
 fort provision <host> --image ~/.cache/forts/<host>-nixos.qcow2   # or .img.gz
 ```
 
 Any x86_64 Nix host with KVM builds it (devbox does; soundship needs no
-shell); `fort image` needs `nix` on PATH, and for the grafted variant
-(baremetal) also `sops`, plus `guestfish` from PATH or, failing that, from
-nixpkgs. A Linode or lab host's artifact is the plain build output: no
-graft, no sops, no guestfish — Linode's caps are asserted and the file is
-copied (the lab copy is what `provision` then grows to the manifest's disk). The
+shell); `fort image` needs `nix` on PATH and nothing else — it reads no
+secret. The artifact is the plain build output on every variant:
+Linode's caps are asserted and the file is copied (the lab copy is what
+`provision` then grows to the manifest's disk; a baremetal `.img` is
+what a human writes to the disk, [baremetal.md](baremetal.md)). The
 flake picks the variant from the runtime module the host file imports, so
 scaffold's choice of shape is the only switch. Details in
 [`docs/nixos/operations.md`](../nixos/operations.md).
 
 ## The seed: the host key arrives through the platform's channel
 
-The bootstrap image used to be a copy of every secret the fort holds: the
-sops file rides in the nix store, and the grafted host key decrypts it.
-The provider keeps copies of that image we cannot delete (#605 has the
-facts). The decision there (2026-10-02) is **option 2 for every
-platform**: the image carries no secret, the host key travels through a
+This is the birth's custody model (#605, decided 2026-10-02). The sops
+file rides in the nix store, encrypted; the host key that decrypts it
+never enters the image. Until #659 `fort image` grafted the key in after
+the build, which made the image a copy of every secret the fort holds,
+and the provider keeps copies of an image we cannot delete (#605 has the
+facts). So **the image carries no secret, the host key travels through a
 channel the platform provides, and one NixOS module reads it before
-activation. This section is the Linode channel, the first one built
-(#606), and the lab's NoCloud channel (#657). The baremetal channel (the
-same `cidata` layout on a USB stick) is #658; until it lands, `fort image`
-grafts for that variant exactly as before.
+activation.** The repo stays the key store ([mint](mint.md)); the
+channel is the only road from it to the host. Two channels exist: the
+Linode Metadata service (#606) and the lab's NoCloud volume (#657). The
+baremetal channel — the same `cidata` layout on a USB stick — is #658,
+not built; a baremetal birth waits for it ([baremetal.md](baremetal.md)).
 
 **The seed** is the ed25519 host key as `fort mint` wrote it into
 `nixos/secrets/<host>.yaml`: `ssh-host-key`, then `ssh-host-key.pub`, the
@@ -137,9 +145,9 @@ The birth also records `forts:seed` on the stack (`linode-metadata` or
 `nocloud`): committed provenance of the channel the host was born
 through, next to `forts:imageId`. The libvirt program declares the seed
 volume only when that key says `nocloud`, so a host born before the
-channel existed — the three adopted lab VMs, the grafted dev fort — never
-sees an empty ISO proposed on a day-2 apply. Those hosts get the channel
-when they are repaved.
+channel existed — the three adopted lab VMs, and the dev fort born from
+an image that carried the key — never sees an empty ISO proposed on a
+day-2 apply. Those hosts get the channel when they are repaved.
 
 Whether this apply creates the host is the stack's answer, not the
 flags': `provision` runs `pulumi stack export` and looks for a resource
@@ -164,10 +172,14 @@ needs the admin age key, as the token lookups in
 `modules/linode-runtime.nix` and `modules/qcow-runtime.nix`, so every
 Linode and every lab fort has it; the channel follows `sfi.platform`). It
 runs after the root is mounted on `/sysroot` and is required by
-`initrd.target`, so before the switch to stage 2; stage 2 then runs
-activation and sops-nix finds the key where it always was. A
+`initrd.target`, so before the switch to stage 2. Activation runs in the
+initrd too on this nixpkgs — `initrd-nixos-activation.service`, after
+`initrd-switch-root.target`, which is after `initrd.target` — so the
+seed unit finishes before activation starts, and sops-nix finds the key
+where it always was (the #656 journal below shows the quarter second
+between them). A
 `ConditionPathExists` skips the unit when the key is on the root, so a
-host born from a grafted image boots unchanged, and so does every later
+host born before the channel boots unchanged, and so does every later
 boot of a seeded one. Otherwise the channel runs. On a Linode fort the
 unit brings `eth0` up with one `udhcpc` lease, asks the service for a
 token (`PUT http://169.254.169.254/v1/token`, the expiry in a header),
@@ -246,14 +258,12 @@ the instance — the metadata cannot change on a running one. That matches
 [`mint`](mint.md)'s restore-not-rotate rule: a re-run restores the same
 identity, and a rotation is a deliberate repave.
 
-**What this does not change yet.** `provision --image` still runs the
-single-use lifecycle (stage, record, release) and still deletes the
-Linode image once the host exists; for a Linode or lab host that delete
-is now hygiene, not custody. The baremetal stick (#658), the removal of
-the lifecycle and the graft (#659), and the repave of production (#660)
-and of the lab forts born before the channel are #605's steps 2–4. The
-root disk and the recovery image (#607) still hold every secret in plain
-text, and so does the seed volume in the lab pool.
+**What remains.** The baremetal stick (#658), and the repave of
+production (#660) and of the lab forts born before the channel, are
+#605's open steps. The root disk and the recovery image (#607) still
+hold every secret in plain text, and so does the seed volume in the lab
+pool: the channel narrows the trust to the platform's metadata store
+and the hypervisor, it does not remove it.
 
 ### Verification results from [linode-metadata-test](https://gitea.zen.lofi/sfi/deployments/pulls/656)
 
@@ -354,7 +364,7 @@ and a wildcard `*.<dns.name>` in the zone. `fort destroy` powers the
 instance off first: Linode refuses disk deletion on a running instance.
 
 **libvirt** (`[libvirt]` `ip`, `[shape]` `vcpus` / `memory` / `disk`): a
-qcow2 volume in soundship's `images` pool streamed from the injected
+qcow2 volume in soundship's `images` pool streamed from the bootstrap
 image through the libvirt API (no root hop); for a host born with the
 channel, the seed volume `<host>-seed.iso` in the same pool ([the
 seed](#the-seed-the-host-key-arrives-through-the-platforms-channel)); and

@@ -15,8 +15,8 @@
 # The seed reader (./seed.nix, #606) rides with this contract: a Linode
 # fort's image carries no host key; the key arrives through the Metadata
 # service at first boot, placed by the initrd before activation. A host
-# whose key is already on the root (the grafted images of today) boots
-# unchanged — the reader finds the key and returns.
+# whose key is already on the root (a host born before the channel)
+# boots unchanged — the reader finds the key and returns.
 { lib, modulesPath, ... }:
 
 {

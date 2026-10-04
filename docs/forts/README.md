@@ -70,13 +70,13 @@ fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canar
                                  the fort's block in wireguard/ssh_config + its
                                  host key in wireguard/known_hosts (ssh-config.md)
                               → PR → merge
-fort image <host>             ← nix build (the variant from the manifest); baremetal
-                                 gets the host key grafted in, linode and qcow do not
-                                 (#606, #657) → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
+fort image <host>             ← nix build (the variant from the manifest); the output
+                                 is the artifact, no secret inside (#659)
+                                 → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
 fort provision <host> --image <path>   ← pulumi up, you confirm; the host key rides as
                                           metadata.user_data (linode) or on a cidata
-                                          volume (libvirt); the single-use image is
-                                          released; state staged
+                                          volume (libvirt), #606/#657; the image is
+                                          released once the host exists; state staged
                               → "<host>: provisioned" PR (state only) → merge
                                  (a [baremetal] host: no provision — you write
                                   the image to the disk, baremetal.md)
@@ -88,9 +88,10 @@ fort check <host>             ← what CI will say
 
 `add` and `seed` can run before the host exists — they are pure repo
 mutations — and usually do, so the first flux sync already finds the
-workloads. `fort image` runs on any x86_64 Nix host with KVM and guestfish
-(devbox; soundship needs no shell). See [`docs/nixos/operations.md`](../nixos/operations.md)
-for the image and the host side.
+workloads. `fort image` runs on any x86_64 Nix host with KVM (devbox;
+soundship needs no shell) and needs nix alone. See
+[`docs/nixos/operations.md`](../nixos/operations.md) for the image and
+the host side.
 
 ## Day 2
 

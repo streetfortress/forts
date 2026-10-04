@@ -7,11 +7,11 @@
 // Scaffolding writes source of truth into this repo (nix host files, flux
 // cluster dirs, sops rules, wg peers) — it is a code generator, reviewed
 // like any other change, and deliberately NOT part of any Pulumi resource
-// graph. Provisioning wraps the stock pulumi CLI and owns the single-use
-// image's whole lifecycle around it. The full flow:
+// graph. Provisioning wraps the stock pulumi CLI and owns the bootstrap
+// image's lifecycle around it. The full flow:
 //
 //	fort scaffold web3                  # render files → branch → PR
-//	fort image web3                     # (after the merge) nix build; linode: that is the artifact (#606)
+//	fort image web3                     # (after the merge) nix build; the output is the artifact
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
@@ -195,30 +195,27 @@ func usage() {
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image: nix build ./nixos#<host>-{qcow|
       linode|baremetal} (the variant from the manifest's provider table;
-      --from skips the build). The key that decrypts the host's secrets on
-      first boot must never enter the nix store, so it travels apart from
-      the build. linode, qcow: the build output IS the artifact, no secret
-      inside — the key arrives at provision as metadata.user_data (#606)
-      or on a NoCloud cidata volume (#657) and the initrd places it before
-      activation; linode's 6 GiB raw / 5 GiB gzip caps are asserted.
-      baremetal: guestfish grafts ssh-host-key + .pub from nixos/secrets/
-      <host>.yaml into /etc/ssh, until the NoCloud stick lands (#658).
-      Output: ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img} — the
-      single-use artifact provision --image consumes and deletes, or, for
-      a [baremetal] host, the SECRET-BEARING one you write to the
-      machine's disk from a live ISO and then delete (docs/forts/
-      baremetal.md); the work dir is shredded. nix must be on PATH; the
-      graft also needs sops, and guestfish from PATH, else nixpkgs.
+      --from skips the build). The build output IS the artifact, on every
+      variant, no secret inside (#659): the key that decrypts the host's
+      secrets on first boot never enters the nix store or the image — it
+      arrives at provision as metadata.user_data (#606) or on a NoCloud
+      cidata volume (#657) and the initrd places it before activation;
+      the baremetal channel is #658. linode's 6 GiB raw / 5 GiB gzip caps
+      are asserted. Output: ~/.cache/forts/<host>-nixos.{qcow2,img.gz,
+      img} — what provision --image consumes, or, for a [baremetal] host,
+      what you write to the machine's disk from a live ISO (docs/forts/
+      baremetal.md). nix must be on PATH; nothing else.
 
   provision <host> [--image <path>] [--yes]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
       the preview, or --yes confirms it — an agent, a script, CI; without
       a TTY and without --yes the verb refuses up front). With --image, the birth: create the stack if the host
-      has none, stage the single-use bootstrap image and record
-      it as the stack's forts:imageId — linode: upload the .img.gz;
-      libvirt: grow the .qcow2 to disk_size, the program streams it into
-      the pool as the root disk — and once the host exists, release it
-      (provider-side where applicable, and the local copy) (#42). The
+      has none, stage the bootstrap image and record it as the stack's
+      forts:imageId — linode: upload the .img.gz; libvirt: grow the
+      .qcow2 to disk_size, the program streams it into the pool as the
+      root disk — and once the host exists, release it (provider-side
+      where applicable, and the local copy): hygiene, Linode bills
+      custom images; the image holds no secret (#42, #659). The
       apply that creates the host (the stack says, not the flag) also
       hands the host key seed to the program, read from nixos/secrets/
       <host>.yaml: metadata.user_data on the instance (#606) or a NoCloud

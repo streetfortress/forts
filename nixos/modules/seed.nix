@@ -2,21 +2,26 @@
 #
 # A fort decrypts its secrets with sops-nix at activation, with the age
 # identity derived from /etc/ssh/ssh_host_ed25519_key (hosts/<host>/
-# secrets.nix). Until now `fort image` grafted that key into the
+# secrets.nix). Until #659 `fort image` grafted that key into the
 # bootstrap image, which made the image a copy of every secret the fort
 # holds, kept in a provider's object storage we cannot wipe. This module
-# moves the key out of the image and into a channel the platform
-# provides: the image becomes a plain build output, and the key arrives at
-# first boot, before activation.
+# is where the key lives instead: a channel the platform provides. The
+# image is a plain build output, and the key arrives at first boot,
+# before activation.
 #
 # Where it runs: the systemd initrd (the fleet's nixpkgs pin defaults to
 # it on every host), as sfi-seed.service — after the root is mounted on
 # /sysroot, required by initrd.target, so before the switch to stage 2.
-# Stage 2 then runs activation and sops-nix finds the key where it is
-# today: the sops wiring and the unit order do not change. A stage-2 unit
-# would write the key after activation had run once without it, and every
-# unit that needs a secret would have failed by then; this is why the
-# reader is in the initrd (#605, "Why the initrd and not a stage-2 unit").
+# Activation does not run in stage 2 on this nixpkgs: it runs in the
+# initrd too, as initrd-nixos-activation.service, after
+# initrd-switch-root.target, which is after initrd.target. The seed unit
+# is required by initrd.target, so it finishes before activation starts
+# and sops-nix finds the key where it is today — the #656 journal shows
+# the seed done a quarter second before activation. The sops wiring and
+# the unit order do not change. A stage-2 unit would write the key after
+# activation had run once without it, and every unit that needs a secret
+# would have failed by then; this is why the reader is in the initrd
+# (#605, "Why the initrd and not a stage-2 unit").
 #
 # What it does: if the key is on the root, nothing (a ConditionPathExists
 # on the unit, and the script checks again). Otherwise it reads the seed
@@ -57,8 +62,9 @@
 #               every process on the host until stage 2 blackholes it;
 #               this one was never open to anyone but root.
 #   baremetal → not yet: the same cidata layout on a USB stick follows
-#               as #658. Until then `fort image` keeps the graft for that
-#               variant, and enabling this module on it is an eval error.
+#               as #658. The image carries no key on this variant either
+#               (#659), so a baremetal birth waits for that channel;
+#               enabling this module on it is an eval error until then.
 #
 # Each channel is a pair — open in the initrd, close in stage 2 — and both
 # halves live here, so nothing platform-specific reaches a generic module.
@@ -111,7 +117,7 @@ in
       assertions = [
         {
           assertion = channel != null;
-          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud stick for baremetal is #658; keep the graft (fort image) for this host";
+          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud stick for baremetal is #658; a birth on this platform waits for it";
         }
         {
           assertion = config.boot.initrd.systemd.enable;

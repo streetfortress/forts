@@ -15,4 +15,4 @@
 # with inherited stdio — the stock CLI stays the escape hatch.
 name: forts
 runtime: go
-description: SFI fleet cloud provisioning — instance, firewall, DNS; the mesh and flux own everything else, and the single-use image is fort provision's job.
+description: SFI fleet cloud provisioning — instance, firewall, DNS; the mesh and flux own everything else, and the bootstrap image is fort provision's job.

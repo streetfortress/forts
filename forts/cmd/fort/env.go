@@ -52,7 +52,7 @@ func cloudEnv(root string, provider string) error {
 		// The provider applies the domain's XSLT (the qcow2 driver fix,
 		// pulumi/libvirt.go) by exec'ing xsltproc; the plugin inherits
 		// our PATH, so put nixpkgs' copy on it when the host has none —
-		// the guestfish / qemu-img fallback, one layer down.
+		// the qemu-img fallback, one layer down.
 		if err := ensureTool("xsltproc", "nixpkgs#libxslt.bin"); err != nil {
 			return err
 		}

@@ -12,17 +12,18 @@ import (
 )
 
 // imageFlow is the per-provider half of the birth flow (#42): how the
-// injected, secret-bearing bootstrap image reaches the pulumi program,
-// and how the single-use artifact goes away once the host exists. The
-// program itself only ever sees `forts:imageId` — the value Stage
-// returns, committed in Pulumi.<host>.yaml as provenance.
+// bootstrap image — the plain build output of `fort image`, no secret
+// inside (#659) — reaches the pulumi program, and how it goes away once
+// the host exists. The program itself only ever sees `forts:imageId` —
+// the value Stage returns, committed in Pulumi.<host>.yaml as provenance.
 type imageFlow interface {
 	// Stage makes the artifact available and returns the value recorded
 	// as forts:imageId. It must leave the artifact retrievable if the
 	// apply then fails (the retry runs without --image).
 	Stage(ctx context.Context, entry manifest.Host, host, path string) (id string, err error)
-	// Release deletes the single-use artifact after a confirmed birth:
-	// provider-side where one exists, then the local injected copy.
+	// Release deletes the artifact after a confirmed birth: provider-side
+	// where one exists (Linode bills custom images), then the local copy.
+	// Hygiene: the host does not need the image once it has booted.
 	Release(ctx context.Context, id, path string) error
 	// Leftover says what a human does with the artifact when the apply
 	// did not confirm the host.
@@ -61,7 +62,7 @@ func (l *linodeImage) Stage(ctx context.Context, entry manifest.Host, host, path
 	// The instance create will fail while the image is still
 	// processing; wait for it here rather than in the program.
 	if _, err := l.client.WaitForImageStatus(ctx, img.ID, linodego.ImageStatusAvailable, 600); err != nil {
-		return "", fmt.Errorf("image %s never became available (left in place): %w", img.ID, err)
+		return "", fmt.Errorf("image %s never became available (it stays on the account): %w", img.ID, err)
 	}
 	return img.ID, nil
 }
@@ -99,7 +100,7 @@ func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, pat
 		return "", err
 	}
 	if filepath.Ext(abs) != ".qcow2" {
-		return "", fmt.Errorf("%s: the libvirt backend takes the injected qcow2 (fort image %s)", path, host)
+		return "", fmt.Errorf("%s: the libvirt backend takes the qcow2 fort image %s produced", path, host)
 	}
 	size := entry.Shape.WithLabDefaults().Disk
 	fmt.Printf("growing %s to %s (qemu-img resize; the root fs autoResizes on first boot)…\n", abs, size)
@@ -109,8 +110,8 @@ func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, pat
 	return abs, nil
 }
 
-// qemuImg runs qemu-img from PATH, else from nixpkgs (the same fallback
-// fort image uses for guestfish).
+// qemuImg runs qemu-img from PATH, else from nixpkgs (the ensureTool
+// fallback, inline: this one call has a flag list to pass through).
 func qemuImg(args ...string) error {
 	var cmd *exec.Cmd
 	if _, err := exec.LookPath("qemu-img"); err == nil {
