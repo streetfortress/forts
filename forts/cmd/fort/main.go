@@ -1,6 +1,6 @@
 // fort — manage forts: the codegen and lifecycle half of the
 // provisioning story (#42/#87). A fort is one host: base image + flux
-// workloads, declared by its manifest (provisioning/forts/<host>.toml)
+// workloads, declared by its manifest (forts/<host>.toml)
 // and keyed by that hostname everywhere (nix host dir, pulumi stack,
 // peers.json, sops).
 //
@@ -98,9 +98,9 @@ func usage() {
 
   scaffold <host> [--write]
       render the host's generated surface from its manifest,
-      provisioning/forts/<host>.toml: nixos/hosts/<host>/{default.nix,
+      forts/<host>.toml: nixos/hosts/<host>/{default.nix,
       secrets.nix} in the lab shape (qcow runtime, static LAN) or, with a
-      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); also fleet/clusters/<host>/ (6 files) and the apps root
+      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); also flux/clusters/<host>/ (6 files) and the apps root
       kustomization. Prints the marked tree; --write lays it down, never
       overwriting a file that exists (a re-run fills gaps) — the manifest
       seeds the host, you refine it in place. Then fort mint.
@@ -165,7 +165,7 @@ func usage() {
       HOST reads, and the passphrase into
       provisioning/console-passwords.yaml, the registry an OPERATOR
       reads. That file is one entry per fort, in the shape
-      wireguard/peers.json already has, encrypted to the admin age keys
+      mesh/peers.json already has, encrypted to the admin age keys
       and NOT to the fort. nixos/modules/ops/console.nix consumes the
       hash, and only a getty accepts it — sshd refuses every password
       (nixos/modules/common.nix). The door exists for one failure: the
@@ -271,7 +271,7 @@ func usage() {
 
   check (<fort>... | --all) [--chart-dir path]
       the merge gate. Fleet: the fort's nix host dir, flux cluster dir
-      and apps tree exist; fleet/apps/<fort>, flux-system and the shared
+      and apps tree exist; flux/apps/<fort>, flux-system and the shared
       infrastructure layers kustomize-build (a listed-but-unseeded sops
       file fails it — the guard working); every ${VAR} they carry is a
       cluster-vars key (flux's envsubst is strict). Contracts: every app
@@ -292,11 +292,11 @@ func usage() {
 
   ssh-config [--write]
       render the client side of the mesh from the tree (#434):
-      wireguard/ssh_config — one Host block per peer in peers.json, the
+      mesh/ssh_config — one Host block per peer in peers.json, the
       fort name plus a role alias where one fort holds the role (sfi-dev,
       sfi-prod, sfi-stage), its mesh address, and the account its shape
       answers on (a fort deployer, a peer with no manifest steven) —
-      and wireguard/known_hosts, one line per
+      and mesh/known_hosts, one line per
       fort with its ssh host key, keyed by fort name (HostKeyAlias) and
       mesh address. Both are committed; consumers Include the first and
       list the second as a UserKnownHostsFile. mint and dismantle keep
@@ -322,8 +322,8 @@ func usage() {
       staged for a PR (#217): removes the manifest, nixos/hosts/
       <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
       shared-infrastructure recipient (then sops updatekeys on the files
-      that lost it), the wireguard peer, fleet/clusters/<host> and
-      fleet/apps/<host> — and prints the
+      that lost it), the wireguard peer, flux/clusters/<host> and
+      flux/apps/<host> — and prints the
       residue: every remaining mention of the host for the reviewer to
       triage in the same PR, cross-fort sops refs into it, and whether
       the host is the fleet's B2 pruner (#400: its sops file names

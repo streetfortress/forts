@@ -75,8 +75,8 @@ func add(args []string) error {
 		}
 		// Author verbs stage what they generate (mint and seed do; the
 		// handbook says so): the new dirs and the appended lists.
-		if err := (sopsCLI{root: o.root}).GitAdd(filepath.Join("fleet/apps", o.fort)); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: git add fleet/apps/%s: %v\n", o.fort, err)
+		if err := (sopsCLI{root: o.root}).GitAdd(filepath.Join("flux/apps", o.fort)); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: git add flux/apps/%s: %v\n", o.fort, err)
 		}
 	}
 	p.report(os.Stdout, o.write)
@@ -271,13 +271,13 @@ func planAdd(o addOpts) (*plan, error) {
 	}
 
 	p := &plan{root: o.root, fort: o.fort, app: app, resolved: resolved, noContract: !c.Present, http: c.HTTP != nil}
-	apps := filepath.Join("fleet/apps", o.fort)
+	apps := filepath.Join("flux/apps", o.fort)
 	appDir := filepath.Join(apps, app)
 	if exists(o.root, appDir) {
 		return nil, fmt.Errorf("%s exists — fort add never overwrites (fort remove first, or refine in place)", appDir)
 	}
 	if !exists(o.root, filepath.Join(apps, "kustomization.yaml")) {
-		return nil, fmt.Errorf("%s has no fleet/apps tree (fort scaffold %s --write first)", o.fort, o.fort)
+		return nil, fmt.Errorf("%s has no flux/apps tree (fort scaffold %s --write first)", o.fort, o.fort)
 	}
 	tpl, err := parseAddTemplates()
 	if err != nil {
@@ -528,11 +528,11 @@ func planAdd(o addOpts) (*plan, error) {
 		pin = "semver filter on 0.0.0-main.* (now " + resolved + ")"
 	}
 	p.add(action{path: filepath.Join(appDir, "repository.yaml"), mark: '●', note: "OCIRepository " + v.ChartURL + ", " + pin, content: render("app/repository.yaml.gotpl")})
-	ca, err := os.ReadFile(filepath.Join(o.root, "fleet/infrastructure/configs/step-ca-root.pem"))
+	ca, err := os.ReadFile(filepath.Join(o.root, "flux/infrastructure/configs/step-ca-root.pem"))
 	if err != nil {
 		return nil, err
 	}
-	p.add(action{path: filepath.Join(appDir, "step-ca-root.pem"), mark: '●', note: "copy of fleet/infrastructure/configs/step-ca-root.pem", content: ca})
+	p.add(action{path: filepath.Join(appDir, "step-ca-root.pem"), mark: '●', note: "copy of flux/infrastructure/configs/step-ca-root.pem", content: ca})
 	p.add(action{path: filepath.Join(appDir, "release.yaml"), mark: '●', note: "wire: " + wireNote(c) + "; retry forever — refine replicas/env in place", content: render("app/release.yaml.gotpl")})
 	if c.HTTP != nil {
 		p.add(action{path: filepath.Join(appDir, "route.yaml"), mark: '●', note: fmt.Sprintf("HTTPRoute %s → %s:%d", v.Hostname, c.HTTP.Service, c.HTTP.Port), content: render("app/route.yaml.gotpl")})
@@ -697,7 +697,7 @@ func (p *plan) apply() error {
 // report prints the marked tree (CLAUDE.md convention) grouped by
 // directory, then what the human does next.
 func (p *plan) report(w io.Writer, written bool) {
-	base := filepath.Join("fleet/apps", p.fort)
+	base := filepath.Join("flux/apps", p.fort)
 	fmt.Fprintf(w, "%s/   (chart %s)\n", base, p.resolved)
 	sort.SliceStable(p.actions, func(i, j int) bool { return p.actions[i].path < p.actions[j].path })
 	lastDir := ""
@@ -822,7 +822,7 @@ func fleetContracts(root string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, n := range contract.Names {
-		m, _ := filepath.Glob(filepath.Join(root, "fleet/apps/*/*", n))
+		m, _ := filepath.Glob(filepath.Join(root, "flux/apps/*/*", n))
 		for _, p := range m {
 			if d := filepath.Dir(p); !seen[d] {
 				seen[d] = true

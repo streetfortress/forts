@@ -19,7 +19,7 @@ func TestCheckFindings(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	apps := filepath.Join(tmp, "fleet/apps", fort)
+	apps := filepath.Join(tmp, "flux/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {
 			t.Fatal(err)
@@ -79,7 +79,7 @@ func TestCheckFindings(t *testing.T) {
 	}
 	var got []string
 	for _, f := range findings {
-		got = append(got, f.level+" "+strings.TrimPrefix(f.dir, filepath.Join("fleet/apps", fort)+"/")+": "+f.msg)
+		got = append(got, f.level+" "+strings.TrimPrefix(f.dir, filepath.Join("flux/apps", fort)+"/")+": "+f.msg)
 	}
 	joined := strings.Join(got, "\n")
 	for _, want := range []string{

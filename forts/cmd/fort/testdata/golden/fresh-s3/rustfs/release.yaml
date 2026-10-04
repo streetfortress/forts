@@ -2,7 +2,7 @@
 # by declaring `requires.s3.<handle>` in its chart contract, the same way
 # sites-db and valkey are turned on (docs/infra/providers.md). It is the
 # template `fort add` renders on a fort's first s3 need, adapted from
-# luxor's own instance (fleet/apps/luxor/rustfs/release.yaml). In-cluster
+# luxor's own instance (flux/apps/luxor/rustfs/release.yaml). In-cluster
 # only: no route, no console hostname, no mesh NodePort — the consumers
 # are the workloads beside it, and the restic PV backup of its data
 # volume is the content backup (docs/infra/backups.md, "Fort-local

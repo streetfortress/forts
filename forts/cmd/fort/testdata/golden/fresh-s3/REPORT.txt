@@ -1,4 +1,4 @@
-fleet/apps/lab-fort/   (chart 0.2.0)
+flux/apps/lab-fort/   (chart 0.2.0)
 ● gallery/
   ● forts.contract.yaml          pre-`fort seed` full form, 3 keys
   ● kustomization.yaml           
@@ -7,7 +7,7 @@ fleet/apps/lab-fort/   (chart 0.2.0)
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/gallery, tag 0.2.0
   ● route.yaml                   HTTPRoute gallery.lab-fort.lofi → gallery:3000
   ◆ secrets.sops.yaml            seeded
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 ● gateway/
   ● certificate-gallery.yaml     step-ca, gallery.lab-fort.lofi
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)

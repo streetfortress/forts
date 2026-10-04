@@ -57,7 +57,7 @@ func preview(args []string) error {
 		hosts = loaded
 		for name, h := range hosts {
 			if !h.Realized() {
-				// nothing in forts/pulumi to diff against: a [baremetal]
+				// nothing in provisioning/pulumi to diff against: a [baremetal]
 				// host has no stack by design (docs/forts/baremetal.md).
 				// Listed in the summary so the walk is visibly complete.
 				skipped = append(skipped, name)
@@ -98,7 +98,7 @@ func preview(args []string) error {
 		if err := cloudEnv(root, hosts[name].Provider); err != nil {
 			return err
 		}
-		err := runPulumi(filepath.Join(root, "forts", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)
+		err := runPulumi(filepath.Join(root, "provisioning", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)
 		if !*all {
 			return err
 		}
@@ -120,7 +120,7 @@ func preview(args []string) error {
 		// State without a manifest means destroy pending (#217): the
 		// dismantle PR merged, `fort destroy` has not run. Say so rather
 		// than silently skipping a stack no manifest names.
-		for _, name := range stacksInState(filepath.Join(root, "forts", "pulumi")) {
+		for _, name := range stacksInState(filepath.Join(root, "provisioning", "pulumi")) {
 			if _, ok := hosts[name]; !ok {
 				failed++
 				results = append(results, fmt.Sprintf("%-6s %s   destroy pending: state without a manifest — fort destroy %s", "PENDING", name, name))

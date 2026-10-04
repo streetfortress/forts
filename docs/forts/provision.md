@@ -12,7 +12,7 @@ with inherited stdio, you read the preview and type `yes`. The program
 (`forts/pulumi`) realises the [manifest](manifest.md) through a per-provider
 backend — `linode` for cloud forts, `libvirt` for the lab (soundship's
 `images` pool) — and the stack is named after the host, so `pulumi
-<anything> -s <host>` from `forts/pulumi` under the same environment is
+<anything> -s <host>` from `provisioning/pulumi` under the same environment is
 always a first-class escape hatch. A `[baremetal]` host has no backend
 and is refused here: its image is written by hand
 ([baremetal.md](baremetal.md)).
@@ -32,7 +32,7 @@ or volume + domain in the lab). `--image` runs the birth flow around the
 apply:
 
 0. **The stack.** A host with no checkpoint under
-   `forts/pulumi/state/` gets `pulumi stack init` (passphrase secrets
+   `provisioning/pulumi/state/` gets `pulumi stack init` (passphrase secrets
    provider); its `Pulumi.<host>.yaml` is born here. Only a birth
    creates a stack: without `--image` a stackless host is refused, so a
    typo can never put an empty stack on `preview --all`.
@@ -62,7 +62,7 @@ failed birth leaves behind costs money until a rerun or a hand delete
 removes it (#608). Without `--image`, `provision` is the plain day-2
 apply.
 
-After any apply, `forts/pulumi` is staged (state; at birth also
+After any apply, `provisioning/pulumi` is staged (state; at birth also
 `Pulumi.<host>.yaml`); commit it as its own PR. The instance is protected (`protect: true` on
 every fort) from that point until [`destroy`](destroy.md).
 
@@ -234,7 +234,7 @@ open to anyone but root.
 
 **The state copy.** `user_data` is a resource input on both backends, so
 the key now has a second home: the committed checkpoint under
-`forts/pulumi/state/`, as a pulumi secret. The passphrase provider
+`provisioning/pulumi/state/`, as a pulumi secret. The passphrase provider
 encrypts it, and the passphrase is sops-managed in
 `provisioning/secrets.yaml`, so the same admin keys gate this copy as
 gate the sops file — a second encryption scheme on the same secret,
@@ -244,7 +244,7 @@ names the channel, not the value). After a birth, before the state PR,
 confirm the checkpoint holds ciphertext and not the key:
 
 ```
-f=forts/pulumi/state/.pulumi/stacks/forts/<host>.json
+f=provisioning/pulumi/state/.pulumi/stacks/forts/<host>.json
 # linode: the instance's metadatas; libvirt: the cloud-init disk's userData
 jq '.checkpoint.latest.resources[] | select(.type=="linode:index/instance:Instance") | .inputs.metadatas, .outputs.metadatas' "$f"
 jq '.checkpoint.latest.resources[] | select(.type=="libvirt:index/cloudInitDisk:CloudInitDisk") | .inputs.userData, .outputs.userData' "$f"
@@ -418,7 +418,7 @@ them.
 ## Environment
 
 Every verb here forces `PULUMI_BACKEND_URL` to this checkout's
-`forts/pulumi/state` and `PULUMI_IGNORE_AMBIENT_PLUGINS=true` (the
+`provisioning/pulumi/state` and `PULUMI_IGNORE_AMBIENT_PLUGINS=true` (the
 nixpkgs bundle's ambient providers mis-shape outputs against the pinned
 SDK). `PULUMI_CONFIG_PASSPHRASE` and `LINODE_TOKEN` come from the
 environment, else sops-decrypted from `provisioning/secrets.yaml`.

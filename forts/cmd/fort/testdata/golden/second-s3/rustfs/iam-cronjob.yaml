@@ -1,6 +1,6 @@
 # The fort's rustfs IAM reconciler: the identities the tree declares,
 # applied to the instance. The generic form of luxor's rustfs-central
-# reconciler (fleet/apps/luxor/rustfs-central/iam-cronjob.yaml, which
+# reconciler (flux/apps/luxor/rustfs-central/iam-cronjob.yaml, which
 # carries the history): here every identity is an app, and an app is
 # declared by two files — a key in users.sops.yaml (the secret half) and a
 # policy document policies/<app>.json (its scope) — so there is no

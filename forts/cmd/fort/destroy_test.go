@@ -21,7 +21,7 @@ func TestDestroyGates(t *testing.T) {
 	}
 	const lab = "[libvirt]\nip = \"10.0.0.1\"\n"
 	write(manifest.Path("other"), lab)
-	write("forts/pulumi/state/.pulumi/stacks/forts/gone.json", checkpoint)
+	write("provisioning/pulumi/state/.pulumi/stacks/forts/gone.json", checkpoint)
 
 	// the happy path: no manifest anywhere, clean, stack exists
 	if p, problems := destroyGates(tmp, "gone", false, true, false); p != "libvirt" || len(problems) != 0 {

@@ -406,11 +406,11 @@ func (r b2Role) followUp(keyID string) string {
 	if r.kind == "db-logical" {
 		f := "secrets-b2-" + r.host + ".sops.yaml"
 		return "Next: it belongs in luxor's databasus-central tree, as the Secret the\n" +
-			"host's Storage CR references (fleet/apps/luxor/databasus-central/\n" +
+			"host's Storage CR references (flux/apps/luxor/databasus-central/\n" +
 			"forts.contract.yaml) — seeded, not pasted into a UI. That file must\n" +
-			"exist first (`fort seed luxor fleet/apps/luxor/databasus-central --write`), then:\n" +
-			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/access-key --write\n" +
-			"  fort seed luxor fleet/apps/luxor/databasus-central --set " + f + "/secret-key --write\n" +
+			"exist first (`fort seed luxor flux/apps/luxor/databasus-central --write`), then:\n" +
+			"  fort seed luxor flux/apps/luxor/databasus-central --set " + f + "/access-key --write\n" +
+			"  fort seed luxor flux/apps/luxor/databasus-central --set " + f + "/secret-key --write\n" +
 			"FILE/KEY because every host's Secret there carries the same two key names."
 	}
 	if r.kind == "restore" {
@@ -428,9 +428,9 @@ func (r b2Role) followUp(keyID string) string {
 			"  sops --config .sops.yaml set provisioning/secrets.yaml '[\"" + keyB2MintingKeyID + "\"]' '\"" + keyID + "\"'"
 	case "sfi-b2-audit-key":
 		return "Next: it belongs in luxor's monitoring-central tree as the Secret the\n" +
-			"s3-exporter reads (fleet/apps/luxor/monitoring/forts.contract.yaml):\n" +
-			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_ACCESS_KEY_ID --write\n" +
-			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_SECRET_ACCESS_KEY --write"
+			"s3-exporter reads (flux/apps/luxor/monitoring/forts.contract.yaml):\n" +
+			"  fort seed luxor flux/apps/luxor/monitoring --set AWS_ACCESS_KEY_ID --write\n" +
+			"  fort seed luxor flux/apps/luxor/monitoring --set AWS_SECRET_ACCESS_KEY --write"
 	case b2PruningKeyName:
 		return "Next: it belongs in luxor's host secrets as the env file sfi.pv-prune sources —\n" +
 			"  sops --config nixos/.sops.yaml set nixos/secrets/luxor.yaml \\\n" +

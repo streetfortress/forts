@@ -12,7 +12,7 @@
 # k3s runs the API server in its own process, so the path is a host
 # path. It is under /var/log on purpose: the fleet's fluent-bit
 # DaemonSet already mounts /var/log, so the stream to Loki
-# (fleet/infrastructure/controllers/fluent-bit) needs no new volume and
+# (flux/infrastructure/controllers/fluent-bit) needs no new volume and
 # costs nothing on a fort without the file. Loki keeps every stream 30
 # days; a longer life for this one is #618's decision, not this
 # module's.
@@ -29,7 +29,7 @@ let
   # platform namespaces' service accounts carry. A namespace is
   # platform here when a controller converges it and no person works in
   # it: cnpg-system runs the CNPG operator and its barman-cloud plugin
-  # (fleet/infrastructure/controllers/cnpg), which were the two largest
+  # (flux/infrastructure/controllers/cnpg), which were the two largest
   # sources in the stage fort's first hours of the stream (#653).
   platformUsers = [
     "system:apiserver"

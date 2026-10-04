@@ -130,7 +130,7 @@ func TestSeedFullForm(t *testing.T) {
 	const fort = "lab-fort" // testdata manifest — no real fort involved
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	apps := filepath.Join(tmp, "fleet/apps", fort)
+	apps := filepath.Join(tmp, "flux/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {
 			t.Fatal(err)
@@ -225,7 +225,7 @@ secrets:
 	}
 
 	// --set on an external key of an existing file
-	o2 := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("fleet/apps", fort, "app")}, setKey: "STRIPE_KEY", setValue: "sk_test_x"}
+	o2 := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "app")}, setKey: "STRIPE_KEY", setValue: "sk_test_x"}
 	plans, err = planSeed(o2)
 	if err != nil {
 		t.Fatal(err)
@@ -249,9 +249,9 @@ func TestSeedFromChartContract(t *testing.T) {
 	copyManifest(t, "testdata", tmp, fort)
 	golden := filepath.Join("testdata/golden", fort)
 	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/forts.contract.yaml", "valkey/forts.contract.yaml"} {
-		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "fleet/apps", fort, rel))
+		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "flux/apps", fort, rel))
 	}
-	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: "testdata/charts/symbology", dirs: []string{filepath.Join("fleet/apps", fort, "symbology")}}
+	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: "testdata/charts/symbology", dirs: []string{filepath.Join("flux/apps", fort, "symbology")}}
 	plans, err := planSeed(o)
 	if err != nil {
 		t.Fatal(err)
@@ -322,7 +322,7 @@ func TestSeedEdgeCases(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	apps := filepath.Join(tmp, "fleet/apps", fort)
+	apps := filepath.Join(tmp, "flux/apps", fort)
 	write := func(rel, content string) {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(apps, rel)), 0o755); err != nil {
 			t.Fatal(err)
@@ -338,7 +338,7 @@ func TestSeedEdgeCases(t *testing.T) {
 
 	// null provider value → error, never "<nil>" in a URL
 	tool := &fakeTool{plain: map[string]string{filepath.Join(apps, "sites-db/secrets-a.sops.yaml"): "stringData:\n  password:\n"}}
-	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("fleet/apps", fort, "app")}}
+	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "app")}}
 	plans, err := planSeed(o)
 	if err != nil {
 		t.Fatal(err)
@@ -351,14 +351,14 @@ func TestSeedEdgeCases(t *testing.T) {
 	}
 
 	// --set with a typo'd key on a two-file dir → error, not exit 0
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("fleet/apps", fort, "sites-db")}, setKey: "pasword", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "sites-db")}, setKey: "pasword", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "not a key of any Secret") {
 		t.Errorf("--set typo: want an error, got %v", err)
 	}
 
 	// --set with a key two Secrets of the dir share → refused, naming
 	// the qualified form; FILE/KEY then lands in that one file only
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("fleet/apps", fort, "sites-db")}, setKey: "password", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "sites-db")}, setKey: "password", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "--set secrets-a.sops.yaml/password") {
 		t.Errorf("--set shared key: want the ambiguity error, got %v", err)
 	}
@@ -388,7 +388,7 @@ func TestSeedEdgeCases(t *testing.T) {
 
 	// an explicitly named dir with nothing to seed → error
 	write("gateway/kustomization.yaml", "resources: []\n")
-	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"gateway"}} // bare name = fleet/apps/<fort>/gateway
+	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"gateway"}} // bare name = flux/apps/<fort>/gateway
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "nothing to seed") {
 		t.Errorf("typo'd dir: want an error, got %v", err)
 	}
@@ -420,14 +420,14 @@ func yamlNode(t *testing.T, s string) *yaml.Node {
 }
 
 func TestAppDir(t *testing.T) {
-	apps := "fleet/apps/f"
+	apps := "flux/apps/f"
 	for in, want := range map[string]string{
-		"sites-db":                  "fleet/apps/f/sites-db",
-		"sites-db/":                 "fleet/apps/f/sites-db",
-		"./sites-db":                "fleet/apps/f/sites-db",
-		"fleet/apps/f/sites-db":     "fleet/apps/f/sites-db",
-		"fleet/apps/f/sites-db/":    "fleet/apps/f/sites-db",
-		"fleet/apps/other/sites-db": "fleet/apps/other/sites-db", // caller's prefix check rejects it
+		"sites-db":                 "flux/apps/f/sites-db",
+		"sites-db/":                "flux/apps/f/sites-db",
+		"./sites-db":               "flux/apps/f/sites-db",
+		"flux/apps/f/sites-db":     "flux/apps/f/sites-db",
+		"flux/apps/f/sites-db/":    "flux/apps/f/sites-db",
+		"flux/apps/other/sites-db": "flux/apps/other/sites-db", // caller's prefix check rejects it
 	} {
 		if got := appDir(apps, in); got != want {
 			t.Errorf("appDir(%q) = %q, want %q", in, got, want)
@@ -448,7 +448,7 @@ func TestReadSetValueFromStdin(t *testing.T) {
 	t.Cleanup(func() { os.Stdin = old })
 	w.WriteString("sk_test_x\n")
 	w.Close()
-	v, err := readSetValue("STRIPE_KEY", "fleet/apps/x/app/secrets.sops.yaml")
+	v, err := readSetValue("STRIPE_KEY", "flux/apps/x/app/secrets.sops.yaml")
 	if err != nil || v != "sk_test_x" {
 		t.Fatalf("got %q, %v", v, err)
 	}
@@ -475,10 +475,10 @@ func TestSecretlessAppNeedsNoSeed(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	copyTree(t, "testdata/golden/secretless/moment-tally-website", filepath.Join(tmp, "fleet/apps", fort, "moment-tally-website"))
+	copyTree(t, "testdata/golden/secretless/moment-tally-website", filepath.Join(tmp, "flux/apps", fort, "moment-tally-website"))
 
 	chartDir := "testdata/charts/moment-tally-website"
-	dir := filepath.Join("fleet/apps", fort, "moment-tally-website")
+	dir := filepath.Join("flux/apps", fort, "moment-tally-website")
 	plans, err := planSeed(seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: chartDir, dirs: []string{dir}})
 	if err != nil {
 		t.Fatal(err)
@@ -511,7 +511,7 @@ func TestSeedS3Provider(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	apps := filepath.Join(tmp, "fleet/apps", fort)
+	apps := filepath.Join(tmp, "flux/apps", fort)
 	copyTree(t, "testdata/golden/fresh-s3", apps)
 	os.Remove(filepath.Join(apps, "REPORT.txt"))
 	tool := &fakeTool{plain: map[string]string{
@@ -553,7 +553,7 @@ func TestSeedS3Provider(t *testing.T) {
 
 	// On the fly: drop the rendered full form, derive from the chart.
 	os.Remove(filepath.Join(apps, "gallery/forts.contract.yaml"))
-	ff, _, source, err := effectiveContract(seedOpts{root: tmp, fort: fort, chartDir: "testdata/charts/gallery"}, filepath.Join("fleet/apps", fort, "gallery"))
+	ff, _, source, err := effectiveContract(seedOpts{root: tmp, fort: fort, chartDir: "testdata/charts/gallery"}, filepath.Join("flux/apps", fort, "gallery"))
 	if err != nil {
 		t.Fatal(err)
 	}

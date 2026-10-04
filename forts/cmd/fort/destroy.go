@@ -54,7 +54,7 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-	pulumiDir := filepath.Join(root, "forts", "pulumi")
+	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
 
 	if err := exec.Command("git", "-C", root, "fetch", "-q", "origin").Run(); err != nil {
 		return fmt.Errorf("git fetch origin: %w", err)
@@ -137,7 +137,7 @@ func destroy(args []string) error {
 
 	// 6. stage the state removal; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
-	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()
+	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
 	fmt.Printf("\n== done. Staged the state removal — commit it as its own PR (\"%s: destroyed\").\n", host)
 	fmt.Println("   Off-repo residue to check: the .files wireguard copy (ubuntu mesh members), ~/.local/share/nixos-provisioning/" + host + " on a playbook-era hypervisor.")
 	return nil
@@ -193,16 +193,16 @@ func destroyGates(root, host string, onMain, clean, noStack bool) (provider stri
 	if !clean {
 		problems = append(problems, "working tree not clean — the state removal must land as its own commit")
 	}
-	state := filepath.Join(root, "forts/pulumi/state/.pulumi/stacks/forts", host+".json")
+	state := filepath.Join(root, "provisioning/pulumi/state/.pulumi/stacks/forts", host+".json")
 	raw, err := os.ReadFile(state)
 	if noStack {
 		if err == nil {
-			problems = append(problems, "stack "+host+" exists in forts/pulumi/state — this host was raised by a backend; drop --no-stack")
+			problems = append(problems, "stack "+host+" exists in provisioning/pulumi/state — this host was raised by a backend; drop --no-stack")
 		}
 		return "", problems
 	}
 	if err != nil {
-		problems = append(problems, "no stack "+host+" in forts/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/forts/baremetal.md)")
+		problems = append(problems, "no stack "+host+" in provisioning/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/forts/baremetal.md)")
 		return "", problems
 	}
 	provider, err = providerFromState(raw)

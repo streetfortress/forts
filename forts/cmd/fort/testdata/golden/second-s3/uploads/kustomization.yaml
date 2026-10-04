@@ -12,7 +12,7 @@ resources:
 generatorOptions:
   disableNameSuffixHash: true
 secretGenerator:
-  # Local copy of fleet/infrastructure/configs/step-ca-root.pem (kustomize
+  # Local copy of flux/infrastructure/configs/step-ca-root.pem (kustomize
   # build-root restriction); consumed as certSecretRef by the
   # OCIRepository so source-controller trusts gitea.zen.lofi. Public
   # cert, plain generator — no sops.

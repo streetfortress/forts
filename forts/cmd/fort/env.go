@@ -37,7 +37,7 @@ func cloudEnv(root string, provider string) error {
 	// state in ~/worktrees/…/fort-wildcard-dns). PULUMI_BACKEND_URL takes
 	// precedence over the recorded login, so the one-time `pulumi login`
 	// in forts/README.md becomes unnecessary for fort commands.
-	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "forts", "pulumi", "state"))
+	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "provisioning", "pulumi", "state"))
 
 	// The lab hypervisor, reached over ssh from wherever fort runs. The
 	// provider carries its own ssh client (no ~/.ssh/config, no agent

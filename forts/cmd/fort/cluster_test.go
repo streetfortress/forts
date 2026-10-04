@@ -14,7 +14,7 @@ import (
 // A [cluster] key that reaches nix is declared twice: in the manifest,
 // and in the host file that scaffold rendered from it — or, on a host
 // that predates the key, that a hand wrote. Nix cannot read
-// provisioning/forts (it is outside the flake's root), so these tests
+// forts (it is outside the flake's root), so these tests
 // are what keep the two equal.
 //
 // clusterHostFiles is every cluster fort's manifest beside its host

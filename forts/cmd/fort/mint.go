@@ -98,10 +98,10 @@ type mintPlan struct {
 	newFile     bool
 
 	edits      []dEdit  // text edits (rules, peer), with "exists" ones filtered out
-	sshConfig  string   // wireguard/ssh_config re-rendered with this peer ("" = already current)
+	sshConfig  string   // mesh/ssh_config re-rendered with this peer ("" = already current)
 	sshNote    string   // the fort's Host block, one line, for the report
-	knownHosts string   // wireguard/known_hosts with this fort's host key ("" = already current)
-	rekey      []string // fleet/infrastructure sops files that gain the cluster recipient
+	knownHosts string   // mesh/known_hosts with this fort's host key ("" = already current)
+	rekey      []string // flux/infrastructure sops files that gain the cluster recipient
 	canaryPath string   // "" = not a flux cluster or already there
 	admins     map[string][]string
 	deployKey  string // gitea status line; "" = not a flux cluster
@@ -148,7 +148,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		need = append(need, filepath.Join("nixos/hosts", host, "default.nix"))
 	}
 	if entry.IsCluster() {
-		for _, rel := range []string{filepath.Join("fleet/apps", host, "kustomization.yaml"), filepath.Join("fleet/clusters", host, "apps.yaml")} {
+		for _, rel := range []string{filepath.Join("flux/apps", host, "kustomization.yaml"), filepath.Join("flux/clusters", host, "apps.yaml")} {
 			if !exists(root, rel) {
 				need = append(need, rel)
 			}
@@ -259,20 +259,20 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", fmt.Sprintf("+ rule secrets/%s.yaml → %d shared recipient(s) + host %s", host, len(recips)-1, p.hostRecip),
 			func(s string) (string, error) { return addHostRule(s, host, recips) }})
 	}
-	peers, err := os.ReadFile(filepath.Join(root, "wireguard/peers.json"))
+	peers, err := os.ReadFile(filepath.Join(root, "mesh/peers.json"))
 	if err != nil {
 		return nil, err
 	}
 	if pub, ok := peerPublicKey(string(peers), host); ok {
 		if pub != p.wg.public {
-			return nil, fmt.Errorf("wireguard/peers.json already lists %s with a public key that is not the one %s derives — the real wireguard key is not in the secrets file, or the peer is stale; a re-key is a deliberate act", host, keyWgPrivate)
+			return nil, fmt.Errorf("mesh/peers.json already lists %s with a public key that is not the one %s derives — the real wireguard key is not in the secrets file, or the peer is stale; a re-key is a deliberate act", host, keyWgPrivate)
 		}
 	} else {
 		note := "+ .peers." + host + " (" + entry.MeshIP
 		if p.endpoint != "" {
 			note += ", endpoint " + p.endpoint
 		}
-		p.edits = append(p.edits, dEdit{"wireguard/peers.json", note + ")",
+		p.edits = append(p.edits, dEdit{"mesh/peers.json", note + ")",
 			func(s string) (string, error) { return addPeer(s, host, entry.MeshIP, p.endpoint, p.wg.public) }})
 	}
 	if err := p.planMesh(string(peers)); err != nil {
@@ -301,14 +301,14 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	} else {
 		p.admins[".sops.yaml"] = sharedRecipients(string(fleetSops))
 		admins := p.admins[".sops.yaml"]
-		notes = append(notes, fmt.Sprintf("+ rule fleet/(clusters|apps)/%s/ → %d shared + cluster %s", host, len(admins), p.cluster.recipient))
+		notes = append(notes, fmt.Sprintf("+ rule flux/(clusters|apps)/%s/ → %d shared + cluster %s", host, len(admins), p.cluster.recipient))
 		fns = append(fns, func(s string) (string, error) { return addFleetRule(s, host, admins, p.cluster.recipient) })
 	}
 	infraLine := "      - " + p.cluster.recipient + " # cluster: " + host
 	if !strings.Contains(string(fleetSops), infraLine) {
-		notes = append(notes, "+ `# cluster: "+host+"` recipient in the shared fleet/infrastructure rule")
+		notes = append(notes, "+ `# cluster: "+host+"` recipient in the shared flux/infrastructure rule")
 		fns = append(fns, func(s string) (string, error) { return addInfraRecipient(s, infraLine) })
-		p.rekey, _ = sopsFilesUnder(root, "fleet/infrastructure")
+		p.rekey, _ = sopsFilesUnder(root, "flux/infrastructure")
 	}
 	if len(fns) > 0 {
 		p.edits = append(p.edits, dEdit{".sops.yaml", strings.Join(notes, "; "), func(s string) (string, error) {
@@ -321,7 +321,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 			return s, nil
 		}})
 	}
-	if rel := filepath.Join("fleet/apps", host, "sops-canary.yaml"); !exists(root, rel) {
+	if rel := filepath.Join("flux/apps", host, "sops-canary.yaml"); !exists(root, rel) {
 		p.canaryPath = rel
 	}
 
@@ -565,8 +565,8 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 }
 
 // planMesh is the client side of the peer (mesh.go): the fort's Host
-// block in wireguard/ssh_config, rendered on the peers.json this plan
-// leaves behind, and its host-key line in wireguard/known_hosts — the
+// block in mesh/ssh_config, rendered on the peers.json this plan
+// leaves behind, and its host-key line in mesh/known_hosts — the
 // key is in hand here (minted, or restored from the secrets file) and
 // nowhere else in plaintext. A line that names the host under another
 // key is refused the way a foreign peer entry is: the host's real key is
@@ -690,15 +690,15 @@ func addHostRule(text, host string, recipients []string) (string, error) {
 }
 
 // addFleetRule inserts the cluster's path-scoped rule above the shared
-// fleet/infrastructure rule in .sops.yaml.
+// flux/infrastructure rule in .sops.yaml.
 func addFleetRule(text, host string, admins []string, clusterRecipient string) (string, error) {
-	anchor := "  - path_regex: fleet/infrastructure/"
+	anchor := "  - path_regex: flux/infrastructure/"
 	lines := strings.Split(text, "\n")
 	for i, l := range lines {
 		if strings.HasPrefix(l, anchor) {
 			var b []string
 			b = append(b, "  # BEGIN fort sops rule: "+host,
-				fmt.Sprintf("  - path_regex: fleet/(clusters|apps)/%s/.*", host),
+				fmt.Sprintf("  - path_regex: flux/(clusters|apps)/%s/.*", host),
 				"    encrypted_regex: ^(data|stringData)$",
 				"    age:")
 			for _, a := range admins {

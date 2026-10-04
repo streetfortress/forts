@@ -22,7 +22,7 @@ import (
 // says the host is gone, so nothing here reaches outside the tree.
 //
 // Two edits are not mere deletions and are worth knowing: the shared
-// fleet/infrastructure sops rule loses the host's recipient line(s), and
+// flux/infrastructure sops rule loses the host's recipient line(s), and
 // every file under that rule is re-encrypted (`sops updatekeys`) — until
 // then the retired host's key keeps decrypting them; and the wireguard
 // peer is removed from peers.json, which the other peers shed on their
@@ -59,8 +59,8 @@ type dismantlePlan struct {
 	entry       manifest.Host
 	removes     []string // repo-relative paths (files or dirs)
 	edits       []dEdit
-	sshConfig   string   // wireguard/ssh_config re-rendered without the host ("" = nothing to do)
-	knownHosts  string   // wireguard/known_hosts without the host's line ("" = nothing to do)
+	sshConfig   string   // mesh/ssh_config re-rendered without the host ("" = nothing to do)
+	knownHosts  string   // mesh/known_hosts without the host's line ("" = nothing to do)
 	rekey       []string // sops files under the shared infrastructure rule
 	rustfsUser  string   // the fort's identity to withdraw from luxor's provider contract
 	consolePass bool     // the fort has an entry in the console-password registry
@@ -101,7 +101,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
 	recipients := strings.Count(string(fleetSops), "# cluster: "+host)
 	if markerBlock(string(fleetSops), host) != "" {
-		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared fleet/infrastructure rule", host, recipients, host), func(s string) (string, error) {
+		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared flux/infrastructure rule", host, recipients, host), func(s string) (string, error) {
 			s, err := removeMarkerBlock(s, host)
 			if err != nil {
 				return "", err
@@ -111,10 +111,10 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		}})
 	}
 	if recipients > 0 {
-		files, _ := sopsFilesUnder(root, "fleet/infrastructure")
+		files, _ := sopsFilesUnder(root, "flux/infrastructure")
 		p.rekey = files
 	}
-	for _, rel := range []string{filepath.Join("fleet/clusters", host), filepath.Join("fleet/apps", host)} {
+	for _, rel := range []string{filepath.Join("flux/clusters", host), filepath.Join("flux/apps", host)} {
 		if exists(root, rel) {
 			p.removes = append(p.removes, rel)
 		}
@@ -131,7 +131,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 
 	// 4. wireguard peer
-	p.edits = append(p.edits, dEdit{"wireguard/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
+	p.edits = append(p.edits, dEdit{"mesh/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 
 	// 4b. the client side of the peer (mesh.go): the host's block leaves
 	// ssh_config and its key line leaves known_hosts — where those files
@@ -160,7 +160,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		edited[knownHostsPath] = p.knownHosts
 	}
 	p.residue, p.crossRefs = scanResidue(root, host, p.removes, edited)
-	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("forts/pulumi/state/.pulumi/stacks/forts", host+".json")) {
+	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("provisioning/pulumi/state/.pulumi/stacks/forts", host+".json")) {
 		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (docs/forts/destroy.md). `just iac-drift` is red for it in between, which is the correct signal.")
 	}
 	if !entry.Realized() {
@@ -397,7 +397,7 @@ var textExt = map[string]bool{".yaml": true, ".yml": true, ".nix": true, ".md": 
 // post-edit text), tagged for triage, and every other fort's contract
 // whose sops refs point into this fort's app tree.
 func scanResidue(root, host string, removed []string, edited map[string]string) (residue, crossRefs []string) {
-	skip := map[string]bool{"forts/pulumi/state": true}
+	skip := map[string]bool{"provisioning/pulumi/state": true}
 	for _, r := range removed {
 		skip[r] = true
 	}
@@ -436,7 +436,7 @@ func scanResidue(root, host string, removed []string, edited map[string]string) 
 	sort.Strings(residue)
 
 	contracts := fleetContracts(root)
-	target := filepath.Join(root, "fleet/apps", host) + string(filepath.Separator)
+	target := filepath.Join(root, "flux/apps", host) + string(filepath.Separator)
 	for _, c := range contracts {
 		if strings.HasPrefix(c, target) {
 			continue
@@ -509,7 +509,7 @@ func residueTag(rel string) string {
 		return "   (CLI test fixture / golden — keep)"
 	case strings.HasSuffix(rel, ".md"):
 		return "   (doc)"
-	case strings.HasPrefix(rel, "fleet/apps/luxor/monitoring/"):
+	case strings.HasPrefix(rel, "flux/apps/luxor/monitoring/"):
 		return "   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)"
 	}
 	return ""

@@ -6,7 +6,7 @@
 # the no-SSH end-state stays viable.
 #
 # Motivating incident: luxor's running WireGuard peer set silently drifted
-# from wireguard/peers.json (production-test added, luxor never rebuilt),
+# from mesh/peers.json (production-test added, luxor never rebuilt),
 # which broke the mesh path to a new cluster while every LAN path kept
 # working. Config drift on hosts nobody rebuilds is invisible until
 # something depends on the stale part.
@@ -14,7 +14,7 @@
 # Mechanics:
 #   - system.autoUpgrade with a git+ssh flake ref. Flakes copy the whole
 #     repo tree (dir= only locates flake.nix), so the modules' relative
-#     reads like ../../wireguard/peers.json work from the fetched source —
+#     reads like ../../mesh/peers.json work from the fetched source —
 #     verified by eval'ing a peers-derived attr from the git URL (#93's
 #     "wrinkle" checkbox). The bare nixosConfigurations entry is made
 #     switch-capable by qcow-runtime.nix in the flake's vmModules.
@@ -22,7 +22,7 @@
 #     PATH-granular: `git ls-remote` first (one round trip; unchanged tip
 #     = free skip, which is nearly every tick), then, when the tip moved,
 #     a shallow bare clone in the state dir answers whether the trees the
-#     host closure actually reads — nixos/, wireguard/, fleet/clusters/
+#     host closure actually reads — nixos/, mesh/, flux/clusters/
 #     — changed since the last attempt. Most commits are fleet-layer
 #     manifests: those are recorded as attempted+applied at the new tip
 #     (the host honestly runs main@tip's nixos tree) and skipped without
@@ -62,7 +62,7 @@
 #     255; nix would otherwise rebuild the cached clone and report
 #     success); the failure is visible in journald → Loki
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
-#     NixosUpgradeFailed rule in fleet/apps/luxor/monitoring/loki-rules.yaml
+#     NixosUpgradeFailed rule in flux/apps/luxor/monitoring/loki-rules.yaml
 #     alerts on it.
 { config, lib, pkgs, ... }:
 
@@ -92,7 +92,7 @@ let
   # reads from the repo (the flake under nixos/, peers.json, and the
   # cluster's flux-instance.yaml). A tip that leaves them untouched is a
   # fleet-only commit: markers advance, no eval.
-  closureTrees = [ "nixos" "wireguard" "fleet/clusters" ];
+  closureTrees = [ "nixos" "mesh" "flux/clusters" ];
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
     # node_nixos_generations (#423): what is on disk for sfi-nixos-rollback
     # to choose from, and the thing nix.gc (below) actually bounds. Written

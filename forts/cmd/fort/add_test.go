@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The golden tree: fleet/apps/sfi-fort-e33e2d5 was laid down by hand
+// The golden tree: flux/apps/sfi-fort-e33e2d5 was laid down by hand
 // (#230, #232) as what fort add is specified to render for symbology
 // from the sfi/symbology#189 preview chart. The fort was dismantled on
 // 2026-09-18 (#348); its tree and manifest live on as a snapshot under
@@ -37,10 +37,10 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	// (the symbology tenant already existed from the restore drill).
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
-	copyFile(t, filepath.Join("testdata/forts", fort, "kustomization.yaml"), filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
-	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "fleet/apps", fort, "sops-canary.yaml"))
-	copyTree(t, filepath.Join(golden, "sites-db"), filepath.Join(tmp, "fleet/apps", fort, "sites-db"))
+	copyFile(t, filepath.Join(repo, "flux/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
+	copyFile(t, filepath.Join("testdata/trees", fort, "kustomization.yaml"), filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
+	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "flux/apps", fort, "sops-canary.yaml"))
+	copyTree(t, filepath.Join(golden, "sites-db"), filepath.Join(tmp, "flux/apps", fort, "sites-db"))
 
 	// The fort followed #189's previews while the PR was open; since the
 	// merge it pins the release tag like every fort, and so does the
@@ -70,7 +70,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	}
 	for _, rel := range exact {
 		want := readFile(t, filepath.Join(golden, rel))
-		got := readFile(t, filepath.Join(tmp, "fleet/apps", fort, rel))
+		got := readFile(t, filepath.Join(tmp, "flux/apps", fort, rel))
 		if want != got {
 			t.Errorf("%s differs from the golden tree:\n--- golden\n%s\n--- generated\n%s", rel, want, got)
 		}
@@ -78,18 +78,18 @@ func TestAddReproducesDrillFort(t *testing.T) {
 
 	// sites-db: tenant present → untouched.
 	for _, rel := range []string{"kustomization.yaml", "forts.contract.yaml"} {
-		if readFile(t, filepath.Join(golden, "sites-db", rel)) != readFile(t, filepath.Join(tmp, "fleet/apps", fort, "sites-db", rel)) {
+		if readFile(t, filepath.Join(golden, "sites-db", rel)) != readFile(t, filepath.Join(tmp, "flux/apps", fort, "sites-db", rel)) {
 			t.Errorf("sites-db/%s was edited although the tenant already exists", rel)
 		}
 	}
 
 	// Root kustomization: same resource list (comments are the human's).
-	if want, got := yamlPath(t, filepath.Join(golden, "kustomization.yaml"), "resources"), yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"), "resources"); !reflect.DeepEqual(want, got) {
+	if want, got := yamlPath(t, filepath.Join(golden, "kustomization.yaml"), "resources"), yamlPath(t, filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"), "resources"); !reflect.DeepEqual(want, got) {
 		t.Errorf("root kustomization resources: want %v, got %v", want, got)
 	}
 
 	// repository.yaml: same spec (the comment names the PR differently).
-	if want, got := yamlPath(t, filepath.Join(golden, "symbology/repository.yaml"), "spec"), yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/repository.yaml"), "spec"); !reflect.DeepEqual(want, got) {
+	if want, got := yamlPath(t, filepath.Join(golden, "symbology/repository.yaml"), "spec"), yamlPath(t, filepath.Join(tmp, "flux/apps", fort, "symbology/repository.yaml"), "spec"); !reflect.DeepEqual(want, got) {
 		t.Errorf("repository.yaml spec: want %v, got %v", want, got)
 	}
 
@@ -97,7 +97,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	// carries hand refinements on top (inference, ui.env, replicas).
 	for _, path := range []string{"spec/values/existingSecret", "spec/values/database", "spec/values/cache", "spec/install", "spec/upgrade", "spec/chartRef"} {
 		want := yamlPath(t, filepath.Join(golden, "symbology/release.yaml"), path)
-		got := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/release.yaml"), path)
+		got := yamlPath(t, filepath.Join(tmp, "flux/apps", fort, "symbology/release.yaml"), path)
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("release.yaml %s: want %v, got %v", path, want, got)
 		}
@@ -107,12 +107,12 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	// golden with the same spec unless it is `external` here and a
 	// human-resolved source (sops/env) there.
 	gv := yamlPath(t, filepath.Join(golden, "symbology/forts.contract.yaml"), "vars")
-	tv := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/forts.contract.yaml"), "vars")
+	tv := yamlPath(t, filepath.Join(tmp, "flux/apps", fort, "symbology/forts.contract.yaml"), "vars")
 	if !reflect.DeepEqual(gv, tv) {
 		t.Errorf("contract vars: want %v, got %v", gv, tv)
 	}
 	gk := yamlPath(t, filepath.Join(golden, "symbology/forts.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
-	tk := yamlPath(t, filepath.Join(tmp, "fleet/apps", fort, "symbology/forts.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
+	tk := yamlPath(t, filepath.Join(tmp, "flux/apps", fort, "symbology/forts.contract.yaml"), "secrets/secrets.sops.yaml/keys").(map[string]any)
 	for name, spec := range tk {
 		gspec, ok := gk[name]
 		if !ok {
@@ -200,8 +200,10 @@ func estateRoot(t *testing.T) string {
 	if err != nil {
 		t.Skip("not inside a git checkout")
 	}
-	if _, err := os.Stat(filepath.Join(repo, manifest.Dir)); err != nil {
-		t.Skipf("no estate at %s (no %s): the mirror tests run in an estate checkout", repo, manifest.Dir)
+	// A manifest, not just the directory: in sfi/forts the root has a
+	// forts/ too — the CLI's own source — and no manifest in it.
+	if m, _ := filepath.Glob(filepath.Join(repo, manifest.Dir, "*.toml")); len(m) == 0 {
+		t.Skipf("no estate at %s (no %s/*.toml): the mirror tests run in an estate checkout", repo, manifest.Dir)
 	}
 	return repo
 }
@@ -388,8 +390,8 @@ func testAddFresh(t *testing.T, f addFixture) {
 	}
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	copyFile(t, filepath.Join(repo, "fleet/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "fleet/infrastructure/configs/step-ca-root.pem"))
-	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps", fort, "kustomization.yaml"))
+	copyFile(t, filepath.Join(repo, "flux/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
+	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,
@@ -425,7 +427,7 @@ func testAddFresh(t *testing.T, f addFixture) {
 	p.report(&report, true)
 
 	got := map[string]string{}
-	base := filepath.Join(tmp, "fleet/apps", fort)
+	base := filepath.Join(tmp, "flux/apps", fort)
 	filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			rel, _ := filepath.Rel(base, path)
@@ -499,7 +501,7 @@ func TestHTTPFlag(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, "lab-fort")
-	copyFile(t, "testdata/forts/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "fleet/apps/lab-fort/kustomization.yaml"))
+	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps/lab-fort/kustomization.yaml"))
 	_, err = planAdd(addOpts{
 		root: tmp, fort: "lab-fort",
 		ref:      "oci://gitea.zen.lofi/sfi/moment-tally-website",

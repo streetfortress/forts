@@ -5,7 +5,7 @@
 # hours (2026-09-11). A cluster's issuer set is exactly the CAs it can
 # reach. Copies live beside each lab cluster's gateway; luxor's is
 # identical. http01 solver routes attach to
-# the per-cluster Gateway (fleet/apps/<cluster>/gateway/) via the http
+# the per-cluster Gateway (flux/apps/<cluster>/gateway/) via the http
 # listener, taking precedence over its https redirect by exact path match.
 #
 # caBundle is the base64 of step-ca-root.pem (public; kept alongside for

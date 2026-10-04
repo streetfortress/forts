@@ -22,10 +22,10 @@ func TestFleetTree(t *testing.T) {
 		t.Errorf("empty tree: %+v", got)
 	}
 	mk("nixos/hosts/a")
-	mk("fleet/clusters/a")
-	mk("fleet/apps/a")
+	mk("flux/clusters/a")
+	mk("flux/apps/a")
 	got = checkFleetFort(root, "a", cluster, shared)
-	if len(got) == 0 || got[0].dir != "fleet/clusters/a/cluster-vars.yaml" || got[0].level != "error" {
+	if len(got) == 0 || got[0].dir != "flux/clusters/a/cluster-vars.yaml" || got[0].level != "error" {
 		t.Errorf("no cluster-vars: %+v", got)
 	}
 
@@ -41,20 +41,20 @@ func TestFleetTree(t *testing.T) {
 	if len(got) != 1 || got[0].level != "ok" {
 		t.Errorf("dev with host dir: %+v", got)
 	}
-	mk("fleet/apps/d")
+	mk("flux/apps/d")
 	got = checkFleetFort(root, "d", dev, shared)
-	if len(got) != 1 || got[0].level != "error" || got[0].dir != "fleet/apps/d" {
+	if len(got) != 1 || got[0].level != "error" || got[0].dir != "flux/apps/d" {
 		t.Errorf("dev with a stray apps tree: %+v", got)
 	}
 
 	mk("nixos/hosts/zz")
-	mk("fleet/apps/old")
+	mk("flux/apps/old")
 	orphans := orphanFindings(root, map[string]bool{"a": true, "d": true})
-	if len(orphans) != 2 || orphans[0].dir != "nixos/hosts/zz" || orphans[1].dir != "fleet/apps/old" || orphans[0].level != "warning" {
+	if len(orphans) != 2 || orphans[0].dir != "nixos/hosts/zz" || orphans[1].dir != "flux/apps/old" || orphans[0].level != "warning" {
 		t.Errorf("orphans: %+v", orphans)
 	}
 
-	os.WriteFile(filepath.Join(root, "fleet/clusters/a/cluster-vars.yaml"), []byte("apiVersion: v1\nkind: ConfigMap\ndata:\n  CLUSTER_NAME: a\n  MESH_IP: 10.1.0.1\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "flux/clusters/a/cluster-vars.yaml"), []byte("apiVersion: v1\nkind: ConfigMap\ndata:\n  CLUSTER_NAME: a\n  MESH_IP: 10.1.0.1\n"), 0o644)
 	vars, err := clusterVars(root, "a")
 	if err != nil || len(vars) != 2 || !vars["MESH_IP"] {
 		t.Errorf("clusterVars: %v %v", vars, err)
@@ -88,7 +88,7 @@ data:
 ---
 `
 	vars := map[string]bool{"CLUSTER_NAME": true}
-	got := envsubstFindings("fleet/apps/a", "a", built, vars)
+	got := envsubstFindings("flux/apps/a", "a", built, vars)
 	if len(got) != 1 || got[0].level != "error" || !strings.Contains(got[0].msg, "ConfigMap/stray references ${MESH_IP, OTHER}") {
 		t.Errorf("findings: %+v", got)
 	}
@@ -106,7 +106,7 @@ metadata:
 data:
   a: "labels job=kube-audit, cluster=${CLUSTER_NAME}, host=$${NODE_NAME}"
 `
-	if got := envsubstFindings("fleet/infrastructure/controllers", "a", escaped, vars); len(got) != 0 {
+	if got := envsubstFindings("flux/infrastructure/controllers", "a", escaped, vars); len(got) != 0 {
 		t.Errorf("escaped reference must pass: %+v", got)
 	}
 	if got := envsubstFindings("x", "a", escaped+"  b: ${NODE_NAME}\n", vars); len(got) != 1 || !strings.Contains(got[0].msg, "${NODE_NAME}") {
@@ -149,7 +149,7 @@ spec:
     host=${user#fort-}; host=${host%-pv}
     keep=${CLUSTER_NAME}
 `
-	got := envsubstFindings("fleet/apps/a", "a", built, map[string]bool{"CLUSTER_NAME": true})
+	got := envsubstFindings("flux/apps/a", "a", built, map[string]bool{"CLUSTER_NAME": true})
 	if len(got) != 1 || got[0].level != "error" {
 		t.Fatalf("findings: %+v", got)
 	}
@@ -164,7 +164,7 @@ spec:
 	// locals to please a substituter that should not be reading them.
 	exempt := strings.Replace(built, "  name: reconciler\n",
 		"  name: reconciler\n  annotations:\n    kustomize.toolkit.fluxcd.io/substitute: disabled\n", 1)
-	if got := envsubstFindings("fleet/apps/a", "a", exempt, map[string]bool{}); len(got) != 0 {
+	if got := envsubstFindings("flux/apps/a", "a", exempt, map[string]bool{}); len(got) != 0 {
 		t.Errorf("annotated resource should be exempt: %+v", got)
 	}
 }
@@ -201,7 +201,7 @@ kind: ValidatingAdmissionPolicy
 metadata:
   name: safe-upgrades.gateway.networking.k8s.io
 `
-	got := namespaceFindings("fleet/apps/luxor", "luxor", built)
+	got := namespaceFindings("flux/apps/luxor", "luxor", built)
 	if len(got) != 1 || got[0].level != "error" {
 		t.Fatalf("exactly the generated ConfigMap should be flagged: %+v", got)
 	}
@@ -227,7 +227,7 @@ func TestDataSizeFindings(t *testing.T) {
 			"\ndata:\n  big.json: " + strings.Repeat("x", size) + "\n---\n"
 	}
 	built := cm("small", 1024) + cm("near", dataSizeWarn+1) + cm("over", dataSizeLimit+1)
-	got := dataSizeFindings("fleet/apps/luxor", built)
+	got := dataSizeFindings("flux/apps/luxor", built)
 	if len(got) != 2 {
 		t.Fatalf("the small ConfigMap must not be a finding: %+v", got)
 	}

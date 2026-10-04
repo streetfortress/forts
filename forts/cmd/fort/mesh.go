@@ -14,18 +14,18 @@ import (
 
 // The client side of the mesh (#434): what a machine needs in order to
 // REACH the peers, rendered from the same source of truth the peers
-// themselves are built from. wireguard/peers.json says who is on the
+// themselves are built from. mesh/peers.json says who is on the
 // mesh and where; the manifests say what each fort is, and so which
 // account answers on 22. Three renders come out of that:
 //
-//   - wireguard/ssh_config   one Host block per peer — the fort name, a
+//   - mesh/ssh_config   one Host block per peer — the fort name, a
 //                            stable role alias where one fort holds the
 //                            role (sfi-dev, sfi-prod, sfi-stage), the mesh
 //                            address, the account (deployer). Committed;
 //                            consumers Include it. mint and dismantle
 //                            re-render it, fort check --all fails when it
 //                            is stale.
-//   - wireguard/known_hosts  one line per fort — its ssh host key, which
+//   - mesh/known_hosts  one line per fort — its ssh host key, which
 //                            mint has in hand (ssh-host-key.pub, otherwise
 //                            sops-encrypted in nixos/secrets/<host>.yaml).
 //                            First login is prompt-free; a replaced fort
@@ -49,9 +49,9 @@ import (
 // dismantled must not send a verb to either one.
 
 const (
-	sshConfigPath  = "wireguard/ssh_config"
-	knownHostsPath = "wireguard/known_hosts"
-	peersPath      = "wireguard/peers.json"
+	sshConfigPath  = "mesh/ssh_config"
+	knownHostsPath = "mesh/known_hosts"
+	peersPath      = "mesh/peers.json"
 
 	userDeployer    = "deployer"
 	userInteractive = "steven"
@@ -155,7 +155,7 @@ func roleAliases(hosts map[string]manifest.Host) map[string]string {
 }
 
 const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-config`" + ` from
-# wireguard/peers.json + provisioning/forts/*.toml. Do not edit: fort mint
+# mesh/peers.json + forts/*.toml. Do not edit: fort mint
 # and fort dismantle re-render it, and fort check --all fails when it is
 # stale. docs/forts/ssh-config.md.
 #
@@ -163,8 +163,8 @@ const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-
 # where a client's own overrides go (an off-mesh machine's ProxyJump, a
 # LAN address for a host it reaches without the tunnel):
 #
-#   Include ~/deployments/wireguard/ssh_config
-#   UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/wireguard/known_hosts
+#   Include ~/deployments/mesh/ssh_config
+#   UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/mesh/known_hosts
 #
 # Every fort answers as deployer, the operator account the framework
 # gives each host; a peer with no manifest is a hand-managed interactive

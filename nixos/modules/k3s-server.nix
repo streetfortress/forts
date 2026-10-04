@@ -17,7 +17,7 @@ let
   # cluster service IP and loopback — not the wireguard address. Since
   # `just fetch-kubeconfig` rewrites the server URL to the mesh IP, every
   # kubectl call over the VPN would fail x509 verification without a SAN for
-  # it. Read from the same wireguard/peers.json the mesh module keys off, by
+  # it. Read from the same mesh/peers.json the mesh module keys off, by
   # hostname, so the two can't drift; hosts outside the mesh add nothing.
   #
   # On an ALREADY-RUNNING node, changing the SAN set needs the cached serving
@@ -25,7 +25,7 @@ let
   # mirrors it to the `k3s-serving` secret in kube-system; delete both and
   # restart k3s if the old SANs survive the rebuild. Production hosts sidestep
   # this: they are replaced as images, so they come up with the SAN baked in.
-  peers = (builtins.fromJSON (builtins.readFile ../../wireguard/peers.json)).peers;
+  peers = (builtins.fromJSON (builtins.readFile ../../mesh/peers.json)).peers;
   meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
 in
 {

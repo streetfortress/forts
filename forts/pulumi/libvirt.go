@@ -99,7 +99,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 	// The seed volume, for a host born with the channel (the type comment).
 	// userData comes from the environment when this run carries the seed
 	// (fort provision does, when the apply creates the domain; a bare
-	// `pulumi preview` from forts/pulumi does not, and ignoreChanges keeps
+	// `pulumi preview` from provisioning/pulumi does not, and ignoreChanges keeps
 	// the recorded value for an existing volume either way). Secret from
 	// the first moment the engine sees it. metaData is the datasource's
 	// one required file; the instance id is the hostname.

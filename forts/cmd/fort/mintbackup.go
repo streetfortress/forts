@@ -51,7 +51,7 @@ const (
 	// the hub, so a fort registers as a tenant of a service ANOTHER
 	// fort hosts, and its identity is declared in that fort's tree.
 	// mint appends, dismantle removes, `fort check` traces both ways.
-	rustfsUsers = "fleet/apps/luxor/rustfs-central/users.sops.yaml"
+	rustfsUsers = "flux/apps/luxor/rustfs-central/users.sops.yaml"
 )
 
 // rustfsPVUser is a fort's restic identity on luxor's rustfs. The name is
@@ -122,7 +122,7 @@ func (p *mintPlan) planBackups(take func(string) (string, bool)) error {
 		p.rustfsUser = envKeyID(v)
 	} else {
 		if !exists(p.root, rustfsUsers) {
-			return fmt.Errorf("%s does not exist — seed luxor's rustfs provider first: fort seed luxor fleet/apps/luxor/rustfs-central --write", rustfsUsers)
+			return fmt.Errorf("%s does not exist — seed luxor's rustfs provider first: fort seed luxor flux/apps/luxor/rustfs-central --write", rustfsUsers)
 		}
 		sec, err := newToken()
 		if err != nil {
@@ -445,7 +445,7 @@ func rustfsIdentityFindings(root string, hosts map[string]manifest.Host) []findi
 	if !exists(root, rustfsUsers) {
 		for host, h := range hosts {
 			if h.Backups.Backed() {
-				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up — seed luxor's rustfs provider: fort seed luxor fleet/apps/luxor/rustfs-central --write"}}
+				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up — seed luxor's rustfs provider: fort seed luxor flux/apps/luxor/rustfs-central --write"}}
 			}
 		}
 		return nil

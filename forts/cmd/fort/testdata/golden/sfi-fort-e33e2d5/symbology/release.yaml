@@ -46,7 +46,7 @@ spec:
       db: "0"
       user: symbology
     inference:
-      # soundship's mesh IP (wireguard/peers.json): DNAT to LM Studio on
+      # soundship's mesh IP (mesh/peers.json): DNAT to LM Studio on
       # the win11 VM. Best-effort by policy — workers back off when it is
       # away (symbology#146).
       address: 10.1.0.1

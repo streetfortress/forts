@@ -11,7 +11,7 @@ import (
 // LAN (#287). Like [libvirt] the static address is baked into the image;
 // unlike it there is no provider to raise the host — the image is written
 // to the machine's disk by a human at the keyboard (docs/forts/baremetal.md),
-// and nothing in forts/pulumi realizes this table. It exists so the fort
+// and nothing in provisioning/pulumi realizes this table. It exists so the fort
 // verbs (scaffold, mint, seed, image, check) see a fort like any other.
 //
 //	[baremetal]

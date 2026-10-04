@@ -2,7 +2,7 @@
 # via Gateway API only (no Ingress). Gateway API CRDs are vendored in
 # ../gateway-api (the chart stopped shipping them). The Gateway itself is
 # per-cluster (hostname listeners grow one service at a time) and lives in
-# fleet/apps/<cluster>/gateway/.
+# flux/apps/<cluster>/gateway/.
 # Chart defaults: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -27,7 +27,7 @@ spec:
         enabled: false
 
     # Don't auto-create Gateway API resources — the Gateway is a per-cluster
-    # manifest in fleet/apps/<cluster>/gateway/.
+    # manifest in flux/apps/<cluster>/gateway/.
     gateway:
       enabled: false
 

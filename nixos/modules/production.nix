@@ -53,7 +53,7 @@
   # 30909/30993: edge Prometheus/Alertmanager NodePorts (mesh-services-
   # edge.yaml) — the wg0-only opening IS their access control; silences
   # are set against 30993.
-  # 30432: sites-db's primary NodePort (fleet/apps/<fort>/sites-db/
+  # 30432: sites-db's primary NodePort (flux/apps/<fort>/sites-db/
   # mesh-service.yaml), read by databasus-central on luxor (#327) — every
   # fort, like the edge pair, so the consumer can assume the coordinate.
   networking.firewall.interfaces.wg0.allowedTCPPorts = [ 6443 10255 30432 30909 30993 ];

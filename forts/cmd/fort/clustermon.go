@@ -19,8 +19,8 @@ import (
 // <host>-keyed path.
 const (
 	hubHost                        = "luxor"
-	clusterMonitoringDir           = "fleet/apps/luxor/monitoring/clusters"
-	clusterMonitoringKustomization = "fleet/apps/luxor/monitoring/kustomization.yaml"
+	clusterMonitoringDir           = "flux/apps/luxor/monitoring/clusters"
+	clusterMonitoringKustomization = "flux/apps/luxor/monitoring/kustomization.yaml"
 )
 
 // clusterMonitoringPath is a cluster's file on the hub: its dead man's
@@ -53,7 +53,7 @@ func clusterMonitoringFindings(root string, hosts map[string]manifest.Host) []fi
 	sort.Strings(names)
 	for _, host := range names {
 		plain := !hosts[host].IsCluster()
-		if !plain && !exists(root, filepath.Join("fleet/clusters", host)) {
+		if !plain && !exists(root, filepath.Join("flux/clusters", host)) {
 			continue
 		}
 		rel := clusterMonitoringPath(host)

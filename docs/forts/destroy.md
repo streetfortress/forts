@@ -15,7 +15,7 @@ CI); without a TTY and without `--yes` it refuses up front.
 
 ```
 sfi-x   (provider linode, from the checkpoint)
-  ✗ still declared on origin/main (provisioning/forts/sfi-x.toml) — merge the `fort dismantle sfi-x` PR first (this refuses to unprotect a declared host)
+  ✗ still declared on origin/main (forts/sfi-x.toml) — merge the `fort dismantle sfi-x` PR first (this refuses to unprotect a declared host)
   ✗ working tree not clean — the state removal must land as its own commit
 refusing: 2 gate(s) not met
 ```
@@ -110,7 +110,7 @@ working tree — the right place for it — and says
 ## The manual equivalent
 
 The verb execs the stock CLI, so the same sequence by hand from
-`forts/pulumi` is always available:
+`provisioning/pulumi` is always available:
 
 ```
 export PULUMI_BACKEND_URL=file://$PWD/state PULUMI_IGNORE_AMBIENT_PLUGINS=true

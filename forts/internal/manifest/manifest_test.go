@@ -181,7 +181,7 @@ func TestParseRefuses(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: want %q, got %v", tc.name, tc.want, err)
 		}
-		if err != nil && !strings.HasPrefix(err.Error(), "provisioning/forts/h.toml: ") {
+		if err != nil && !strings.HasPrefix(err.Error(), "forts/h.toml: ") {
 			t.Errorf("%s: error names the file: %v", tc.name, err)
 		}
 	}

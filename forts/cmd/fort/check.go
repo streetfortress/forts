@@ -104,7 +104,7 @@ func check(args []string) error {
 		// The pruning key's holder (#400): a host that sweeps a tier of
 		// sfi.pv-prune names that tier's key, and the inverse (prune.go).
 		findings = append(findings, pruneFindings(root, fort)...)
-		if entry.IsCluster() && exists(root, filepath.Join("fleet/apps", fort)) {
+		if entry.IsCluster() && exists(root, filepath.Join("flux/apps", fort)) {
 			cf, err := checkFort(o, fort)
 			if err != nil {
 				return err
@@ -151,10 +151,10 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 	if _, err := manifest.Load(o.root, fort); err != nil {
 		return nil, err
 	}
-	apps := filepath.Join("fleet/apps", fort)
+	apps := filepath.Join("flux/apps", fort)
 	entries, err := os.ReadDir(filepath.Join(o.root, apps))
 	if err != nil {
-		return nil, fmt.Errorf("%s: no fleet/apps tree (%w)", fort, err)
+		return nil, fmt.Errorf("%s: no flux/apps tree (%w)", fort, err)
 	}
 	var out []finding
 	consumed := sopsRefs{}
@@ -224,7 +224,7 @@ const providerLabel = "forts.sfi/provider"
 func checkProviderNamespaces(root, fort string) []finding {
 	var out []finding
 	for _, typ := range contract.Types {
-		dir := filepath.Join("fleet/apps", fort, providerDirs[typ])
+		dir := filepath.Join("flux/apps", fort, providerDirs[typ])
 		if !exists(root, dir) {
 			continue
 		}
@@ -250,7 +250,7 @@ func checkProviderNamespaces(root, fort string) []finding {
 }
 
 // sopsRefs is the set of (provider file, key) pairs the fort's effective
-// contracts source — "fleet/apps/<fort>/rustfs/users.sops.yaml" → keys —
+// contracts source — "flux/apps/<fort>/rustfs/users.sops.yaml" → keys —
 // gathered while the gate walks the app dirs, for the reverse trace.
 type sopsRefs map[string]map[string]bool
 
@@ -289,7 +289,7 @@ func (r sopsRefs) collect(dir string, ff *FullForm) {
 // with no policies/<name>.json, and a document with no user is dead
 // text.
 func checkRustfsIdentities(root, fort string, consumed sopsRefs) []finding {
-	dir := filepath.Join("fleet/apps", fort, "rustfs")
+	dir := filepath.Join("flux/apps", fort, "rustfs")
 	if !exists(root, dir) {
 		return nil
 	}
@@ -506,7 +506,7 @@ func checkVars(root, dir string, ff *FullForm) []finding {
 // (or optional) and its wire: paths are set in the HelmRelease values.
 func checkWires(root, fort, dir string, c *contract.Contract) []finding {
 	var out []finding
-	apps := filepath.Join("fleet/apps", fort)
+	apps := filepath.Join("flux/apps", fort)
 	values := releaseValues(filepath.Join(root, dir, "release.yaml"))
 	for _, r := range c.Instances() {
 		providerDir := providerDirs[r.Type]
@@ -538,7 +538,7 @@ func reportFindings(w io.Writer, fort string, findings []finding, annotate bool)
 	for _, f := range findings {
 		switch f.level {
 		case "ok":
-			fmt.Fprintf(w, "  ✓ %-40s %s\n", strings.TrimPrefix(f.dir, "fleet/apps/"+fort+"/"), f.msg)
+			fmt.Fprintf(w, "  ✓ %-40s %s\n", strings.TrimPrefix(f.dir, "flux/apps/"+fort+"/"), f.msg)
 		case "warning":
 			fmt.Fprintf(w, "  ! %s: %s\n", f.dir, f.msg)
 			if annotate {

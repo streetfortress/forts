@@ -1,4 +1,4 @@
-# The manifest — `provisioning/forts/<host>.toml`
+# The manifest — `forts/<host>.toml`
 
 One file per fort, TOML, filename = hostname (no renames, as everywhere).
 It is the fort's declaration: what every verb reads before it touches
@@ -92,8 +92,8 @@ key (#272): every fort imports the hardened profile (mesh-scoped SSH, no
 wheel), gets the deploy key (auto-rebuild's pull credential), carries
 `protect: true` on its stack, and `mesh_ip` is required. **`[cluster]`**
 (#426) makes the host a flux cluster: `k3s-server.nix` on the datastore
-it names, `production.nix` (deployer-only), `fleet/clusters/<host>`,
-`fleet/apps/<host>` and the cluster key. The table is handled like the
+it names, `production.nix` (deployer-only), `flux/clusters/<host>`,
+`flux/apps/<host>` and the cluster key. The table is handled like the
 provider tables — strict keys, decoded by its own Spec — and can be
 empty; every key in it has a default. **No `[cluster]` table makes a plain
 fort**: the baseline the framework gives every host — `hardened.nix`,
@@ -158,7 +158,7 @@ into `peers.json`.
 
 No chart versions (Renovate owns `repository.yaml`), no values (the
 HelmRelease), no secrets (`fort seed`), and **no apps list**: the fort's
-workloads are declared by `fleet/apps/<host>/` itself — `fort add` is
+workloads are declared by `flux/apps/<host>/` itself — `fort add` is
 imperative, and provider dirs arrive on first need. A checked `[[apps]]`
 membership was designed and parked (#269) until a sibling cut shows the
 tree copy is the pain.

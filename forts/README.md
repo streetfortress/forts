@@ -1,7 +1,7 @@
 # forts — cloud provisioning (#42/#87)
 
 You manage *forts* with this: one fort = one host = base image + flux
-workloads, declared by its manifest (`provisioning/forts/<host>.toml`,
+workloads, declared by its manifest (`forts/<host>.toml`,
 docs/forts/manifest.md) and keyed by that hostname everywhere (nix host
 dir, pulumi stack, peers.json, sops). `cmd/fort` is the CLI; `pulumi/` is
 the resource program it wraps; `internal/manifest` is the shared schema.
@@ -120,7 +120,7 @@ None per host: `fort provision <host> --image …` creates the stack at
 birth (`fort adopt` at adoption), and `fort destroy` removes it.
 
 `fort` commands pin `PULUMI_BACKEND_URL` to this checkout's
-`forts/pulumi/state`, so no `pulumi login` is needed for them — and a
+`provisioning/pulumi/state`, so no `pulumi login` is needed for them — and a
 stale global login (e.g. from a worktree) cannot redirect where state is
 written. Running pulumi by hand still honours whatever `pulumi login`
 last recorded: prefer `fort preview` / `fort provision`, or export

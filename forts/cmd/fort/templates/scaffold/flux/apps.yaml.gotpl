@@ -12,7 +12,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./fleet/apps/{{ .Hostname }}
+  path: ./flux/apps/{{ .Hostname }}
   prune: true
   wait: true
   decryption:

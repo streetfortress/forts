@@ -15,23 +15,23 @@ unreviewed intent.
 
 ```
 dismantle sfi-x   (cloud: linode)
-✗ fleet/apps/sfi-x
-✗ fleet/clusters/sfi-x
+✗ flux/apps/sfi-x
+✗ flux/clusters/sfi-x
 ✗ nixos/hosts/sfi-x
 ✗ nixos/secrets/sfi-x.yaml
-✗ provisioning/forts/sfi-x.toml
-✗ fleet/apps/luxor/monitoring/clusters/sfi-x.yaml
+✗ forts/sfi-x.toml
+✗ flux/apps/luxor/monitoring/clusters/sfi-x.yaml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
-○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared fleet/infrastructure rule
-◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
-○ fleet/apps/luxor/monitoring/kustomization.yaml   - clusters/sfi-x.yaml
-○ wireguard/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
-◆ wireguard/ssh_config           re-rendered without sfi-x
-◆ wireguard/known_hosts          - the sfi-x line
+○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared flux/infrastructure rule
+◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
+○ flux/apps/luxor/monitoring/kustomization.yaml   - clusters/sfi-x.yaml
+○ mesh/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
+◆ mesh/ssh_config           re-rendered without sfi-x
+◆ mesh/known_hosts          - the sfi-x line
 ○ provisioning/console-passwords.yaml   - the sfi-x entry (its console passphrase, #524)
 ! residue — 3 file(s) still mention sfi-x; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):
     README.md: 2 mention(s)   (doc)
-    fleet/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
+    flux/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
     forts/cmd/fort/testdata/forts/sfi-x/…   (CLI test fixture / golden — keep)
 · pulumi stack `sfi-x` still exists — untouched by design; `fort destroy sfi-x` after this merges. `just iac-drift` is red for it in between, which is the correct signal.
 · the gitea deploy key `flux-sfi-x` stays registered until fort destroy revokes it.
@@ -50,7 +50,7 @@ Three things deserve the explanation:
   fort's passphrase outlives the fort.
 - **`sops updatekeys` is load-bearing.** Removing a recipient from
   `.sops.yaml` changes nothing by itself: the departed cluster key keeps
-  decrypting every shared `fleet/infrastructure` file until they are
+  decrypting every shared `flux/infrastructure` file until they are
   re-encrypted. Dismantle does that right after the rule edit, so the
   retired host loses access in the same PR.
 - **The residue is a report, not an action.** Everything outside the

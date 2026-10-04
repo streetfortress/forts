@@ -85,7 +85,7 @@ func TestRenderSSHConfig(t *testing.T) {
 		// hand-managed peers: steven, no HostKeyAlias
 		"# hand-managed peer (no manifest)\nHost devbox\n  Hostname 10.1.0.3\n  User steven\n\n",
 		"Host soundship\n  Hostname 10.1.0.1\n  User steven\n",
-		"Include ~/deployments/wireguard/ssh_config",
+		"Include ~/deployments/mesh/ssh_config",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -285,7 +285,7 @@ func TestPlanSSHConfig(t *testing.T) {
 	var sb strings.Builder
 	p.report(&sb, true)
 	rep := sb.String()
-	for _, want := range []string{"◆ wireguard/ssh_config", "◆ wireguard/known_hosts", "+ luxor", "key replaced: sfi-prod-1111111", "- retired-fort (no manifest)", "kept as committed: sfi-dev-abc1234", "! no host key line for sfi-prod-2222222", "staged."} {
+	for _, want := range []string{"◆ mesh/ssh_config", "◆ mesh/known_hosts", "+ luxor", "key replaced: sfi-prod-1111111", "- retired-fort (no manifest)", "kept as committed: sfi-dev-abc1234", "! no host key line for sfi-prod-2222222", "staged."} {
 		if !strings.Contains(rep, want) {
 			t.Errorf("report lacks %q:\n%s", want, rep)
 		}

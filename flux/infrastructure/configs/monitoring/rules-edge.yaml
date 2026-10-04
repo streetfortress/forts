@@ -1,7 +1,7 @@
 # Edge rule set (#53): "this cluster is unhealthy", nothing else. These must
 # evaluate and page locally with the mesh down. Cross-cluster rules and the
 # dead man's switch live ONLY on luxor's ThanosRuler
-# (fleet/apps/luxor/monitoring/rules-central.yaml) so nothing pages twice.
+# (flux/apps/luxor/monitoring/rules-central.yaml) so nothing pages twice.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

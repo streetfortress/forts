@@ -66,7 +66,7 @@ var mainBuild = regexp.MustCompile(`^0\.0\.0-main\.`)
 // same binary the runner and every operator already has — with the lab
 // root CA passed explicitly, exactly like the release workflows.
 func resolveChart(root string, pin chartPin) (dir, resolved string, err error) {
-	ca := filepath.Join(root, "fleet/infrastructure/configs/step-ca-root.pem")
+	ca := filepath.Join(root, "flux/infrastructure/configs/step-ca-root.pem")
 	ref := pin.url
 	constraint, err := pin.constraint()
 	if err != nil {

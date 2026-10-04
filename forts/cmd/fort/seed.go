@@ -132,7 +132,7 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 	if _, err := manifest.Load(o.root, o.fort); err != nil {
 		return nil, err
 	}
-	apps := filepath.Join("fleet/apps", o.fort)
+	apps := filepath.Join("flux/apps", o.fort)
 	dirs := o.dirs
 	explicit := len(dirs) > 0
 	if !explicit {
@@ -405,7 +405,7 @@ func readChartPin(path string) (*chartPin, error) {
 // did: conventional outputs, overridden by what the HelmRelease's wire
 // values actually say (the valkey db index, a moved host).
 func providersForSeed(root, fort, app string, c *contract.Contract) (map[string]providerBinding, error) {
-	apps := filepath.Join("fleet/apps", fort)
+	apps := filepath.Join("flux/apps", fort)
 	values := releaseValues(filepath.Join(root, apps, app, "release.yaml"))
 	out := map[string]providerBinding{}
 	for _, r := range c.Instances() {

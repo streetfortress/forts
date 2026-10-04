@@ -1,4 +1,4 @@
-// Package manifest reads a fort's manifest: provisioning/forts/<host>.toml,
+// Package manifest reads a fort's manifest: forts/<host>.toml,
 // one file per fort, filename = hostname (no renames, as everywhere). One
 // schema serves both halves of the tooling (the fort CLI and the pulumi
 // program) so the generators cannot drift.
@@ -40,7 +40,7 @@ import (
 )
 
 // Dir is the manifests' home, repo-relative.
-const Dir = "provisioning/forts"
+const Dir = "forts"
 
 // Path is the host's manifest, repo-relative.
 func Path(host string) string { return filepath.Join(Dir, host+".toml") }
@@ -62,7 +62,7 @@ type Host struct {
 	DNS     DNS     `toml:"dns"`
 	Backups Backups `toml:"backups"`
 	// Cluster is the [cluster] table: this fort is a flux cluster (#426)
-	// — k3s on the datastore it names, flux, fleet/clusters + fleet/apps,
+	// — k3s on the datastore it names, flux, flux/clusters + flux/apps,
 	// the cluster age key — and what its k3s does beyond the
 	// per-fort-identical standard (#626). Absent for a plain fort; the
 	// table can be empty (every key has a default).
@@ -167,7 +167,7 @@ func (h Host) Datastore() string {
 func (h Host) AuditLogging() bool { return h.Cluster != nil && h.Cluster.AuditLogging }
 
 // IsCluster says whether this fort is a flux cluster ([cluster]):
-// fleet/clusters + fleet/apps trees, the cluster age key, the canary,
+// flux/clusters + flux/apps trees, the cluster age key, the canary,
 // k3s. A fort that is not a cluster is a plain fort: the host dir is its
 // whole tree.
 func (h Host) IsCluster() bool { return h.Cluster != nil }
@@ -215,7 +215,7 @@ const ProviderTables = "[libvirt] (lab VM), [baremetal] (lab hardware) or [linod
 // follow from !Cloud(); a physical machine on the LAN is a lab host too.
 func (h Host) Cloud() bool { return h.Provider == "linode" }
 
-// Realized says whether a backend in forts/pulumi raises and destroys
+// Realized says whether a backend in provisioning/pulumi raises and destroys
 // this host. False for [baremetal]: the apply verbs refuse, preview
 // skips, and the image is written by hand (docs/forts/baremetal.md).
 func (h Host) Realized() bool { return h.Provider != "" && h.Provider != "baremetal" }

@@ -32,7 +32,7 @@ var orphanAllowlist = map[string]bool{}
 
 // The shared layers every cluster reconciles; built once per run and
 // substitution-checked once per cluster (each carries its own vars).
-var infraLayers = []string{"fleet/infrastructure/controllers", "fleet/infrastructure/configs"}
+var infraLayers = []string{"flux/infrastructure/controllers", "flux/infrastructure/configs"}
 
 // ${VAR} tokens flux's post-build envsubst substitutes. Resources annotated
 // kustomize.toolkit.fluxcd.io/substitute: disabled are exempt (the grafana
@@ -82,11 +82,11 @@ func checkFleetShared(root string, hosts map[string]bool, orphans bool) fleetSha
 	return s
 }
 
-// orphanFindings: a dir under nixos/hosts, fleet/clusters or fleet/apps
+// orphanFindings: a dir under nixos/hosts, flux/clusters or flux/apps
 // that no manifest claims.
 func orphanFindings(root string, hosts map[string]bool) []finding {
 	var out []finding
-	for _, parent := range []string{"nixos/hosts", "fleet/clusters", "fleet/apps"} {
+	for _, parent := range []string{"nixos/hosts", "flux/clusters", "flux/apps"} {
 		entries, err := os.ReadDir(filepath.Join(root, parent))
 		if err != nil {
 			continue
@@ -111,7 +111,7 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 		if !exists(root, filepath.Join("nixos/hosts", fort)) {
 			out = append(out, finding{"error", filepath.Join("nixos/hosts", fort), "missing — a plain fort has a manifest and a nix host dir (fort scaffold renders it)"})
 		}
-		for _, rel := range []string{filepath.Join("fleet/clusters", fort), filepath.Join("fleet/apps", fort)} {
+		for _, rel := range []string{filepath.Join("flux/clusters", fort), filepath.Join("flux/apps", fort)} {
 			if exists(root, rel) {
 				out = append(out, finding{"error", rel, "a plain fort has no cluster — nothing reconciles this tree; remove it, or add [cluster] to the manifest"})
 			}
@@ -121,7 +121,7 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 		}
 		return out
 	}
-	for _, rel := range []string{filepath.Join("nixos/hosts", fort), filepath.Join("fleet/clusters", fort), filepath.Join("fleet/apps", fort)} {
+	for _, rel := range []string{filepath.Join("nixos/hosts", fort), filepath.Join("flux/clusters", fort), filepath.Join("flux/apps", fort)} {
 		if !exists(root, rel) {
 			out = append(out, finding{"error", rel, "missing — every fort has a manifest, a nix host dir, a flux cluster dir and an apps tree (fort scaffold renders them)"})
 		}
@@ -131,9 +131,9 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 	}
 	vars, err := clusterVars(root, fort)
 	if err != nil {
-		out = append(out, finding{"error", filepath.Join("fleet/clusters", fort, "cluster-vars.yaml"), err.Error()})
+		out = append(out, finding{"error", filepath.Join("flux/clusters", fort, "cluster-vars.yaml"), err.Error()})
 	}
-	layers := []string{filepath.Join("fleet/apps", fort), filepath.Join("fleet/clusters", fort, "flux-system")}
+	layers := []string{filepath.Join("flux/apps", fort), filepath.Join("flux/clusters", fort, "flux-system")}
 	for _, layer := range layers {
 		built, err := kustomizeBuild(root, layer)
 		if err != nil {
@@ -157,10 +157,10 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 	return out
 }
 
-// clusterVars: the keys of fleet/clusters/<fort>/cluster-vars.yaml's data —
+// clusterVars: the keys of flux/clusters/<fort>/cluster-vars.yaml's data —
 // what flux's envsubst will have.
 func clusterVars(root, fort string) (map[string]bool, error) {
-	raw, err := os.ReadFile(filepath.Join(root, "fleet/clusters", fort, "cluster-vars.yaml"))
+	raw, err := os.ReadFile(filepath.Join(root, "flux/clusters", fort, "cluster-vars.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("missing (fort scaffold renders it)")
 	}

@@ -1,4 +1,4 @@
-fleet/apps/lab-fort/   (chart 0.3.0)
+flux/apps/lab-fort/   (chart 0.3.0)
 ● gateway/
   ● certificate-sfi-website.yaml step-ca, sfi-website.lab-fort.lofi
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
@@ -15,7 +15,7 @@ fleet/apps/lab-fort/   (chart 0.3.0)
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
   ● route.yaml                   HTTPRoute sfi-website.lab-fort.lofi → sfi-website-ui:3000
   ◆ secrets.sops.yaml            seeded
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 ● sites-db/
   ● cluster.yaml                 CNPG Cluster sites-db: greenfield, NO archive (profile lab), roles via patches
   ● database-sfi-website.yaml    Database CR

@@ -25,11 +25,11 @@ func TestDismantle(t *testing.T) {
 	} {
 		t.Run(tc.host, func(t *testing.T) {
 			tmp := t.TempDir()
-			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), ".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
-				"nixos/secrets/" + tc.host + ".yaml", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), ".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
+				"nixos/secrets/" + tc.host + ".yaml", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
-			for _, rel := range []string{"nixos/hosts/" + tc.host, "fleet/clusters/" + tc.host, "fleet/apps/" + tc.host, "fleet/apps/luxor/rustfs-central"} {
+			for _, rel := range []string{"nixos/hosts/" + tc.host, "flux/clusters/" + tc.host, "flux/apps/" + tc.host, "flux/apps/luxor/rustfs-central"} {
 				copyTree(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
 			// a contract on another fort sourcing from this one
@@ -44,7 +44,7 @@ func TestDismantle(t *testing.T) {
 			hosts, _, _ := manifest.LoadAll(tmp)
 			write(sshConfigPath, renderSSHConfig(m, hosts))
 			write(knownHostsPath, knownHostsSet(knownHostsSet("", tc.host, m.Peers[tc.host].IP, "ssh-ed25519 GONE"), "luxor", "10.1.0.5", "ssh-ed25519 STAYS"))
-			write("fleet/apps/luxor/app/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/sites-db/secrets-db.sops.yaml, stringData.password]}\n")
+			write("flux/apps/luxor/app/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/sites-db/secrets-db.sops.yaml, stringData.password]}\n")
 
 			p, err := planDismantle(tmp, tc.host)
 			if err != nil {
@@ -58,12 +58,12 @@ func TestDismantle(t *testing.T) {
 			p.report(&sb, true)
 			rep := sb.String()
 
-			for _, rel := range []string{"nixos/hosts/" + tc.host, "nixos/secrets/" + tc.host + ".yaml", "fleet/clusters/" + tc.host, "fleet/apps/" + tc.host} {
+			for _, rel := range []string{"nixos/hosts/" + tc.host, "nixos/secrets/" + tc.host + ".yaml", "flux/clusters/" + tc.host, "flux/apps/" + tc.host} {
 				if _, err := os.Stat(filepath.Join(tmp, rel)); err == nil {
 					t.Errorf("%s still exists", rel)
 				}
 			}
-			for _, rel := range []string{"fleet/apps/luxor/rustfs-central/release.yaml", "nixos/secrets/", "fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+			for _, rel := range []string{"flux/apps/luxor/rustfs-central/release.yaml", "nixos/secrets/", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
 				if _, err := os.Stat(filepath.Join(tmp, rel)); err != nil {
 					t.Errorf("%s was removed", rel)
 				}
@@ -88,7 +88,7 @@ func TestDismantle(t *testing.T) {
 			if !strings.Contains(readFile(t, filepath.Join(tmp, ".sops.yaml")), "# cluster: luxor") {
 				t.Errorf("shared rule lost luxor's recipient")
 			}
-			peers := readFile(t, filepath.Join(tmp, "wireguard/peers.json"))
+			peers := readFile(t, filepath.Join(tmp, "mesh/peers.json"))
 			if strings.Contains(peers, `"`+tc.host+`"`) || !strings.Contains(peers, `"luxor"`) {
 				t.Errorf("peers.json wrong:\n%s", peers[:200])
 			}
@@ -96,19 +96,19 @@ func TestDismantle(t *testing.T) {
 				t.Errorf("updatekeys: %v", tool.rekeyed)
 			}
 			sc := readFile(t, filepath.Join(tmp, sshConfigPath))
-			if strings.Contains(sc, tc.host) || !strings.Contains(sc, "Host luxor\n") || !strings.Contains(rep, "◆ wireguard/ssh_config") {
+			if strings.Contains(sc, tc.host) || !strings.Contains(sc, "Host luxor\n") || !strings.Contains(rep, "◆ mesh/ssh_config") {
 				t.Errorf("ssh_config after dismantle:\n%s\n%s", sc, rep)
 			}
-			if kh := parseKnownHosts(readFile(t, filepath.Join(tmp, knownHostsPath))); len(kh) != 1 || kh["luxor"].key != "ssh-ed25519 STAYS" || !strings.Contains(rep, "◆ wireguard/known_hosts") {
+			if kh := parseKnownHosts(readFile(t, filepath.Join(tmp, knownHostsPath))); len(kh) != 1 || kh["luxor"].key != "ssh-ed25519 STAYS" || !strings.Contains(rep, "◆ mesh/known_hosts") {
 				t.Errorf("known_hosts after dismantle: %+v\n%s", kh, rep)
 			}
-			if strings.Contains(rep, "wireguard/ssh_config:") || strings.Contains(rep, "wireguard/known_hosts:") {
+			if strings.Contains(rep, "mesh/ssh_config:") || strings.Contains(rep, "mesh/known_hosts:") {
 				t.Errorf("the rendered files are not residue:\n%s", rep)
 			}
 			if !strings.Contains(rep, "README.md:") {
 				t.Errorf("residue should list README.md:\n%s", rep)
 			}
-			if !strings.Contains(rep, "fleet/apps/luxor/app/forts.contract.yaml: secrets.sops.yaml/X") {
+			if !strings.Contains(rep, "flux/apps/luxor/app/forts.contract.yaml: secrets.sops.yaml/X") {
 				t.Errorf("cross-fort ref not reported:\n%s", rep)
 			}
 			want := "- 2 `# cluster:"

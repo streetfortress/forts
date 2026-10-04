@@ -43,8 +43,8 @@ import (
 // password manager" — which this repo names nowhere — was a dependency
 // nobody had checked.
 //
-// The registry is a per-host file in the shape wireguard/peers.json and
-// wireguard/ssh_config already have: one entry per fort, mint adds it,
+// The registry is a per-host file in the shape mesh/peers.json and
+// mesh/ssh_config already have: one entry per fort, mint adds it,
 // `fort dismantle` withdraws it, `fort check` traces it both ways. Key
 // names are plaintext in a sops file, so the check reads WHICH forts
 // are listed without an age key and never a value.

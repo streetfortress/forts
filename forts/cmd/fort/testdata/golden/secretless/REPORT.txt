@@ -1,4 +1,4 @@
-fleet/apps/lab-fort/   (chart 0.1.0)
+flux/apps/lab-fort/   (chart 0.1.0)
 ● gateway/
   ● certificate-moment-tally-website.yaml step-ca, moment-tally-website.lab-fort.lofi
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
@@ -13,7 +13,7 @@ fleet/apps/lab-fort/   (chart 0.1.0)
   ● release.yaml                 wire: none; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.1.0
   ● route.yaml                   HTTPRoute moment-tally-website.lab-fort.lofi → moment-tally-website:3000
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 
 staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.
 then: review, commit, PR — flux applies on merge.

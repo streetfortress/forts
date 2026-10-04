@@ -10,7 +10,7 @@
 # Greenfield: no bootstrap block, so CNPG initdb's its default app/app
 # database and the tenants' Database CRs create theirs. A fort that is
 # born from a backup instead flips this to bootstrap.recovery by hand
-# (fleet/apps/sfi-fort-e33e2d5/sites-db/cluster.yaml is the worked
+# (flux/apps/sfi-fort-e33e2d5/sites-db/cluster.yaml is the worked
 # example); initdb/recovery only run at cluster CREATION, so that is a
 # repave, never a live edit.
 apiVersion: postgresql.cnpg.io/v1

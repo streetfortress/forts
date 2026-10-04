@@ -70,7 +70,7 @@ func provision(args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)
 	}
 
-	pulumiDir := filepath.Join(root, "forts", "pulumi")
+	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
 	ctx := context.Background()
 
 	initNeeded, err := stackGate(pulumiDir, host, *imagePath != "")
@@ -157,7 +157,7 @@ func provision(args []string) error {
 	}
 	// The apply verbs stage the file backend: the checkpoint (and, at
 	// birth, Pulumi.<host>.yaml) is the state PR.
-	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()
+	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
 
 	if flow != nil {
 		// `pulumi up` exits 0 when the preview is declined, so gate
@@ -292,7 +292,7 @@ func initStack(pulumiDir, host string) error {
 	return runPulumi(pulumiDir, "stack", "init", host, "--secrets-provider", "passphrase", "--non-interactive")
 }
 
-// runPulumi execs the stock CLI with inherited stdio in forts/pulumi —
+// runPulumi execs the stock CLI with inherited stdio in provisioning/pulumi —
 // previews render and prompts work exactly as if run by hand, and
 // `pulumi <anything> -s <host>` by hand stays a first-class escape hatch.
 func runPulumi(dir string, args ...string) error {

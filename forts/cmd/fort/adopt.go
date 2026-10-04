@@ -47,7 +47,7 @@ func adopt(args []string) error {
 	if entry.Provider != "libvirt" {
 		return fmt.Errorf("host %q: adopt is for lab VMs the playbook raised — the manifest needs a [libvirt] table (got [%s])", host, entry.Provider)
 	}
-	pulumiDir := filepath.Join(root, "forts", "pulumi")
+	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
 	if hasStack(pulumiDir, host) {
 		return fmt.Errorf("host %q already has a stack — nothing to adopt", host)
 	}
@@ -104,7 +104,7 @@ func adopt(args []string) error {
 	if err := runPulumi(pulumiDir, append([]string{"up", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		return err
 	}
-	exec.Command("git", "-C", root, "add", "-A", "forts/pulumi").Run()
+	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
 	fmt.Printf("\n== done. Staged the new stack — commit it as its own PR (\"%s: adopted\"). From here: fort preview / provision / destroy %s.\n", host, host)
 	return nil
 }

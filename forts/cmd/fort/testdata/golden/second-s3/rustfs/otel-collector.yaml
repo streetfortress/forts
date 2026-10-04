@@ -1,5 +1,5 @@
 # OTLP → Prometheus bridge for the fort's rustfs — the twin of
-# fleet/apps/luxor/rustfs/otel-collector.yaml, which says why: rustfs has
+# flux/apps/luxor/rustfs/otel-collector.yaml, which says why: rustfs has
 # NO /metrics endpoint and only pushes OTLP (RUSTFS_OBS_ENDPOINT,
 # release.yaml obs_endpoint), and a store with no metrics is how luxor's
 # scanner log firehose filled a disk unseen (2026-09-14). This collector

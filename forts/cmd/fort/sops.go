@@ -40,7 +40,7 @@ func (s sopsCLI) Decrypt(path string) ([]byte, error) {
 }
 
 // EncryptInPlace runs under the repo's creation rules from the repo
-// root, so the path-scoped rule for fleet/apps/<fort>/ picks the
+// root, so the path-scoped rule for flux/apps/<fort>/ picks the
 // fort's recipients (identity must be minted first — fort mint's job).
 func (s sopsCLI) EncryptInPlace(path string) error {
 	return s.EncryptWith(filepath.Join(s.root, ".sops.yaml"), path)

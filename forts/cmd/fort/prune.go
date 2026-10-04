@@ -169,7 +169,7 @@ func pruneKeyHint(tier string) string {
 	case pruneTierB2:
 		return "Mint it: fort b2-key pruning --write, then sops set it into the file (the verb prints the command)"
 	case pruneTierRustfs:
-		return "Its value is the `prune` identity of rustfs-central's provider contract (fleet/apps/luxor/rustfs-central)"
+		return "Its value is the `prune` identity of rustfs-central's provider contract (flux/apps/luxor/rustfs-central)"
 	}
 	return ""
 }

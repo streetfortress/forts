@@ -44,12 +44,12 @@ Consequences worth knowing:
 |---|---|---|
 | ● | `nixos/secrets/<host>.yaml` — `k3s-token`, `wireguard-private-key`, `ssh-host-key` + `.pub`, `flux-sops-age-key`, `flux-git-deploy-key` | new file written whole and encrypted once; missing keys added with `sops set` |
 | ○ | `nixos/.sops.yaml` — a `# BEGIN/END fort sops rule: <host>` block for `secrets/<host>.yaml`, recipients = the shared admin set + the host | always |
-| ○ | `wireguard/peers.json` — `.peers.<host>` with `wg_vpn_ip`, `public_key`, and `wg_endpoint_ip` (the manifest's `mesh_endpoint`, else the lab `[libvirt] ip`, else `[dns]` name.zone) | always |
-| ◆ | `wireguard/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `deployer`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
-| ◆ | `wireguard/known_hosts` — the host's ssh host key, keyed by name and mesh address; a line under another key is refused | the line is absent |
-| ○ | `.sops.yaml` — the fleet rule for `fleet/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `fleet/infrastructure` rule | always |
-| ◆ | `fleet/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
-| ◆ | `fleet/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
+| ○ | `mesh/peers.json` — `.peers.<host>` with `wg_vpn_ip`, `public_key`, and `wg_endpoint_ip` (the manifest's `mesh_endpoint`, else the lab `[libvirt] ip`, else `[dns]` name.zone) | always |
+| ◆ | `mesh/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `deployer`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
+| ◆ | `mesh/known_hosts` — the host's ssh host key, keyed by name and mesh address; a line under another key is refused | the line is absent |
+| ○ | `.sops.yaml` — the fleet rule for `flux/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `flux/infrastructure` rule | always |
+| ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
+| ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
 | · | gitea deploy key `flux-<host>`, read-only, on `sfi/deployments` | always; registered under `--write` only |
 | · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
@@ -151,12 +151,12 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
   cluster recipient  age1…
 ● nixos/secrets/sfi-x.yaml             k3s-token, wireguard-private-key, … — minted, sops-encrypted
 ○ nixos/.sops.yaml                     + rule secrets/sfi-x.yaml → 3 shared recipient(s) + host age1…
-○ wireguard/peers.json                 + .peers.sfi-x (10.1.0.55, endpoint sfi-x.streetfortress.cloud)
-◆ wireguard/ssh_config                 re-rendered — Host sfi-x → deployer@10.1.0.55
-◆ wireguard/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
-○ .sops.yaml                           + rule fleet/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
-◆ fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (gains the sfi-x recipient)
-◆ fleet/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
+○ mesh/peers.json                 + .peers.sfi-x (10.1.0.55, endpoint sfi-x.streetfortress.cloud)
+◆ mesh/ssh_config                 re-rendered — Host sfi-x → deployer@10.1.0.55
+◆ mesh/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
+○ .sops.yaml                           + rule flux/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
+◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (gains the sfi-x recipient)
+◆ flux/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
 · gitea deploy key flux-sfi-x: would register (read-only)
 
 dry run — nothing minted (mint --write).

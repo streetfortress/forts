@@ -7,7 +7,7 @@
 # secrets inside state are encrypted per-value by the passphrase provider
 # (passphrase itself sops-managed).
 #
-#   pulumi login file://$(git rev-parse --show-toplevel)/forts/pulumi/state
+#   pulumi login file://$(git rev-parse --show-toplevel)/provisioning/pulumi/state
 #   pulumi stack init web3 --secrets-provider passphrase
 #   pulumi preview -s web3 --diff
 #

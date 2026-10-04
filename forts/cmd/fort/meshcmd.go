@@ -13,8 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fort ssh-config [--write] — render wireguard/ssh_config and
-// wireguard/known_hosts from the tree (mesh.go). mint and dismantle keep
+// fort ssh-config [--write] — render mesh/ssh_config and
+// mesh/known_hosts from the tree (mesh.go). mint and dismantle keep
 // them current as a side effect of their own edit; this verb is the
 // whole-fleet render: after a hand edit to peers.json, to backfill the
 // key lines of forts minted before the file existed, or just to read
@@ -161,7 +161,7 @@ func (p *sshConfigPlan) apply(tool secretsTool) error {
 func (p *sshConfigPlan) report(w io.Writer, written bool) {
 	fmt.Fprintf(w, "ssh-config   (%d mesh peer(s): %d fort(s), %d hand-managed)\n", p.peers, p.forts, p.peers-p.forts)
 	if p.sshConfig != "" {
-		fmt.Fprintf(w, "◆ %-24s rendered from %s + provisioning/forts/*.toml\n", sshConfigPath, peersPath)
+		fmt.Fprintf(w, "◆ %-24s rendered from %s + forts/*.toml\n", sshConfigPath, peersPath)
 	} else {
 		fmt.Fprintf(w, "○ %-24s unchanged\n", sshConfigPath)
 	}

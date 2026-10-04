@@ -28,7 +28,7 @@ func TestRenderScaffold(t *testing.T) {
 
 	cloud := byPath(render(t, "cloud-fort", hosts["cloud-fort"]))
 	lab := byPath(render(t, "lab-fort", hosts["lab-fort"]))
-	// nix host dir (2) + fleet/clusters (fleet) + the apps root + the
+	// nix host dir (2) + flux/clusters (fleet) + the apps root + the
 	// cluster's monitoring on the hub and the hub kustomization append.
 	for _, m := range []map[string]string{cloud, lab} {
 		if len(m) != 2+len(fleet)+1+2 {
@@ -64,8 +64,8 @@ func TestRenderScaffold(t *testing.T) {
 		}
 	}
 	for _, f := range fleet {
-		if _, ok := cloud[filepath.Join("fleet/clusters/cloud-fort", f)]; !ok {
-			t.Errorf("cloud: missing fleet/clusters/cloud-fort/%s", f)
+		if _, ok := cloud[filepath.Join("flux/clusters/cloud-fort", f)]; !ok {
+			t.Errorf("cloud: missing flux/clusters/cloud-fort/%s", f)
 		}
 	}
 
@@ -96,21 +96,21 @@ func TestRenderScaffold(t *testing.T) {
 		if !strings.Contains(sec, "secrets/"+name+".yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") {
 			t.Errorf("%s secrets.nix wrong:\n%s", name, sec)
 		}
-		cv := m["fleet/clusters/"+name+"/cluster-vars.yaml"]
+		cv := m["flux/clusters/"+name+"/cluster-vars.yaml"]
 		if !strings.Contains(cv, "CLUSTER_NAME: "+name) {
 			t.Errorf("%s cluster-vars wrong:\n%s", name, cv)
 		}
-		if !strings.Contains(m["fleet/clusters/"+name+"/flux-system/flux-instance.yaml"], "path: fleet/clusters/"+name) {
+		if !strings.Contains(m["flux/clusters/"+name+"/flux-system/flux-instance.yaml"], "path: flux/clusters/"+name) {
 			t.Errorf("%s flux-instance sync path wrong", name)
 		}
-		if !strings.Contains(m["fleet/clusters/"+name+"/apps.yaml"], "path: ./fleet/apps/"+name) {
+		if !strings.Contains(m["flux/clusters/"+name+"/apps.yaml"], "path: ./flux/apps/"+name) {
 			t.Errorf("%s apps.yaml path wrong", name)
 		}
-		if !strings.Contains(m["fleet/apps/"+name+"/kustomization.yaml"], "- sops-canary.yaml") {
+		if !strings.Contains(m["flux/apps/"+name+"/kustomization.yaml"], "- sops-canary.yaml") {
 			t.Errorf("%s apps root kustomization lacks the canary", name)
 		}
 	}
-	if !strings.Contains(cloud["fleet/clusters/cloud-fort/cluster-vars.yaml"], "MESH_IP: 10.1.0.98") {
+	if !strings.Contains(cloud["flux/clusters/cloud-fort/cluster-vars.yaml"], "MESH_IP: 10.1.0.98") {
 		t.Errorf("cloud MESH_IP wrong")
 	}
 
@@ -209,7 +209,7 @@ func TestRenderScaffold(t *testing.T) {
 	}
 }
 
-// The committed fleet/clusters dirs are what the templates render — the
+// The committed flux/clusters dirs are what the templates render — the
 // generator reproduces the tree the playbook-era cluster-init laid down (modulo nothing:
 // these files carry no hand edits today).
 func TestScaffoldMatchesCommittedClusters(t *testing.T) {
@@ -221,12 +221,12 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	for name, h := range hosts {
 		for _, f := range render(t, name, h) {
 			// The cluster's monitoring on the hub is rendered for every
-			// flux cluster, luxor's own included; fleet/clusters/luxor
+			// flux cluster, luxor's own included; flux/clusters/luxor
 			// was bootstrapped by hand and carries a bespoke apps layer
 			// (databasus-configs) and pre-module comments — the exception
 			// its manifest's header records, not a template drift.
 			isMon := strings.HasPrefix(f.path, clusterMonitoringDir+"/")
-			if !isMon && (name == "luxor" || !strings.HasPrefix(f.path, "fleet/clusters/")) {
+			if !isMon && (name == "luxor" || !strings.HasPrefix(f.path, "flux/clusters/")) {
 				continue
 			}
 			if got := readFile(t, filepath.Join(repo, f.path)); got != string(f.content) {

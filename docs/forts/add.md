@@ -37,7 +37,7 @@ an apps root (scaffold first), and on an app dir that already exists —
 The captured report for symbology on a fresh cloud fort:
 
 ```
-fleet/apps/sfi-x/   (chart 0.1.9)
+flux/apps/sfi-x/   (chart 0.1.9)
 ● gateway/
   ● certificate-symbology.yaml   letsencrypt, symbology.sfi-x.streetfortress.cloud
   ● gateway.yaml                 http listener only
@@ -65,7 +65,7 @@ fleet/apps/sfi-x/   (chart 0.1.9)
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/symbology, tag 0.1.9
   ● route.yaml                   HTTPRoute symbology.sfi-x.streetfortress.cloud → symbology-ui:3000
   ◆ secrets.sops.yaml            seeded
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 ● valkey/
   ● acl-symbology.yaml           JSON6902 add /spec/values/auth/aclUsers/symbology
   ● forts.contract.yaml          valkey-users: default + symbology
@@ -113,7 +113,7 @@ empty is left out altogether. The report says so where the seed line
 normally goes:
 
 ```
-fleet/apps/sfi-x/   (chart 0.1.0)
+flux/apps/sfi-x/   (chart 0.1.0)
 ● gateway/
   …
 ○ kustomization.yaml             + gateway, moment-tally-website
@@ -123,7 +123,7 @@ fleet/apps/sfi-x/   (chart 0.1.0)
   ● release.yaml                 wire: none; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.1.0
   ● route.yaml                   HTTPRoute moment-tally-website.sfi-x.lofi → moment-tally-website:3000
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 
 staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.
 then: review, commit, PR — flux applies on merge.
@@ -145,14 +145,14 @@ the app dir alone — `namespace.yaml`, `repository.yaml`,
 says what the absence costs, because nothing else can:
 
 ```
-fleet/apps/sfi-x/   (chart 0.0.0-pr.48.108.g42d6bce)
+flux/apps/sfi-x/   (chart 0.0.0-pr.48.108.g42d6bce)
 ○ kustomization.yaml             + moment-tally-website
 ● moment-tally-website/
   ● kustomization.yaml
   ● namespace.yaml
   ● release.yaml                 wire: none; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.0.0-pr.48.108.g42d6bce
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 
 note: the chart ships no forts.contract.yaml. This app gets no key gate: `fort check`
       cannot see a chart bump that starts to need a key. The chart adopts the

@@ -1,5 +1,5 @@
 # Read-only ops kubeconfig (#90): renders the ops-ro ServiceAccount token
-# (fleet/infrastructure/configs/ops-readonly.yaml) into
+# (flux/infrastructure/configs/ops-readonly.yaml) into
 # /var/lib/sfi/kubeconfig-ro — the everyday kubeconfig for humans, local
 # and fetched (`just fetch-kubeconfig`). The admin k3s.yaml is root-only
 # 0600; using it directly IS the break-glass event (README Key
@@ -32,16 +32,16 @@
 { config, lib, pkgs, ... }:
 
 let
-  peers = (builtins.fromJSON (builtins.readFile ../../../wireguard/peers.json)).peers;
+  peers = (builtins.fromJSON (builtins.readFile ../../../mesh/peers.json)).peers;
   meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
   server = if meshIp != null then meshIp else "127.0.0.1";
 in
 {
   # Applied by k3s at start, so the ops-ro token exists before flux does.
-  # Same file the fleet applies (fleet/infrastructure/configs/) — see the
+  # Same file the fleet applies (flux/infrastructure/configs/) — see the
   # header for why both, and for how the fleet's copy retires.
   services.k3s.manifests.ops-readonly.source =
-    ../../../fleet/infrastructure/configs/ops-readonly.yaml;
+    ../../../flux/infrastructure/configs/ops-readonly.yaml;
 
   # Read access to the rendered file; production.nix adds deployer.
   users.groups.kubeops = { };

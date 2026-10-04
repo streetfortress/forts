@@ -29,8 +29,8 @@ func TestMint(t *testing.T) {
 	repo := estateRoot(t)
 	const host = "mint-fort"
 	tmp := t.TempDir()
-	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
-		"fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
+		"flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
 	for _, rel := range files {
 		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 	}
@@ -52,8 +52,8 @@ func TestMint(t *testing.T) {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
-	write("fleet/apps/"+host+"/kustomization.yaml", "resources: []\n")
-	write("fleet/clusters/"+host+"/apps.yaml", "kind: Kustomization\n")
+	write("flux/apps/"+host+"/kustomization.yaml", "resources: []\n")
+	write("flux/clusters/"+host+"/apps.yaml", "kind: Kustomization\n")
 
 	p, err := planMint(tmp, host, tool, gitea, false)
 	if err != nil {
@@ -108,15 +108,15 @@ func TestMint(t *testing.T) {
 	if !strings.Contains(fleet, "      - "+p.cluster.recipient+" # cluster: "+host+"\n") {
 		t.Error("infrastructure recipient line missing")
 	}
-	peers := readFile(t, filepath.Join(tmp, "wireguard/peers.json"))
+	peers := readFile(t, filepath.Join(tmp, "mesh/peers.json"))
 	if !strings.Contains(peers, `"`+host+`": {`) || !strings.Contains(peers, `"wg_endpoint_ip": "`+host+`.example.cloud"`) || !strings.Contains(peers, `"public_key": "`+p.wg.public+`"`) {
 		t.Errorf("peer:\n%s", peers)
 	}
 	if len(*registered) != 1 || (*registered)[0].Title != "flux-"+host || !strings.HasPrefix((*registered)[0].Key, "ssh-ed25519 ") {
 		t.Errorf("gitea: %+v", *registered)
 	}
-	for _, want := range []string{"● nixos/secrets/" + host + ".yaml", "○ nixos/.sops.yaml", "○ wireguard/peers.json", "○ .sops.yaml", "◆ fleet/infrastructure/", "◆ fleet/apps/" + host + "/sops-canary.yaml", "registered flux-" + host, "staged.",
-		"◆ wireguard/ssh_config", "Host " + host + " → deployer@10.1.0.97", "◆ wireguard/known_hosts", "+ " + host + ",10.1.0.97"} {
+	for _, want := range []string{"● nixos/secrets/" + host + ".yaml", "○ nixos/.sops.yaml", "○ mesh/peers.json", "○ .sops.yaml", "◆ flux/infrastructure/", "◆ flux/apps/" + host + "/sops-canary.yaml", "registered flux-" + host, "staged.",
+		"◆ mesh/ssh_config", "Host " + host + " → deployer@10.1.0.97", "◆ mesh/known_hosts", "+ " + host + ",10.1.0.97"} {
 		if !strings.Contains(rep, want) {
 			t.Errorf("report lacks %q:\n%s", want, rep)
 		}
@@ -214,7 +214,7 @@ func TestMint(t *testing.T) {
 	if err := d.apply(&fakeTool{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json"} {
+	for _, rel := range []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json"} {
 		if got := readFile(t, filepath.Join(tmp, rel)); got != original[rel] {
 			t.Errorf("%s after mint+dismantle differs from the original", rel)
 		}
@@ -273,8 +273,8 @@ func TestMintPlainFort(t *testing.T) {
 	repo := estateRoot(t)
 	const host = "mint-plain"
 	tmp := t.TempDir()
-	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
-		"fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
+		"flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
 	for _, rel := range files {
 		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 	}
@@ -332,7 +332,7 @@ func TestMintPlainFort(t *testing.T) {
 	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
 		t.Error("nixos rule missing")
 	}
-	if !strings.Contains(readFile(t, filepath.Join(tmp, "wireguard/peers.json")), `"`+host+`": {`) {
+	if !strings.Contains(readFile(t, filepath.Join(tmp, "mesh/peers.json")), `"`+host+`": {`) {
 		t.Error("peer missing")
 	}
 	if len(*registered) != 1 || (*registered)[0].Title != "flux-"+host {
@@ -354,7 +354,7 @@ func TestMintPlainFort(t *testing.T) {
 	if err := d.apply(&fakeTool{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json"} {
+	for _, rel := range []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json"} {
 		if got := readFile(t, filepath.Join(tmp, rel)); got != original[rel] {
 			t.Errorf("%s after mint+dismantle differs from the original", rel)
 		}

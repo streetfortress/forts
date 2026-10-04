@@ -23,7 +23,7 @@ the primitives rather than fattening one.
 
 ## What it renders
 
-From `provisioning/forts/<host>.toml`:
+From `forts/<host>.toml`:
 
 ```
 nixos/hosts/<host>/
@@ -34,16 +34,16 @@ nixos/hosts/<host>/
 ● secrets.nix        sops-nix wiring: the host's age identity is derived from
                      its ssh host key; declares wireguard-private-key when the
                      manifest has mesh_ip
-fleet/clusters/<host>/
+flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
-● flux-system/flux-instance.yaml             sync path fleet/clusters/<host>
+● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
 ● flux-system/kustomization.yaml
 ● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
-● apps.yaml                                  → fleet/apps/<host>
-fleet/apps/<host>/
+● apps.yaml                                  → flux/apps/<host>
+flux/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
-fleet/apps/luxor/monitoring/
+flux/apps/luxor/monitoring/
 ● clusters/<host>.yaml                       dead man's switch (metrics, logs), edge Alertmanager datasource[, PVBackupNotConfigured]
 ○ kustomization.yaml                         + clusters/<host>.yaml
 ```
@@ -89,7 +89,7 @@ file on the hub:
 ```
 ● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
-fleet/apps/luxor/monitoring/
+flux/apps/luxor/monitoring/
 ● clusters/sfi-lab-x.yaml             mesh scrape target (node-exporter), HostDown
 ○ kustomization.yaml                  + clusters/sfi-lab-x.yaml
 ```
@@ -98,7 +98,7 @@ fleet/apps/luxor/monitoring/
 `production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`): `hardened.nix`,
 `lab-host.nix`, `ops/deployer.nix` and `shell.nix`, with `wireguard.nix`,
 `auto-rebuild.nix`, and the LAN and zram blocks of the lab VM. Nothing
-under `fleet/`: there is no cluster to sync and no canary to prove
+under `flux/`: there is no cluster to sync and no canary to prove
 decryption. `secrets.nix` declares no `k3s-token`. The file is the estate's
 from then on: an account, a service, a role is plain NixOS written below
 the imports, and the framework names none of it.
@@ -126,7 +126,7 @@ reported `○ exists — kept` and never touched. So:
   are never clobbered;
 - a re-run after a template change shows what would be *new*, not a diff
   against your edits;
-- the committed `fleet/clusters/*` dirs are still byte-identical to a
+- the committed `flux/clusters/*` dirs are still byte-identical to a
   fresh render (the test `TestScaffoldMatchesCommittedClusters` says so —
   luxor, hand-bootstrapped, is the recorded exception).
 

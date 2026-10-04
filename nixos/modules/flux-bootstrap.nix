@@ -24,7 +24,7 @@
 #
 # The FluxInstance manifest is NOT duplicated here: the flake's source is
 # the whole repo, so the module applies the very file flux later owns
-# (fleet/clusters/<cluster>/flux-system/flux-instance.yaml).
+# (flux/clusters/<cluster>/flux-system/flux-instance.yaml).
 #
 # Consumers declare the two extra host secrets in nixos/secrets/<host>.yaml
 # (flux-sops-age-key = the cluster's age key, flux-git-deploy-key = a
@@ -32,7 +32,7 @@
 #
 #   sfi.flux-bootstrap = {
 #     enable = true;
-#     cluster = "luxor";   # → fleet/clusters/luxor
+#     cluster = "luxor";   # → flux/clusters/luxor
 #   };
 { config, lib, pkgs, ... }:
 
@@ -40,7 +40,7 @@ let
   cfg = config.sfi.flux-bootstrap;
 
   fluxInstanceManifest =
-    ../../fleet + "/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
+    ../../flux + "/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
 
   knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
 in
@@ -52,7 +52,7 @@ in
 
     cluster = lib.mkOption {
       type = lib.types.str;
-      description = "Cluster name; the FluxInstance at fleet/clusters/<cluster>/flux-system/ is applied.";
+      description = "Cluster name; the FluxInstance at flux/clusters/<cluster>/flux-system/ is applied.";
     };
 
     operatorVersion = lib.mkOption {

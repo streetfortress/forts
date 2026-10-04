@@ -2,7 +2,7 @@
 
 Design for the service-scaffolding half of the fort CLI: how a chart
 declares what it needs, how `fort add` turns that into reviewed manifests
-under `fleet/apps/<fort>/`, and how CI refuses a fort whose wiring does
+under `flux/apps/<fort>/`, and how CI refuses a fort whose wiring does
 not match the chart it pins. Decisions recorded here were taken in the
 2026-09-13 design session; the sequencing at the end is deliberately
 incremental (base case first, one provider per PR, decommissioning
@@ -28,7 +28,7 @@ One file name, one schema, two locations:
   artifact, one version pin: the contract cannot skew from the chart it
   describes.
 - **Beside the fort's manifests** — the same file name in
-  `fleet/apps/<fort>/<app>/`, **optional**, an *overlay* merged on top of
+  `flux/apps/<fort>/<app>/`, **optional**, an *overlay* merged on top of
   the chart's: fort keys win, `sources` and `env:` refs are fort-only,
   `requires.<x>.provider` is overridable. It exists only when the fort
   deviates from convention — a non-default provider placement, a
@@ -176,7 +176,7 @@ Same file name and schema, in the fort's app dir, present only when
 needed:
 
 ```yaml
-# fleet/apps/<fort>/<app>/forts.contract.yaml — OVERLAY on the chart's
+# flux/apps/<fort>/<app>/forts.contract.yaml — OVERLAY on the chart's
 contract: v1
 requires:
   postgres.db:
@@ -213,7 +213,7 @@ secret:
 Pure generator: reads the chart's contract, the fort's manifest,
 and the existing fort tree; writes **new files** and **appends lines to
 kustomization resource/patch lists**; never rewrites an existing file.
-Refuses if `fleet/apps/<fort>/<app>/` exists (scaffold's force-no
+Refuses if `flux/apps/<fort>/<app>/` exists (scaffold's force-no
 semantics). Everything is staged for a PR; nothing is applied. Optional
 requirements are provisioned by default (`--without valkey` skips one),
 so the out-of-the-box result is the full topology.
@@ -241,9 +241,9 @@ writes its own block by hand — `upgrade.remediation.retries: 0` and
 argument. Those two values are also flux's behaviour when the block is
 absent, so the point of writing them is the decision, not the numbers.
 The release then parks at `Ready=False`, `FluxResourceNotReady`
-(`fleet/infrastructure/configs/monitoring/rules-edge.yaml`) pages at
+(`flux/infrastructure/configs/monitoring/rules-edge.yaml`) pages at
 15m, and a human chooses the next step.
-`fleet/apps/sfi-fort-zenbook/gitea/` is the release that named this
+`flux/apps/sfi-fort-zenbook/gitea/` is the release that named this
 exception (#482). Its neighbours `gitea-actions/` and `renovate/` keep
 `-1` on both halves, because a runner and a CronJob carry no schema.
 `fort add` still renders `-1` on both halves for every new app: the
@@ -276,7 +276,7 @@ Secret against. The chart takes the gate the day it ships the file.
 **Base case** (chart with `secret` + `http` only — sfi-website today):
 
 ```
-fleet/apps/<fort>/<app>/
+flux/apps/<fort>/<app>/
   kustomization.yaml       namespace, repository, release, secrets.sops.yaml (listed, absent until seeded), route, monitoring
   namespace.yaml
   repository.yaml          OCIRepository pinned to the version fort add resolved; certSecretRef for gitea.zen.lofi
@@ -285,14 +285,14 @@ fleet/apps/<fort>/<app>/
   route.yaml               HTTPRoute → contract.http
   monitoring.yaml          PodMonitor if contract.metrics
   (no forts.contract.yaml — the chart's is the contract)
-fleet/apps/<fort>/gateway/  created from template on first http need: http listener only,
+flux/apps/<fort>/gateway/  created from template on first http need: http listener only,
   gateway.yaml              the lab step-ca issuer (or nothing on cloud forts, where
   cluster-issuer-*.yaml     letsencrypt is shared infrastructure), and the catch-all
   redirect-https.yaml       http→https RequestRedirect route (#232 — the gap the first
                             curl on the drill fort found)
   certificate-<app>.yaml
   listener-<app>.yaml      JSON6902 patch: add /spec/listeners/- (+ one line in gateway/kustomization.yaml `patches:`)
-fleet/apps/<fort>/kustomization.yaml   + `- <app>`
+flux/apps/<fort>/kustomization.yaml   + `- <app>`
 ```
 
 The listener patch is the one designed exception to "new files only":
@@ -313,10 +313,10 @@ with new files + kustomization lines:
 | `valkey` | `valkey/` from PR #182's staging template (cache profile) or luxor's (persistent) | `acl-<app>.yaml` JSON6902 patch adding `auth.aclUsers.<app>`; key `<app>` added to the existing `valkey-users` contract → seeder's **add-missing-keys** mode (`sops set`) |
 | `s3` | `rustfs/` from luxor's template (in-cluster only, no route): the instance, its OTLP→Prometheus bridge and `RustfsDown` rule, the bucket Job, the `rustfs-iam` CronJob, the contract with the root pair and `rustfs-users` | `policies/<app>.json` (get/put/list/delete on `<app>`, nothing else); one `rc bucket create` line in the bucket Job; one `files:` entry in the `rustfs-policies` generator; key `<app>` added to the `rustfs-users` contract → seeder's **add-missing-keys** mode. The CronJob reconciles users and policies into the instance on a 15 min interval and removes any user the contract no longer declares |
 
-Operators (CNPG) stay fleet-wide in `fleet/infrastructure/controllers`;
+Operators (CNPG) stay fleet-wide in `flux/infrastructure/controllers`;
 `fort add` never touches the infrastructure layer. If an operator ever
 becomes per-fort optional, that is a separate change to how
-`fleet/clusters/<fort>/infrastructure.yaml` selects controllers, and
+`flux/clusters/<fort>/infrastructure.yaml` selects controllers, and
 `fort check --all` gets an invariant ("fort requires postgres → cnpg
 present").
 
@@ -496,7 +496,7 @@ fort seed sfi-fort-e33e2d5
 the tree (● new, ○ existing + appended lines, ◆ written by seed):
 
 ```
-fleet/apps/sfi-fort-e33e2d5/
+flux/apps/sfi-fort-e33e2d5/
 ○ kustomization.yaml            + gateway, valkey, symbology
 ● gateway/                      first http need → from template
     kustomization.yaml          resources: issuer, gateway.yaml, redirect-https.yaml, certificate-symbology.yaml; patches: listener-symbology.yaml
@@ -588,7 +588,7 @@ The fort follows the PR head without a deployments commit per
 iteration by pinning a semver *filter* rather than a tag:
 
 ```yaml
-# fleet/apps/sfi-fort-e33e2d5/symbology/repository.yaml — preview pin
+# flux/apps/sfi-fort-e33e2d5/symbology/repository.yaml — preview pin
 spec:
   ref:
     semver: ">=0.0.0-0"

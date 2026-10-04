@@ -1,4 +1,4 @@
-fleet/apps/lab-fort/   (chart 0.1.0)
+flux/apps/lab-fort/   (chart 0.1.0)
 ○ gateway/
   ● certificate-uploads.yaml     step-ca, uploads.lab-fort.lofi
   ○ kustomization.yaml           + certificate-uploads.yaml; patches: + listener-uploads.yaml
@@ -18,7 +18,7 @@ fleet/apps/lab-fort/   (chart 0.1.0)
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/uploads, tag 0.1.0
   ● route.yaml                   HTTPRoute uploads.lab-fort.lofi → uploads:8080
   ◆ secrets.sops.yaml            seeded
-  ● step-ca-root.pem             copy of fleet/infrastructure/configs/step-ca-root.pem
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed lab-fort --write

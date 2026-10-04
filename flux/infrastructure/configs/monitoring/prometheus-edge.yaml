@@ -79,8 +79,8 @@ spec:
     fsGroup: 65534
     runAsNonRoot: true
 
-  # Central Prometheus on luxor (wireguard/peers.json), NodePort 30990 —
-  # fleet/apps/luxor/monitoring/mesh-services.yaml. Mesh IP, not luxor.lofi:
+  # Central Prometheus on luxor (mesh/peers.json), NodePort 30990 —
+  # flux/apps/luxor/monitoring/mesh-services.yaml. Mesh IP, not luxor.lofi:
   # the name is a dual A record and only survives here because Go's dialer
   # retries every answer — the paging-critical path shouldn't depend on
   # client dialer behavior (the same ambiguity broke fluent-bit outright).
@@ -97,7 +97,7 @@ spec:
 
   # Select monitors and rules everywhere, EXCEPT rules marked for the
   # central/fleet-wide set — on luxor those belong to the ThanosRuler
-  # (fleet/apps/luxor/monitoring) and must not be evaluated twice.
+  # (flux/apps/luxor/monitoring) and must not be evaluated twice.
   serviceMonitorSelector: {}
   serviceMonitorNamespaceSelector: {}
   podMonitorSelector: {}

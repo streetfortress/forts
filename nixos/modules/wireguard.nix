@@ -1,6 +1,6 @@
 # WireGuard mesh membership. Reusable across hosts: the local peer is picked by
 # hostname, so any host whose networking.hostName matches a key in
-# wireguard/peers.json can import this. Requires the sops secret
+# mesh/peers.json can import this. Requires the sops secret
 # `wireguard-private-key` (declared in the host's secrets module).
 #
 # Mesh observability (#121): a root-side timer exports per-peer WireGuard
@@ -9,12 +9,12 @@
 # the all-prod fleet. Labels use peer names from the same peers.json the
 # config is built from, so drift alerts read as hostnames, not pubkeys.
 # The WireGuardPeerSilent / WireGuardMetricsStale rules live in the edge
-# rule set (fleet/infrastructure/configs/monitoring/rules-edge.yaml):
+# rule set (flux/infrastructure/configs/monitoring/rules-edge.yaml):
 # mesh-health must evaluate locally with the mesh down.
 { config, lib, pkgs, ... }:
 
 let
-  peersData = builtins.fromJSON (builtins.readFile ../../wireguard/peers.json);
+  peersData = builtins.fromJSON (builtins.readFile ../../mesh/peers.json);
   selfName = config.networking.hostName;
   self = peersData.peers.${selfName};
   otherPeers = lib.filterAttrs (n: _: n != selfName) peersData.peers;

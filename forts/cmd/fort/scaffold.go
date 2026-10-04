@@ -75,7 +75,7 @@ type scaffoldFile struct {
 
 // scaffold renders a host's generated surface from its manifest:
 // the nix host dir (default.nix in the lab or cloud shape, secrets.nix)
-// and, for a flux cluster, fleet/clusters/<host>/ + the apps root
+// and, for a flux cluster, flux/clusters/<host>/ + the apps root
 // kustomization — the files the playbook-era cluster-init laid down for
 // lab VMs, one generator for lab and cloud now. Pure
 // generator with force-no semantics per file: the manifest seeds the host
@@ -231,7 +231,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		return nil, fmt.Errorf("%s: mesh_ip is required — every fort is a mesh member", host)
 	}
 
-	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/*.gotpl", "templates/scaffold/fleet/*.gotpl")
+	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/*.gotpl", "templates/scaffold/flux/*.gotpl")
 	if err != nil {
 		return nil, err
 	}
@@ -279,15 +279,15 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		}
 		return append(out, hubMonitoringFiles(host, b, plainMonitoringNote)...), nil
 	}
-	clusters := filepath.Join("fleet/clusters", host)
+	clusters := filepath.Join("flux/clusters", host)
 	plan = append(plan,
 		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
-		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path fleet/clusters/" + host},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path flux/clusters/" + host},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.MeshIP},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
-		struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ fleet/apps/" + host},
-		struct{ path, tpl, note string }{filepath.Join("fleet/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ flux/apps/" + host},
+		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
 	)
 	var out []scaffoldFile
 	for _, p := range plan {

@@ -146,7 +146,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 	}
 
 	// The seed, when this run carries one (fort provision does; a bare
-	// `pulumi preview` from forts/pulumi does not, and ignoreChanges keeps
+	// `pulumi preview` from provisioning/pulumi does not, and ignoreChanges keeps
 	// the recorded value for an existing instance either way). Secret from
 	// the first moment the engine sees it.
 	var metadatas linode.InstanceMetadataArrayInput
@@ -251,7 +251,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		// Per-fort service hostnames (umami.<host>.<zone> today; the
 		// fleet's <service>.<host> convention) resolve via one wildcard
 		// rather than a record per service — the gateway listener +
-		// Certificate are already keyed that way in fleet/apps/<host>.
+		// Certificate are already keyed that way in flux/apps/<host>.
 		_, err = linode.NewDomainRecord(ctx, name+"-dns-wildcard", &linode.DomainRecordArgs{
 			DomainId:   pulumi.Int(*domain.Id),
 			Name:       pulumi.String("*." + host.DNS.Name),

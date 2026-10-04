@@ -2,7 +2,7 @@
 
 A **fort** is one host: one NixOS machine, one pulumi stack named after it,
 and one single-node k3s cluster that flux
-reconciles from `fleet/clusters/<host>` + `fleet/apps/<host>`. Everything
+reconciles from `flux/clusters/<host>` + `flux/apps/<host>`. Everything
 about it — the node config, its identity, its workloads, the state that
 says it exists — lives in this repo, and the `fort` CLI (`forts/cmd/fort`)
 is the one tool that moves a fort through its life. There is no playbook,
@@ -54,7 +54,7 @@ Every fort change follows the same beat, and the reasons are the rules.
    *absent* from `origin/main` — the merged dismantle PR is the deliberate
    act `protect: true` was guarding for.
 4. **Commit the pulumi state as its own PR.** Apply verbs write the file
-   backend under `forts/pulumi/state/` and stage it. That PR carries no
+   backend under `provisioning/pulumi/state/` and stage it. That PR carries no
    code, just the checkpoint: it is the provenance of the host's birth (or
    death), and `fort preview --all` is red until it lands.
 
@@ -65,12 +65,12 @@ checkpoint in git history is an audit trail no backend gives you for free.
 ## Birth of a fort
 
 ```
-provisioning/forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
+forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
                                  mesh_ip, [dns], the provider table; fort check --all
-fort scaffold <host> --write  ← nixos/hosts/<host>/, fleet/clusters/<host>/, apps root
+fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary;
-                                 the fort's block in wireguard/ssh_config + its
-                                 host key in wireguard/known_hosts (ssh-config.md)
+                                 the fort's block in mesh/ssh_config + its
+                                 host key in mesh/known_hosts (ssh-config.md)
                               → PR → merge
 fort image <host>             ← nix build (the variant from the manifest); the output
                                  is the artifact, no secret inside (#659)
@@ -135,9 +135,9 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |
 | nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
 
-`PULUMI_BACKEND_URL` is forced to this checkout's `forts/pulumi/state` by
+`PULUMI_BACKEND_URL` is forced to this checkout's `provisioning/pulumi/state` by
 every verb, so a `pulumi login` elsewhere can never redirect state into
-another worktree. The stock `pulumi … -s <host>` from `forts/pulumi` under
+another worktree. The stock `pulumi … -s <host>` from `provisioning/pulumi` under
 the same environment is always a first-class escape hatch.
 
 **Without a TTY** (an agent, a script, CI) pass `--yes` to the apply
@@ -162,3 +162,35 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [fort configuration contracts](fort-configuration-contracts.md) — the
   contract schema, overlays, the gate, chart-author guidelines (the #144
   design document)
+
+## The estate layout (v1, 2026-10-04)
+
+What the verbs read and write in an estate, by directory. Decided in
+sfi/deployments#525 and applied to the CLI with the split (sfi/deployments#385,
+step 3); sfi/deployments itself moves to it at sfi/deployments#675.
+
+```
+forts/<host>.toml                the manifests: one file per fort, the declaration
+nixos/
+  hosts/<host>/                  default.nix + secrets.nix, rendered by scaffold, then the estate's
+  secrets/<host>.yaml            the fort's sops file, written by mint
+  modules/                       the estate's own modules (the framework's come from the flake input)
+  .sops.yaml                     the per-host rules, a marker block per fort
+flux/
+  clusters/<host>/               the FluxInstance and the cluster's Kustomizations
+  apps/<host>/                   the apps root; fort add renders into it
+  infrastructure/                the shared layer every cluster applies
+mesh/
+  peers.json                     who is on the mesh and where; mint adds, dismantle removes
+  ssh_config, known_hosts        rendered from peers.json + the manifests
+provisioning/
+  secrets.yaml                   the fleet secrets (gitea token, restic password, ...)
+  console-passwords.yaml         the console registry
+  pulumi/                        the project file, Pulumi.<host>.yaml per stack, and state/ (the file:// backend)
+.sops.yaml                       the flux rules: one per cluster, plus the shared infrastructure rule
+```
+
+`provisioning/pulumi/Pulumi.yaml` is the estate's: it names the program
+(`main:`), which the framework provides. Until `fort init` renders it, a
+new estate writes it by hand.
+

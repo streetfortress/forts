@@ -1,6 +1,6 @@
 # ssh-config and wg-conf — the client side of the mesh
 
-`wireguard/peers.json` says who is on the mesh and where; the manifests
+`mesh/peers.json` says who is on the mesh and where; the manifests
 say what each fort is. Everything a *client* needs to reach them used to
 be hand-kept on top of that — `Host` aliases in `.files`, the account per
 fort class, a `ProxyJump` for machines off the mesh, a host-key prompt on
@@ -9,7 +9,7 @@ dismantle left one behind (#183, #434). Two verbs render it instead:
 
 | verb | kind | renders | from |
 |---|---|---|---|
-| `fort ssh-config [--write]` | author | `wireguard/ssh_config`, `wireguard/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
+| `fort ssh-config [--write]` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
 | `fort wg-conf <member>` | read | a member's own `wg0` on stdout | peers.json |
 
 `fort mint` and `fort dismantle` keep the two files current as they add
@@ -18,7 +18,7 @@ a hand edit to peers.json, to backfill, or to read what the tree says.
 `fort check --all` fails on a stale `ssh_config` and warns on a fort
 without a key line.
 
-## `wireguard/ssh_config`
+## `mesh/ssh_config`
 
 One `Host` block per mesh peer, in name order. Roaming clients (the
 `clients` table) are not ssh targets and are left out.
@@ -63,7 +63,7 @@ name whichever alias or address was typed. A fort's successor
 reuses a mesh address with a new key: keyed by address that is "REMOTE
 HOST IDENTIFICATION HAS CHANGED"; keyed by name it is a new host.
 
-## `wireguard/known_hosts`
+## `mesh/known_hosts`
 
 One line per fort, `<fort>,<mesh ip> ssh-ed25519 …`, so the first login
 is prompt-free — the mirror of what `auto-rebuild.nix` does for gitea's key.
@@ -90,8 +90,8 @@ From `~/.ssh/config`, after anything of your own — the first value ssh
 finds wins, so local overrides go above the `Include`:
 
 ```
-Include ~/deployments/wireguard/ssh_config
-UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/wireguard/known_hosts
+Include ~/deployments/mesh/ssh_config
+UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/mesh/known_hosts
 ```
 
 `~/deployments` is the checkout; macmini has one. New

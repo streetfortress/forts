@@ -13,7 +13,7 @@ read in full before anything is written.
 
 ## What a contract asks for
 
-Every app dir under `fleet/apps/<fort>/` carries a `forts.contract.yaml`
+Every app dir under `flux/apps/<fort>/` carries a `forts.contract.yaml`
 — the fort-side **full form** where one is committed, else the chart's
 own contract (pulled at the tag `repository.yaml` pins) merged with the
 fort's overlay. A contract names each Secret file, its metadata, and its
@@ -34,12 +34,12 @@ the refs, not declared. The contract schema itself is in
 ## What it does
 
 ```
-fleet/apps/sfi-x/sites-db/   (forts.contract.yaml (full form))
+flux/apps/sfi-x/sites-db/   (forts.contract.yaml (full form))
   ◆ secrets-backup.sops.yaml     seeded (2 keys)
   ◆ secrets-symbology.sops.yaml  seeded (2 keys)
-fleet/apps/sfi-x/valkey/
+flux/apps/sfi-x/valkey/
   ◆ secrets.sops.yaml            seeded (2 keys)
-fleet/apps/sfi-x/symbology/     (chart 0.1.9 contract + overlay)
+flux/apps/sfi-x/symbology/     (chart 0.1.9 contract + overlay)
   ◆ secrets.sops.yaml            seeded (8 keys); absent until set: STRIPE_SECRET_KEY
 
 dry run — nothing seeded (seed --write).
