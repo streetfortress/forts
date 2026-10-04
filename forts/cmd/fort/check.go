@@ -11,6 +11,7 @@ import (
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/contract"
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
+	"gopkg.in/yaml.v3"
 )
 
 // check is the merge gate (docs/forts/fort-configuration-contracts.md, "The gate is the
@@ -156,6 +157,7 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 		return nil, fmt.Errorf("%s: no fleet/apps tree (%w)", fort, err)
 	}
 	var out []finding
+	consumed := sopsRefs{}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -191,6 +193,7 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 				out = append(out, checkDeclared(dir, ff, c)...)
 			}
 		}
+		consumed.collect(dir, ff)
 		if c != nil {
 			out = append(out, checkWires(o.root, fort, dir, c)...)
 			if c.File == contract.LegacyFileName {
@@ -204,7 +207,138 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 			out = append(out, finding{"ok", dir, source})
 		}
 	}
+	out = append(out, checkProviderNamespaces(o.root, fort)...)
+	out = append(out, checkRustfsIdentities(o.root, fort, consumed)...)
 	return out, nil
+}
+
+// providerLabel is the one well-known label every provider namespace a
+// fort renders carries, value = the provider type (#326). It is what
+// lets `fort check` and a kubectl selector enumerate the forts-managed
+// set before the namespaces are grouped under one prefix.
+const providerLabel = "forts.sfi/provider"
+
+// checkProviderNamespaces: each provider dir on the fort labels its
+// namespace. A dir that is there is an instance the fort runs, whatever
+// rendered it, so the label is required on every one.
+func checkProviderNamespaces(root, fort string) []finding {
+	var out []finding
+	for _, typ := range contract.Types {
+		dir := filepath.Join("fleet/apps", fort, providerDirs[typ])
+		if !exists(root, dir) {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(root, dir, "namespace.yaml"))
+		if err != nil {
+			out = append(out, finding{"error", dir, "namespace.yaml: " + err.Error()})
+			continue
+		}
+		var ns struct {
+			Metadata struct {
+				Labels map[string]string `yaml:"labels"`
+			} `yaml:"metadata"`
+		}
+		if err := yaml.Unmarshal(raw, &ns); err != nil {
+			out = append(out, finding{"error", dir, "namespace.yaml: " + err.Error()})
+			continue
+		}
+		if got := ns.Metadata.Labels[providerLabel]; got != typ {
+			out = append(out, finding{"error", dir, fmt.Sprintf("namespace.yaml: label %s: %s missing (got %q) — every provider namespace a fort renders carries it", providerLabel, typ, got)})
+		}
+	}
+	return out
+}
+
+// sopsRefs is the set of (provider file, key) pairs the fort's effective
+// contracts source — "fleet/apps/<fort>/rustfs/users.sops.yaml" → keys —
+// gathered while the gate walks the app dirs, for the reverse trace.
+type sopsRefs map[string]map[string]bool
+
+func (r sopsRefs) collect(dir string, ff *FullForm) {
+	add := func(s Spec) {
+		if s.Sops == nil {
+			return
+		}
+		parts := strings.SplitN(s.Sops[1], ".", 2)
+		if len(parts) != 2 || (parts[0] != "stringData" && parts[0] != "data") {
+			return
+		}
+		file := filepath.Clean(filepath.Join(dir, s.Sops[0]))
+		if r[file] == nil {
+			r[file] = map[string]bool{}
+		}
+		r[file][parts[1]] = true
+	}
+	for _, v := range ff.Vars {
+		add(v.Spec)
+	}
+	for _, sf := range ff.Secrets {
+		for _, k := range sf.Keys {
+			add(k.Spec)
+		}
+	}
+}
+
+// checkRustfsIdentities is the reverse of checkVars for the fort's
+// rustfs: checkVars proves every app's sops ref lands on a key of
+// rustfs-users; this proves every key of rustfs-users is sourced by an
+// app on the fort. The forward trace catches a missing credential; the
+// reverse catches an orphaned one — a live identity scoped to a bucket
+// whose objects are still there, which is worse than a stale dir. The
+// policy document is traced the same way: the reconciler skips a user
+// with no policies/<name>.json, and a document with no user is dead
+// text.
+func checkRustfsIdentities(root, fort string, consumed sopsRefs) []finding {
+	dir := filepath.Join("fleet/apps", fort, "rustfs")
+	if !exists(root, dir) {
+		return nil
+	}
+	var out []finding
+	declared := map[string]bool{}
+	users := filepath.Join(dir, "users.sops.yaml")
+	if raw, _, err := contract.Read(filepath.Join(root, dir)); err == nil && isFullForm(raw) {
+		if ff, err := parseFullForm(raw); err == nil {
+			for _, sf := range ff.Secrets {
+				if sf.File == "users.sops.yaml" {
+					for _, k := range sf.Keys {
+						declared[k.Name] = true
+					}
+				}
+			}
+		}
+	}
+	if exists(root, users) {
+		if names, err := secretKeyNames(filepath.Join(root, users)); err == nil {
+			for _, n := range names {
+				declared[n] = true
+			}
+		}
+	}
+	policies, _ := filepath.Glob(filepath.Join(root, dir, "policies", "*.json"))
+	hasPolicy := map[string]bool{}
+	for _, p := range policies {
+		hasPolicy[strings.TrimSuffix(filepath.Base(p), ".json")] = true
+	}
+	names := make([]string, 0, len(declared))
+	for n := range declared {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if !consumed[users][n] {
+			out = append(out, finding{"error", dir, "ORPHANED identity " + n + ": no app on " + fort + " sources users.sops.yaml stringData." + n + " — a live credential with no consumer; drop the key from " + contract.FileName + " and users.sops.yaml (the CronJob then removes the user)"})
+		}
+		if !hasPolicy[n] {
+			out = append(out, finding{"error", dir, "identity " + n + " has no policies/" + n + ".json — the IAM CronJob skips a user with no policy document"})
+		}
+	}
+	for n := range hasPolicy {
+		if !declared[n] {
+			out = append(out, finding{"warning", dir, "policies/" + n + ".json names no declared identity — dead document, or a key missing from " + contract.FileName})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].msg < out[j].msg })
+	return out
 }
 
 // checkSecrets: each Secret file the contract describes exists and

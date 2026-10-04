@@ -101,3 +101,46 @@ func appendMapEntry(text, anchor, entry string) (string, error) {
 	out = append(out, lines[end+1:]...)
 	return strings.Join(out, "\n"), nil
 }
+
+// appendMapEntryUnder is appendMapEntry scoped to one section: the anchor
+// is searched only after the line that is exactly <section>, for files
+// that carry the same anchor twice (the rustfs contract's two `keys:`).
+func appendMapEntryUnder(text, section, anchor, entry string) (string, error) {
+	lines := strings.Split(text, "\n")
+	at := -1
+	for i, l := range lines {
+		if l == section {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return "", fmt.Errorf("no %q line", section)
+	}
+	head := strings.Join(lines[:at+1], "\n")
+	tail, err := appendMapEntry(strings.Join(lines[at+1:], "\n"), anchor, entry)
+	if err != nil {
+		return "", err
+	}
+	return head + "\n" + tail, nil
+}
+
+// appendAfterLast inserts <line> after the last line that starts with
+// <prefix> (whitespace included) — the bucket Job's `rc bucket create`
+// run, where order is meaningless and the shape is one line per app.
+func appendAfterLast(text, prefix, line string) (string, error) {
+	lines := strings.Split(text, "\n")
+	at := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, prefix) {
+			at = i
+		}
+	}
+	if at < 0 {
+		return "", fmt.Errorf("no line starting with %q", prefix)
+	}
+	out := append([]string{}, lines[:at+1]...)
+	out = append(out, line)
+	out = append(out, lines[at+1:]...)
+	return strings.Join(out, "\n"), nil
+}

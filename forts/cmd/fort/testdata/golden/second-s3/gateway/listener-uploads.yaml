@@ -1,0 +1,17 @@
+# https listener for uploads — appended to the Gateway by the patch
+# entry in kustomization.yaml. Hostname follows the lab convention
+# <app>.<fort>.lofi; the certificate is certificate-uploads.yaml.
+- op: add
+  path: /spec/listeners/-
+  value:
+    name: https-uploads
+    port: 8443
+    protocol: HTTPS
+    hostname: uploads.lab-fort.lofi
+    tls:
+      mode: Terminate
+      certificateRefs:
+        - name: uploads-tls
+    allowedRoutes:
+      namespaces:
+        from: All

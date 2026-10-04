@@ -1,0 +1,17 @@
+# https listener for gallery — appended to the Gateway by the patch
+# entry in kustomization.yaml. Hostname follows the lab convention
+# <app>.<fort>.lofi; the certificate is certificate-gallery.yaml.
+- op: add
+  path: /spec/listeners/-
+  value:
+    name: https-gallery
+    port: 8443
+    protocol: HTTPS
+    hostname: gallery.lab-fort.lofi
+    tls:
+      mode: Terminate
+      certificateRefs:
+        - name: gallery-tls
+    allowedRoutes:
+      namespaces:
+        from: All

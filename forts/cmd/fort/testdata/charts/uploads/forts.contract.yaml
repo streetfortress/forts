@@ -1,0 +1,17 @@
+# Test fixture contract (see Chart.yaml): s3 alone, composed into one
+# key the way an S3 client library's env var takes it, plus http.
+contract: v1
+secret:
+  keys:
+    # Both halves of the identity in one key: the access key is non-secret
+    # and inlines, the secret key becomes the var over rustfs-users.
+    S3_CREDENTIALS: {template: "${s3.files.accessKey}:${s3.files.secretKey}"}
+requires:
+  s3:
+    files:
+      wire:
+        endpoint: s3.endpoint
+        bucket: s3.bucket
+http:
+  service: uploads
+  port: 8080

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - repository.yaml
+  - release.yaml
+  - otel-collector.yaml
+  - monitoring.yaml
+  - bucket-job.yaml
+  - iam-cronjob.yaml
+  # Secret rustfs-credentials (the root pair) and Secret rustfs-users
+  # (key per app identity: {{ .App }}), both seeded from
+  # forts.contract.yaml; listed-but-absent = the pre-merge kustomize guard.
+  - secrets.sops.yaml
+  - users.sops.yaml
+
+configMapGenerator:
+  # One policy document per identity, name = the identity = the app. The
+  # IAM CronJob attaches policies/<name>.json to the user <name> with no
+  # script edit, so a tenant registration is one file here and one line
+  # below. The namespace is NOT inherited by a generator (a namespaced
+  # object without one fails the whole apps layer at apply, 2026-09-16).
+  - name: rustfs-policies
+    namespace: rustfs
+    files:
+      - policies/{{ .App }}.json

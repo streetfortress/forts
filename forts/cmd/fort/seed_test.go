@@ -503,3 +503,71 @@ func TestSecretlessAppNeedsNoSeed(t *testing.T) {
 		t.Errorf("check: want one ok finding, got %+v", findings)
 	}
 }
+
+// The s3 provider seeds like the other two (#326): on the fresh-s3
+// golden tree the rustfs dir orders before the app whose var points
+// into its users file, its contract produces two Secrets (the root pair
+// and the identity list), and the app's S3 key resolves from the
+// identity's value. The on-the-fly path agrees: the chart's contract
+// alone derives the same var over the same sops ref.
+func TestSeedS3Provider(t *testing.T) {
+	const fort = "lab-fort"
+	tmp := t.TempDir()
+	copyManifest(t, "testdata", tmp, fort)
+	apps := filepath.Join(tmp, "fleet/apps", fort)
+	copyTree(t, "testdata/golden/fresh-s3", apps)
+	os.Remove(filepath.Join(apps, "REPORT.txt"))
+	tool := &fakeTool{plain: map[string]string{
+		filepath.Join(apps, "rustfs/users.sops.yaml"):             "stringData:\n  gallery: s3secret\n",
+		filepath.Join(apps, "sites-db/secrets-gallery.sops.yaml"): "stringData:\n  username: gallery\n  password: dbpw\n",
+	}}
+	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true}
+	plans, err := planSeed(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, p := range plans {
+		order = append(order, filepath.Base(p.dir))
+	}
+	if want := []string{"rustfs", "sites-db", "gallery"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("order: want %v, got %v", want, order)
+	}
+	if n := len(plans[0].files); n != 2 {
+		t.Fatalf("rustfs: want 2 Secret files (root pair + identities), got %d", n)
+	}
+	for _, p := range plans {
+		if err := p.execute(o); err != nil {
+			t.Fatalf("%s: %v", p.dir, err)
+		}
+	}
+	names, err := secretKeyNames(filepath.Join(apps, "rustfs/users.sops.yaml"))
+	if err != nil || !reflect.DeepEqual(names, []string{"gallery"}) {
+		t.Errorf("rustfs-users keys: %v (%v)", names, err)
+	}
+	names, err = secretKeyNames(filepath.Join(apps, "rustfs/secrets.sops.yaml"))
+	if err != nil || !reflect.DeepEqual(names, []string{"RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY"}) {
+		t.Errorf("rustfs-credentials keys: %v (%v)", names, err)
+	}
+	raw := readFile(t, filepath.Join(apps, "gallery/secrets.sops.yaml"))
+	if !strings.Contains(raw, `S3_SECRET_KEY: "s3secret"`) || !strings.Contains(raw, `DATABASE_PASSWORD: "dbpw"`) {
+		t.Errorf("gallery secret lacks the provider values:\n%s", raw)
+	}
+
+	// On the fly: drop the rendered full form, derive from the chart.
+	os.Remove(filepath.Join(apps, "gallery/forts.contract.yaml"))
+	ff, _, source, err := effectiveContract(seedOpts{root: tmp, fort: fort, chartDir: "testdata/charts/gallery"}, filepath.Join("fleet/apps", fort, "gallery"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(source, "chart contract") {
+		t.Errorf("source: %s", source)
+	}
+	var vars []string
+	for _, v := range ff.Vars {
+		vars = append(vars, v.Name+"="+v.Spec.YAML())
+	}
+	if want := []string{"db_password={sops: [../sites-db/secrets-gallery.sops.yaml, stringData.password]}", "media_secret_key={sops: [../rustfs/users.sops.yaml, stringData.gallery]}"}; !reflect.DeepEqual(vars, want) {
+		t.Errorf("derived vars: want %v, got %v", want, vars)
+	}
+}

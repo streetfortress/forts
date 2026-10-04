@@ -26,7 +26,7 @@ keys, each key one of:
 | `sops: [file, path]` | copies a value from another sops file — a provider's output (`sites-db/secrets-<app>.sops.yaml` `stringData.password`), or a sibling fort's file (`../../<fort>/…`, the drill-fort precedent for cloning staging) |
 | `external` | leaves the key **absent until set** — an API key from a third party; `--set KEY` prompts for one value (or reads stdin) |
 
-Providers come first: `sites-db` and `valkey` dirs are seeded before the
+Providers come first: `sites-db`, `valkey` and `rustfs` dirs are seeded before the
 apps whose `sops:` refs point into them, and the order is derived from
 the refs, not declared. The contract schema itself is in
 [fort configuration contracts](fort-configuration-contracts.md).

@@ -1,0 +1,11 @@
+# gallery's login role on the shared sites-db cluster — appended to
+# managed.roles by the patch entry in kustomization.yaml; the password
+# is sites-db-gallery-credentials (secrets-gallery.sops.yaml).
+- op: add
+  path: /spec/managed/roles/-
+  value:
+    name: gallery
+    ensure: present
+    login: true
+    passwordSecret:
+      name: sites-db-gallery-credentials

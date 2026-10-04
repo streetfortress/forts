@@ -1,0 +1,18 @@
+# Serving cert for the https-gallery listener; issued by step-ca via the
+# ACME http01 gateway solver (challenge routes attach to the http listener).
+# Requires gallery.lab-fort.lofi to resolve to this node in lab
+# DNS (dnsmasq on 10.0.0.2) — the ACME server dials the hostname back.
+# Until it does, cert-manager retries harmlessly and the listener serves
+# its self-signed placeholder.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gallery
+  namespace: traefik
+spec:
+  secretName: gallery-tls
+  dnsNames:
+    - gallery.lab-fort.lofi
+  issuerRef:
+    kind: ClusterIssuer
+    name: step-ca

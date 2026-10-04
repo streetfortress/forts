@@ -1,4 +1,10 @@
+# The fort's shared cache, in its own namespace like every provider. The
+# forts.sfi/provider label is the one every provider namespace a fort
+# renders carries: `fort check` requires it, and
+# `kubectl get ns -l forts.sfi/provider` enumerates the forts-managed set (#326).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: valkey
+  labels:
+    forts.sfi/provider: valkey

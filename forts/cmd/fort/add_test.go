@@ -155,6 +155,22 @@ func TestAppendHelpers(t *testing.T) {
 	if err != nil || out != "secrets:\n  f:\n    keys:\n      a: {generate: hex24}\n      b: {generate: hex24}\n" {
 		t.Errorf("appendMapEntry: %v\n%s", err, out)
 	}
+	// Two `keys:` anchors: the section picks the second.
+	two := "secrets:\n  root.sops.yaml:\n    keys:\n      A: {generate: hex8}\n  users.sops.yaml:\n    keys:\n      a: {generate: hex24}\n"
+	out, err = appendMapEntryUnder(two, "  users.sops.yaml:", "    keys:", "      b: {generate: hex24}")
+	if err != nil || out != two+"      b: {generate: hex24}\n" {
+		t.Errorf("appendMapEntryUnder: %v\n%s", err, out)
+	}
+	if _, err := appendMapEntryUnder(two, "  nope.sops.yaml:", "    keys:", "x"); err == nil {
+		t.Error("appendMapEntryUnder: missing section accepted")
+	}
+	out, err = appendAfterLast("a\n  rc bucket create r/x\n  rc ls r\n", "  rc bucket create ", "  rc bucket create r/y")
+	if err != nil || out != "a\n  rc bucket create r/x\n  rc bucket create r/y\n  rc ls r\n" {
+		t.Errorf("appendAfterLast: %v\n%s", err, out)
+	}
+	if _, err := appendAfterLast("a\n", "zz", "x"); err == nil {
+		t.Error("appendAfterLast: missing prefix accepted")
+	}
 }
 
 // --- helpers
@@ -305,6 +321,29 @@ func TestAddFollowMain(t *testing.T) {
 	})
 }
 
+// The s3 provider on a fresh lab fort (#326): gallery requires postgres
+// and s3, so the tree gets sites-db AND rustfs from template — the
+// rustfs instance born with its first tenant registered (bucket line,
+// policy document, identity key) — and the app contract carries one
+// var per provider over the conventional sops refs.
+func TestAddFreshS3(t *testing.T) {
+	testAddFresh(t, addFixture{fort: "lab-fort", golden: "testdata/golden/fresh-s3", chart: "gallery", version: "0.2.0"})
+}
+
+// A second s3 tenant on the same instance (#326): uploads is added after
+// gallery, so rustfs/ already exists and add registers rather than
+// creates — a new policy file, a bucket line, a configMapGenerator
+// entry and a contract key appended (○), users.sops.yaml marked for the
+// seeder's add-missing-keys. The golden is the whole tree after both
+// adds, with the second add's report.
+func TestAddSecondS3Tenant(t *testing.T) {
+	testAddFresh(t, addFixture{
+		fort: "lab-fort", golden: "testdata/golden/second-s3",
+		chart: "gallery", version: "0.2.0",
+		then: &addFixture{chart: "uploads", version: "0.1.0"},
+	})
+}
+
 // addFixture is one replay of `fort add` on a fresh fort: the manifest
 // fixture, the golden tree, the chart (its OCI ref and its pin), and
 // the flags the operator typed.
@@ -313,6 +352,9 @@ type addFixture struct {
 	chartDir                     string // default: testdata/charts/<chart>
 	http                         string // --http <service>:<port>
 	followMain                   bool   // --follow-main
+	// then: a second add on the same tree, whose report the golden
+	// records (the tenant-on-existing-instance path).
+	then *addFixture
 }
 
 func testAddFresh(t *testing.T, f addFixture) {
@@ -345,6 +387,21 @@ func testAddFresh(t *testing.T, f addFixture) {
 	}
 	if err := p.apply(); err != nil {
 		t.Fatal(err)
+	}
+	if f.then != nil {
+		p, err = planAdd(addOpts{
+			root: tmp, fort: fort,
+			ref:      "oci://gitea.zen.lofi/sfi/" + f.then.chart,
+			version:  f.then.version,
+			chartDir: "testdata/charts/" + f.then.chart,
+			without:  map[string]bool{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := p.apply(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var report strings.Builder
 	p.report(&report, true)

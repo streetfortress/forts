@@ -185,7 +185,7 @@ beside the gateway — per cluster, not shared, because a cloud cluster
 can never reach `step-ca.lofi` and a `Ready=False` issuer wedged web3's
 infrastructure health checks for hours.
 
-**Providers.** Rendered on first need from `templates/add/{postgres,valkey}`,
+**Providers.** Rendered on first need from `templates/add/{postgres,valkey,rustfs}`,
 then registered per tenant. The postgres instance's archive follows the
 manifest's `[backups] profile`: `production` renders the barman-cloud
 plugin with an `ObjectStore` on B2 (`s3://sfi-db-physical-backups/<fort>`),
@@ -201,12 +201,17 @@ role to `spec.managed.roles` (kept an empty list in the template so the
 patch has a target), and the tenant's credentials Secret in the
 provider's own contract; for valkey an ACL user patch and a key in
 `valkey-users`. The valkey `db` index is the count of existing
-`acl-*.yaml`. Both providers are one instance per fort by construction —
-the monolith is the decision — and neither is ever touched again by add
+`acl-*.yaml`. For s3 (#326) the first need renders `rustfs/` — luxor's
+instance without the route, its metrics bridge and `RustfsDown` rule, the
+bucket Job, the `rustfs-iam` CronJob, and a contract with the root pair
+and the identity list — and every tenant is `policies/<app>.json`
+(get/put/list/delete on bucket `<app>`, nothing else), a `rc bucket
+create` line, a `files:` entry in the policies generator and a key
+`<app>` in `rustfs-users`. The identity's name is its access key and its
+bucket. All three providers are one instance per fort by construction —
+the monolith is the decision — and none is ever touched again by add
 once its tenant is registered (`○ untouched — tenant already registered`).
-`s3` is declared in the contract vocabulary and not implemented; a
-required `s3` refuses, an optional one is skipped. Details in
-[`docs/infra/providers.md`](../infra/providers.md).
+Details in [`docs/infra/providers.md`](../infra/providers.md).
 
 ## What the contract wires
 
@@ -218,6 +223,8 @@ The chart declares its needs; the fort fills the values by convention:
 | postgres | `password` | secret-typed: a `sops:` ref into `../sites-db/secrets-<app>.sops.yaml`, only reachable from `secret.keys` templates |
 | valkey | `host` / `port` / `db` / `user` | `valkey.valkey.svc.cluster.local` / `6379` / next free index / `<app>` |
 | valkey | `password` | secret-typed, from `../valkey/secrets.sops.yaml` key `<app>` |
+| s3 | `endpoint` / `bucket` / `accessKey` | `http://rustfs-svc.rustfs.svc.cluster.local:9000` / `<app>` / `<app>` |
+| s3 | `secretKey` | secret-typed, from `../rustfs/users.sops.yaml` key `<app>` |
 
 `uri` outputs are deliberately not composed. Non-secret outputs go into
 HelmRelease values through `wire:`; secret-typed ones may only feed

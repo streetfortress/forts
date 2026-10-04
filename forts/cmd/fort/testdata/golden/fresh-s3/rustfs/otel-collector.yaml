@@ -1,0 +1,144 @@
+# OTLP → Prometheus bridge for the fort's rustfs — the twin of
+# fleet/apps/luxor/rustfs/otel-collector.yaml, which says why: rustfs has
+# NO /metrics endpoint and only pushes OTLP (RUSTFS_OBS_ENDPOINT,
+# release.yaml obs_endpoint), and a store with no metrics is how luxor's
+# scanner log firehose filled a disk unseen (2026-09-14). This collector
+# receives OTLP/HTTP on 4318, re-exposes the metrics in Prometheus text
+# format on 8889, and the edge Prometheus scrapes that via the chart's
+# ServiceMonitor (serviceMonitorSelector {}) — series arrive with the
+# fort's cluster label like every other in-cluster target, and the
+# RustFS dashboard on luxor keys on cluster + namespace.
+#
+# The contrib image, not the chart's default otelcol-k8s: the k8s
+# distribution has no prometheus exporter, only otlp/otlphttp/
+# loadbalancing. contrib carries it.
+#
+# Endpoints are written 0.0.0.0, not the chart's dollar-brace env
+# interpolation of MY_POD_IP: any dollar-brace expression inside this
+# file — values OR comments — goes through flux's STRICT post-build
+# envsubst first and fails the whole apps layer. The chart's defaults are
+# helm-rendered and never see envsubst, so null-ing them is safe.
+# Chart defaults: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: open-telemetry
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://open-telemetry.github.io/opentelemetry-helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-collector
+  namespace: rustfs
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: opentelemetry-collector
+      version: 0.173.1 # app 0.160.0
+      sourceRef:
+        kind: HelmRepository
+        name: open-telemetry
+        namespace: flux-system
+  values:
+    fullnameOverride: otel-collector
+    mode: deployment
+    replicaCount: 1
+
+    image:
+      repository: otel/opentelemetry-collector-contrib
+    command:
+      name: otelcol-contrib
+
+    # Metrics only. Everything else the chart wires by default (jaeger,
+    # zipkin, the collector's prometheus self-scrape receiver, the debug
+    # exporter, the logs and traces pipelines) is nulled out: rustfs
+    # exports traces and logs disabled (release.yaml), and a debug
+    # exporter on a metrics pipeline is a log line per datapoint —
+    # the exact failure mode this stack just recovered from.
+    config:
+      receivers:
+        jaeger: null
+        zipkin: null
+        prometheus: null
+        otlp:
+          protocols:
+            grpc: null
+            http:
+              endpoint: 0.0.0.0:4318
+      exporters:
+        debug: null
+        prometheus:
+          endpoint: 0.0.0.0:8889
+          # Keep OTel resource attributes (service.name, host.name, ...)
+          # out of the series labels: the job/instance/cluster labels the
+          # scrape adds are the fleet's identity, and rustfs's resource
+          # set is per-process noise that would fragment every series on
+          # a pod restart.
+          resource_to_telemetry_conversion:
+            enabled: false
+      service:
+        pipelines:
+          logs: null
+          traces: null
+          metrics:
+            receivers: [otlp]
+            processors: [memory_limiter, batch]
+            exporters: [prometheus]
+
+    ports:
+      otlp:
+        enabled: false
+      jaeger-compact:
+        enabled: false
+      jaeger-thrift:
+        enabled: false
+      jaeger-grpc:
+        enabled: false
+      zipkin:
+        enabled: false
+      otlp-http:
+        enabled: true
+      # The collector's own telemetry (8888) and the rustfs re-export
+      # (8889) are separate ports on purpose: two scrape endpoints, two
+      # job identities, so a collector restart is visible as its own
+      # event rather than as a gap in rustfs's series.
+      metrics:
+        enabled: true
+      prom-export:
+        enabled: true
+        containerPort: 8889
+        servicePort: 8889
+        protocol: TCP
+
+    # Scraped by the edge Prometheus (serviceMonitorSelector {}).
+    # The prometheus exporter stamps every series with rustfs's OTel
+    # resource identity (job="RustFS", an instance id) and its
+    # instrumentation scope; the scrape keeps its own job/instance and
+    # parks the exporter's as exported_*. None of it carries meaning
+    # here — one rustfs per cluster, keyed by cluster/namespace — so
+    # drop it. Inline per endpoint: the chart's top-level
+    # serviceMonitor.metricRelabelings renders after the endpoint list
+    # and only attaches to the LAST endpoint (verified with helm
+    # template), which would have left the rustfs endpoint untouched.
+    serviceMonitor:
+      enabled: true
+      metricsEndpoints:
+        - port: prom-export
+          interval: 30s
+          metricRelabelings:
+            - action: labeldrop
+              regex: otel_scope_.*|exported_job|exported_instance
+        - port: metrics
+          interval: 30s
+
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        # memory_limiter derives its ceiling from this (80% / 25% spike).
+        memory: 256Mi

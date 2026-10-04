@@ -1,0 +1,9 @@
+# Test fixture: a content app that requires postgres AND s3 (#326). The
+# contract beside this file exercises the s3 provider on a fresh fort —
+# instance from template, bucket + identity for the first tenant — with
+# the postgres tenant beside it, so the golden shows both providers'
+# vars in one app contract.
+apiVersion: v2
+name: gallery
+version: 0.2.0
+appVersion: "0.2.0"

@@ -6,3 +6,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: sites-db
+  # forts.sfi/provider: the one label every provider namespace a fort runs
+  # carries — `fort check` requires it; `kubectl get ns -l forts.sfi/provider`
+  # enumerates the set (#326).
+  labels:
+    forts.sfi/provider: postgres

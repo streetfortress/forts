@@ -226,7 +226,7 @@ Conventions that make the output deterministic (no flags for these):
 | Secret | `<app>-env` in namespace `<app>` |
 | postgres tenant | database `<app>`, role `<app>`, secret `sites-db-<app>-credentials`, per-tenant file `secrets-<app>.sops.yaml` in the provider dir |
 | valkey tenant | ACL user `<app>`, next free logical db, key `<app>` in the shared `valkey-users` secret |
-| s3 | bucket `<fort>-<app>` |
+| s3 tenant | bucket `<app>` (no fort prefix — [backups](../infra/backups.md), "Fort-local rustfs"), IAM identity `<app>` whose name is its access key, policy `policies/<app>.json`, key `<app>` in the shared `rustfs-users` secret |
 | hostname | `<app>.<fort>.streetfortress.cloud` unless `--hostname` (apex domains are always explicit) |
 | HelmRelease | `install.remediation.retries: -1` and `upgrade.remediation.retries: -1` — retry until ready, never park on a failed state waiting for an ops nudge (one exception, below) |
 
@@ -311,7 +311,7 @@ with new files + kustomization lines:
 |---|---|---|
 | `postgres` | `sites-db/` from the sfi-prod template (cluster, backup, contract) | `database-<app>.yaml` (Database CR, extensions); `role-<app>.yaml` JSON6902 patch adding the `managed.roles` entry; provider contract gains `secrets-<app>.sops.yaml` (`username` literal, `password` generate hex24) |
 | `valkey` | `valkey/` from PR #182's staging template (cache profile) or luxor's (persistent) | `acl-<app>.yaml` JSON6902 patch adding `auth.aclUsers.<app>`; key `<app>` added to the existing `valkey-users` contract → seeder's **add-missing-keys** mode (`sops set`) |
-| `s3` | `rustfs/` from luxor's template | bucket entry in the bucket Job; **credential model open** — luxor hands out the instance's root keys today; per-app IAM users via `mc admin user` in the same Job is the likely shape. Last in sequencing for that reason |
+| `s3` | `rustfs/` from luxor's template (in-cluster only, no route): the instance, its OTLP→Prometheus bridge and `RustfsDown` rule, the bucket Job, the `rustfs-iam` CronJob, the contract with the root pair and `rustfs-users` | `policies/<app>.json` (get/put/list/delete on `<app>`, nothing else); one `rc bucket create` line in the bucket Job; one `files:` entry in the `rustfs-policies` generator; key `<app>` added to the `rustfs-users` contract → seeder's **add-missing-keys** mode. The CronJob reconciles users and policies into the instance on a 15 min interval and removes any user the contract no longer declares |
 
 Operators (CNPG) stay fleet-wide in `fleet/infrastructure/controllers`;
 `fort add` never touches the infrastructure layer. If an operator ever
@@ -343,6 +343,15 @@ wiring from plaintext key names without any age key:
    committed file that carries the key.
 4. Every non-optional `requires` instance has its provider dir on the
    fort and its `wire` values paths set in the HelmRelease.
+5. Every provider dir on the fort (`sites-db/`, `valkey/`, `rustfs/`)
+   labels its namespace `forts.sfi/provider: <type>` — the one label that
+   lets the gate and `kubectl get ns -l forts.sfi/provider` enumerate the
+   forts-managed set (#326).
+6. `rustfs/`: every key of `rustfs-users` is sourced by an app on the
+   fort (an orphaned key is a live credential with no consumer —
+   **fail**), and has its `policies/<name>.json` (the CronJob skips a
+   user without one — **fail**); a policy document with no key warns.
+   The forward direction is rule 3.
 
 **Strict on every fort.** Every fort is the hardened host profile —
 that is what a fort is, not "serves users" — so there is
@@ -442,7 +451,7 @@ Two consequences to accept and record:
    **Backups stay fort-ops** (decided 2026-09-13): the CNPG barman
    archive is the sites-db template's, and a logical-backup CR
    (databasus-operator) would live fort-side too — its Storage target is
-   fort posture (the `s3` provider's open credential model) — until
+   fort posture (an app's bucket is the app's; a Storage CR is not) — until
    consistent patterns across apps justify contracting it, the way
    monitoring rules already do.
 8. **Size for the 4 GB shape**: requests set, one replica default,
@@ -673,7 +682,17 @@ superseded and stays only until the next fort is seeded with the Go one.
 
 `fort check` is the gate above, in CI as of this step.
 
-Not yet, in the order below: `fort rotate`, s3, remote providers,
+`fort add` renders the **s3** provider since #326: `rustfs/` from the
+embedded template on first need (the instance, its metrics bridge, the
+bucket Job, the IAM CronJob, a contract with the root pair and the
+identity list), then per tenant a policy document, a bucket line, a
+generator entry and a contract key. The identity is the app: bucket
+`<app>`, IAM user `<app>` (its name is its access key), one key `<app>`
+in `rustfs-users` that the app's contract reaches by `sops:`. Two
+goldens (`fresh-s3`, `second-s3`) cover the instance and the second
+tenant. Luxor's own rustfs is not on the template yet.
+
+Not yet, in the order below: `fort rotate`, remote providers,
 overlay `provider` overrides (placement is by convention), the
 `capabilities` list. `fort status`/`fort describe` (#224) are nice-to-haves
 behind the publication milestone (#160).
@@ -696,7 +715,8 @@ behind the publication milestone (#160).
    has monitoring"): red or green, so they belong to the gate, not to a
    readout. `fort status` / `fort describe` are #224, behind #160.
 7. **`fort rotate`** (+ the break-glass roll in its report).
-8. **s3**: bucket + the per-app credential decision.
+8. ~~**s3**: bucket + the per-app credential decision~~ (#326: bucket
+   `<app>`, one scoped identity per app, reconciled by a CronJob).
 9. **Remote providers** (`provider.fort`): mesh exposure of `-rw`
    Services, manifest-derived hosts.
 

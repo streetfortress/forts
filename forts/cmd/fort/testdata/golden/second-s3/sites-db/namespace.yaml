@@ -1,0 +1,12 @@
+# One shared namespace for the fort's postgres: a single CNPG cluster
+# that no app owns, so it gets its own namespace and the apps reach it
+# cross-namespace via the -rw Service. The forts.sfi/provider label is
+# the one every provider namespace a fort renders carries: `fort check`
+# requires it, and `kubectl get ns -l forts.sfi/provider` enumerates the
+# forts-managed set (#326).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sites-db
+  labels:
+    forts.sfi/provider: postgres

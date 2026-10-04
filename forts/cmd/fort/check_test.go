@@ -11,8 +11,10 @@ import (
 
 // The gate on a synthetic fort: a full-form dir that is complete, one
 // missing a key, a chart-contract dir with an unset required external
-// key, an unset wire value, and a provider ref into a file without the
-// key. Uses the fixture manifest and the symbology contract fixture.
+// key, an unset wire value, a provider ref into a file without the key,
+// a provider namespace without its label, and a rustfs identity nobody
+// sources (#326). Uses the fixture manifest and the symbology contract
+// fixture.
 func TestCheckFindings(t *testing.T) {
 	const fort = "lab-fort"
 	tmp := t.TempDir()
@@ -33,6 +35,21 @@ func TestCheckFindings(t *testing.T) {
 		}
 		return s + "sops: {}\n"
 	}
+	// provider namespaces: valkey labelled, sites-db NOT (one label
+	// finding), rustfs labelled
+	write("valkey/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: valkey\n  labels:\n    forts.sfi/provider: valkey\n")
+	write("sites-db/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sites-db\n")
+	write("rustfs/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: rustfs\n  labels:\n    forts.sfi/provider: s3\n")
+	// rustfs: two identities declared and seeded; gallery is sourced by
+	// the gallery app below and has its policy, orphan has neither a
+	// consumer nor a policy; dead.json names no identity
+	write("rustfs/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: rustfs-credentials, namespace: rustfs}\n    keys:\n      RUSTFS_ACCESS_KEY: {generate: hex8}\n      RUSTFS_SECRET_KEY: {generate: hex24}\n  users.sops.yaml:\n    metadata: {name: rustfs-users, namespace: rustfs}\n    keys:\n      gallery: {generate: hex24}\n      orphan: {generate: hex24}\n")
+	write("rustfs/secrets.sops.yaml", secret("rustfs-credentials", "rustfs", "RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY"))
+	write("rustfs/users.sops.yaml", secret("rustfs-users", "rustfs", "gallery", "orphan"))
+	write("rustfs/policies/gallery.json", "{}\n")
+	write("rustfs/policies/dead.json", "{}\n")
+	write("gallery/forts.contract.yaml", "vars:\n  media_secret_key: {sops: [../rustfs/users.sops.yaml, stringData.gallery]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: gallery-env, namespace: gallery}\n    keys:\n      S3_SECRET_KEY: {template: \"${media_secret_key}\"}\n")
+	write("gallery/secrets.sops.yaml", secret("gallery-env", "gallery", "S3_SECRET_KEY"))
 	// complete full-form provider
 	write("valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      symbology: {generate: hex24}\n")
 	write("valkey/secrets.sops.yaml", secret("valkey-users", "valkey", "default", "symbology"))
@@ -76,20 +93,27 @@ func TestCheckFindings(t *testing.T) {
 		"error legacy: chart contract declares STRIPE_SECRET_KEY — the fort-side",
 		"warning legacy: chart contract's optional key(s) not carried fort-side: RESEND_API_KEY",
 		"error legacy: requires.valkey.cache: release.yaml values unset: cache.db (db)",
+		"error sites-db: namespace.yaml: label forts.sfi/provider: postgres missing",
+		"error rustfs: ORPHANED identity orphan: no app on lab-fort sources users.sops.yaml stringData.orphan",
+		"error rustfs: identity orphan has no policies/orphan.json",
+		"warning rustfs: policies/dead.json names no declared identity",
+		"ok gallery: forts.contract.yaml (full form)",
+		"ok rustfs: forts.contract.yaml (full form)",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing finding %q in:\n%s", want, joined)
 		}
 	}
-	// valkey's wires are all set → no wire finding for it
-	for _, unwanted := range []string{"symbology: requires.valkey.cache: release.yaml"} {
+	// valkey's wires are all set → no wire finding for it; gallery is
+	// sourced, so it is no orphan; the labelled namespaces pass
+	for _, unwanted := range []string{"symbology: requires.valkey.cache: release.yaml", "identity gallery", "valkey: namespace.yaml", "rustfs: namespace.yaml"} {
 		if strings.Contains(joined, unwanted) {
 			t.Errorf("unexpected finding mentioning %q in:\n%s", unwanted, joined)
 		}
 	}
 	var sb strings.Builder
-	if n := reportFindings(&sb, fort, findings, true); n != 6 {
-		t.Errorf("errors: want 6, got %d\n%s", n, sb.String())
+	if n := reportFindings(&sb, fort, findings, true); n != 9 {
+		t.Errorf("errors: want 9, got %d\n%s", n, sb.String())
 	}
 	if !strings.Contains(sb.String(), "::error::") {
 		t.Errorf("annotations missing:\n%s", sb.String())

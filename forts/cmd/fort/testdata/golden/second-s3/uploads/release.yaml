@@ -1,0 +1,32 @@
+# uploads — HelmRelease rendered by `fort add` from the chart's contract:
+# the `wire:` values paths are filled from the fort's providers by
+# convention
+# (s3 → the shared rustfs, bucket and identity `uploads`); password-class
+# keys ride the uploads-env Secret. Retry forever: the first install
+# races its providers (and a preview pin races the images) — never park
+# on a failed release waiting for an ops nudge. Refine in place after
+# add: replicas for the node shape, non-secret env as values (never in
+# the Secret — a values change rolls pods), app-specific knobs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: uploads
+  namespace: uploads
+spec:
+  interval: 1h
+  releaseName: uploads
+  chartRef:
+    kind: OCIRepository
+    name: uploads
+    namespace: flux-system
+  install:
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1
+  values:
+    existingSecret: uploads-env
+    s3:
+      bucket: uploads
+      endpoint: http://rustfs-svc.rustfs.svc.cluster.local:9000

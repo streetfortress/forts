@@ -140,6 +140,7 @@ type view struct {
 	SelectorLines                               []string
 	Postgres                                    *pgTenant
 	Valkey                                      *vkTenant
+	S3                                          *s3Tenant
 	ValuesYAML                                  string
 	Vars                                        []ctrVar
 	Keys                                        []NamedSpec
@@ -155,6 +156,10 @@ type vkTenant struct {
 	Handle string
 	DB     int
 	Key    string // the Secret key carrying this user's password
+}
+type s3Tenant struct {
+	Handle string
+	Key    string // the Secret key carrying this identity's secret key
 }
 type ctrVar struct{ Name, Comment, File, Path string }
 
@@ -300,8 +305,7 @@ func planAdd(o addOpts) (*plan, error) {
 	// The Secret entry is added after the full form is derived: only a
 	// contract with keys names a Secret (#460).
 	values := map[string]any{}
-	outputs := map[string]map[string]string{} // "type.handle" → non-secret outputs
-	passwordVar := map[string]ctrVar{}        // "type.handle" → var
+	providers := map[string]providerBinding{} // "type.handle" → outputs + the secret output's var
 	// The sites-db archive key, when this add creates the instance on a
 	// production fort: listed with the chart's externals so the report
 	// says what to mint and how to set it.
@@ -322,8 +326,7 @@ func planAdd(o addOpts) (*plan, error) {
 			v.Postgres = &pgTenant{Handle: r.Handle, Extensions: r.Instance.Extensions}
 			v.TenantContractEntry = tenantContractEntry(app)
 			dbDir := filepath.Join(apps, "sites-db")
-			b := conventionalBinding(r.Type, r.Handle, app, 0)
-			outputs[key], passwordVar[key] = b.outputs, b.passwordVar
+			providers[key] = conventionalBinding(r.Type, r.Handle, app, 0)
 			tenant := func() {
 				p.add(action{path: filepath.Join(dbDir, "database-"+app+".yaml"), mark: '●', note: "Database CR" + extNote(r.Instance.Extensions), content: render("postgres/database.yaml.gotpl")})
 				p.add(action{path: filepath.Join(dbDir, "role-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/managed/roles/-", content: render("postgres/role.yaml.gotpl")})
@@ -387,8 +390,7 @@ func planAdd(o addOpts) (*plan, error) {
 				db = len(acls)
 			}
 			v.Valkey = &vkTenant{Handle: r.Handle, DB: db, Key: keyReferencing(c, r.Type, r.Handle)}
-			b := conventionalBinding(r.Type, r.Handle, app, db)
-			outputs[key], passwordVar[key] = b.outputs, b.passwordVar
+			providers[key] = conventionalBinding(r.Type, r.Handle, app, db)
 			if exists(o.root, vkDir) {
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "kustomization.yaml"), mark: '○', note: "patches: + acl-" + app + ".yaml",
@@ -412,13 +414,50 @@ func planAdd(o addOpts) (*plan, error) {
 				rootAdds = append(rootAdds, "valkey")
 			}
 		case "s3":
-			if r.Instance.Optional {
-				continue
+			if v.S3 != nil {
+				return nil, fmt.Errorf("one s3 instance per chart in v1")
 			}
-			return nil, fmt.Errorf("requires.s3.%s: the s3 provider is not implemented yet (docs/forts/fort-configuration-contracts.md sequencing)", r.Handle)
+			rsDir := filepath.Join(apps, "rustfs")
+			v.S3 = &s3Tenant{Handle: r.Handle, Key: keyReferencing(c, r.Type, r.Handle)}
+			providers[key] = conventionalBinding(r.Type, r.Handle, app, 0)
+			policy := filepath.Join(rsDir, "policies", app+".json")
+			switch {
+			case !exists(o.root, rsDir):
+				// Instance on first need, with this tenant already
+				// registered: its bucket line, its policy document, its
+				// identity key — the same shape a later append produces.
+				for _, f := range []string{"namespace.yaml", "repository.yaml", "release.yaml", "otel-collector.yaml", "iam-cronjob.yaml"} {
+					p.add(action{path: filepath.Join(rsDir, f), mark: '●', content: static("rustfs/" + f)})
+				}
+				p.add(action{path: filepath.Join(rsDir, "monitoring.yaml"), mark: '●', note: "PrometheusRule RustfsDown (scrape is the collector's ServiceMonitor)", content: static("rustfs/monitoring.yaml")})
+				p.add(action{path: filepath.Join(rsDir, "bucket-job.yaml"), mark: '●', note: "rc bucket create " + app, content: render("rustfs/bucket-job.yaml.gotpl")})
+				p.add(action{path: policy, mark: '●', note: "get/put/list/delete on bucket " + app + ", nothing else", content: render("rustfs/policy.json.gotpl")})
+				p.add(action{path: filepath.Join(rsDir, "kustomization.yaml"), mark: '●', note: "configMapGenerator rustfs-policies: policies/" + app + ".json", content: render("rustfs/kustomization.yaml.gotpl")})
+				p.add(action{path: filepath.Join(rsDir, contract.FileName), mark: '●', note: "rustfs-credentials (root pair) + rustfs-users: " + app, content: render("rustfs/forts.contract.yaml.gotpl")})
+				p.add(action{path: filepath.Join(rsDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
+				p.add(action{path: filepath.Join(rsDir, "users.sops.yaml"), mark: '◆', note: "seeded"})
+				rootAdds = append(rootAdds, "rustfs")
+			case exists(o.root, policy):
+				p.add(action{path: rsDir, mark: '○', note: "untouched — identity `" + app + "` already registered"})
+			default:
+				p.add(action{path: policy, mark: '●', note: "get/put/list/delete on bucket " + app + ", nothing else", content: render("rustfs/policy.json.gotpl")})
+				p.add(action{path: filepath.Join(rsDir, "bucket-job.yaml"), mark: '○', note: "+ rc bucket create " + app,
+					edit: func(s string) (string, error) {
+						return appendAfterLast(s, "              rc bucket create ", "              rc bucket create --ignore-existing r/"+app)
+					}})
+				p.add(action{path: filepath.Join(rsDir, "kustomization.yaml"), mark: '○', note: "configMapGenerator rustfs-policies: + policies/" + app + ".json",
+					edit: func(s string) (string, error) {
+						return appendMapEntry(s, "    files:", "      - policies/"+app+".json")
+					}})
+				p.add(action{path: filepath.Join(rsDir, contract.FileName), mark: '○', note: "rustfs-users: + key " + app,
+					edit: func(s string) (string, error) {
+						return appendMapEntryUnder(s, "  users.sops.yaml:", "    keys:", "      "+app+": {generate: hex24}")
+					}})
+				p.add(action{path: filepath.Join(rsDir, "users.sops.yaml"), mark: '◆', note: "+ key " + app + " (seeder add-missing-keys; until then: sops set)"})
+			}
 		}
 		for out, path := range r.Instance.Wire {
-			val, ok := outputs[key][out]
+			val, ok := providers[key].outputs[out]
 			if !ok {
 				return nil, fmt.Errorf("requires.%s.wire.%s: not a non-secret output of %s", key, out, r.Type)
 			}
@@ -428,10 +467,6 @@ func planAdd(o addOpts) (*plan, error) {
 
 	// --- the fort-side contract: chart keys with provider outputs
 	// resolved by convention (shared with fort seed's on-the-fly path).
-	providers := map[string]providerBinding{}
-	for key, out := range outputs {
-		providers[key] = providerBinding{outputs: out, passwordVar: passwordVar[key]}
-	}
 	vars, keys, externals, err := fullFormFromChart(c, providers)
 	if err != nil {
 		return nil, err
@@ -545,9 +580,9 @@ func parseHTTPFlag(s string) (*contract.HTTP, error) {
 }
 
 // rewriteTemplate turns a chart template (`${postgres.db.password}`,
-// `${postgres.db.host}`) into the fort-side form: password outputs
-// become `${<handle>_password}` vars backed by a sops ref, non-secret
-// outputs are inlined. A key whose provider was skipped (--without) is
+// `${postgres.db.host}`) into the fort-side form: the type's secret
+// output (`password`; `secretKey` for s3) becomes a `${<handle>_…}` var
+// backed by a sops ref, non-secret outputs are inlined. A key whose provider was skipped (--without) is
 // dropped if optional, an error otherwise.
 func rewriteTemplate(k contract.Key, providers map[string]providerBinding, vars *[]ctrVar) (string, bool, error) {
 	var fail error
@@ -565,7 +600,7 @@ func rewriteTemplate(k contract.Key, providers map[string]providerBinding, vars 
 			return m
 		}
 		switch field {
-		case "password":
+		case b.secretOutput:
 			if !hasVar(*vars, b.passwordVar.Name) {
 				*vars = append(*vars, b.passwordVar)
 			}
@@ -584,8 +619,11 @@ func rewriteTemplate(k contract.Key, providers map[string]providerBinding, vars 
 		return "", false, fail
 	}
 	if strings.Contains(out, "${") && !skip {
+		// What survives must be a var this rewrite introduced (the
+		// provider's secret output); anything else is a reference the
+		// chart wrote that nothing here resolves.
 		for _, m := range regexp.MustCompile(`\$\{[^}]*\}`).FindAllString(out, -1) {
-			if !strings.HasSuffix(m, "_password}") {
+			if !hasVar(*vars, strings.TrimSuffix(strings.TrimPrefix(m, "${"), "}")) {
 				return "", false, fmt.Errorf("secret.keys.%s: unresolved reference %s", k.Name, m)
 			}
 		}
@@ -612,7 +650,7 @@ func tenantContractEntry(app string) string {
 // keyReferencing names the Secret key whose template consumes the
 // instance's password (the lockstep pair the provider comments name).
 func keyReferencing(c *contract.Contract, typ, handle string) string {
-	needle := "${" + typ + "." + handle + ".password}"
+	needle := "${" + typ + "." + handle + "." + conventionalBinding(typ, handle, "", 0).secretOutput + "}"
 	for _, k := range c.Secret.Keys {
 		if strings.Contains(k.Template, needle) {
 			return k.Name
@@ -665,9 +703,14 @@ func (p *plan) report(w io.Writer, written bool) {
 	lastDir := ""
 	for _, a := range p.actions {
 		rel := strings.TrimPrefix(a.path, base+"/")
-		dir, file := filepath.Split(rel)
+		// Grouped by the instance or app dir, one level deep: a file in a
+		// subdirectory (rustfs/policies/<app>.json) lists under its
+		// instance with the subpath as its name, not as a dir of its own.
+		dir, file, _ := strings.Cut(rel, "/")
+		if file == "" {
+			dir, file = "", rel
+		}
 		if dir != "" {
-			dir = strings.TrimSuffix(dir, "/")
 			if dir != lastDir {
 				mark := '○'
 				if p.creates(filepath.Join(base, dir)) {
@@ -745,7 +788,7 @@ func (p *plan) creates(dir string) bool {
 }
 
 // parseAddTemplates registers every templates/add/<dir>/<file>.gotpl under
-// its dir-qualified name (three dirs carry a kustomization.yaml.gotpl).
+// its dir-qualified name (several dirs carry a kustomization.yaml.gotpl).
 func parseAddTemplates() (*template.Template, error) {
 	root := template.New("add")
 	dirs, err := addTemplates.ReadDir("templates/add")

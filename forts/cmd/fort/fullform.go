@@ -219,6 +219,10 @@ func yamlScalar(v string) string {
 type providerBinding struct {
 	outputs     map[string]string
 	passwordVar ctrVar
+	// secretOutput names the one secret-typed output of the type —
+	// `password` for postgres and valkey, `secretKey` for s3 — which a
+	// chart template may only reach through passwordVar.
+	secretOutput string
 }
 
 // providerDirs: the shared instance each provider type lives in on a
@@ -233,13 +237,25 @@ func conventionalBinding(typ, handle, app string, db int) providerBinding {
 	switch typ {
 	case "postgres":
 		return providerBinding{
-			outputs:     map[string]string{"host": "sites-db-rw.sites-db.svc.cluster.local", "port": "5432", "name": app, "user": app},
-			passwordVar: ctrVar{handle + "_password", "requires.postgres." + handle + " → the sites-db tenant role (lockstep pair).", "../sites-db/secrets-" + app + ".sops.yaml", "stringData.password"},
+			outputs:      map[string]string{"host": "sites-db-rw.sites-db.svc.cluster.local", "port": "5432", "name": app, "user": app},
+			passwordVar:  ctrVar{handle + "_password", "requires.postgres." + handle + " → the sites-db tenant role (lockstep pair).", "../sites-db/secrets-" + app + ".sops.yaml", "stringData.password"},
+			secretOutput: "password",
 		}
 	case "valkey":
 		return providerBinding{
-			outputs:     map[string]string{"host": "valkey.valkey.svc.cluster.local", "port": "6379", "db": fmt.Sprint(db), "user": app},
-			passwordVar: ctrVar{handle + "_password", "requires.valkey." + handle + " → the valkey-users ACL entry (lockstep pair).", "../valkey/secrets.sops.yaml", "stringData." + app},
+			outputs:      map[string]string{"host": "valkey.valkey.svc.cluster.local", "port": "6379", "db": fmt.Sprint(db), "user": app},
+			passwordVar:  ctrVar{handle + "_password", "requires.valkey." + handle + " → the valkey-users ACL entry (lockstep pair).", "../valkey/secrets.sops.yaml", "stringData." + app},
+			secretOutput: "password",
+		}
+	case "s3":
+		// The identity IS the app: bucket `<app>` (no fort prefix —
+		// docs/infra/backups.md, "Fort-local rustfs"), IAM user `<app>`,
+		// whose name is its access key; the secret half is the app's key
+		// in the instance's rustfs-users Secret (#326).
+		return providerBinding{
+			outputs:      map[string]string{"endpoint": "http://rustfs-svc.rustfs.svc.cluster.local:9000", "bucket": app, "accessKey": app},
+			passwordVar:  ctrVar{handle + "_secret_key", "requires.s3." + handle + " → the rustfs-users identity " + app + " (lockstep pair).", "../rustfs/users.sops.yaml", "stringData." + app},
+			secretOutput: "secretKey",
 		}
 	}
 	return providerBinding{}
