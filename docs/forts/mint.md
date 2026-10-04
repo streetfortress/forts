@@ -78,12 +78,16 @@ destroy`.
 - `restic-s3-env-b2` is **minted against the B2 API**, and the credential
   that mints it is an **operational input**: from the password
   manager, for the moment of a raise — `fort mint --write` prompts for
-  it (id echoed, key not), or reads `B2_KEY_ID` / `B2_APP_KEY` when set. It is deliberately not in `provisioning/secrets.yaml` beside
+  the key (not echoed), or reads `B2_APP_KEY` when set. It is deliberately not in `provisioning/secrets.yaml` beside
   `linode-token` — B2 does not enforce capability subsetting, so a key
   that can mint keys can mint one that deletes backups, and that really
   deletes (verified, #291). A credential which can destroy the recovery
   path does not get to sit where every `fort` invocation, and eventually
-  a CI recipient (#284), can read it.
+  a CI recipient (#284), can read it. Its **id** is a different thing
+  (#432): an identifier, echoed on every prompt and listed in every
+  `b2_list_keys` row, worth nothing without the secret. It sits in that
+  file as `b2-minting-key-id`, seeded once, so the prompt is one paste
+  and `B2_KEY_ID` is only an override.
 
 **The B2 guard is not the deploy key's.** A deploy key has a public half
 to compare; a B2 key's secret is shown exactly once and never again. So
@@ -94,7 +98,7 @@ the console into holding delete rights, which a name comparison never
 would. A same-named key whose id is not the repo's is refused by id, for
 a deliberate deletion — exactly as a mismatched deploy key is.
 
-Without `B2_KEY_ID` / `B2_APP_KEY`, a re-mint that needs to create
+Without `B2_APP_KEY`, a re-mint that needs to create
 nothing says so (`NOT verified`) and proceeds, and a dry run plans
 without asking; only a `--write` that must mint prompts for
 `sfi-b2-key-minting-key` — or, with no terminal to ask on, refuses and
@@ -198,7 +202,7 @@ carry `write:user`, and `agent-claude-oauth-token` beside it — seeded
 once from `claude setup-token`). A fort with a `[backups]` profile needs
 `restic-password` and the `rustfs-access-key` / `rustfs-secret-key` pair
 in that same file; a `production` one additionally needs the B2 minting key
-(prompted, or `B2_KEY_ID` / `B2_APP_KEY`), and only when the key it would
-mint does not exist yet. `jq` (the peers file is edited through it
+(its id from `b2-minting-key-id` in that file, the key prompted for or
+`B2_APP_KEY`), and only when the key it would mint does not exist yet. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it).

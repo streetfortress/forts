@@ -36,8 +36,9 @@ import (
 // of that being deliberate rather than casual: dry run by default, a
 // refusal when the key already exists, and one loud banner.
 //
-// The credential it runs with is prompted for, or read from B2_KEY_ID /
-// B2_APP_KEY (b2session.go). Only `minting` needs the account master key:
+// The credential it runs with is prompted for, or read from B2_APP_KEY
+// (b2session.go; the minting key's id is on file, the master key's is
+// typed). Only `minting` needs the account master key:
 // B2 does not enforce capability subsetting (#291), so the minting key
 // creates every other shape and the master key stays in the password
 // manager after day one.
@@ -384,7 +385,7 @@ above matters, delete it in the console deliberately and re-run.
    it is deliberately not written to this repo.
 
 `, role.name, key.ApplicationKeyID, key.ApplicationKey)
-	fmt.Println(role.followUp())
+	fmt.Println(role.followUp(key.ApplicationKeyID))
 	return nil
 }
 
@@ -395,7 +396,8 @@ func (r b2Role) spec(bucketIDs []string) b2.KeySpec {
 
 // followUp says where the value belongs, which differs per role: one is
 // exported for a raise, the other is sops-set into luxor's host secrets.
-func (r b2Role) followUp() string {
+// keyID is the new key's id, for the one role whose id goes on file.
+func (r b2Role) followUp(keyID string) string {
 	if r.kind == "db-physical" {
 		return "Next: it belongs in the cluster, as the Secret " + r.host + "'s CNPG backup\n" +
 			"configuration references — seeded through that tree's secrets contract, not\n" +
@@ -420,8 +422,10 @@ func (r b2Role) followUp() string {
 	}
 	switch r.name {
 	case "sfi-b2-key-minting-key":
-		return "Next: export it as B2_KEY_ID / B2_APP_KEY when running `fort mint <host> --write`\n" +
-			"for a fort whose manifest says [backups] profile = \"production\". Nothing else reads it."
+		return "Next: the KEY goes in the password manager; the ID is not a secret and goes on\n" +
+			"file once, so every minting session (fort mint --write on a production\n" +
+			"profile, fort destroy, fort b2-key) asks for the key alone or reads B2_APP_KEY:\n" +
+			"  sops --config .sops.yaml set provisioning/secrets.yaml '[\"" + keyB2MintingKeyID + "\"]' '\"" + keyID + "\"'"
 	case "sfi-b2-audit-key":
 		return "Next: it belongs in luxor's monitoring-central tree as the Secret the\n" +
 			"s3-exporter reads (fleet/apps/luxor/monitoring/forts.contract.yaml):\n" +

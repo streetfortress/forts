@@ -335,16 +335,28 @@ func b2HostKeyNames(host string) []string {
 }
 
 // revokeB2Key deletes the fort's application keys; `fort destroy` calls it
-// beside revokeDeployKey. It takes only the host name on purpose: by
-// destroy time the manifest is gone (that absence is the gate), so the
-// profile cannot be consulted. Listing by name covers every case — a lab
-// fort simply has no such keys, and a fort whose profile changed still
-// gets the keys it actually has revoked.
+// beside revokeDeployKey. By destroy time the manifest is gone (that
+// absence is the gate), so the profile cannot be consulted; what can be
+// is the retired nixos/secrets/<host>.yaml, read back from the commit
+// that deleted it: mint writes restic-s3-env-b2 exactly when it mints a
+// B2 key, and the key NAME is plaintext. A fort whose retired file never
+// held it never had a key, so nothing is asked for and no session is
+// opened (#432: destroy is the verb that runs least often, and every
+// prompt on it is a paste from the password manager).
+//
+// retired == nil is "no record" — the file was never in history, or the
+// read failed — and NOT "no key": the only record is missing, and a
+// missing record must not skip a live revoke. That case, and a file that
+// did hold the key, take today's path: prompt, list by name, revoke.
+// Listing by name covers a fort whose profile changed, too.
 //
 // Absent credentials are reported, not fatal: a destroy must not be
 // blocked on an operational input, and the caller prints what is left.
-func revokeB2Key(host string) (string, error) {
+func revokeB2Key(host string, retired *retiredSecrets) (string, error) {
 	names := b2HostKeyNames(host)
+	if retired != nil && !retired.has(keyResticB2) {
+		return fmt.Sprintf("none minted for this fort (the retired %s never held %s — the profile was not production); nothing to revoke", retired.rel, keyResticB2), nil
+	}
 	c, err := b2Session(needMinting, "Revoking "+host+"'s B2 keys")
 	if err != nil {
 		return "", fmt.Errorf("B2 keys NOT revoked (%s): %w", strings.Join(names, ", "), err)

@@ -1,7 +1,7 @@
 # fort destroy — the side-effects half, gated on the merge
 
 ```
-fort destroy <host> [--yes]
+fort destroy <host> [--yes] [--no-stack]
 ```
 
 `destroy` is everything about retiring a fort that happens outside git,
@@ -26,7 +26,19 @@ refusing: 2 gate(s) not met
 - The **tree must be clean**, so the state removal lands as its own
   commit.
 - The **stack must exist**. A host nothing raised through the CLI has no
-  stack and goes by hand on its hypervisor or console.
+  stack and goes by hand on its hypervisor or console. A `[baremetal]`
+  host never has one: `--no-stack` declares that and runs step 7 alone
+  ([baremetal](baremetal.md)).
+
+## Needs
+
+Everything but one thing is on file: the provider token and the pulumi
+passphrase, the `gitea-token` the revocations run with, and the admin age
+key that reads the retired secrets file. The one thing it may ask for is
+the secret half of `sfi-b2-key-minting-key`, from the password manager —
+and only when the fort **had a B2 key** (step 7). Its id is on file as
+`b2-minting-key-id`; `B2_APP_KEY` in the environment answers the prompt
+for a scripted run.
 
 The provider comes from the checkpoint's `pulumi:providers:*` resource,
 not from the manifest: `pulumi destroy` never runs the program, so the
@@ -62,6 +74,19 @@ missing manifest is no obstacle.
    key). Nothing under the name is fine too; a history read that fails
    warns and names the key as the thing left to delete by hand.
    `agent-claude-oauth-token` is fleet-wide and untouched.
+   Then **the B2 keys** (`sfi-pv-<host>`, the db keys, the legacy
+   `fort-<host>`), by name from `b2_list_keys`; `sfi-restore-<host>` is
+   left standing, since a dead fort's backups are what it reads. The same
+   retired `nixos/secrets/<host>.yaml` says whether there is anything to
+   revoke: key *names* are plaintext, and `fort mint` writes
+   `restic-s3-env-b2` exactly when it mints a B2 key. A fort whose file
+   never held it (`[backups] profile` was not `production`) prints
+   `b2 key: none minted for this fort` and asks for nothing. A fort whose
+   file held it — or a fort with no retired file in history, since a
+   missing record must not skip a live revoke — gets the prompt: the
+   minting key's id is printed from `b2-minting-key-id`, the key is
+   pasted (or `B2_APP_KEY`), and an empty paste skips the revoke with a
+   warning naming the keys to delete by hand.
 8. **Stage the state removal.** Commit it as its own PR
    (`<host>: destroyed`); `just iac-drift` is green again since the
    stack no longer exists to report on.

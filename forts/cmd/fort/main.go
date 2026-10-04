@@ -150,9 +150,12 @@ func usage() {
       machine restoring a host is never that host; it is NOT refused for
       a fort, fort destroy leaves it standing, and it belongs in the
       password manager for the length of the restore.
-      Prompts for the credential it needs, or reads B2_KEY_ID /
-      B2_APP_KEY: the account master key for minting, and
-      sfi-b2-key-minting-key for everything else. Prints the plan and the grant; --write
+      Prompts for the credential it needs, or reads B2_APP_KEY: the
+      account master key for minting, and sfi-b2-key-minting-key for
+      everything else. The minting key's id is not a secret and sits
+      in provisioning/secrets.yaml as b2-minting-key-id, so only the
+      key is pasted (B2_KEY_ID overrides the id; the master key's id
+      is always asked for). Prints the plan and the grant; --write
       creates it and prints the secret ONCE — one of the two verbs that
       print a value (console-password is the other), because there is
       nowhere else for it to go. An existing key is never replaced (its
@@ -191,6 +194,8 @@ func usage() {
       does not declare are reported and never touched. The plan runs on
       the minting key; --write needs the account master key
       (writeBuckets), prompted for or from B2_KEY_ID / B2_APP_KEY.
+      destroy asks for the minting key only when the retired
+      nixos/secrets/<host>.yaml shows the fort held a B2 key.
 
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image: nix build ./nixos#<host>-{qcow|

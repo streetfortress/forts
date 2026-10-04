@@ -154,18 +154,28 @@ func destroy(args []string) error {
 // it. A B2 key is scoped to its fort's prefix, so what it can still
 // reach is only the backups that are about to age out — but it is live
 // until someone removes it.
+//
+// The retired nixos/secrets/<host>.yaml is read back from git history
+// once and answers for both: the GPG key ids (decrypted), and whether
+// the fort ever held a B2 key at all (a plaintext key name, #432) — so a
+// fort that never had one never asks for the minting key.
 func revokeIdentities(root, host string) {
 	if msg, err := revokeDeployKey(root, host); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
 	} else {
 		fmt.Println("  deploy key:", msg)
 	}
+	secrets, err := readRetiredSecrets(root, host)
+	if err != nil {
+		// Unknown, not none: the B2 half falls back to listing by name.
+		fmt.Fprintf(os.Stderr, "warning: retired secrets: %v\n", err)
+	}
 	// Who to revoke on, and which GPG key: the accounts come from the
 	// retired manifest and their key ids from the retired secrets file,
 	// both read back from the commit that deleted them (a GPG key has no
 	// title on gitea).
 	byHand := fmt.Sprintf(" — delete agent-%s (ssh key, gpg key, token) by hand on every agent user of that fort\n", host)
-	accounts, err := retiredAccounts(root, host, sopsCLI{root: root}.Decrypt)
+	accounts, err := retiredAccounts(root, host, secrets, sopsCLI{root: root}.Decrypt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: agent identity: %v\n", err)
 	}
@@ -181,7 +191,7 @@ func revokeIdentities(root, host string) {
 			fmt.Println("  agent identity:", msg)
 		}
 	}
-	if msg, err := revokeB2Key(host); err != nil {
+	if msg, err := revokeB2Key(host, secrets); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
 	} else {
 		fmt.Println("  b2 key:", msg)

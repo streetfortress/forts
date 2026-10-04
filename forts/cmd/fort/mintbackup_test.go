@@ -84,6 +84,37 @@ func TestB2SessionRefusesWithoutTheOperationalInput(t *testing.T) {
 	}
 }
 
+// The key ID is not a secret (#432): the minting key's sits on file as
+// b2-minting-key-id, so B2_APP_KEY alone is a complete non-interactive
+// credential. Without it on file the refusal says how to put it there;
+// the master key's ID is never on file and is always asked for.
+func TestB2SessionTakesTheMintingKeyIDFromTheFile(t *testing.T) {
+	t.Setenv("B2_KEY_ID", "")
+	t.Setenv("B2_APP_KEY", "secret-half")
+	stdinIsTTY = func() bool { return false }
+	defer func(f func() string) { storedMintingKeyID = f }(storedMintingKeyID)
+
+	storedMintingKeyID = func() string { return "" }
+	_, err := b2Session(needMinting, "Revoking x's B2 keys")
+	if err == nil || !strings.Contains(err.Error(), "B2_KEY_ID unset") || !strings.Contains(err.Error(), keyB2MintingKeyID) {
+		t.Errorf("no id anywhere: want a refusal that says how to store it, got %v", err)
+	}
+	_, err = b2Session(needMaster, "Minting sfi-b2-key-minting-key")
+	if err == nil || !strings.Contains(err.Error(), "B2_KEY_ID unset") || strings.Contains(err.Error(), keyB2MintingKeyID) {
+		t.Errorf("the master key's id is typed, never stored: %v", err)
+	}
+	// With the id on file, the minting need is past the credential
+	// gate — it next reaches the API, which a test does not — so the
+	// master need is the one to prove: it must not read the file.
+	storedMintingKeyID = func() string { t.Error("the master key's id must not come from the file"); return "on-file" }
+	if _, err := b2Session(needMaster, "Minting sfi-b2-key-minting-key"); err == nil {
+		t.Error("master without B2_KEY_ID must refuse")
+	}
+	if !b2EnvSet() {
+		t.Error("B2_APP_KEY alone is the environment form now")
+	}
+}
+
 func TestB2RolesAreTheDesignsCapabilitySets(t *testing.T) {
 	minting := b2Roles["minting"]
 	pruning := b2Roles["pruning"]

@@ -478,29 +478,114 @@ func TestRetiredAccounts(t *testing.T) {
 	// destroy reads origin/main; a local branch named so stands in
 	git("update-ref", "refs/remotes/origin/main", "HEAD")
 	read := func(path string) ([]byte, error) { return os.ReadFile(path) }
+	retired := func(host string) *retiredSecrets {
+		s, err := readRetiredSecrets(root, host)
+		if err != nil {
+			t.Fatalf("retired secrets of %s: %v", host, err)
+		}
+		return s
+	}
 
-	got, err := retiredAccounts(root, "gone", read)
+	got, err := retiredAccounts(root, "gone", retired("gone"), read)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[0] != (retiredAccount{"agent", "sfi-agent", agent.keyID}) || got[1] != (retiredAccount{"analyst", "sfi-analyst", analyst.keyID}) {
 		t.Errorf("retired dev fort: %+v", got)
 	}
-	if got, err := retiredAccounts(root, "cluster", read); err != nil || got != nil {
+	if got, err := retiredAccounts(root, "cluster", retired("cluster"), read); err != nil || got != nil {
 		t.Errorf("retired cluster fort: %+v %v", got, err)
 	}
-	if got, err := retiredAccounts(root, "never", read); err != nil || got != nil {
+	if s := retired("never"); s != nil {
+		t.Errorf("a fort that never existed has no retired secrets: %+v", s)
+	}
+	if got, err := retiredAccounts(root, "never", nil, read); err != nil || got != nil {
 		t.Errorf("never existed: %+v %v", got, err)
 	}
 	// A secrets file that should decrypt and does not: the accounts still
 	// come back (the ssh keys and tokens are revocable by title), and the
 	// error says the signing keys stay.
-	got, err = retiredAccounts(root, "gone", func(string) ([]byte, error) { return nil, os.ErrPermission })
+	got, err = retiredAccounts(root, "gone", retired("gone"), func(string) ([]byte, error) { return nil, os.ErrPermission })
 	if err == nil || !strings.Contains(err.Error(), "decrypting the retired") {
 		t.Errorf("decrypt failure must surface: %v", err)
 	}
 	if len(got) != 2 || got[0].gpgKeyID != "" {
 		t.Errorf("accounts without their key ids: %+v", got)
+	}
+	// A dev fort whose secrets file is not in history at all: the same,
+	// with the error naming the file that is missing.
+	got, err = retiredAccounts(root, "gone", nil, read)
+	if err == nil || !strings.Contains(err.Error(), "no retired nixos/secrets/gone.yaml") {
+		t.Errorf("a missing secrets file must surface: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("accounts still come back: %+v", got)
+	}
+}
+
+// The retired secrets file answers "did this fort ever hold a B2 key"
+// from its plaintext key names, so destroy asks for the minting key only
+// when there is something to revoke (#432: a profile "none" fort asked
+// for it anyway, and the only way it could learn there was nothing to
+// revoke was to list). No record is "unknown", not "none".
+func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
+	root := t.TempDir()
+	git := func(args ...string) {
+		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("config", "user.email", "t@t")
+	git("config", "user.name", "t")
+	write := func(rel, content string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
+		os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644)
+	}
+	// The shape sops leaves: names in the clear, values and the sops
+	// block opaque. The sops block is metadata, never a key name.
+	write("nixos/secrets/prod.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nrestic-s3-env-b2: ENC[x]\nsops:\n    age: []\n")
+	write("nixos/secrets/lab.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nsops:\n    age: []\n")
+	git("add", "-A")
+	git("commit", "-q", "-m", "minted")
+	git("rm", "-q", "nixos/secrets/prod.yaml", "nixos/secrets/lab.yaml")
+	git("commit", "-q", "-m", "dismantled")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+	prod, err := readRetiredSecrets(root, "prod")
+	if err != nil || !prod.has(keyResticB2) {
+		t.Errorf("prod held a B2 key: has=%v %v", prod.has(keyResticB2), err)
+	}
+	if prod.has("sops") {
+		t.Error("the sops block is not a key")
+	}
+	lab, err := readRetiredSecrets(root, "lab")
+	if err != nil || lab == nil || lab.has(keyResticB2) {
+		t.Errorf("lab never held one: %+v %v", lab, err)
+	}
+	never, err := readRetiredSecrets(root, "never")
+	if err != nil || never != nil {
+		t.Errorf("no file, no record: %+v %v", never, err)
+	}
+	if never.has(keyResticB2) {
+		t.Error("a nil record holds nothing — callers gate on nil first")
+	}
+
+	// revokeB2Key on those facts, with no credential anywhere and no
+	// terminal: the lab fort is answered without a session; prod and the
+	// unknown case still reach for one, and are refused by name.
+	t.Setenv("B2_KEY_ID", "")
+	t.Setenv("B2_APP_KEY", "")
+	stdinIsTTY = func() bool { return false }
+	msg, err := revokeB2Key("lab", lab)
+	if err != nil || !strings.Contains(msg, "none minted") || !strings.Contains(msg, "nixos/secrets/lab.yaml") {
+		t.Errorf("lab: want 'none minted' naming the record, got %q %v", msg, err)
+	}
+	for name, s := range map[string]*retiredSecrets{"prod": prod, "unknown": nil} {
+		if _, err := revokeB2Key(name, s); err == nil || !strings.Contains(err.Error(), "B2 keys NOT revoked") {
+			t.Errorf("%s: a key that may exist must still be revoked (or the refusal named): %v", name, err)
+		}
 	}
 }
 
