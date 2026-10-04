@@ -1,0 +1,6 @@
+{
+  "peers": {
+    "plain-fort": {"wg_vpn_ip": "10.1.0.96", "wg_endpoint_ip": "10.0.0.96", "public_key": "cGxhaW4tZm9ydC1maXh0dXJlLXB1YmxpYy1rZXk9PT09PT0="}
+  },
+  "clients": {}
+}

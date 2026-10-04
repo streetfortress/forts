@@ -1,0 +1,27 @@
+# Provider contract (docs/fort-configuration-contracts.md) — NON-SECRET, rendered from the
+# fort CLI's rustfs template (there is no chart of ours to carry it);
+# `fort seed` executes it.
+#
+# Two Secrets. rustfs-credentials is the instance's root pair, held by
+# the bucket Job and the IAM CronJob and by no app. rustfs-users is the
+# identity list: key name = the IAM username, which is ALSO the access
+# key, which is ALSO the app and its bucket — self-describing in
+# `rc admin user ls`, in an audit, and in the app's values. The value is
+# the secret half. Each tenant registration appends its key here;
+# {{ .SecretName }}'s {{ .S3.Key }} is sourced from this file — lockstep
+# pair on rotation. The CronJob removes any user the list no longer
+# declares, so dropping a key here is the withdrawal.
+secrets:
+  secrets.sops.yaml:
+    metadata:
+      name: rustfs-credentials
+      namespace: rustfs
+    keys:
+      RUSTFS_ACCESS_KEY: {generate: hex8}
+      RUSTFS_SECRET_KEY: {generate: hex24}
+  users.sops.yaml:
+    metadata:
+      name: rustfs-users
+      namespace: rustfs
+    keys:
+      {{ .App }}: {generate: hex24}

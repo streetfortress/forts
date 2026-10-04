@@ -1,0 +1,77 @@
+# Machine-readable contract for SFI forts (deployments#144) — NON-SECRET.
+#
+# Ships inside the chart tarball. It says what this chart needs from ANY
+# environment — the keys its `existingSecret` must carry and how each value
+# is produced, the platform services it consumes and which values paths
+# carry their endpoints — never where those things live on a given fort.
+# `fort add` renders the fort-side manifests from it, `fort seed` produces
+# the SOPS-encrypted Secret, and the fleet CI gate checks the committed
+# Secret's key names against it at the pinned chart version. Rules of the
+# schema (deployments: docs/fort-configuration-contracts.md):
+#   - no `literal` here: non-secret config is chart VALUES (ui.env,
+#     worker.env, database.*, cache.*) so a change rolls pods
+#   - secret-typed provider outputs (${postgres.db.password}, ...) may only
+#     be referenced from `secret.keys` templates, never wired into values
+#   - `external` = a human supplies it; absent from the Secret until then
+#     (CI fails a production fort on a missing non-optional key)
+contract: v1
+
+secret:
+  values: existingSecret          # values path naming the Secret (default symbology-env)
+  keys:
+    # Better Auth session signing (ui). Unique per installation; rotating
+    # it invalidates every active session. BETTER_AUTH_URL is ui.env.
+    BETTER_AUTH_SECRET: {generate: b64_32}
+    # The postgres role's password (ui, workers, migration hook). The
+    # non-secret half rides in the database.* values below.
+    DATABASE_PASSWORD: {template: "${postgres.db.password}"}
+    # The valkey ACL user's password (ui query-layer cache, Config C).
+    # Absent + empty cache.* values = cache layer off.
+    CACHE_PASSWORD: {template: "${valkey.cache.password}", optional: true}
+    # Stripe supporter checkout (ui); both from the Stripe dashboard.
+    # Required once PUBLIC_SUPPORT_ENABLED is "true" (ui.env).
+    STRIPE_SECRET_KEY: {external: "Stripe → Developers → API keys (sk_live_/sk_test_)"}
+    STRIPE_WEBHOOK_SECRET: {external: "Stripe → Webhooks → /api/webhooks/stripe signing secret (whsec_)"}
+    # Resend transactional mail (ui). Unset = sends skipped with a log line,
+    # so signup/verify flows degrade rather than fail. FROM/REPLY_TO are
+    # non-secret: ui.env.
+    RESEND_API_KEY: {external: "Resend → API keys (re_)", optional: true}
+    # Bearer token the workers send to the OpenAI-compatible inference
+    # endpoint. Local LM Studio (inference.address) accepts any value.
+    OPENAI_API_KEY: {external: "inference endpoint API key (any value for LM Studio)"}
+    # Overflow/fallback model for oversized prompts (OPENAI_OVERFLOW_* in
+    # worker.env). Optional: unset disables the overflow path.
+    ANTHROPIC_API_KEY: {external: "Anthropic console → API keys", optional: true}
+
+requires:
+  postgres:
+    db:
+      extensions: [vector]        # pgvector: content embeddings
+      wire:                       # non-secret outputs → chart values
+        host: database.host
+        port: database.port
+        name: database.name
+        user: database.user
+  valkey:
+    cache:
+      optional: true              # the app runs without a cache
+      wire:
+        host: cache.host
+        port: cache.port
+        db: cache.db
+        user: cache.user
+
+# The fleet owns Gateway listener + Certificate + HTTPRoute (httpRoute
+# stays disabled here); this names the backend. The Service is
+# <fullname>-ui; fort add sets releaseName = chart name, so symbology-ui.
+http:
+  service: symbology-ui
+  port: 3000
+
+# Worker prometheus_client endpoint (worker.metricsPort, port name
+# "metrics"); fort add renders the PodMonitor. Alert rules stay fort-side:
+# they encode fleet policy, not chart facts.
+metrics:
+  port: metrics
+  selector:
+    app.kubernetes.io/component: worker

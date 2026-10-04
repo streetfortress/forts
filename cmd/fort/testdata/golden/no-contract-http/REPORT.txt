@@ -1,0 +1,23 @@
+flux/apps/lab-fort/   (chart 0.0.0-pr.48.108.g42d6bce)
+● gateway/
+  ● certificate-moment-tally-website.yaml step-ca, moment-tally-website.lab-fort.lofi
+  ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
+  ● gateway.yaml                 http listener only
+  ● kustomization.yaml           patches: listener-moment-tally-website.yaml
+  ● listener-moment-tally-website.yaml JSON6902 add /spec/listeners/- (https-moment-tally-website)
+  ● redirect-https.yaml          catch-all http→https 301
+○ kustomization.yaml             + gateway, moment-tally-website
+● moment-tally-website/
+  ● kustomization.yaml           
+  ● namespace.yaml               
+  ● release.yaml                 wire: none; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.0.0-pr.48.108.g42d6bce
+  ● route.yaml                   HTTPRoute moment-tally-website.lab-fort.lofi → moment-tally-website:3000
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
+
+note: the chart ships no forts.contract.yaml. This app gets no key gate: `fort check`
+      cannot see a chart bump that starts to need a key. The chart adopts the
+      gate when it ships the file — docs/fort-configuration-contracts.md.
+
+staged. nothing to seed: the chart ships no contract, so the app has no Secret.
+then: review, commit, PR — flux applies on merge.

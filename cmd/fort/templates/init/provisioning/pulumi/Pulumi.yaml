@@ -1,0 +1,21 @@
+# The estate's Pulumi project (#42/#87): micro-stacks, stack name == the
+# manifest's host. The project name is baked into every resource URN —
+# settled as `forts` before any real state existed; renaming it later is
+# state surgery.
+#
+# The program is the framework's: `fort-pulumi`, built beside `fort` from
+# sfi/forts (cmd/fort-pulumi) and found on PATH — `fort provision` puts
+# its own directory there before it execs pulumi, so the pair always
+# match. Pulumi.<host>.yaml beside this file is the stack's config, and
+# state/ the file:// backend, committed: the owning repo is where state
+# lives, and secrets inside it are encrypted per value by the passphrase
+# provider (the passphrase itself sops-managed in provisioning/secrets.yaml).
+#
+#   pulumi preview -s <host> --diff      from this directory, with
+#   PULUMI_BACKEND_URL=file://$PWD/state — the stock CLI stays the escape hatch.
+name: forts
+runtime:
+  name: go
+  options:
+    binary: fort-pulumi
+description: fort provisioning — instance, firewall, DNS; the mesh and flux own everything else, and the bootstrap image is fort provision's job.

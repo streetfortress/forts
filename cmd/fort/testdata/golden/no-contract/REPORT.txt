@@ -1,0 +1,18 @@
+flux/apps/lab-fort/   (chart 0.0.0-pr.48.108.g42d6bce)
+○ kustomization.yaml             + moment-tally-website
+● moment-tally-website/
+  ● kustomization.yaml           
+  ● namespace.yaml               
+  ● release.yaml                 wire: none; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.0.0-pr.48.108.g42d6bce
+  ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
+
+note: the chart ships no forts.contract.yaml. This app gets no key gate: `fort check`
+      cannot see a chart bump that starts to need a key. The chart adopts the
+      gate when it ships the file — docs/fort-configuration-contracts.md.
+note: nothing declares an http service, so this app has no listener, no
+      certificate and no route. It is reachable on the mesh and the LAN only.
+      Add ingress with `fort add … --http <service>:<port>`.
+
+staged. nothing to seed: the chart ships no contract, so the app has no Secret.
+then: review, commit, PR — flux applies on merge.

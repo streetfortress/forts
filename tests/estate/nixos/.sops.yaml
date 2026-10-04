@@ -1,0 +1,12 @@
+# Fixture: the per-host sops rules of a one-fort estate. The admin key is
+# not a real key; nothing here decrypts. The key is written bare, as mint
+# writes it: ops/challenge.nix reads the recipients off these lines.
+keys:
+  - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m
+creation_rules:
+  # BEGIN fort sops rule: plain-fort
+  - path_regex: secrets/plain-fort\.yaml$
+    key_groups:
+      - age:
+          - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m
+  # END fort sops rule: plain-fort

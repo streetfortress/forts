@@ -1,0 +1,30 @@
+# Machine-readable contract for SFI forts (deployments#144) — NON-SECRET.
+#
+# Ships inside the chart tarball. It says what this chart needs from ANY
+# environment — never where those things live on a given fort. `fort add`
+# renders the fort-side manifests from it, `fort seed` produces the
+# SOPS-encrypted Secret, and the fleet CI gate checks the committed Secret's
+# key names against it at the pinned chart version (deployments:
+# docs/fort-configuration-contracts.md).
+#
+# This one is nearly empty, and that is the honest answer for this app:
+#
+#   - no `secret`: there are no secrets here. The only runtime config is the
+#     Umami pair, which is embedded verbatim in every served page, so it is
+#     plain values (ui.env) overridden per environment in the HelmRelease.
+#     Add a `secret.keys` block the day a genuinely secret env var appears —
+#     values.yaml says the same thing from the chart's side.
+#   - no `requires`: stateless SSR, no database, no cache, no bucket.
+#   - no `metrics`: the app exposes no prometheus endpoint. (A chart that
+#     ships its own PodMonitor would also omit this — the fort renders
+#     nothing either way.)
+contract: v1
+
+# The fleet owns Gateway listener + Certificate + HTTPRoute (httpRoute stays
+# disabled in values.yaml); this names the backend. The Service is
+# <fullname>, and `fort add` sets releaseName = chart name, so the fullname
+# helper collapses to the bare chart name — matching the route sfi-prod
+# already carries by hand.
+http:
+  service: moment-tally-website
+  port: 3000
