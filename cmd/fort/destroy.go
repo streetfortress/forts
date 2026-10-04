@@ -10,13 +10,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"github.com/linode/linodego"
 )
 
@@ -57,14 +57,18 @@ func destroy(args []string) error {
 	}
 	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
 
-	if err := exec.Command("git", "-C", root, "fetch", "-q", "origin").Run(); err != nil {
+	git, err := tools.Runner("git")
+	if err != nil {
+		return err
+	}
+	if err := git("-C", root, "fetch", "-q", "origin").Run(); err != nil {
 		return fmt.Errorf("git fetch origin: %w", err)
 	}
-	onMain, err := exec.Command("git", "-C", root, "ls-tree", "--name-only", "origin/main", "--", manifest.Path(host)).Output()
+	onMain, err := git("-C", root, "ls-tree", "--name-only", "origin/main", "--", manifest.Path(host)).Output()
 	if err != nil {
 		return fmt.Errorf("reading origin/main: %w", err)
 	}
-	status, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
+	status, err := git("-C", root, "status", "--porcelain").Output()
 	if err != nil {
 		return err
 	}
@@ -138,7 +142,7 @@ func destroy(args []string) error {
 
 	// 6. stage the state removal; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
-	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
+	stage(root)
 	fmt.Printf("\n== done. Staged the state removal — commit it as its own PR (\"%s: destroyed\").\n", host)
 	fmt.Println("   Off-repo residue to check: the .files wireguard copy (ubuntu mesh members), ~/.local/share/nixos-provisioning/" + host + " on a playbook-era hypervisor.")
 	return nil

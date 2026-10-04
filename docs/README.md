@@ -138,10 +138,40 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |
+| the tools the verbs exec (`git`, `helm`, `jq`, `kustomize`, `mkisofs`, `mkpasswd`, `qemu-img`, `sops`, `virsh`, `xsltproc`) | the `fort` package, which carries them on its own PATH | every verb that shells out |
+| `nix`, `pulumi` | the host | `image` (nix), the apply verbs (pulumi) |
 | nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
 
-`mint` execs `mkpasswd` for the console password hash (from PATH, else
-nixpkgs), as it execs `sops` and `jq`.
+### The tool set
+
+The CLI shells out to ten binaries, and they are one declared set:
+`internal/tools/tools.json` names each one with the nixpkgs attribute it
+comes from. `packages.fort` wraps `fort` and `fort-pulumi` with the whole
+set ahead of them on PATH, from the framework's own nixpkgs, so a verb
+never fetches a tool with a provider waiting on it:
+
+```
+nix profile install <estate>/nixos#fort   ← an operator machine, once
+nix run <estate>/nixos#fort -- check --all
+nix develop                               ← in sfi/forts: the same set, plus Go
+```
+
+The CLI never fetches a tool itself. A verb checks for the tools it
+needs before it does any work, and a missing one is named with both ways
+to get it: the machine's own package manager, or the whole set through
+the package or the dev shell. So a dev who already keeps `git`, `helm`,
+`jq`, `kustomize` and `sops` needs no nix on the machine for `check`,
+`scaffold`, `add`, `seed` or the sops verbs; nix is for the servers, and
+for the verbs that build or provision them (`image` runs `nix build`,
+`provision` and `console-password` want the libvirt and mkpasswd tools).
+
+`nix` and `pulumi` stay the host's own, and the set records why. `nix` is
+the client of the host's daemon. `pulumi` loads its bundled Go language
+host from the directory of its own binary, and the CLI sets
+`PULUMI_IGNORE_AMBIENT_PLUGINS` so the provider version `go.mod` pins
+always wins — a `pulumi` on a wrapper's PATH would satisfy neither. A
+verb that wants a tool it cannot find names the attribute to install it
+from, and stops before it does any work.
 
 `PULUMI_BACKEND_URL` is forced to this checkout's `provisioning/pulumi/state` by
 every verb, so a `pulumi login` elsewhere can never redirect state into

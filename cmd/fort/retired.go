@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -85,14 +85,18 @@ func (s *retiredSecrets) values(decrypt func(path string) ([]byte, error)) (map[
 // it from origin/main still holds the version before it. nil when the
 // path was never deleted there (it never existed, or it is still live).
 func retiredFile(root, rel string) ([]byte, error) {
-	sha, err := exec.Command("git", "-C", root, "log", "-1", "--format=%H", "--diff-filter=D", "origin/main", "--", rel).Output()
+	git, err := tools.Runner("git")
+	if err != nil {
+		return nil, err
+	}
+	sha, err := git("-C", root, "log", "-1", "--format=%H", "--diff-filter=D", "origin/main", "--", rel).Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log %s: %w", rel, err)
 	}
 	if strings.TrimSpace(string(sha)) == "" {
 		return nil, nil
 	}
-	raw, err := exec.Command("git", "-C", root, "show", strings.TrimSpace(string(sha))+"^:"+rel).Output()
+	raw, err := git("-C", root, "show", strings.TrimSpace(string(sha))+"^:"+rel).Output()
 	if err != nil {
 		return nil, fmt.Errorf("git show %s before its deletion: %w", rel, err)
 	}

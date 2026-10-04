@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // image builds a host's bootstrap image (#42). The nix build is generic:
@@ -74,8 +74,8 @@ func image(args []string) error {
 	// 1. the generic image: built, or handed in
 	src := *from
 	if src == "" {
-		if _, err := exec.LookPath("nix"); err != nil {
-			return fmt.Errorf("nix not on PATH — the image build needs it (or pass --from <built image>)")
+		if err := tools.Ensure("nix"); err != nil {
+			return fmt.Errorf("%w — the image build needs it (or pass --from <built image>)", err)
 		}
 		fmt.Printf("== nix build %s (KVM; any x86_64 Nix host)\n", v.attr)
 		if src, err = nixBuildImage(root, v); err != nil {
@@ -187,7 +187,10 @@ func (v variantSpec) ext() string {
 // nixBuildImage builds the attribute (progress on stderr) and returns the
 // image file inside the output path: nixos.qcow2, or the one *.img.gz.
 func nixBuildImage(root string, v variantSpec) (string, error) {
-	cmd := exec.Command("nix", "build", "--no-link", "--print-out-paths", v.attr)
+	cmd, err := tools.Command("nix", "build", "--no-link", "--print-out-paths", v.attr)
+	if err != nil {
+		return "", err
+	}
 	cmd.Dir = root
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()

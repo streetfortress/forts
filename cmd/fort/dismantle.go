@@ -7,13 +7,13 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // dismantle is the inverse of `fort scaffold` + `fort mint`: a pure repo mutation that removes exactly what they
@@ -383,7 +383,10 @@ func removeLinesContaining(text, needle string) (string, int) {
 // removePeer is `jq 'del(.peers[$n])'` — preseed wrote the file with jq,
 // so the same tool keeps its formatting and key order byte-for-byte.
 func removePeer(text, host string) (string, error) {
-	cmd := exec.Command("jq", "--arg", "n", host, "del(.peers[$n])")
+	cmd, err := tools.Command("jq", "--arg", "n", host, "del(.peers[$n])")
+	if err != nil {
+		return "", err
+	}
 	cmd.Stdin = strings.NewReader(text)
 	out, err := cmd.Output()
 	if err != nil {
@@ -479,16 +482,17 @@ func scanResidue(root, host string, removed []string, edited map[string]string) 
 // build output and ignored files never show up as residue); a plain
 // walk otherwise (tests run on a temp copy).
 func trackedFiles(root string) []string {
-	cmd := exec.Command("git", "ls-files", "-z")
-	cmd.Dir = root
-	if out, err := cmd.Output(); err == nil {
-		var files []string
-		for _, f := range strings.Split(string(out), "\x00") {
-			if f != "" {
-				files = append(files, f)
+	if cmd, err := tools.Command("git", "ls-files", "-z"); err == nil {
+		cmd.Dir = root
+		if out, err := cmd.Output(); err == nil {
+			var files []string
+			for _, f := range strings.Split(string(out), "\x00") {
+				if f != "" {
+					files = append(files, f)
+				}
 			}
+			return files
 		}
-		return files
 	}
 	var files []string
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

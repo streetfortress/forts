@@ -6,12 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	hostseed "gitea.zen.lofi/sfi/forts/internal/seed"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // provision is the birth flow (#42): the bootstrap image is uploaded,
@@ -115,7 +115,7 @@ func provision(args []string) error {
 			// The provider writes the cidata ISO by exec'ing mkisofs on
 			// this machine (terraform-provider-libvirt 0.8.1); the plugin
 			// inherits our PATH, as for xsltproc.
-			if err := ensureTool("mkisofs", "nixpkgs#cdrtools"); err != nil {
+			if err := tools.Ensure("mkisofs"); err != nil {
 				return err
 			}
 		}
@@ -157,7 +157,7 @@ func provision(args []string) error {
 	}
 	// The apply verbs stage the file backend: the checkpoint (and, at
 	// birth, Pulumi.<host>.yaml) is the state PR.
-	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
+	stage(root)
 
 	if flow != nil {
 		// `pulumi up` exits 0 when the preview is declined, so gate
@@ -296,15 +296,31 @@ func initStack(pulumiDir, host string) error {
 // previews render and prompts work exactly as if run by hand, and
 // `pulumi <anything> -s <host>` by hand stays a first-class escape hatch.
 func runPulumi(dir string, args ...string) error {
-	cmd := exec.Command("pulumi", args...)
+	cmd, err := tools.Command("pulumi", args...)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = dir
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
 }
 
 func outputPulumi(dir string, args ...string) (string, error) {
-	cmd := exec.Command("pulumi", args...)
+	cmd, err := tools.Command("pulumi", args...)
+	if err != nil {
+		return "", err
+	}
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// stage puts the file backend in the index: the checkpoint (and, at
+// birth, Pulumi.<host>.yaml) is the state PR. Best effort, as it was
+// before the tool set — the apply already happened, and the commit is
+// the operator's either way.
+func stage(root string) {
+	if git, err := tools.Command("git", "-C", root, "add", "-A", "provisioning/pulumi"); err == nil {
+		git.Run()
+	}
 }

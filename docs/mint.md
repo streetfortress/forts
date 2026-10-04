@@ -197,4 +197,5 @@ in that same file; a `production` one additionally needs the B2 minting key
 `B2_APP_KEY`), and only when the key it would mint does not exist yet. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it). `mkpasswd` for the console password hash, when the host enables the
-door and the file has no hash — from PATH, else nixpkgs, as `sops` is.
+door and the file has no hash — one of the CLI's declared tools, as
+`sops` and `jq` are ([the tool set](README.md#the-tool-set)).

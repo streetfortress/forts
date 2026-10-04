@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -840,7 +840,10 @@ func addPeer(text, host, ip, endpoint, pub string) (string, error) {
 		args = append(args, "--arg", "ep", endpoint)
 		expr = ".peers[$n] = {wg_vpn_ip: $ip, wg_endpoint_ip: $ep, public_key: $pub}"
 	}
-	cmd := exec.Command("jq", append(args, expr)...)
+	cmd, err := tools.Command("jq", append(args, expr)...)
+	if err != nil {
+		return "", err
+	}
 	cmd.Stdin = strings.NewReader(text)
 	out, err := cmd.Output()
 	if err != nil {

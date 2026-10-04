@@ -1,0 +1,25 @@
+{
+  "$comment": "The fort CLI's tool dependencies as one declared set (sfi/forts#25). Two readers: internal/tools checks for a tool at run time and names a missing one, and flake.nix puts the packaged set on packages.fort's wrapper PATH and in devShells.default. `packaged` maps a binary to the nixpkgs attribute path that carries it. `ambient` is the binary the host must own: `attr` is what an operator installs it from, `why` is the reason the closure must not carry it. Declare a tool here before you exec it.",
+  "packaged": {
+    "git": "git",
+    "helm": "kubernetes-helm",
+    "jq": "jq",
+    "kustomize": "kustomize",
+    "mkisofs": "cdrtools",
+    "mkpasswd": "mkpasswd",
+    "qemu-img": "qemu-utils",
+    "sops": "sops",
+    "virsh": "libvirt",
+    "xsltproc": "libxslt.bin"
+  },
+  "ambient": {
+    "nix": {
+      "attr": "nix",
+      "why": "it is the client of the host's own daemon; only `image` runs it, to build the generic image"
+    },
+    "pulumi": {
+      "attr": "pulumi-bin",
+      "why": "pulumi loads its bundled go language host from the directory of its own binary, so it must stay the distribution the operator installed; and the CLI sets PULUMI_IGNORE_AMBIENT_PLUGINS, which makes a pulumi on a wrapper's PATH ignore every plugin beside it anyway"
+    }
+  }
+}

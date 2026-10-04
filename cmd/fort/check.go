@@ -12,6 +12,7 @@ import (
 	"gitea.zen.lofi/sfi/forts/internal/contract"
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,9 +68,10 @@ func check(args []string) error {
 			os.RemoveAll(filepath.Dir(pc.dir))
 		}
 	}()
-	// kustomize is exec'd like sops/helm/pulumi; CI installs it, a dev
-	// host without one gets nixpkgs' copy on PATH.
-	if err := ensureTool("kustomize", "nixpkgs#kustomize"); err != nil {
+	// kustomize is one of the declared tools (internal/tools): the
+	// fort package carries it, CI installs its own, a checkout run
+	// builds it. Resolved here, before the gate reads a single tree.
+	if err := tools.Ensure("kustomize"); err != nil {
 		return err
 	}
 	errors := 0

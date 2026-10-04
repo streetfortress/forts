@@ -56,12 +56,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"gitea.zen.lofi/sfi/forts/internal/b2"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 const probePrefix = "b2probe/"
@@ -626,9 +626,13 @@ func missing(key, env string) error {
 }
 
 func secret(root, key string) (string, error) {
-	out, err := exec.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
+	cmd, err := tools.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
 		"-d", "--extract", `["`+key+`"]`,
-		filepath.Join(root, "provisioning/secrets.yaml")).Output()
+		filepath.Join(root, "provisioning/secrets.yaml"))
+	if err != nil {
+		return "", err
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"github.com/linode/linodego"
 )
 
@@ -110,14 +110,12 @@ func (l *libvirtImage) Stage(ctx context.Context, entry manifest.Host, host, pat
 	return abs, nil
 }
 
-// qemuImg runs qemu-img from PATH, else from nixpkgs (the ensureTool
-// fallback, inline: this one call has a flag list to pass through).
+// qemuImg runs qemu-img, one of the declared tools (internal/tools):
+// the fort package carries it, a checkout run builds it from nixpkgs.
 func qemuImg(args ...string) error {
-	var cmd *exec.Cmd
-	if _, err := exec.LookPath("qemu-img"); err == nil {
-		cmd = exec.Command("qemu-img", args...)
-	} else {
-		cmd = exec.Command("nix", append([]string{"shell", "nixpkgs#qemu-utils", "-c", "qemu-img"}, args...)...)
+	cmd, err := tools.Command("qemu-img", args...)
+	if err != nil {
+		return err
 	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()

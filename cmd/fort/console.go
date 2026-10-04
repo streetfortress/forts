@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // `fort console-password <host>` mints the credential
@@ -346,9 +346,13 @@ soundship for a lab fort.
 var readConsolePassword = readConsolePasswordSops
 
 func readConsolePasswordSops(root, host string) (string, error) {
-	out, err := exec.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
+	cmd, err := tools.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
 		"-d", "--extract", `["`+host+`"]`,
-		filepath.Join(root, consoleRegistry)).Output()
+		filepath.Join(root, consoleRegistry))
+	if err != nil {
+		return "", err
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("sops -d --extract [%q] %s: %s", host, consoleRegistry, lastLine(exitDetail(err)))
 	}
@@ -449,13 +453,14 @@ var hashPassword = mkpasswdHash
 // mkpasswdHash runs the password through mkpasswd's default yescrypt —
 // what NixOS's own `mkpasswd` gives and what the host's PAM verifies.
 // The password goes in on stdin, so it is never an argv the process
-// table shows. mkpasswd is exec'd like sops, helm and kustomize: from
-// PATH, else nixpkgs.
+// table shows. mkpasswd is one of the declared tools (internal/tools):
+// the fort package carries it — #25 found a Mac that had none — and a
+// checkout run builds it from nixpkgs.
 func mkpasswdHash(password string) (string, error) {
-	if err := ensureTool("mkpasswd", "nixpkgs#mkpasswd"); err != nil {
+	cmd, err := tools.Command("mkpasswd", "-m", "yescrypt", "-s")
+	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("mkpasswd", "-m", "yescrypt", "-s")
 	cmd.Stdin = strings.NewReader(password + "\n")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb

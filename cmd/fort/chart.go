@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -72,7 +73,11 @@ func resolveChart(root string, pin chartPin) (dir, resolved string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	show, err := exec.Command("helm", "show", "chart", ref, "--version", constraint, "--ca-file", ca).Output()
+	helm, err := tools.Runner("helm")
+	if err != nil {
+		return "", "", err
+	}
+	show, err := helm("show", "chart", ref, "--version", constraint, "--ca-file", ca).Output()
 	if err != nil {
 		return "", "", fmt.Errorf("helm show chart %s --version %q: %s", ref, constraint, exitDetail(err))
 	}
@@ -90,7 +95,7 @@ func resolveChart(root string, pin chartPin) (dir, resolved string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	pull := exec.Command("helm", "pull", ref, "--version", meta.Version, "--untar", "--untardir", tmp, "--ca-file", ca)
+	pull := helm("pull", ref, "--version", meta.Version, "--untar", "--untardir", tmp, "--ca-file", ca)
 	if out, err := pull.CombinedOutput(); err != nil {
 		os.RemoveAll(tmp)
 		return "", "", fmt.Errorf("helm pull %s@%s: %s", ref, meta.Version, strings.TrimSpace(string(out)))

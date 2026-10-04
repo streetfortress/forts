@@ -4,13 +4,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -180,7 +180,10 @@ func clusterVars(root, fort string) (map[string]bool, error) {
 // kustomizeBuild runs `kustomize build <rel>` and returns the stream; on
 // failure the error is kustomize's last stderr line.
 func kustomizeBuild(root, rel string) (string, error) {
-	cmd := exec.Command("kustomize", "build", filepath.Join(root, rel))
+	cmd, err := tools.Command("kustomize", "build", filepath.Join(root, rel))
+	if err != nil {
+		return "", err
+	}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

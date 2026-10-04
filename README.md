@@ -7,12 +7,13 @@ half: the manifests, host files, secrets and flux trees of a set of
 forts, built on this repo as a flake input. This repo holds no estate.
 
 ```
-flake.nix          nixosModules.<name> (one per file under modules/), packages.fort (+ fort-pulumi)
+flake.nix          nixosModules.<name> (one per file under modules/), packages.fort (+ fort-pulumi,
+                   wrapped with the CLI's tool set), devShells.default
 modules/           the NixOS modules: the hardened profile, the mesh, k3s, flux, the ops verbs, ...
 cmd/fort/          the CLI; templates/scaffold, templates/add and templates/init (an estate's
                    skeleton, the shared flux layer included) are what it renders
 cmd/fort-pulumi/   the pulumi program fort provision execs
-internal/          manifest, contract, seed, b2
+internal/          manifest, contract, seed, b2, tools (the CLI's tool set: internal/tools/tools.json)
 tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh births one with fort init
 docs/              the CLI handbook — start at docs/README.md
 ```
@@ -101,7 +102,8 @@ sops-decrypted from `provisioning/secrets.yaml` by every cloud command.
 The libvirt backend needs neither: `LIBVIRT_DEFAULT_URI` defaults to
 soundship over ssh with `~/.ssh/id_ed25519` in the URI (the provider
 carries its own ssh client — no `~/.ssh/config`, no agent unless asked),
-and `xsltproc` / `qemu-img` come from nixpkgs when the host has none.
+and `xsltproc` / `mkisofs` / `qemu-img` ride on the `fort` package's own
+PATH (docs/README.md, "The tool set").
 
 ## The lab backend (`provider: libvirt`)
 
@@ -122,7 +124,7 @@ rides beside it (#657): a cloud-init disk `<host>-seed.iso` in the same
 pool, the NoCloud `cidata` layout, attached as an IDE CD-ROM and read by
 the initrd; `user_data` is a pulumi secret, ignored after birth, and the
 provider needs `mkisofs` on the machine that runs the apply (nixpkgs'
-`cdrtools` when the host has none).
+`cdrtools`, which the `fort` package carries).
 
 ```
 fort image lab1                                      # nix build (KVM: devbox); the key rides on the seed volume, not in the image

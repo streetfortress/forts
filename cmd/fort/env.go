@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // cloudEnv puts the credentials a pulumi run needs into the environment
@@ -59,9 +60,8 @@ func cloudEnv(root string, provider string) error {
 		}
 		// The provider applies the domain's XSLT (the qcow2 driver fix,
 		// pulumi/libvirt.go) by exec'ing xsltproc; the plugin inherits
-		// our PATH, so put nixpkgs' copy on it when the host has none —
-		// the qemu-img fallback, one layer down.
-		if err := ensureTool("xsltproc", "nixpkgs#libxslt.bin"); err != nil {
+		// our PATH, so the tool has to be resolved before pulumi starts.
+		if err := tools.Ensure("xsltproc"); err != nil {
 			return err
 		}
 	}
@@ -85,29 +85,15 @@ func cloudEnv(root string, provider string) error {
 }
 
 func secret(root, key string) (string, error) {
-	out, err := exec.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
+	cmd, err := tools.Command("sops", "--config", filepath.Join(root, ".sops.yaml"),
 		"-d", "--extract", `["`+key+`"]`,
-		filepath.Join(root, "provisioning/secrets.yaml")).Output()
+		filepath.Join(root, "provisioning/secrets.yaml"))
+	if err != nil {
+		return "", err
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// ensureTool prepends a nix-built package's bin dir to PATH when the
-// named tool is not already there. `nix build --no-link` is a no-op
-// once the store has it.
-func ensureTool(tool, flakeRef string) error {
-	if _, err := exec.LookPath(tool); err == nil {
-		return nil
-	}
-	out, err := exec.Command("nix", "build", "--no-link", "--print-out-paths", flakeRef).Output()
-	if err != nil {
-		return fmt.Errorf("%s not on PATH and `nix build %s` failed: %w", tool, flakeRef, err)
-	}
-	bin := filepath.Join(strings.TrimSpace(string(out)), "bin")
-	if _, err := os.Stat(filepath.Join(bin, tool)); err != nil {
-		return fmt.Errorf("%s: not in %s", tool, bin)
-	}
-	return os.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

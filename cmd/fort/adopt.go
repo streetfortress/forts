@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // adopt brings a playbook-era lab VM under the libvirt backend without a
@@ -54,12 +54,13 @@ func adopt(args []string) error {
 	if err := cloudEnv(root, entry.Provider); err != nil {
 		return err
 	}
-	if err := ensureTool("virsh", "nixpkgs#libvirt"); err != nil {
+	runVirsh, err := tools.Runner("virsh")
+	if err != nil {
 		return err
 	}
 	uri := os.Getenv("LIBVIRT_DEFAULT_URI")
 	virsh := func(args ...string) (string, error) {
-		out, err := exec.Command("virsh", append([]string{"-c", uri}, args...)...).Output()
+		out, err := runVirsh(append([]string{"-c", uri}, args...)...).Output()
 		return strings.TrimSpace(string(out)), err
 	}
 
@@ -104,7 +105,7 @@ func adopt(args []string) error {
 	if err := runPulumi(pulumiDir, append([]string{"up", "--stack", host}, confirmArgs(*yes)...)...); err != nil {
 		return err
 	}
-	exec.Command("git", "-C", root, "add", "-A", "provisioning/pulumi").Run()
+	stage(root)
 	fmt.Printf("\n== done. Staged the new stack — commit it as its own PR (\"%s: adopted\"). From here: fort preview / provision / destroy %s.\n", host, host)
 	return nil
 }

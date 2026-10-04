@@ -135,8 +135,9 @@ the domain, then it — and it holds the key in plain text, as the root
 qcow2 beside it does: #605 accepts this trust in the hypervisor, and this
 sentence records it. Two things follow from the bridged provider
 (terraform-provider-libvirt 0.8.1): it writes the ISO by exec'ing
-`mkisofs` on the machine that runs the apply, so `provision` puts
-nixpkgs' `cdrtools` on PATH when the host has none (as for `xsltproc`);
+`mkisofs` on the machine that runs the apply, so `provision` checks for it
+before pulumi starts — the `fort` package carries it (nixpkgs' `cdrtools`),
+a checkout run without it stops and says so (as for `xsltproc`);
 and the ISO's `user-data` is the resource's input, so the committed
 checkpoint holds it as ciphertext, under [the state copy](#the-state-copy)
 below.

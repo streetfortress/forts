@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
 // secretsTool is the seeder's only path to secret material: decrypt
@@ -32,7 +33,11 @@ type secretsTool interface {
 type sopsCLI struct{ root string }
 
 func (s sopsCLI) Decrypt(path string) ([]byte, error) {
-	out, err := exec.Command("sops", "-d", path).Output()
+	cmd, err := tools.Command("sops", "-d", path)
+	if err != nil {
+		return nil, err
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("sops -d %s: %s", path, lastLine(exitDetail(err)))
 	}
@@ -47,7 +52,10 @@ func (s sopsCLI) EncryptInPlace(path string) error {
 }
 
 func (s sopsCLI) EncryptWith(config, path string) error {
-	cmd := exec.Command("sops", "--config", config, "-e", "-i", path)
+	cmd, err := tools.Command("sops", "--config", config, "-e", "-i", path)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops -e %s: %s", path, lastLine(string(out)))
@@ -66,7 +74,10 @@ func (s sopsCLI) Set(path, key, value string) error {
 
 func (s sopsCLI) SetWith(config, path, jsonPath, value string) error {
 	v, _ := json.Marshal(value)
-	cmd := exec.Command("sops", "--config", config, "set", path, jsonPath, string(v))
+	cmd, err := tools.Command("sops", "--config", config, "set", path, jsonPath, string(v))
+	if err != nil {
+		return err
+	}
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops set %s %s: %s", path, jsonPath, lastLine(string(out)))
@@ -75,7 +86,10 @@ func (s sopsCLI) SetWith(config, path, jsonPath, value string) error {
 }
 
 func (s sopsCLI) UnsetWith(config, path, jsonPath string) error {
-	cmd := exec.Command("sops", "--config", config, "unset", path, jsonPath)
+	cmd, err := tools.Command("sops", "--config", config, "unset", path, jsonPath)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops unset %s %s: %s", path, jsonPath, lastLine(string(out)))
@@ -87,7 +101,10 @@ func (s sopsCLI) UnsetWith(config, path, jsonPath string) error {
 // lists — removing a recipient from .sops.yaml alone changes nothing:
 // the departed key keeps decrypting until this runs (fort dismantle).
 func (s sopsCLI) UpdateKeys(path string) error {
-	cmd := exec.Command("sops", "--config", filepath.Join(s.root, ".sops.yaml"), "updatekeys", "-y", path)
+	cmd, err := tools.Command("sops", "--config", filepath.Join(s.root, ".sops.yaml"), "updatekeys", "-y", path)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = s.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("sops updatekeys %s: %s", path, lastLine(string(out)))
@@ -97,7 +114,10 @@ func (s sopsCLI) UpdateKeys(path string) error {
 
 // GitAdd stages a path — additions, edits and deletions alike (-A).
 func (s sopsCLI) GitAdd(path string) error {
-	cmd := exec.Command("git", "add", "-A", "--", path)
+	cmd, err := tools.Command("git", "add", "-A", "--", path)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = s.root
 	return cmd.Run()
 }
