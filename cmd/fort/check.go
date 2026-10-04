@@ -85,11 +85,11 @@ func check(args []string) error {
 	// one: the declaration lives in luxor's tree, so it can only be
 	// traced with every manifest in hand (--all).
 	if *all {
-		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
 		est, err := estate.Load(root)
 		if err != nil {
 			return err
 		}
+		shared.findings = append(shared.findings, rustfsIdentityFindings(root, est.Hub, parsed)...)
 		shared.findings = append(shared.findings, clusterMonitoringFindings(root, est.Hub, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)

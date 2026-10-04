@@ -72,8 +72,8 @@ spec:
             K8S-Logging.Parser On
             K8S-Logging.Exclude On
 
-      # Loki push goes to luxor's MESH IP, not luxor.lofi: the name is a
-      # dual A record (10.1.0.5 + 10.0.0.5, rotated) and fluent-bit's
+      # Loki push goes to the hub's MESH IP (HUB_MESH_IP from
+      # cluster-vars), not a name: a dual A record and fluent-bit's
       # resolver takes one answer per attempt — a client that can't retry
       # across records fails whenever the cache hands it a path its network
       # can't reach (production-test's fluent-bit shipped zero logs this
@@ -107,7 +107,7 @@ spec:
         [OUTPUT]
             Name loki
             Match kube.*
-            Host 10.1.0.5
+            Host ${HUB_MESH_IP}
             Port 31100
             labels job=fluent-bit, cluster=${CLUSTER_NAME}, host=$kubernetes['host'], namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name']
             auto_kubernetes_labels off
@@ -117,7 +117,7 @@ spec:
         [OUTPUT]
             Name loki
             Match host.*
-            Host 10.1.0.5
+            Host ${HUB_MESH_IP}
             Port 31100
             labels job=systemd, cluster=${CLUSTER_NAME}, host=$HOSTNAME
             line_format json
@@ -128,7 +128,7 @@ spec:
         [OUTPUT]
             Name loki
             Match audit.*
-            Host 10.1.0.5
+            Host ${HUB_MESH_IP}
             Port 31100
             labels job=kube-audit, cluster=${CLUSTER_NAME}, host=$${NODE_NAME}
             line_format json

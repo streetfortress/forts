@@ -31,8 +31,11 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Hub, Forts, Registry string
-	Admins                                    []string
+	Name, Repo, RepoGit, Hub, HubPush, Forts, Registry string
+	Admins                                             []string
+	// Push: the edges have a hub to push to (a fort here or an address
+	// elsewhere), so the layer carries remote_write and fluent-bit.
+	Push bool
 }
 
 type multiFlag []string
@@ -46,14 +49,15 @@ func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<gitea>:<port>/<owner>/<name>)")
-	hub := fl.String("hub", "", "the fort whose monitoring tree carries the others' files; none for edge-only")
+	hub := fl.String("hub", "", "the fort of this estate that is the hub: the others' monitoring files render into its tree, their backups register with its rustfs")
+	hubPush := fl.String("hub-push", "", "a hub in another estate, by mesh address: the edges push to it (exclusive with --hub)")
 	forts := fl.String("forts", defaultForts, "the framework's flake URL, inputs.forts of the estate flake")
 	registry := fl.String("registry", "gitea.zen.lofi", "the chart registry the gate logs into")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--hub <host>] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
@@ -68,7 +72,7 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub}
+	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush}
 	if err := est.Validate(); err != nil {
 		return err
 	}
@@ -79,7 +83,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init births one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, Forts: *forts, Registry: *registry, Admins: admins})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
 	if err != nil {
 		return err
 	}

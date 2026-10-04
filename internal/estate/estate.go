@@ -13,6 +13,7 @@ package estate
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -33,11 +34,17 @@ type Estate struct {
 	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
 	// Both clone it with the deploy key fort mint registers.
 	Repo string `toml:"repo"`
-	// Hub is the fort whose monitoring tree carries every other fort's
-	// file (the dead man's switch, the edge Alertmanager datasource, a
-	// plain fort's scrape). Optional: an estate with no hub has no one to
-	// notice a silent fort, and says so by leaving this out.
+	// Hub is the fort of THIS estate whose monitoring tree carries every
+	// other fort's file (the dead man's switch, the edge Alertmanager
+	// datasource, a plain fort's scrape), and whose rustfs-central the
+	// forts with a backups profile register with. Optional: an estate
+	// with no hub has no one to notice a silent fort, and says so by
+	// leaving this out.
 	Hub string `toml:"hub"`
+	// HubPush is a hub in ANOTHER estate, by mesh address: the edges push
+	// metrics and logs to it, and that estate decides what it scrapes.
+	// Exclusive with Hub. No files render for it here.
+	HubPush string `toml:"hub_push"`
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -82,6 +89,12 @@ func (e Estate) Validate() error {
 	if e.Hub != "" && !nameRE.MatchString(e.Hub) {
 		return fmt.Errorf("hub %q — want the hub fort's host name (%s), or no hub", e.Hub, nameRE)
 	}
+	if e.HubPush != "" && net.ParseIP(e.HubPush) == nil {
+		return fmt.Errorf("hub_push %q — want the mesh address of a hub in another estate", e.HubPush)
+	}
+	if e.Hub != "" && e.HubPush != "" {
+		return fmt.Errorf("hub and hub_push together — a hub is either a fort of this estate or an address in another, not both")
+	}
 	return nil
 }
 
@@ -94,5 +107,11 @@ func (e Estate) RepoGit() string {
 	return e.Repo + ".git"
 }
 
-// HasHub says whether the estate names a monitoring hub.
+// HasHub says whether a fort of this estate is the hub: files render
+// into its tree.
 func (e Estate) HasHub() bool { return e.Hub != "" }
+
+// Pushes says whether the edges have somewhere to push: a hub here or an
+// address elsewhere. The shared layer carries remote_write and the log
+// shipper only then.
+func (e Estate) Pushes() bool { return e.Hub != "" || e.HubPush != "" }

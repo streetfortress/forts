@@ -229,13 +229,13 @@ func TestPlanB2KeyDryRunWithoutCredentials(t *testing.T) {
 func TestRustfsIdentityFindings(t *testing.T) {
 	root := t.TempDir()
 	write := func(keys ...string) {
-		dir := filepath.Join(root, filepath.Dir(rustfsUsers))
+		dir := filepath.Join(root, filepath.Dir(rustfsUsersPath("luxor")))
 		os.MkdirAll(dir, 0o755)
 		body := "apiVersion: v1\nkind: Secret\nmetadata:\n    name: rustfs-users\n    namespace: rustfs\nstringData:\n"
 		for _, k := range keys {
 			body += "    " + k + ": ENC[AES256_GCM,data:x,iv:y,tag:z,type:str]\n"
 		}
-		os.WriteFile(filepath.Join(root, rustfsUsers), []byte(body), 0o644)
+		os.WriteFile(filepath.Join(root, rustfsUsersPath("luxor")), []byte(body), 0o644)
 	}
 	backed := manifest.Host{Backups: manifest.Backups{Profile: "production"}}
 	none := manifest.Host{Backups: manifest.Backups{Profile: "none"}}
@@ -250,25 +250,25 @@ func TestRustfsIdentityFindings(t *testing.T) {
 	// Forward: declared, not yet minted. A warning — an unfinished raise
 	// is visible and harmless.
 	write("prune")
-	fs := rustfsIdentityFindings(root, map[string]manifest.Host{"sfi-a": backed})
+	fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{"sfi-a": backed})
 	if len(fs) != 1 || fs[0].level != "warning" || !strings.Contains(fs[0].msg, "fort-sfi-a-pv") {
 		t.Errorf("forward: %v (%s)", fs, levels(fs))
 	}
 
 	// Both halves present: silent.
 	write("prune", "fort-sfi-a-pv")
-	if fs := rustfsIdentityFindings(root, map[string]manifest.Host{"sfi-a": backed}); len(fs) != 0 {
+	if fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{"sfi-a": backed}); len(fs) != 0 {
 		t.Errorf("a matched pair should say nothing: %v", fs)
 	}
 
 	// Reverse: the fort is gone, its credential is not. THE error case —
 	// a live identity scoped to a prefix whose backups are still there.
-	if fs := rustfsIdentityFindings(root, map[string]manifest.Host{}); len(fs) != 1 || fs[0].level != "error" || !strings.Contains(fs[0].msg, "ORPHANED") {
+	if fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{}); len(fs) != 1 || fs[0].level != "error" || !strings.Contains(fs[0].msg, "ORPHANED") {
 		t.Errorf("reverse: %v (%s)", fs, levels(fs))
 	}
 
 	// Disagreement: the fort exists but says it backs up nowhere.
-	if fs := rustfsIdentityFindings(root, map[string]manifest.Host{"sfi-a": none}); len(fs) != 1 || fs[0].level != "error" {
+	if fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{"sfi-a": none}); len(fs) != 1 || fs[0].level != "error" {
 		t.Errorf(`profile "none" with an identity must be an error: %v`, fs)
 	}
 

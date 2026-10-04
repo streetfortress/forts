@@ -98,6 +98,9 @@ func TestRenderScaffold(t *testing.T) {
 			t.Errorf("%s secrets.nix wrong:\n%s", name, sec)
 		}
 		cv := m["flux/clusters/"+name+"/cluster-vars.yaml"]
+		if !strings.Contains(cv, "HUB_MESH_IP: "+testHubIP) {
+			t.Errorf("%s cluster-vars lacks the hub's address:\n%s", name, cv)
+		}
 		if !strings.Contains(cv, "CLUSTER_NAME: "+name) {
 			t.Errorf("%s cluster-vars wrong:\n%s", name, cv)
 		}
@@ -177,7 +180,7 @@ func TestRenderScaffold(t *testing.T) {
 
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
-	if _, err := renderScaffold("lab-fort", h, testEstate); err == nil {
+	if _, err := renderScaffold("lab-fort", h, testEstate, testHubIP); err == nil {
 		t.Errorf("a manifest without mesh_ip should be refused")
 	}
 
@@ -241,9 +244,12 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 // the deployments repo as the source — the shape the golden trees carry.
 var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git", Hub: "luxor"}
 
+// testHubIP is luxor's mesh address, as its manifest has it.
+const testHubIP = "10.1.0.5"
+
 func render(t *testing.T, host string, h manifest.Host) []scaffoldFile {
 	t.Helper()
-	files, err := renderScaffold(host, h, testEstate)
+	files, err := renderScaffold(host, h, testEstate, testHubIP)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +350,7 @@ func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 	if readFile(t, filepath.Join(dir, manifest.Path("plain-fort"))) != readFile(t, filepath.Join("testdata", manifest.Path("plain-fort"))) {
 		t.Fatal("the fixture estate's manifest differs from testdata's")
 	}
-	files, err := renderScaffold("plain-fort", hosts["plain-fort"], est)
+	files, err := renderScaffold("plain-fort", hosts["plain-fort"], est, "")
 	if err != nil {
 		t.Fatal(err)
 	}

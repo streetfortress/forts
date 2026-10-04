@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
@@ -80,6 +81,7 @@ const (
 )
 
 type mintPlan struct {
+	est        estate.Estate // estate.toml: the hub the backups register with
 	root, host string
 	entry      manifest.Host
 	endpoint   string // wireguard endpoint, "" = none (a peer others dial out to is optional)
@@ -138,7 +140,11 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if gitea == nil {
 		return nil, fmt.Errorf("host %q: the flux deploy key needs the gitea client", host)
 	}
-	p := &mintPlan{root: root, host: host, entry: entry, write: write, have: map[string]string{}, admins: map[string][]string{}}
+	est, err := estate.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	p := &mintPlan{root: root, host: host, entry: entry, est: est, write: write, have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
@@ -367,11 +373,12 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 			return err
 		}
 	}
-	// Registering with luxor's rustfs-central: this fort's identity is
-	// declared in that fort's tree, because luxor hosts the backup
+	// Registering with the hub's rustfs-central: this fort's identity is
+	// declared in that fort's tree, because the hub hosts the backup
 	// destination. `fort check` traces it both ways, so the two halves
 	// cannot drift unnoticed, and dismantle withdraws it.
 	if p.rustfsSecret != "" {
+		rustfsUsers := rustfsUsersPath(p.est.Hub)
 		full := filepath.Join(p.root, rustfsUsers)
 		if err := tool.SetWith(filepath.Join(p.root, ".sops.yaml"), full, `["stringData"]["`+p.rustfsUser+`"]`, p.rustfsSecret); err != nil {
 			return fmt.Errorf("declaring %s in %s: %w", p.rustfsUser, rustfsUsers, err)
@@ -547,7 +554,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		if p.rustfsSecret == "" {
 			verb = "already in"
 		}
-		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsers, p.host)
+		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsersPath(p.est.Hub), p.host)
 	}
 	if p.entry.Backups.Backed() {
 		fmt.Fprintf(w, "· backups: profile %q — %s\n", p.entry.Backups.Profile, backupDestinations(p.entry.Backups.Profile))

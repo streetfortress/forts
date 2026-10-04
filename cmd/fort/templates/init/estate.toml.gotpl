@@ -4,8 +4,14 @@ name = "{{ .Name }}"
 repo = "{{ .Repo }}"
 {{- if .Hub }}
 hub = "{{ .Hub }}"
+{{- else if .HubPush }}
+hub_push = "{{ .HubPush }}"   # a hub in another estate: the edges push to it
 {{- else }}
-# hub = "<host>"   # the fort whose monitoring tree carries every other
-                   # fort's file (its dead man's switch, its scrape). None:
-                   # edge-only, and nobody notices a silent fort.
+# hub = "<host>"             # the fort of this estate whose monitoring tree carries
+                             # every other fort's file (its dead man's switch, its
+                             # scrape) and whose rustfs the backups register with
+# hub_push = "<mesh ip>"     # or a hub in another estate: the edges push to it
+                             # Neither: edge-only, and nobody notices a silent fort.
+                             # Changing this later means re-rendering flux/infrastructure
+                             # and HUB_MESH_IP in every cluster-vars by hand.
 {{- end }}

@@ -67,13 +67,36 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["provisioning/pulumi/Pulumi.yaml"], "binary: fort-pulumi") {
 		t.Errorf("Pulumi.yaml:\n%s", m["provisioning/pulumi/Pulumi.yaml"])
 	}
-	// with a hub, estate.toml names it
+	// no hub: the layer has no push targets and no log shipper
+	if strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "remoteWrite") || strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "fluent-bit") {
+		t.Error("no hub: the layer must carry neither remote_write nor fluent-bit")
+	}
+	for p, c := range m {
+		if strings.HasPrefix(p, "flux/infrastructure/") && strings.Contains(c, "${HUB_MESH_IP}") && !strings.Contains(p, "fluent-bit/") {
+			t.Errorf("%s references HUB_MESH_IP in a layer with no hub", p)
+		}
+	}
+	// with a hub, estate.toml names it and the layer pushes to it
 	v := testInitView
-	v.Hub = "luxor"
+	v.Hub, v.Push = "luxor", true
+	files, _ = renderInit(v)
+	m = map[string]string{}
+	for _, f := range files {
+		m[f.path] = string(f.content)
+	}
+	if !strings.Contains(m["estate.toml"], "\nhub = \"luxor\"\n") {
+		t.Errorf("estate.toml with hub:\n%s", m["estate.toml"])
+	}
+	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "url: http://${HUB_MESH_IP}:30990/api/v1/write") || !strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "  - fluent-bit\n") {
+		t.Error("with a hub: the layer must remote_write to HUB_MESH_IP and ship logs")
+	}
+	// a hub by address
+	v = testInitView
+	v.HubPush, v.Push = "10.1.0.5", true
 	files, _ = renderInit(v)
 	for _, f := range files {
-		if f.path == "estate.toml" && !strings.Contains(string(f.content), "\nhub = \"luxor\"\n") {
-			t.Errorf("estate.toml with hub:\n%s", f.content)
+		if f.path == "estate.toml" && !strings.Contains(string(f.content), "\nhub_push = \"10.1.0.5\"") {
+			t.Errorf("estate.toml with hub_push:\n%s", f.content)
 		}
 	}
 }

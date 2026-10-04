@@ -2,7 +2,9 @@
 # Applied by the flux-system root sync (this dir is the FluxInstance sync
 # path) and referenced via postBuild.substituteFrom on the infra-controllers,
 # infrastructure and apps Kustomizations. MESH_IP must stay in sync with
-# mesh/peers.json.
+# mesh/peers.json. HUB_MESH_IP is where the edge Prometheus remote-writes
+# and fluent-bit ships logs (estate.toml: the hub fort's mesh address, or
+# hub_push); an estate with no hub has no such line and no such targets.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,3 +13,6 @@ metadata:
 data:
   CLUSTER_NAME: {{ .Hostname }}
   MESH_IP: {{ .MeshIP }}
+{{- if .HubMeshIP }}
+  HUB_MESH_IP: {{ .HubMeshIP }}
+{{- end }}

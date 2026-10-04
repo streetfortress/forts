@@ -63,7 +63,8 @@ type dismantlePlan struct {
 	sshConfig   string   // mesh/ssh_config re-rendered without the host ("" = nothing to do)
 	knownHosts  string   // mesh/known_hosts without the host's line ("" = nothing to do)
 	rekey       []string // sops files under the shared infrastructure rule
-	rustfsUser  string   // the fort's identity to withdraw from luxor's provider contract
+	rustfsUser  string
+	rustfsUsers string   // the hub's users file the identity is withdrawn from   // the fort's identity to withdraw from luxor's provider contract
 	consolePass bool     // the fort has an entry in the console-password registry
 	pruner      bool     // the fort's sops file names restic-prune-s3-env-b2: it holds the fleet's B2 pruning key (#400)
 	residue     []string // "path: N mention(s)"
@@ -123,9 +124,11 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// The cluster's monitoring on the hub (#288): scaffold's file and its
 	// line in the hub's kustomization — a retired cluster's dead man's
 	// switch would otherwise page forever.
-	if est, err := estate.Load(root); err != nil {
+	est, err := estate.Load(root)
+	if err != nil {
 		return nil, err
-	} else if rel := clusterMonitoringPath(est.Hub, host); est.HasHub() && exists(root, rel) {
+	}
+	if rel := clusterMonitoringPath(est.Hub, host); est.HasHub() && exists(root, rel) {
 		p.removes = append(p.removes, rel)
 		p.edits = append(p.edits, dEdit{clusterMonitoringKustomization(est.Hub), "- clusters/" + host + ".yaml", func(s string) (string, error) {
 			s, _ = removeLinesContaining(s, "clusters/"+host+".yaml")
@@ -169,13 +172,14 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if !entry.Realized() {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack — after this merges, `fort destroy "+host+" --no-stack` revokes the deploy key and B2 keys mint made; the machine itself is powered off and its disk wiped by hand (docs/baremetal.md).")
 	}
-	// The registration with luxor's rustfs-central lives in luxor's
+	// The registration with the hub's rustfs-central lives in the hub's
 	// tree, because that fort hosts the backup destination.
 	// Withdrawing it is what makes the credential go away
 	// — the IAM reconciler removes any user the contract no longer
 	// declares, so an orphaned identity cannot outlive its fort.
-	if entry.Backups.Backed() && secretHasKey(root, rustfsUsers, rustfsPVUser(host)) {
+	if entry.Backups.Backed() && est.HasHub() && secretHasKey(root, rustfsUsersPath(est.Hub), rustfsPVUser(host)) {
 		p.rustfsUser = rustfsPVUser(host)
+		p.rustfsUsers = rustfsUsersPath(est.Hub)
 	}
 	// The console password (#524) is the one credential of this fort
 	// that lives outside nixos/secrets/<host>.yaml, because an OPERATOR
@@ -206,10 +210,10 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 		}
 	}
 	if p.rustfsUser != "" {
-		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, rustfsUsers), `["stringData"]["`+p.rustfsUser+`"]`); err != nil {
-			return fmt.Errorf("withdrawing %s from %s: %w", p.rustfsUser, rustfsUsers, err)
+		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, p.rustfsUsers), `["stringData"]["`+p.rustfsUser+`"]`); err != nil {
+			return fmt.Errorf("withdrawing %s from %s: %w", p.rustfsUser, p.rustfsUsers, err)
 		}
-		if err := tool.GitAdd(rustfsUsers); err != nil {
+		if err := tool.GitAdd(p.rustfsUsers); err != nil {
 			return err
 		}
 	}

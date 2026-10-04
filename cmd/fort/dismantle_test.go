@@ -39,6 +39,7 @@ func TestDismantle(t *testing.T) {
 			}
 			// a doc that names the host, so residue reporting has something to find
 			write("README.md", "# fleet\n\nthe fort "+tc.host+" is mentioned here\n")
+			write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nhub = \"luxor\"\n")
 			// the client side (#434), as the tree before the dismantle has it
 			m, _ := loadMesh(tmp)
 			hosts, _, _ := manifest.LoadAll(tmp)

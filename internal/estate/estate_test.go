@@ -14,7 +14,13 @@ func TestParse(t *testing.T) {
 	if err != nil || e.Hub != "luxor" || e.RepoGit() != e.Repo {
 		t.Fatalf("with hub: %+v %v", e, err)
 	}
+	e, err = Parse([]byte("name = \"second-estate\"\nrepo = \"ssh://x/y\"\nhub_push = \"10.1.0.5\"\n"))
+	if err != nil || e.HasHub() || !e.Pushes() || e.HubPush != "10.1.0.5" {
+		t.Fatalf("hub by address: %+v %v", e, err)
+	}
 	for name, tc := range map[string]struct{ text, want string }{
+		"bad push":    {"name = \"e\"\nrepo = \"ssh://x/y\"\nhub_push = \"luxor\"\n", "hub_push"},
+		"both hubs":   {"name = \"e\"\nrepo = \"ssh://x/y\"\nhub = \"luxor\"\nhub_push = \"10.1.0.5\"\n", "together"},
 		"no name":     {"repo = \"ssh://x/y\"\n", "name"},
 		"bad repo":    {"name = \"e\"\nrepo = \"git@gitea:sfi/e\"\n", "git URL"},
 		"bad hub":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nhub = \"Luxor\"\n", "hub"},

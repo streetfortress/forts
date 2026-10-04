@@ -56,6 +56,10 @@ type hostView struct {
 	// RepoURL: the estate's git URL (estate.toml), the FluxInstance's
 	// source and auto-rebuild's pull.
 	RepoURL string
+	// HubMeshIP: where the edge stack pushes (cluster-vars HUB_MESH_IP):
+	// the hub fort's mesh address, or estate.toml's hub_push. "" with no
+	// hub, and the layer init rendered then carries no push targets.
+	HubMeshIP string
 	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
 	// is reached by cluster DNS rather than over the mesh.
 	Hub bool
@@ -112,7 +116,11 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	files, err := renderScaffold(host, entry, est)
+	hubIP, err := hubMeshIP(root, est)
+	if err != nil {
+		return err
+	}
+	files, err := renderScaffold(host, entry, est, hubIP)
 	if err != nil {
 		return err
 	}
@@ -186,10 +194,29 @@ func scaffoldShape(e manifest.Host) string {
 	return s + ", k3s on " + e.Datastore()
 }
 
-// renderScaffold is the pure half: the manifests → files.
-func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaffoldFile, error) {
+// hubMeshIP is where this estate's edges push: the hub fort's mesh
+// address (from its manifest) or the address estate.toml names in another
+// estate; "" when there is no hub and nothing to push to.
+func hubMeshIP(root string, est estate.Estate) (string, error) {
+	switch {
+	case est.HasHub():
+		hub, err := manifest.Load(root, est.Hub)
+		if err != nil {
+			return "", fmt.Errorf("%s names hub %q: %w", estate.Path, est.Hub, err)
+		}
+		return hub.MeshIP, nil
+	case est.HubPush != "":
+		return est.HubPush, nil
+	}
+	return "", nil
+}
+
+// renderScaffold is the pure half: the manifests → files. hubIP is the
+// hub's mesh address (hubMeshIP), "" for an estate with no hub.
+func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP string) ([]scaffoldFile, error) {
 	view := hostView{
 		RepoURL:      est.RepoGit(),
+		HubMeshIP:    hubIP,
 		Hostname:     host,
 		MeshIP:       entry.MeshIP,
 		LanPrefix:    24,

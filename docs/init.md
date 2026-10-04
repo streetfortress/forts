@@ -42,14 +42,30 @@ The estate's own, named in the report:
 ```toml
 name = "second-estate"
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
-# hub = "luxor"                                               # the monitoring hub; none = edge-only
+# hub = "luxor"          # the hub is a fort of this estate
+# hub_push = "10.1.0.5"  # or a hub in another estate, by mesh address
 ```
 
 `scaffold` renders the FluxInstance source and `sfi.auto-rebuild.repoUrl`
-from `repo`, and a fort's file on the hub only when `hub` names one.
-`check` and `dismantle` read the hub too. An estate with no hub has nobody
-to notice a silent fort: the edge Alertmanager is its only alerting, and
-`fort check --all` says so.
+from `repo`. The hub takes one of three shapes, and `init` renders the
+shared layer for the one it is told (`--hub`, `--hub-push`, neither):
+
+| estate.toml | the hub's tree | the edges push | backups register |
+|---|---|---|---|
+| `hub = "<host>"` | a fort here: scaffold renders every other fort's file into `flux/apps/<hub>/monitoring/clusters/` | `HUB_MESH_IP` = the hub's `mesh_ip` | with `flux/apps/<hub>/rustfs-central` |
+| `hub_push = "<mesh ip>"` | in another estate: nothing renders here, that estate decides what it scrapes | `HUB_MESH_IP` = the address | refused: a `[backups]` profile needs a hub here |
+| neither | none | the layer carries no `remote_write` and no fluent-bit | refused |
+
+`scaffold` writes `HUB_MESH_IP` into a cluster's `cluster-vars.yaml` when
+there is somewhere to push; the layer's edge Prometheus `remote_write` and
+fluent-bit's Loki outputs read it. `check` and `dismantle` read the hub
+too. An estate with no hub has nobody to notice a silent fort: the edge
+Alertmanager is its only alerting, and `fort check --all` says so.
+
+Changing the hub after init is a hand edit: `flux/infrastructure` is the
+estate's once rendered (re-render it from a scratch `fort init` and diff),
+and `cluster-vars.yaml` is never overwritten by scaffold, so each cluster
+gains or loses its `HUB_MESH_IP` line by hand.
 
 ## After init
 

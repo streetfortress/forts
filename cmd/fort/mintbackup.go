@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/b2"
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -45,16 +46,19 @@ const (
 	b2PVBucket       = "sfi-pv-backups"
 	b2PhysicalBucket = "sfi-db-physical-backups"
 	b2LogicalBucket  = "sfi-db-logical-backups"
-
-	// luxor's backup-destination instance (docs/infra/providers.md).
-	// S3 is a per-fort battery; what is particular is luxor's ROLE as
-	// the hub, so a fort registers as a tenant of a service ANOTHER
-	// fort hosts, and its identity is declared in that fort's tree.
-	// mint appends, dismantle removes, `fort check` traces both ways.
-	rustfsUsers = "flux/apps/luxor/rustfs-central/users.sops.yaml"
 )
 
-// rustfsPVUser is a fort's restic identity on luxor's rustfs. The name is
+// rustfsUsersPath is the hub's backup-destination instance
+// (docs/infra/providers.md): S3 is a per-fort battery; what is particular
+// is the hub's ROLE, so a fort registers as a tenant of a service ANOTHER
+// fort hosts, and its identity is declared in that fort's tree. mint
+// appends, dismantle removes, `fort check` traces both ways. Which fort
+// is the hub is estate.toml's to say.
+func rustfsUsersPath(hub string) string {
+	return filepath.Join("flux/apps", hub, "rustfs-central/users.sops.yaml")
+}
+
+// rustfsPVUser is a fort's restic identity on the hub's rustfs. The name is
 // also its access key: it reads as itself in `mc admin user list`, in an
 // audit, and in the repository URL that uses it.
 func rustfsPVUser(host string) string { return "fort-" + host + "-pv" }
@@ -121,8 +125,11 @@ func (p *mintPlan) planBackups(take func(string) (string, bool)) error {
 		p.resticRustfs = v
 		p.rustfsUser = envKeyID(v)
 	} else {
-		if !exists(p.root, rustfsUsers) {
-			return fmt.Errorf("%s does not exist — seed luxor's rustfs provider first: fort seed luxor flux/apps/luxor/rustfs-central --write", rustfsUsers)
+		if !p.est.HasHub() {
+			return fmt.Errorf("[backups] profile %s needs a hub that hosts rustfs-central, and %s names none (a hub_push in another estate cannot take a registration yet)", p.entry.Backups.Profile, estate.Path)
+		}
+		if users := rustfsUsersPath(p.est.Hub); !exists(p.root, users) {
+			return fmt.Errorf("%s does not exist — seed the hub's rustfs provider first: fort seed %s flux/apps/%s/rustfs-central --write", users, p.est.Hub, p.est.Hub)
 		}
 		sec, err := newToken()
 		if err != nil {
@@ -429,8 +436,8 @@ func secretHasKey(root, rel, key string) bool {
 }
 
 // rustfsIdentityFindings traces BOTH ways the registration of a fort
-// with luxor's rustfs-central (docs/infra/providers.md — a service one
-// fort hosts for the others, so the declaration is in luxor's tree):
+// with the hub's rustfs-central (docs/infra/providers.md — a service one
+// fort hosts for the others, so the declaration is in the hub's tree):
 //
 //	forward   a fort that backs up has an identity        → else a WARNING
 //	reverse   an identity belongs to a fort that exists   → else an ERROR
@@ -440,12 +447,21 @@ func secretHasKey(root, rel, key string) bool {
 // `fort mint`. An ORPHANED identity is a live credential scoped to a
 // prefix whose backups are still sitting there — that is the direction
 // that earns the cross-fort write, and the one that must fail CI.
-func rustfsIdentityFindings(root string, hosts map[string]manifest.Host) []finding {
+func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []finding {
 	var out []finding
+	if hub == "" {
+		for host, h := range hosts {
+			if h.Backups.Backed() {
+				return []finding{{"error", estate.Path, host + " declares [backups] profile " + h.Backups.Profile + " but the estate names no hub — nothing hosts rustfs-central for it to register with"}}
+			}
+		}
+		return nil
+	}
+	rustfsUsers := rustfsUsersPath(hub)
 	if !exists(root, rustfsUsers) {
 		for host, h := range hosts {
 			if h.Backups.Backed() {
-				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up — seed luxor's rustfs provider: fort seed luxor flux/apps/luxor/rustfs-central --write"}}
+				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up — seed the hub's rustfs provider: fort seed " + hub + " flux/apps/" + hub + "/rustfs-central --write"}}
 			}
 		}
 		return nil

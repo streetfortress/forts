@@ -38,7 +38,7 @@ flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
 ● flux-system/kustomization.yaml
-● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>
+● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the hub's address, from estate.toml]
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → flux/apps/<host>
 flux/apps/<host>/
