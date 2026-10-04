@@ -37,6 +37,10 @@
     inputs.forts.nixosModules.lab-host
     inputs.forts.nixosModules.ops-deployer
     inputs.forts.nixosModules.shell        # the prompt, keys and aliases at a pane (#557)
+    # The console door (sfi/forts#24, #524): a password for `deployer` that
+    # only a getty accepts. fort mint minted the hash into this host's sops
+    # file and the passphrase into provisioning/console-passwords.yaml.
+    inputs.forts.nixosModules.ops-console
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
   ];
 
@@ -50,6 +54,12 @@
 
   # zsh and the shared prompt for whoever reads a pane here (#576).
   sfi.shell.enable = true;
+
+  # The console door (#524): the getty reads deployer-password-hash from
+  # this host's sops file, and sshd still refuses the password. Read the
+  # passphrase with `fort console-password plain-fort --show`; replace
+  # it with `--rotate --write`.
+  sfi.ops.console.enable = true;
 
   # Watch main; a changed host config lands within a minute or two of
   # merging — or now, via `sudo sfi-nixos-rebuild` as deployer (#93).

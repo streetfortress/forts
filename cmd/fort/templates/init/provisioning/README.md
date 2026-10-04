@@ -9,8 +9,9 @@ The inputs a fort's birth needs and the record of what was raised.
   `linode-token` (a cloud fort), `restic-password` and the
   `rustfs-access-key` / `rustfs-secret-key` pair (a fort with a backups
   profile), `b2-minting-key-id` (a production backups profile).
-- `console-passwords.yaml` — the console registry, written by
-  `fort console-password`.
+- `console-passwords.yaml` — the console registry, one passphrase per
+  fort: `fort mint` adds a fort's entry at birth, `fort console-password
+  --rotate` replaces it, `fort dismantle` withdraws it.
 - `pulumi/` — the project file (the program is `fort-pulumi`, built
   beside `fort`), one `Pulumi.<host>.yaml` per stack, and `state/`, the
   committed file:// backend.

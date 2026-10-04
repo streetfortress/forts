@@ -6,7 +6,8 @@ fort mint <host> [--write]
 
 `mint` gives a host everything that makes it *itself*: the keys other
 systems will recognise it by, the sops rules that let it read its own
-secrets, the mesh peer entry, and — for a flux cluster — the cluster's
+secrets, the mesh peer entry, the console password where the host file
+enables the door, and — for a flux cluster — the cluster's
 age key, the deploy key gitea trusts, and the canary that proves the
 whole chain works. It runs after [`scaffold --write`](scaffold.md) and
 before [`add`](add.md); [`dismantle`](dismantle.md) is its exact inverse.
@@ -51,11 +52,28 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
+| ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
 | · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `repo`) | always; registered under `--write` only |
 | · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
+
+**The console password is minted here and rotated elsewhere**
+(sfi/forts#24; `fort console-password` has the custody notes). Mint
+reads the host file for the scaffold's enable line and, finding it,
+mints a passphrase, hashes it (`mkpasswd`, yescrypt) and writes the two
+halves to their two readers: the hash to the fort's sops file, beside
+the keys, encrypted to the host too; the passphrase to the registry,
+encrypted to the admin recipients and not to the fort, and written
+*first*, so a failure between the two never leaves a hash nobody can
+read back. Nothing is printed; `fort console-password <host> --show`
+is the read. Restore-not-rotate holds as for every other key: a hash
+already in the file is kept, and when its passphrase has gone missing
+from the registry mint says so and names `console-password <host>
+--rotate --write` rather than replacing a value somebody may still
+hold. A host whose `default.nix` does not enable the module gets no
+console half at all.
 
 **The calls outside the tree** are the gitea deploy key and, on a
 `production` fort, the B2 application key. Both are registered only under `--write`,
@@ -113,7 +131,8 @@ hosts follow.
 For a manifest with no `[cluster]` table the plan is the host's own
 identity and nothing cluster-shaped: `wireguard-private-key`,
 `ssh-host-key` + `.pub` and `flux-git-deploy-key` (auto-rebuild's pull
-credential — every fort's) into the secrets file, the `nixos/.sops.yaml`
+credential — every fort's) into the secrets file, the console password
+(the plain shape enables the door too), the `nixos/.sops.yaml`
 rule, the peer, the deploy key on gitea. No `k3s-token`, no
 `flux-sops-age-key`, no fleet rule or infra recipient (nothing to re-key),
 no canary. The gate wants only `nixos/hosts/<host>/default.nix`.
@@ -152,6 +171,7 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ● nixos/secrets/sfi-x.yaml             k3s-token, wireguard-private-key, … — minted, sops-encrypted
 ○ nixos/.sops.yaml                     + rule secrets/sfi-x.yaml → 3 shared recipient(s) + host age1…
 ○ mesh/peers.json                 + .peers.sfi-x (10.1.0.55, endpoint sfi-x.streetfortress.cloud)
+○ provisioning/console-passwords.yaml   + sfi-x: its console passphrase (sops set; the host holds the hash)
 ◆ mesh/ssh_config                 re-rendered — Host sfi-x → deployer@10.1.0.55
 ◆ mesh/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
 ○ .sops.yaml                           + rule flux/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
@@ -176,4 +196,5 @@ in that same file; a `production` one additionally needs the B2 minting key
 (its id from `b2-minting-key-id` in that file, the key prompted for or
 `B2_APP_KEY`), and only when the key it would mint does not exist yet. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
-it).
+it). `mkpasswd` for the console password hash, when the host enables the
+door and the file has no hash — from PATH, else nixpkgs, as `sops` is.

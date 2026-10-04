@@ -362,3 +362,188 @@ func TestMintPlainFort(t *testing.T) {
 		}
 	}
 }
+
+// The console door at birth (sfi/forts#24): a host whose default.nix
+// enables sfi.ops.console gets the credential with its identity — the
+// hash as one more key of the secrets file, the passphrase in the
+// registry, the registry written first. Restore-not-rotate holds: a
+// re-run mints nothing, and a hash whose passphrase is gone from the
+// registry is reported, never replaced — console-password --rotate is
+// the repair. Built on its own fixtures, so it runs outside an estate
+// checkout too (the mirror tests above skip there).
+func TestMintConsole(t *testing.T) {
+	const host = "mint-console"
+	tmp := t.TempDir()
+	write := func(rel, content string) {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
+	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.95\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.95\"\n")
+	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
+	// The scaffold's output, reduced to the one line mint reads.
+	write("nixos/hosts/"+host+"/default.nix", "{ inputs, ... }:\n{\n  imports = [ inputs.forts.nixosModules.ops-console ];\n  sfi.ops.console.enable = true;\n}\n")
+
+	// CI has no mkpasswd and no nix; the hash's shape is mkpasswdHash's
+	// contract (console_test.go).
+	hashPassword = func(string) (string, error) { return "$y$j9T$fake$hash", nil }
+	t.Cleanup(func() { hashPassword = mkpasswdHash })
+
+	tool := &fakeTool{}
+	gitea, _ := fakeGitea(t, nil)
+	p, err := planMint(tmp, host, tool, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.console || !p.consoleMint || !p.newRegistry || p.consoleOrphan {
+		t.Fatalf("plan: console=%v mint=%v newRegistry=%v orphan=%v", p.console, p.consoleMint, p.newRegistry, p.consoleOrphan)
+	}
+	// The plain fort's four keys and the hash, the hash last.
+	if len(p.missing) != 5 || p.missing[4] != keyDeployerPasswordHash {
+		t.Fatalf("missing: %v", p.missing)
+	}
+	var sb strings.Builder
+	p.report(&sb, false)
+	if !strings.Contains(sb.String(), "● "+consoleRegistry) || !strings.Contains(sb.String(), "dry run") {
+		t.Fatalf("dry run: want the registry planned, got:\n%s", sb.String())
+	}
+	if p.consoleHash != "" {
+		t.Fatal("a dry run must not hash")
+	}
+
+	if err := p.apply(tool, gitea); err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(tmp, consoleRegistry)
+	secrets := filepath.Join(tmp, p.secretsPath)
+	// Both files encrypted once, the registry before the secrets file:
+	// a failure between them leaves a passphrase nobody uses, never a
+	// hash nobody can read back.
+	ri, si := -1, -1
+	for i, e := range tool.encrypted {
+		switch e {
+		case registry:
+			ri = i
+		case secrets:
+			si = i
+		}
+	}
+	if ri < 0 || si < 0 || ri > si {
+		t.Fatalf("encrypted: %v — want the registry, then the secrets file", tool.encrypted)
+	}
+	reg := readFile(t, registry)
+	if !strings.HasPrefix(reg, host+": ") || !strings.HasSuffix(reg, "\n") {
+		t.Fatalf("registry: %q", reg)
+	}
+	pass := strings.TrimSpace(strings.TrimPrefix(reg, host+": "))
+	if strings.Count(pass, "-") != 4 {
+		t.Fatalf("registry holds %q — want the passphrase under the host name", pass)
+	}
+	var have map[string]string
+	if err := yamlUnmarshalFile(secrets, &have); err != nil {
+		t.Fatal(err)
+	}
+	if have[keyDeployerPasswordHash] != "$y$j9T$fake$hash" {
+		t.Fatalf("secrets file holds %q under %s — the HOST holds the hash, never the passphrase", have[keyDeployerPasswordHash], keyDeployerPasswordHash)
+	}
+	if strings.Contains(readFile(t, secrets), pass) {
+		t.Fatal("the passphrase reached the secrets file")
+	}
+	if !contains(tool.added, consoleRegistry) {
+		t.Fatalf("added: %v — the registry is not staged", tool.added)
+	}
+	sb.Reset()
+	p.report(&sb, true)
+	rep := sb.String()
+	if strings.Contains(rep, pass) || strings.Contains(rep, "$y$j9T$fake$hash") {
+		t.Fatalf("the report printed a value:\n%s", rep)
+	}
+	if !strings.Contains(rep, "● "+consoleRegistry) || !strings.Contains(rep, "console-password "+host+" --show") || !strings.Contains(rep, keyDeployerPasswordHash) {
+		t.Fatalf("report:\n%s", rep)
+	}
+
+	// re-run: both halves there, nothing minted, nothing said
+	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.consoleMint || p2.consoleOrphan || len(p2.missing) != 0 {
+		t.Fatalf("re-run: mint=%v orphan=%v missing=%v", p2.consoleMint, p2.consoleOrphan, p2.missing)
+	}
+	sb.Reset()
+	p2.report(&sb, true)
+	if strings.Contains(sb.String(), consoleRegistry) {
+		t.Fatalf("re-run must not mention the registry:\n%s", sb.String())
+	}
+
+	// the orphan: the hash on the host, no passphrase behind it. Mint
+	// keeps the hash — somebody may still hold the value — and names the
+	// deliberate repair.
+	write(consoleRegistry, "sops: {}\n")
+	p3, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p3.consoleMint || !p3.consoleOrphan || len(p3.missing) != 0 {
+		t.Fatalf("orphan: mint=%v orphan=%v missing=%v", p3.consoleMint, p3.consoleOrphan, p3.missing)
+	}
+	sb.Reset()
+	p3.report(&sb, false)
+	if !strings.Contains(sb.String(), "! "+consoleRegistry) || !strings.Contains(sb.String(), "console-password "+host+" --rotate --write") {
+		t.Fatalf("orphan: want the repair named, got:\n%s", sb.String())
+	}
+
+	// a second fort joins an existing registry with a sops set, not a
+	// rewrite: the first fort's entry is never touched
+	write(consoleRegistry, host+": ENC[z]\nsops: {}\n")
+	const other = "mint-console-2"
+	write(manifest.Path(other), "mesh_ip = \"10.1.0.94\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.94\"\n")
+	write("nixos/hosts/"+other+"/default.nix", "{\n  sfi.ops.console.enable = true;\n}\n")
+	tool4 := &fakeTool{}
+	p4, err := planMint(tmp, other, tool4, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p4.consoleMint || p4.newRegistry {
+		t.Fatalf("second fort: mint=%v newRegistry=%v", p4.consoleMint, p4.newRegistry)
+	}
+	if err := p4.apply(tool4, gitea); err != nil {
+		t.Fatal(err)
+	}
+	if contains(tool4.encrypted, registry) {
+		t.Fatal("an existing registry must not be re-encrypted whole")
+	}
+	var set bool
+	for _, s := range tool4.sets {
+		if s[0] == registry && s[1] == `["`+other+`"]` && strings.Count(s[2], "-") == 4 {
+			set = true
+		}
+	}
+	if !set {
+		t.Fatalf("sets: %v — want the second fort's entry set in the registry", tool4.sets)
+	}
+	sb.Reset()
+	p4.report(&sb, true)
+	if !strings.Contains(sb.String(), "○ "+consoleRegistry) {
+		t.Fatalf("second fort: want the appended registry, got:\n%s", sb.String())
+	}
+
+	// a host that does not enable the module: no console half at all,
+	// whatever the registry says — that is `fort check`'s warning
+	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
+	write(consoleRegistry, "sops: {}\n")
+	p5, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p5.console || p5.consoleMint || p5.consoleOrphan {
+		t.Fatalf("opted out: console=%v mint=%v orphan=%v", p5.console, p5.consoleMint, p5.consoleOrphan)
+	}
+}

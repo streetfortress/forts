@@ -54,11 +54,19 @@ import (
 // multiplexer's buffer and in whatever transcript the session leaves.
 // `--show` is the deliberate read, one fort at a time.
 //
-// WHY IT IS NOT PART OF `fort mint`. Mint restores rather than rotates,
-// because an identity that changes invalidates everything encrypted to
-// it. A password is the opposite: an operator rotates it after a person
-// leaves, after a shared console session, after a drill. So this is its
-// own verb with `--rotate` as the deliberate act.
+// HOW IT RELATES TO `fort mint`. The first credential is mint's
+// (sfi/forts#24): every host shape the scaffold renders enables the
+// module, and mint, which reads the host file anyway, mints the
+// passphrase and the hash with the rest of the identity — the same two
+// files, through the same recordPassphrase below. Mint restores rather
+// than rotates, because an identity that changes invalidates everything
+// encrypted to it; a hash already in the secrets file is kept, even when
+// its passphrase has gone missing from the registry. A password is the
+// one credential an operator rotates — after a person leaves, after a
+// shared console session, after a drill — so rotation stays here, as
+// `--rotate`, and `--show` is the read. `--write` without `--rotate`
+// mints only where mint did not: a host that enabled the module after
+// its birth.
 //
 // SCOPE: every fort. ops/ops-commands.nix pins every sfi-* sudo rule to
 // `deployer`, and the account is ops/deployer.nix's on cluster forts and
@@ -171,34 +179,14 @@ func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
 // and sops' argv, and nothing else — sops.go says why that argv is the
 // trade the repo already makes for every other value it sets.
 func (p *consolePlan) apply(tool secretsTool) error {
-	pass, err := newPassphrase()
+	pass, hash, err := newConsoleCredential()
 	if err != nil {
 		return err
 	}
-	hash, err := hashPassword(pass)
-	if err != nil {
-		return err
-	}
-	fleetConfig := filepath.Join(p.root, ".sops.yaml")
-	registry := filepath.Join(p.root, consoleRegistry)
 	// The registry first: a failure after the host's hash is set would
 	// leave a fort whose console password nobody can read, which is the
 	// one state this whole design exists to prevent.
-	if p.newRegistry {
-		if err := os.MkdirAll(filepath.Dir(registry), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(registry, []byte(p.host+": "+pass+"\n"), 0o600); err != nil {
-			return err
-		}
-		if err := tool.EncryptWith(fleetConfig, registry); err != nil {
-			os.Remove(registry)
-			return err
-		}
-	} else if err := tool.SetWith(fleetConfig, registry, `["`+p.host+`"]`, pass); err != nil {
-		return err
-	}
-	if err := tool.GitAdd(consoleRegistry); err != nil {
+	if err := recordPassphrase(tool, p.root, p.host, pass); err != nil {
 		return err
 	}
 	if err := tool.SetWith(filepath.Join(p.root, "nixos/.sops.yaml"), filepath.Join(p.root, p.secretsPath), `["`+keyDeployerPasswordHash+`"]`, hash); err != nil {
@@ -209,6 +197,47 @@ func (p *consolePlan) apply(tool secretsTool) error {
 	}
 	p.passphrase, p.hash = pass, hash
 	return nil
+}
+
+// newConsoleCredential is the pair: a fresh passphrase and its hash for
+// the host. The passphrase reaches mkpasswd on stdin and sops' argv, and
+// nothing else — sops.go says why that argv is the trade the repo
+// already makes for every other value it sets.
+func newConsoleCredential() (pass, hash string, err error) {
+	if pass, err = newPassphrase(); err != nil {
+		return "", "", err
+	}
+	if hash, err = hashPassword(pass); err != nil {
+		return "", "", err
+	}
+	return pass, hash, nil
+}
+
+// recordPassphrase writes the registry half: the registry is created for
+// the first fort — one file written whole and encrypted once, as mint
+// does with a new secrets file — and set for every later one, then
+// staged. Shared by this verb and fort mint, and called BEFORE the hash
+// goes onto the host in both: the other order can leave a hash nobody
+// can read back. The fleet .sops.yaml's provisioning/ rule picks the
+// admin recipients and not the fort.
+func recordPassphrase(tool secretsTool, root, host, pass string) error {
+	fleetConfig := filepath.Join(root, ".sops.yaml")
+	registry := filepath.Join(root, consoleRegistry)
+	if !exists(root, consoleRegistry) {
+		if err := os.MkdirAll(filepath.Dir(registry), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(registry, []byte(host+": "+pass+"\n"), 0o600); err != nil {
+			return err
+		}
+		if err := tool.EncryptWith(fleetConfig, registry); err != nil {
+			os.Remove(registry)
+			return err
+		}
+	} else if err := tool.SetWith(fleetConfig, registry, `["`+host+`"]`, pass); err != nil {
+		return err
+	}
+	return tool.GitAdd(consoleRegistry)
 }
 
 // show prints one fort's passphrase. One fort, because a whole-file
@@ -290,9 +319,10 @@ not in your scrollback. Read it when you need it:
 // host has opted in yet.
 func (p *consolePlan) tail(w io.Writer) {
 	if !p.enabled {
-		fmt.Fprintf(w, `Next: the host must opt in. In %s, import the module and enable it:
+		fmt.Fprintf(w, `Next: the host must opt in. In %s, import the module and enable it
+(every host fort scaffold renders does both already, sfi/forts#24):
 
-    imports = [ ../../modules/ops/console.nix ];
+    imports = [ inputs.forts.nixosModules.ops-console ];
     sfi.ops.console.enable = true;
 
 Then PR both changes together — `+"`fort check`"+` fails a fort that enables the
@@ -327,9 +357,12 @@ func readConsolePasswordSops(root, host string) (string, error) {
 
 // consoleFindings is the `fort check` half (#524's "exercise it, or it
 // is only a belief"). The failsafe is three files, and every partial
-// state fails quietly: a module with no hash fails the activation, a
-// hash with no registry entry is a door nobody can open, and a
-// credential no module reads is neither.
+// state fails quietly: a module with no hash fails the activation (an
+// error, and since sfi/forts#24 the state a fort is in between scaffold
+// and mint), a hash with no registry entry is a door nobody can open,
+// and a credential no module reads is neither. A host with no half at
+// all is silent: the scaffold enables the module on every shape, so a
+// host without it took the line out on purpose.
 func consoleFindings(root, fort string) []finding {
 	hostNix := filepath.Join("nixos/hosts", fort, "default.nix")
 	secretsPath := filepath.Join("nixos/secrets", fort+".yaml")
@@ -339,7 +372,7 @@ func consoleFindings(root, fort string) []finding {
 	entry := sopsHasKey(filepath.Join(root, consoleRegistry), fort)
 	switch {
 	case enabled && !hash:
-		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort console-password " + fort + " --write"}}
+		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " --write (the console credential is part of the identity, sfi/forts#24; fort console-password " + fort + " --write mints it alone)"}}
 	case enabled && !entry:
 		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyDeployerPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate --write"}}
 	case enabled:

@@ -34,17 +34,21 @@
 #
 # The guard is the import, as in ops/root.nix: a host gets this only by
 # naming the module in its own hosts/<host>/default.nix and setting
-# enable. EVERY fort can: the account is ops/deployer.nix's, which
+# enable. EVERY fort does, by default: the host shapes `fort scaffold`
+# renders import and enable it (sfi/forts#24), and a host that wants no
+# door takes the two lines out. The account is ops/deployer.nix's, which
 # ops-commands.nix imports, so a dev fort has the same door as a cluster
 # fort (#647 — #524 had left dev forts out and this module refused them
 # at evaluation; that assertion is gone with the reason for it). The
-# credential is minted per fort by
-# `fort console-password <host> --write`, which writes the hash here and
-# the passphrase into provisioning/console-passwords.yaml — the registry
-# an operator reads with `--show`, encrypted to the admin age keys and
-# NOT to the fort. A host holds the hash and nothing more, so a fort
-# that is taken yields no credential, not even its own. A fort with
-# enable and no hash fails `fort check` before it fails activation.
+# credential is minted per fort by `fort mint`, with the rest of the
+# identity, or by `fort console-password <host> --write` for a host that
+# opted in after its birth; either writes the hash here and the
+# passphrase into provisioning/console-passwords.yaml — the registry an
+# operator reads with `console-password --show`, encrypted to the admin
+# age keys and NOT to the fort. A host holds the hash and nothing more,
+# so a fort that is taken yields no credential, not even its own. A fort
+# with enable and no hash fails `fort check` before it fails activation
+# — the state between scaffold and mint.
 #
 # CONSEQUENCE: users.mutableUsers = false. The fleet sets mutableUsers
 # nowhere, so it is true today, and under true this failsafe SILENTLY

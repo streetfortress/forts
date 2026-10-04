@@ -87,6 +87,21 @@ func TestRenderScaffold(t *testing.T) {
 			t.Errorf("lab default.nix lacks %q", s)
 		}
 	}
+	// The operator defaults (sfi/forts#24): the shell at a pane and the
+	// console door on every shape, imported and enabled — the first fort
+	// of a new estate came up with neither, and both had to be added by
+	// hand after birth. The secrets.nix names the key the door reads.
+	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
+		got := m["nixos/hosts/"+name+"/default.nix"]
+		for _, s := range operatorDefaults {
+			if !strings.Contains(got, s) {
+				t.Errorf("%s default.nix lacks the operator default %q", name, s)
+			}
+		}
+		if !strings.Contains(m["nixos/hosts/"+name+"/secrets.nix"], keyDeployerPasswordHash) {
+			t.Errorf("%s secrets.nix does not name %s", name, keyDeployerPasswordHash)
+		}
+	}
 	for _, s := range []string{"linode-runtime", "modules/interactive.nix", "modules/dotfiles.nix"} {
 		if strings.Contains(l, s) {
 			t.Errorf("lab default.nix should not carry %q", s)
@@ -189,7 +204,7 @@ func TestRenderScaffold(t *testing.T) {
 	// when the manifest names one, everything else as the lab VM.
 	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
 	m := metal["nixos/hosts/metal-fort/default.nix"]
-	for _, s := range []string{"inputs.forts.nixosModules.baremetal-runtime", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", `profile = "production";`, "docs/baremetal.md"} {
+	for _, s := range append([]string{"inputs.forts.nixosModules.baremetal-runtime", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", `profile = "production";`, "docs/baremetal.md"}, operatorDefaults...) {
 		if !strings.Contains(m, s) {
 			t.Errorf("metal default.nix lacks %q", s)
 		}
@@ -247,6 +262,17 @@ var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.l
 // testHubIP is luxor's mesh address, as its manifest has it.
 const testHubIP = "10.1.0.5"
 
+// operatorDefaults is what every host shape imports and enables, whatever
+// else it is (sfi/forts#24): the shell and the console door. A shape
+// that lacks one renders a fort an operator cannot reach at a pane or at
+// the console after the mesh breaks.
+var operatorDefaults = []string{
+	"inputs.forts.nixosModules.shell",
+	"inputs.forts.nixosModules.ops-console",
+	"sfi.shell.enable = true;",
+	"sfi.ops.console.enable = true;",
+}
+
 func render(t *testing.T, host string, h manifest.Host) []scaffoldFile {
 	t.Helper()
 	files, err := renderScaffold(host, h, testEstate, testHubIP)
@@ -283,7 +309,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	d := m["nixos/hosts/plain-fort/default.nix"]
 	// The baseline and nothing else: the hardened profile, the mesh,
 	// deployer with the ops verbs (#647), the shell, the rebuild loop.
-	for _, s := range []string{"inputs.forts.nixosModules.qcow-runtime", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.lab-host", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.shell", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"} {
+	for _, s := range append([]string{"inputs.forts.nixosModules.qcow-runtime", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.lab-host", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
 		if !strings.Contains(d, s) {
 			t.Errorf("plain default.nix lacks %q", s)
 		}

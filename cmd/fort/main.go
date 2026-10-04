@@ -121,7 +121,10 @@ func usage() {
       mint the host's identity: its ssh host key (which doubles as its
       age identity), wireguard key + mesh peer, k3s token, the cluster age key, the flux deploy key (registered
       read-only on gitea — the one call outside the tree) and the sops
-      canary; the sops rules that make the host a recipient of its own
+      canary; the console password where the host file enables the door
+      (every scaffolded host does, sfi/forts#24: the hash beside the
+      keys, the passphrase in provisioning/console-passwords.yaml); the
+      sops rules that make the host a recipient of its own
       secrets. Private halves exist in memory and land only in
       nixos/secrets/<host>.yaml, encrypted. A re-run restores what that
       file holds and fills gaps only — rotation is deliberate, never a
@@ -171,8 +174,10 @@ func usage() {
       named.
 
   console-password <host> [--write] [--rotate] [--show]
-      mint the console password for the host's deployer account (#524),
-      in two halves for two readers: the yescrypt hash into
+      rotate (--rotate) and read (--show) the console password of the
+      host's deployer account (#524); fort mint mints the first one with
+      the identity, and --write alone mints it only for a host that
+      enabled the door after its birth. Two halves for two readers: the yescrypt hash into
       nixos/secrets/<host>.yaml as deployer-password-hash, which the
       HOST reads, and the passphrase into
       provisioning/console-passwords.yaml, the registry an OPERATOR

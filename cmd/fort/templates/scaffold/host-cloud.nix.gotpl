@@ -17,7 +17,8 @@
 # not the public IP. No steven, no home stack, no wheel; see
 # modules/production.nix. Public surface is the {{ .Provider }} cloud firewall
 # (default-deny + 80/443 + wireguard, forts/pulumi) in front of the host's
-# own firewall. Break-glass is Lish in the Linode console.
+# own firewall. Break-glass is the console password (ops/console.nix)
+# at Lish in the Linode console.
 { inputs, lib, ... }:
 
 {
@@ -40,6 +41,13 @@
     # flux-sops-age-key + flux-git-deploy-key into this host's sops file.
     inputs.forts.nixosModules.flux-bootstrap
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
+    # The operator defaults every fort carries (sfi/forts#24): the shell at
+    # a pane, and the console door — a password for `deployer` that only a
+    # getty accepts, so an operator reaches `sudo sfi-nixos-rollback` after
+    # the mesh breaks (#524). fort mint minted the hash into this host's
+    # sops file and the passphrase into provisioning/console-passwords.yaml.
+    inputs.forts.nixosModules.shell
+    inputs.forts.nixosModules.ops-console
 {{ if .BackupProfile }}    # restic PV backups (docs/infra/backups.md). CNPG owns the database
     # layer and databasus the logical one; this is every other volume.
     inputs.forts.nixosModules.pv-backup
@@ -52,6 +60,17 @@
   # estate's files — mesh/peers.json, the flux tree, nixos/.sops.yaml, the
   # lab CA — under this root (modules/estate.nix in sfi/forts).
   sfi.estate.root = ../../..;
+
+  # zsh and the shared prompt for whoever reads a pane here (#576). The
+  # prompt's host label is the module's bright-black; a fort that wants
+  # another sets sfi.shell.starshipSettings.hostname.style here (#582).
+  sfi.shell.enable = true;
+
+  # The console door (#524): the getty reads deployer-password-hash from
+  # this host's sops file, and sshd still refuses the password. Read the
+  # passphrase with `fort console-password {{ .Hostname }} --show`; replace
+  # it with `--rotate --write`.
+  sfi.ops.console.enable = true;
 
   # Upstream linode-config.nix sets PermitRootLogin = "prohibit-password"
   # at normal priority, colliding with common.nix's "no" — ours wins:

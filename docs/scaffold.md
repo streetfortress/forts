@@ -30,7 +30,9 @@ nixos/hosts/<host>/
 ● default.nix        lab shape (qcow runtime, static LAN block) when the entry
                      has provider: libvirt or none; cloud shape (linode runtime,
                      split DNS over the mesh, zram, Lish break-glass) when it
-                     names a cloud provider
+                     names a cloud provider; every shape imports shell.nix and
+                     ops/console.nix and enables both (the operator defaults,
+                     below)
 ● secrets.nix        sops-nix wiring: the host's age identity is derived from
                      its ssh host key; declares wireguard-private-key when the
                      manifest has mesh_ip
@@ -96,12 +98,12 @@ flux/apps/luxor/monitoring/
 
 `default.nix` imports the baseline in place of `k3s-server.nix` +
 `production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`): `hardened.nix`,
-`lab-host.nix`, `ops/deployer.nix` and `shell.nix`, with `wireguard.nix`,
-`auto-rebuild.nix`, and the LAN and zram blocks of the lab VM. Nothing
-under `flux/`: there is no cluster to sync and no canary to prove
-decryption. `secrets.nix` declares no `k3s-token`. The file is the estate's
-from then on: an account, a service, a role is plain NixOS written below
-the imports, and the framework names none of it.
+`lab-host.nix`, `ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with
+`wireguard.nix`, `auto-rebuild.nix`, and the LAN and zram blocks of the lab
+VM. Nothing under `flux/`: there is no cluster to sync and no canary to
+prove decryption. `secrets.nix` declares no `k3s-token`. The file is the
+estate's from then on: an account, a service, a role is plain NixOS
+written below the imports, and the framework names none of it.
 
 The hub file is the pull-shaped counterpart of a cluster's: with no edge
 Prometheus, luxor scrapes the fort over the mesh — node-exporter on 9100 —
@@ -116,6 +118,35 @@ survives. The leg is `jobName: host-node-exporter` — the name a cluster
 fort's edge ServiceMonitor gives the same exporter, and the job the Host
 Overview dashboard keys every panel on — so a plain fort lists there the
 moment the hub scrapes it (#442).
+
+## The operator defaults
+
+Every shape imports `shell.nix` and `ops/console.nix` and sets
+`sfi.shell.enable = true` and `sfi.ops.console.enable = true`
+(sfi/forts#24). Both are the operator's, not the role's: every fort
+carries `deployer` (`ops/deployer.nix`, #647), the shell is what a
+person reads at a pane as that account, and the console password is
+the one door that survives a broken mesh — hosts answer SSH on the
+mesh alone, so a merged change that breaks wireguard locks every
+operator out of every fort at once, and the getty login to `sudo
+sfi-nixos-rollback` is the way back in (#524). The first fort of
+sfi/second-estate came up with neither, and both had to be added by
+hand after birth; a door each estate must remember to add is not a
+door. The three cluster forts of sfi/deployments had added the same
+lines by hand.
+
+The credential follows: [`mint`](mint.md) reads the host file, sees the
+enable line, and mints the console password with the rest of the
+identity — the hash into the fort's sops file, the passphrase into
+`provisioning/console-passwords.yaml`. `fort check` fails a host that
+enables the module without the hash, which is the state between
+`scaffold --write` and `mint --write`.
+
+A host that wants no door takes the two console lines out of its own
+`default.nix` before mint; `fort check` says nothing about a host with
+no half of the credential. The prompt's host label
+(`sfi.shell.starshipSettings.hostname.style`, #582) stays a hand edit
+in the host file: the manifest has no key for it.
 
 ## Force-no semantics
 
@@ -139,7 +170,7 @@ fort.
 
 ```
 fort scaffold web3 --write
-fort mint web3 --write        # identity
+fort mint web3 --write        # identity, the console password included
 # PR → merge → fort image web3 → fort provision web3 --image …
 ```
 

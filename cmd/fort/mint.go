@@ -22,7 +22,9 @@ import (
 // ssh key (which doubles as its age identity), its wireguard key and
 // mesh peer, the k3s token, and for a flux cluster the cluster age key,
 // the flux deploy key registered read-only on gitea, and the sops
-// canary. A pure repo mutation plus that one API call.
+// canary; and, where the host file enables the console door, the
+// console password in its two halves (console.go, sfi/forts#24). A pure
+// repo mutation plus that one API call.
 //
 // The repo is the key store. Every private half is generated in memory
 // and lands only in nixos/secrets/<host>.yaml, encrypted to the admin
@@ -111,6 +113,16 @@ type mintPlan struct {
 
 	write bool // --write: the plan may be applied, so a missing credential is fatal now rather than later
 
+	// The console door (console.go, sfi/forts#24): minted with the
+	// identity when the host file enables sfi.ops.console. The hash is
+	// one more key of the secrets file; the passphrase goes to the
+	// registry, which apply writes first.
+	console       bool   // the host's default.nix enables the module
+	consoleMint   bool   // apply mints the passphrase and the hash
+	consoleOrphan bool   // a hash with no passphrase behind it: console-password --rotate is the repair
+	newRegistry   bool   // the registry does not exist yet
+	consoleHash   string // filled by apply, and only there — a dry run mints nothing
+
 	// The backup credentials a [backups] profile implies (mintbackup.go).
 	resticPassword string
 	resticRustfs   string
@@ -163,6 +175,11 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if len(need) > 0 {
 		return nil, fmt.Errorf("missing %s — run `fort scaffold %s --write` first", strings.Join(need, ", "), host)
 	}
+	hostNix, err := os.ReadFile(filepath.Join(root, "nixos/hosts", host, "default.nix"))
+	if err != nil {
+		return nil, err
+	}
+	p.console = consoleModuleRE.Match(hostNix)
 
 	// 1. what the repo already holds for this host
 	p.secretsPath = filepath.Join("nixos/secrets", host+".yaml")
@@ -244,6 +261,24 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	// where not.
 	if err := p.planBackups(take); err != nil {
 		return nil, err
+	}
+	// 2c. the console door (sfi/forts#24): the host file enables the
+	// module, so the credential is part of the identity — the hash in
+	// the secrets file beside the keys, the passphrase in the registry.
+	// Restore-not-rotate holds here too: a hash already in the file is
+	// kept, even when its passphrase is gone from the registry, because
+	// somebody may still hold the value it was made from —
+	// console-password --rotate is the repair, and the report says so. A
+	// host that does not enable the module gets nothing: a credential no
+	// getty reads is what `fort check` warns about. Nothing is hashed
+	// until apply, so a dry run needs no mkpasswd.
+	if p.console {
+		if _, ok := take(keyDeployerPasswordHash); !ok {
+			p.consoleMint = true
+			p.newRegistry = !exists(root, consoleRegistry)
+		} else if !sopsHasKey(filepath.Join(root, consoleRegistry), host) {
+			p.consoleOrphan = true
+		}
 	}
 	// 3. the rules and the peer — each only if absent, as text edits
 	nixosSops, err := os.ReadFile(filepath.Join(root, "nixos/.sops.yaml"))
@@ -391,6 +426,21 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 	nixosConfig := filepath.Join(p.root, "nixos/.sops.yaml")
 	fleetConfig := filepath.Join(p.root, ".sops.yaml")
 
+	// The console door: the passphrase into the registry BEFORE the hash
+	// goes into the secrets file below (console.go says why: the other
+	// order can leave a hash nobody can read back). The passphrase
+	// reaches mkpasswd on stdin and sops' argv, and nothing else.
+	if p.consoleMint {
+		pass, hash, err := newConsoleCredential()
+		if err != nil {
+			return err
+		}
+		if err := recordPassphrase(tool, p.root, p.host, pass); err != nil {
+			return err
+		}
+		p.consoleHash = hash
+	}
+
 	// The secrets file: written whole and encrypted once when new; gaps
 	// added one key at a time (sops set) when it exists.
 	full := filepath.Join(p.root, p.secretsPath)
@@ -488,6 +538,8 @@ func (p *mintPlan) value(key string) string {
 		return p.resticRustfs
 	case keyResticB2:
 		return p.resticB2
+	case keyDeployerPasswordHash:
+		return p.consoleHash
 	}
 	return ""
 }
@@ -531,6 +583,14 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	for _, e := range p.edits {
 		fmt.Fprintf(w, "○ %-36s %s\n", e.path, e.note)
 	}
+	switch {
+	case p.consoleMint && p.newRegistry:
+		fmt.Fprintf(w, "● %-36s the console registry, created for %s (admin recipients only; the host holds the hash)\n", consoleRegistry, p.host)
+	case p.consoleMint:
+		fmt.Fprintf(w, "○ %-36s + %s: its console passphrase (sops set; the host holds the hash)\n", consoleRegistry, p.host)
+	case p.consoleOrphan:
+		fmt.Fprintf(w, "! %-36s has NO entry for %s — the host carries %s and nothing can read it back; a new passphrase is a deliberate act: fort console-password %s --rotate --write\n", consoleRegistry, p.host, keyDeployerPasswordHash, p.host)
+	}
 	if p.sshConfig != "" {
 		fmt.Fprintf(w, "◆ %-36s re-rendered — %s\n", sshConfigPath, p.sshNote)
 	}
@@ -563,6 +623,10 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	if !written {
 		fmt.Fprintln(w, "dry run — nothing minted (mint --write).")
 		return
+	}
+	if p.consoleMint {
+		// Never the value: the registry is the one copy (console.go).
+		fmt.Fprintf(w, "The console passphrase is in %s and NOWHERE else — not in this output.\nRead it when you need it: fort console-password %s --show\n", consoleRegistry, p.host)
 	}
 	if !p.entry.IsCluster() {
 		fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then the image build + fort provision %s --image <path>\n", p.host)

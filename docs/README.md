@@ -71,7 +71,11 @@ forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
 fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary;
                                  the fort's block in mesh/ssh_config + its
-                                 host key in mesh/known_hosts (ssh-config.md)
+                                 host key in mesh/known_hosts (ssh-config.md);
+                                 the console password (sfi/forts#24): its hash
+                                 in the fort's sops file, the passphrase in
+                                 provisioning/console-passwords.yaml —
+                                 `fort console-password <host> --show` reads it
                               → PR → merge
 fort image <host>             ← nix build (the variant from the manifest); the output
                                  is the artifact, no secret inside (#659)
@@ -136,6 +140,9 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |
 | nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
 
+`mint` execs `mkpasswd` for the console password hash (from PATH, else
+nixpkgs), as it execs `sops` and `jq`.
+
 `PULUMI_BACKEND_URL` is forced to this checkout's `provisioning/pulumi/state` by
 every verb, so a `pulumi login` elsewhere can never redirect state into
 another worktree. The stock `pulumi … -s <host>` from `provisioning/pulumi` under
@@ -187,7 +194,7 @@ mesh/
   ssh_config, known_hosts        rendered from peers.json + the manifests
 provisioning/
   secrets.yaml                   the fleet secrets (gitea token, restic password, ...)
-  console-passwords.yaml         the console registry
+  console-passwords.yaml         the console registry: mint adds a fort's passphrase, console-password rotates it, dismantle withdraws it
   pulumi/                        the project file, Pulumi.<host>.yaml per stack, and state/ (the file:// backend)
 .sops.yaml                       the flux rules: one per cluster, plus the shared infrastructure rule
 ```
