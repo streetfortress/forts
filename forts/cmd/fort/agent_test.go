@@ -547,9 +547,12 @@ func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
 	// block opaque. The sops block is metadata, never a key name.
 	write("nixos/secrets/prod.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nrestic-s3-env-b2: ENC[x]\nsops:\n    age: []\n")
 	write("nixos/secrets/lab.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nsops:\n    age: []\n")
+	// The fleet's pruner (#400): profile "none" — no restic-s3-env-b2 —
+	// but the role-scoped pruning key's env file is in its record.
+	write("nixos/secrets/pruner.yaml", "restic-password: ENC[x]\nrestic-prune-s3-env-rustfs: ENC[x]\nrestic-prune-s3-env-b2: ENC[x]\nsops:\n    age: []\n")
 	git("add", "-A")
 	git("commit", "-q", "-m", "minted")
-	git("rm", "-q", "nixos/secrets/prod.yaml", "nixos/secrets/lab.yaml")
+	git("rm", "-q", "nixos/secrets/prod.yaml", "nixos/secrets/lab.yaml", "nixos/secrets/pruner.yaml")
 	git("commit", "-q", "-m", "dismantled")
 	git("update-ref", "refs/remotes/origin/main", "HEAD")
 
@@ -586,6 +589,19 @@ func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
 		if _, err := revokeB2Key(name, s); err == nil || !strings.Contains(err.Error(), "B2 keys NOT revoked") {
 			t.Errorf("%s: a key that may exist must still be revoked (or the refusal named): %v", name, err)
 		}
+	}
+	// The pruner's record has no fort key of its own, but it names the
+	// pruning key's env file: destroy opens a session for that, and the
+	// refusal lists sfi-b2-pruning-key among the keys left to delete.
+	pruner, err := readRetiredSecrets(root, "pruner")
+	if err != nil || !pruner.has(pruneEnvKey(pruneTierB2)) || pruner.has(keyResticB2) {
+		t.Fatalf("pruner record: %+v %v", pruner, err)
+	}
+	if _, err := revokeB2Key("pruner", pruner); err == nil || !strings.Contains(err.Error(), b2PruningKeyName) {
+		t.Errorf("the pruner's destroy must reach for the pruning key: %v", err)
+	}
+	if _, err := revokeB2Key("prod", prod); err != nil && strings.Contains(err.Error(), b2PruningKeyName) {
+		t.Errorf("a fort that was not the pruner must not name the pruning key: %v", err)
 	}
 }
 

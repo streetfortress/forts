@@ -283,8 +283,14 @@ func usage() {
       requires (plaintext key names, no decryption), every provider var
       resolves to a seeded file+key, every required provider is present
       and its wire: values are set in the HelmRelease. Charts are pulled
-      at the pinned tag once per run. --all also validates every
-      manifest and warns on host dirs no manifest claims. Strict on
+      at the pinned tag once per run. The B2 pruning key's holder
+      (#400): a host that sweeps a tier of sfi.pv-prune names that
+      tier's restic-prune-s3-env key in its sops file (else an error:
+      the activation fails), and a host that names one sweeps the tier
+      (else a warning: a deleting credential nothing reads); --all
+      also wants exactly one host naming the b2 key. --all also
+      validates every manifest and warns on host dirs no manifest
+      claims. Strict on
       every fort; exits nonzero on any error; annotates for CI when
       GITEA_ACTIONS is set.
 
@@ -324,7 +330,9 @@ func usage() {
       that lost it), the wireguard peer, fleet/clusters/<host> and
       fleet/apps/<host> — and prints the
       residue: every remaining mention of the host for the reviewer to
-      triage in the same PR, and cross-fort sops refs into it. Touches
+      triage in the same PR, cross-fort sops refs into it, and whether
+      the host is the fleet's B2 pruner (#400: its sops file names
+      restic-prune-s3-env-b2; destroy revokes the key). Touches
       no pulumi state: fort destroy is the second, gated step after the
       merge.
 
@@ -342,6 +350,10 @@ func usage() {
       --no-stack is for a [baremetal] host, which has no stack by design:
       the same gates minus the stack, then only the identities (deploy
       key, B2 keys); the machine goes by hand (docs/forts/baremetal.md).
+      The B2 keys are the fort's own and, when the retired secrets file
+      names restic-prune-s3-env-b2, sfi-b2-pruning-key too (#400): the
+      host was the fleet's pruner, and the output says the fleet now
+      has none.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.

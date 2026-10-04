@@ -64,6 +64,7 @@ type dismantlePlan struct {
 	rekey       []string // sops files under the shared infrastructure rule
 	rustfsUser  string   // the fort's identity to withdraw from luxor's provider contract
 	consolePass bool     // the fort has an entry in the console-password registry
+	pruner      bool     // the fort's sops file names restic-prune-s3-env-b2: it holds the fleet's B2 pruning key (#400)
 	residue     []string // "path: N mention(s)"
 	crossRefs   []string // other forts' contracts sourcing from this fort
 	notes       []string
@@ -179,6 +180,11 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// therefore does not remove it: withdraw the registry entry too, or
 	// a retired fort's passphrase outlives the fort.
 	p.consolePass = sopsHasKey(filepath.Join(root, consoleRegistry), host)
+	// The B2 pruning key (#400, prune.go) is role-scoped: the host whose
+	// file names restic-prune-s3-env-b2 is the fleet's pruner, and the
+	// key dies with it. Dismantle never reaches outside the tree, so
+	// this is reported, not acted on — destroy revokes.
+	p.pruner = holdsPruneKey(root, host)
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
 	if p.entry.Backups.Profile == "production" {
 		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
@@ -277,6 +283,9 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		for _, r := range p.crossRefs {
 			fmt.Fprintf(w, "    %s\n", r)
 		}
+	}
+	if p.pruner {
+		fmt.Fprintf(w, "! %s is the fleet's B2 pruner — %s names %s, the env file sfi.pv-prune's b2 tier reads. fort destroy revokes %s with the host, and the fleet then has no B2 pruner: enable sfi.pv-prune's b2 tier on another host and mint again (fort b2-key pruning --write). fort check --all warns until then.\n", p.host, filepath.Join("nixos/secrets", p.host+".yaml"), pruneEnvKey(pruneTierB2), b2PruningKeyName)
 	}
 	if len(p.residue) > 0 {
 		fmt.Fprintf(w, "! residue — %d file(s) still mention %s; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):\n", len(p.residue), p.host)

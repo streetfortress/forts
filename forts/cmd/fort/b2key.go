@@ -87,7 +87,7 @@ var b2Roles = map[string]b2Role{
 	// tool-driven; barman and the logical dumps expire by lifecycle rule
 	// and want no deleting credential pointed at them at all.
 	"pruning": {
-		name:    "sfi-b2-pruning-key",
+		name:    b2PruningKeyName,
 		summary: "restic forget --prune on luxor (sfi.pv-prune)",
 		caps:    b2.Pruning,
 		buckets: []string{b2PVBucket},
@@ -431,11 +431,13 @@ func (r b2Role) followUp(keyID string) string {
 			"s3-exporter reads (fleet/apps/luxor/monitoring/forts.contract.yaml):\n" +
 			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_ACCESS_KEY_ID --write\n" +
 			"  fort seed luxor fleet/apps/luxor/monitoring --set AWS_SECRET_ACCESS_KEY --write"
-	case "sfi-b2-pruning-key":
+	case b2PruningKeyName:
 		return "Next: it belongs in luxor's host secrets as the env file sfi.pv-prune sources —\n" +
 			"  sops --config nixos/.sops.yaml set nixos/secrets/luxor.yaml \\\n" +
 			"    '[\"restic-prune-s3-env-b2\"]' \"\\\"AWS_ACCESS_KEY_ID=<id>\\nAWS_SECRET_ACCESS_KEY=<secret>\\n\\\"\"\n" +
-			"and nowhere else. It is the only credential in the fleet that deletes backups."
+			"and nowhere else — NOT the password manager. It is the only credential in the fleet\n" +
+			"that deletes backups, and it lifecycles with the host that holds it (#400): fort check\n" +
+			"traces the holder, and fort destroy of that host revokes the key."
 	default:
 		return "Next: it belongs in " + r.host + "'s own secrets as the env file its restic\n" +
 			"units source, and nowhere else — from the repo root:\n" +

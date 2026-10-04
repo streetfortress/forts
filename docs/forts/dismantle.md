@@ -64,6 +64,14 @@ Three things deserve the explanation:
   Cross-fort `sops:` refs *into* this fort are called out separately —
   those contracts lose their source and `fort check` will fail them, so
   re-point them in the same PR.
+- **The fleet's B2 pruner is called out too** (#400). `sfi-b2-pruning-key`
+  is role-scoped: it belongs to whichever host enables `sfi.pv-prune`'s
+  b2 tier, and that host's `nixos/secrets/<host>.yaml` is the one that
+  names `restic-prune-s3-env-b2` — a plaintext key name, so the plan can
+  tell. Dismantle reports it as a `!` line (the key stays live until
+  `fort destroy` revokes it, and the fleet then has no pruner until
+  another host enables the tier and mints again); it acts on nothing,
+  because it never reaches outside the tree.
 
 The residue is counted on the post-edit text of the files the plan
 edits, so the dry run shows what the reviewer will actually face.
@@ -80,6 +88,8 @@ planned only where the host's rule block exists.
   PR's merge instead, and `fort preview --all` reports the stack as
   `PENDING` until then.
 - **The gitea deploy key**, revoked by `destroy`.
+- **The B2 keys**, the fort's own and — when this host is the pruner —
+  `sfi-b2-pruning-key`, revoked by `destroy`.
 - **The `.files` wireguard copy** for the ubuntu mesh members (#183) —
   still a hand re-render.
 

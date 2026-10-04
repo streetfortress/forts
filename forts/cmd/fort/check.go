@@ -86,6 +86,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
 		shared.findings = append(shared.findings, clusterMonitoringFindings(root, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
+		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {
@@ -99,6 +100,9 @@ func check(args []string) error {
 		// The console failsafe (#524): its two halves live in different
 		// files, and either one alone fails quietly (console.go).
 		findings = append(findings, consoleFindings(root, fort)...)
+		// The pruning key's holder (#400): a host that sweeps a tier of
+		// sfi.pv-prune names that tier's key, and the inverse (prune.go).
+		findings = append(findings, pruneFindings(root, fort)...)
 		if entry.IsCluster() && exists(root, filepath.Join("fleet/apps", fort)) {
 			cf, err := checkFort(o, fort)
 			if err != nil {

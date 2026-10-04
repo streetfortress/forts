@@ -350,11 +350,22 @@ func b2HostKeyNames(host string) []string {
 // did hold the key, take today's path: prompt, list by name, revoke.
 // Listing by name covers a fort whose profile changed, too.
 //
+// The pruning key (#400, prune.go) is role-scoped, not host-scoped: it
+// goes with the host whose retired file names restic-prune-s3-env-b2,
+// because that host was the fleet's pruner and nothing else holds the
+// key. A record that does not name it leaves the key alone, and so does
+// no record — the fleet's only deleting credential is not revoked on a
+// guess; a standing pruning key is named in the message instead.
+//
 // Absent credentials are reported, not fatal: a destroy must not be
 // blocked on an operational input, and the caller prints what is left.
 func revokeB2Key(host string, retired *retiredSecrets) (string, error) {
 	names := b2HostKeyNames(host)
-	if retired != nil && !retired.has(keyResticB2) {
+	pruner := retired.has(pruneEnvKey(pruneTierB2))
+	if pruner {
+		names = append(names, b2PruningKeyName)
+	}
+	if retired != nil && !retired.has(keyResticB2) && !pruner {
 		return fmt.Sprintf("none minted for this fort (the retired %s never held %s — the profile was not production); nothing to revoke", retired.rel, keyResticB2), nil
 	}
 	c, err := b2Session(needMinting, "Revoking "+host+"'s B2 keys")
@@ -381,6 +392,14 @@ func revokeB2Key(host string, retired *retiredSecrets) (string, error) {
 	}
 	if standing := b2.KeyNamed(keys, b2RestoreKeyName(host)); len(standing) > 0 {
 		msg += fmt.Sprintf("; %s (id %s) left standing — it is how this fort's backups get read; delete it when no restore needs it", b2RestoreKeyName(host), ids(standing))
+	}
+	switch pruning := b2.KeyNamed(keys, b2PruningKeyName); {
+	case pruner && len(pruning) > 0:
+		msg += fmt.Sprintf(". %s WAS THE FLEET'S PRUNER and %s went with it: the fleet now has no B2 pruner, and every fort's B2 repo only grows — enable sfi.pv-prune's b2 tier on another host, mint again (fort b2-key pruning --write) and sops set it there", host, b2PruningKeyName)
+	case pruner:
+		msg += fmt.Sprintf(". %s WAS THE FLEET'S PRUNER (its retired %s names %s) but %s was not on B2 — already deleted by hand? The fleet has no B2 pruner until another host enables sfi.pv-prune's b2 tier and mints again (fort b2-key pruning --write)", host, retired.rel, pruneEnvKey(pruneTierB2), b2PruningKeyName)
+	case retired == nil && len(pruning) > 0:
+		msg += fmt.Sprintf("; %s (id %s) left standing — no retired record says whether %s was the pruner (sfi.pv-prune); if it was, delete the key in the console and mint again on the new pruner", b2PruningKeyName, ids(pruning), host)
 	}
 	return msg, nil
 }
