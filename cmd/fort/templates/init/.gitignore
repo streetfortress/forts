@@ -1,0 +1,4 @@
+**/.DS_Store
+# nix build symlinks
+result*
+nixos/result*

@@ -1,0 +1,51 @@
+# The estate's gate, on every push: `fort check --all` (tree ↔ manifests,
+# kustomize builds, strict envsubst, contracts ↔ Secrets) and a full
+# module-system eval of every host that has a manifest. Both come from
+# the framework this estate pins: `nix run ./nixos#fort` is the CLI at
+# that pin.
+#
+# Two red-X states are DELIBERATE gates, not breakage: a staged-but-
+# unseeded app tree (listed-but-absent sops files fail kustomize) and a
+# staged-but-unprovisioned host (a missing mesh peer fails nix eval).
+# Such PRs go green when the provisioning replay seeds identity + secrets.
+name: checks
+
+on:
+  push:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.1.3
+
+      - name: The gate (fort check --all)
+        env:
+          GITEA_ACTIONS: "true"
+        run: |
+          set -euo pipefail
+          if [ -f flux/infrastructure/configs/step-ca-root.pem ]; then
+            helm registry login {{ .Registry }} --ca-file flux/infrastructure/configs/step-ca-root.pem \
+              --username "${{ "{{" }} gitea.actor {{ "}}" }}" --password-stdin <<< "${{ "{{" }} secrets.REGISTRY_TOKEN {{ "}}" }}"
+          fi
+          nix run ./nixos#fort -- check --all
+
+      - name: Eval every host with a manifest
+        run: |
+          set -euo pipefail
+          fail=0
+          for host in $(basename -s .toml forts/*.toml); do
+            echo "== nix eval $host"
+            if ! nix eval --raw "./nixos#nixosConfigurations.${host}.config.system.build.toplevel.drvPath"; then
+              echo "::error::nix eval failed for ${host}"
+              fail=1
+            fi
+            echo
+          done
+          exit "$fail"

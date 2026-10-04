@@ -68,7 +68,7 @@
 
 let
   cfg = config.sfi.auto-rebuild;
-  repoUrl = "ssh://git@gitea.zen.lofi:30022/sfi/deployments";
+  repoUrl = cfg.repoUrl;
   textfileDir = "/var/lib/node-exporter-textfiles"; # textfile-metrics.nix
   flakeRef = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
   knownHostsFile = pkgs.writeText "auto-rebuild-known-hosts" cfg.gitKnownHosts;
@@ -272,6 +272,16 @@ in
       };
     };
 
+    repoUrl = lib.mkOption {
+      type = lib.types.str;
+      example = "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git";
+      description = ''
+        The estate's git URL: what the gate reads main's tip from and
+        what the rebuild clones, with the deploy key fort mint
+        registered. The host file sets it; `fort scaffold` renders it
+        from estate.toml.
+      '';
+    };
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
       # Same pin as flux-bootstrap.nix gitKnownHosts.

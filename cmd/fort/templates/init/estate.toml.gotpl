@@ -1,0 +1,11 @@
+# {{ .Name }} — an estate: the forts declared here, built on sfi/forts.
+# Rendered by `fort init`; every verb reads it (docs/init.md in sfi/forts).
+name = "{{ .Name }}"
+repo = "{{ .Repo }}"
+{{- if .Hub }}
+hub = "{{ .Hub }}"
+{{- else }}
+# hub = "<host>"   # the fort whose monitoring tree carries every other
+                   # fort's file (its dead man's switch, its scrape). None:
+                   # edge-only, and nobody notices a silent fort.
+{{- end }}

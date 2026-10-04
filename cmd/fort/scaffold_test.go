@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -39,23 +40,23 @@ func TestRenderScaffold(t *testing.T) {
 	// backup leg only where the profile promises one, and the edge
 	// Alertmanager over the mesh (the hub's own is cluster DNS).
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
-		got := m[clusterMonitoringPath(name)]
+		got := m[clusterMonitoringPath("luxor", name)]
 		for _, s := range []string{`absent(up{cluster="` + name + `"})`, `absent_over_time({job="fluent-bit", cluster="` + name + `"}[15m])`, "uid: am-edge-" + name, "loki_rule:", "grafana_datasource:"} {
 			if !strings.Contains(got, s) {
 				t.Errorf("%s monitoring lacks %q:\n%s", name, s, got)
 			}
 		}
-		if _, ok := m[clusterMonitoringKustomization]; !ok {
+		if _, ok := m[clusterMonitoringKustomization("luxor")]; !ok {
 			t.Errorf("%s: no hub kustomization append", name)
 		}
 	}
-	if !strings.Contains(cloud[clusterMonitoringPath("cloud-fort")], "PVBackupNotConfigured") {
+	if !strings.Contains(cloud[clusterMonitoringPath("luxor", "cloud-fort")], "PVBackupNotConfigured") {
 		t.Errorf("production profile must render PVBackupNotConfigured")
 	}
-	if strings.Contains(lab[clusterMonitoringPath("lab-fort")], "PVBackupNotConfigured") {
+	if strings.Contains(lab[clusterMonitoringPath("luxor", "lab-fort")], "PVBackupNotConfigured") {
 		t.Errorf("lab profile must not render PVBackupNotConfigured")
 	}
-	if !strings.Contains(cloud[clusterMonitoringPath("cloud-fort")], "url: http://10.1.0.98:30993") {
+	if !strings.Contains(cloud[clusterMonitoringPath("luxor", "cloud-fort")], "url: http://10.1.0.98:30993") {
 		t.Errorf("a fort's edge Alertmanager is reached over the mesh")
 	}
 	for _, f := range want {
@@ -176,7 +177,7 @@ func TestRenderScaffold(t *testing.T) {
 
 	h := hosts["lab-fort"]
 	h.MeshIP = ""
-	if _, err := renderScaffold("lab-fort", h); err == nil {
+	if _, err := renderScaffold("lab-fort", h, testEstate); err == nil {
 		t.Errorf("a manifest without mesh_ip should be refused")
 	}
 
@@ -225,7 +226,7 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 			// was bootstrapped by hand and carries a bespoke apps layer
 			// (databasus-configs) and pre-module comments — the exception
 			// its manifest's header records, not a template drift.
-			isMon := strings.HasPrefix(f.path, clusterMonitoringDir+"/")
+			isMon := strings.HasPrefix(f.path, clusterMonitoringDir("luxor")+"/")
 			if !isMon && (name == "luxor" || !strings.HasPrefix(f.path, "flux/clusters/")) {
 				continue
 			}
@@ -236,9 +237,13 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	}
 }
 
+// testEstate is the estate the render tests assume: luxor as the hub,
+// the deployments repo as the source — the shape the golden trees carry.
+var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git", Hub: "luxor"}
+
 func render(t *testing.T, host string, h manifest.Host) []scaffoldFile {
 	t.Helper()
-	files, err := renderScaffold(host, h)
+	files, err := renderScaffold(host, h, testEstate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +291,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	if !strings.Contains(sec, "secrets/plain-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
 		t.Errorf("plain secrets.nix wrong:\n%s", sec)
 	}
-	mon := m[clusterMonitoringPath("plain-fort")]
+	mon := m[clusterMonitoringPath("luxor", "plain-fort")]
 	// One ScrapeConfig, node-exporter: the operator owns `job` (relabelled
 	// to jobName after the target labels), so the leg files under
 	// host-node-exporter — the Host Overview's job (#442).
@@ -308,7 +313,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	}
 	var hasEdit bool
 	for _, f := range files {
-		if f.path == clusterMonitoringKustomization && f.edit != nil {
+		if f.path == clusterMonitoringKustomization("luxor") && f.edit != nil {
 			hasEdit = true
 			out, err := f.edit("resources:\n  - clusters/luxor.yaml\n")
 			if err != nil || !strings.Contains(out, "  - clusters/plain-fort.yaml\n") {
@@ -323,26 +328,32 @@ func TestRenderScaffoldPlain(t *testing.T) {
 
 // tests/estate is the one-fort fixture estate flake.nix evaluates
 // (nixosConfigurations.plain-fort): what `fort scaffold plain-fort
-// --write` rendered into it, from the same manifest testdata carries. A
+// --write` rendered into it, from the same manifest testdata carries and
+// the estate.toml it holds (no hub: the host dir is the whole render). A
 // template change re-renders the fixture or fails here.
 func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
 		t.Fatal(err, problems)
 	}
-	const estate = "../../tests/estate"
-	if readFile(t, filepath.Join(estate, manifest.Path("plain-fort"))) != readFile(t, filepath.Join("testdata", manifest.Path("plain-fort"))) {
+	const dir = "../../tests/estate"
+	est, err := estate.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, filepath.Join(dir, manifest.Path("plain-fort"))) != readFile(t, filepath.Join("testdata", manifest.Path("plain-fort"))) {
 		t.Fatal("the fixture estate's manifest differs from testdata's")
 	}
-	for _, f := range render(t, "plain-fort", hosts["plain-fort"]) {
-		if f.edit != nil {
-			continue // the hub kustomization line: an append, checked by its file below
-		}
-		if got := readFile(t, filepath.Join(estate, f.path)); got != string(f.content) {
+	files, err := renderScaffold("plain-fort", hosts["plain-fort"], est)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("no hub: want the host dir alone (2 files), got %d", len(files))
+	}
+	for _, f := range files {
+		if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
 			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold plain-fort --write in tests/estate", f.path)
 		}
-	}
-	if k := readFile(t, filepath.Join(estate, clusterMonitoringKustomization)); !strings.Contains(k, "  - clusters/plain-fort.yaml\n") {
-		t.Errorf("the fixture hub kustomization lacks the fort's line:\n%s", k)
 	}
 }

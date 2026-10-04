@@ -1,0 +1,11 @@
+# The per-host rules: one block per fort, above the catch-all, written by
+# `fort mint` and removed by `fort dismantle`. A fort's secrets file is
+# encrypted to the admins and to the fort's own age identity (derived
+# from its ssh host key). The catch-all is what a new fort's block is
+# derived from: the admin set.
+creation_rules:
+  - path_regex: secrets/.*\.yaml$
+    age:
+{{- range .Admins }}
+      - {{ . }} # admin
+{{- end }}

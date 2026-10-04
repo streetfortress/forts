@@ -25,10 +25,6 @@ import (
 // seeding contract, where the human replaced `external` keys with sops
 // refs to staging's Secret.
 func TestAddReproducesDrillFort(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
 	const fort = "sfi-fort-e33e2d5"
 	golden := filepath.Join("testdata/golden", fort)
 
@@ -37,7 +33,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	// (the symbology tenant already existed from the restore drill).
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	copyFile(t, filepath.Join(repo, "flux/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
+	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, filepath.Join("testdata/trees", fort, "kustomization.yaml"), filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "flux/apps", fort, "sops-canary.yaml"))
 	copyTree(t, filepath.Join(golden, "sites-db"), filepath.Join(tmp, "flux/apps", fort, "sites-db"))
@@ -384,13 +380,9 @@ func testAddFresh(t *testing.T, f addFixture) {
 	if chartDir == "" {
 		chartDir = "testdata/charts/" + chart
 	}
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
-	copyFile(t, filepath.Join(repo, "flux/infrastructure/configs/step-ca-root.pem"), filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
+	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 
 	p, err := planAdd(addOpts{

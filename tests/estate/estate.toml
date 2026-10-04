@@ -1,0 +1,3 @@
+# The fixture estate (tests/estate/README.md): one plain fort, no hub.
+name = "fixture"
+repo = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate"

@@ -81,6 +81,7 @@
   # Watch main; a changed host config lands within ~6h — or now, via
   # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
+  sfi.auto-rebuild.repoUrl = "{{ .RepoURL }}"; # the estate (estate.toml): what the gate watches and the rebuild clones
 {{ if .BackupProfile }}
   # [backups] profile = "{{ .BackupProfile }}" in this fort's manifest. The
   # profile names a destination set, not targets: `lab` is luxor's rustfs

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/contract"
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
@@ -85,7 +86,11 @@ func check(args []string) error {
 	// traced with every manifest in hand (--all).
 	if *all {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, parsed)...)
-		shared.findings = append(shared.findings, clusterMonitoringFindings(root, parsed)...)
+		est, err := estate.Load(root)
+		if err != nil {
+			return err
+		}
+		shared.findings = append(shared.findings, clusterMonitoringFindings(root, est.Hub, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 	}

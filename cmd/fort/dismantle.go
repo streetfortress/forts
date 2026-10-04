@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -122,9 +123,11 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// The cluster's monitoring on the hub (#288): scaffold's file and its
 	// line in the hub's kustomization — a retired cluster's dead man's
 	// switch would otherwise page forever.
-	if rel := clusterMonitoringPath(host); exists(root, rel) {
+	if est, err := estate.Load(root); err != nil {
+		return nil, err
+	} else if rel := clusterMonitoringPath(est.Hub, host); est.HasHub() && exists(root, rel) {
 		p.removes = append(p.removes, rel)
-		p.edits = append(p.edits, dEdit{clusterMonitoringKustomization, "- clusters/" + host + ".yaml", func(s string) (string, error) {
+		p.edits = append(p.edits, dEdit{clusterMonitoringKustomization(est.Hub), "- clusters/" + host + ".yaml", func(s string) (string, error) {
 			s, _ = removeLinesContaining(s, "clusters/"+host+".yaml")
 			return s, nil
 		}})

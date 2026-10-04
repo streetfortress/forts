@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -52,6 +53,9 @@ type hostView struct {
 	// by MAC when the manifest names one (#287).
 	Baremetal bool
 	MAC       string
+	// RepoURL: the estate's git URL (estate.toml), the FluxInstance's
+	// source and auto-rebuild's pull.
+	RepoURL string
 	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
 	// is reached by cluster DNS rather than over the mesh.
 	Hub bool
@@ -104,7 +108,11 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	files, err := renderScaffold(host, entry)
+	est, err := estate.Load(root)
+	if err != nil {
+		return err
+	}
+	files, err := renderScaffold(host, entry, est)
 	if err != nil {
 		return err
 	}
@@ -178,9 +186,10 @@ func scaffoldShape(e manifest.Host) string {
 	return s + ", k3s on " + e.Datastore()
 }
 
-// renderScaffold is the pure half: manifest → files.
-func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
+// renderScaffold is the pure half: the manifests → files.
+func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaffoldFile, error) {
 	view := hostView{
+		RepoURL:      est.RepoGit(),
 		Hostname:     host,
 		MeshIP:       entry.MeshIP,
 		LanPrefix:    24,
@@ -190,7 +199,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		Datastore:    entry.Datastore(),
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
-		Hub:          host == hubHost,
+		Hub:          host == est.Hub,
 		Plain:        !entry.IsCluster(),
 		AuditLogging: entry.AuditLogging(),
 	}
@@ -273,11 +282,14 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 			}
 			out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
 		}
+		if !est.HasHub() {
+			return out, nil
+		}
 		b, err := render("host-monitoring.yaml.gotpl")
 		if err != nil {
 			return nil, fmt.Errorf("host-monitoring.yaml.gotpl: %w", err)
 		}
-		return append(out, hubMonitoringFiles(host, b, plainMonitoringNote)...), nil
+		return append(out, hubMonitoringFiles(est.Hub, host, b, plainMonitoringNote)...), nil
 	}
 	clusters := filepath.Join("flux/clusters", host)
 	plan = append(plan,
@@ -299,7 +311,10 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	}
 	// The cluster's monitoring on the hub (#288): everything the central
 	// layer knows about this one cluster, in one file keyed by its name,
-	// plus the line that makes flux apply it.
+	// plus the line that makes flux apply it. No hub, no file.
+	if !est.HasHub() {
+		return out, nil
+	}
 	b, err := render("cluster-monitoring.yaml.gotpl")
 	if err != nil {
 		return nil, fmt.Errorf("cluster-monitoring.yaml.gotpl: %w", err)
@@ -308,17 +323,17 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if view.BackupProfile == "production" {
 		note += ", PVBackupNotConfigured"
 	}
-	return append(out, hubMonitoringFiles(host, b, note)...), nil
+	return append(out, hubMonitoringFiles(est.Hub, host, b, note)...), nil
 }
 
 // hubMonitoringFiles is a fort's file on the hub plus the line that
 // makes flux apply it (clustermon.go) — the same pair for a cluster and
 // a plain fort, different content.
-func hubMonitoringFiles(host string, content []byte, note string) []scaffoldFile {
+func hubMonitoringFiles(hub, host string, content []byte, note string) []scaffoldFile {
 	item := "clusters/" + host + ".yaml"
 	return []scaffoldFile{
-		{path: clusterMonitoringPath(host), content: content, note: note},
-		{path: clusterMonitoringKustomization, note: "+ " + item, edit: func(s string) (string, error) {
+		{path: clusterMonitoringPath(hub, host), content: content, note: note},
+		{path: clusterMonitoringKustomization(hub), note: "+ " + item, edit: func(s string) (string, error) {
 			if strings.Contains(s, item) {
 				return s, nil
 			}

@@ -38,6 +38,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "init":
+		err = initCmd(os.Args[2:])
 	case "scaffold":
 		err = scaffold(os.Args[2:])
 	case "image":
@@ -90,11 +92,21 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  scaffold, mint, image, add, seed, dismantle, ssh-config
+  author  init, scaffold, mint, image, add, seed, dismantle, ssh-config
   keys    b2-key (the B2 credentials no other verb creates),
           console-password (the fort's getty password)
   apply   provision, adopt, destroy
   read    check, preview, wg-conf
+
+  init --name <estate> --repo <git url> --admin <age1…> [--hub <host>] [--write]
+      birth an estate: render into the root of a git checkout the files
+      every other verb assumes — estate.toml, the estate flake (sfi/forts
+      as inputs.forts), the two sops rule files with the admin
+      recipients, the empty mesh, the Pulumi project file, the shared
+      flux infrastructure layer, the gate workflow, the directories. A
+      pure render: no secrets, no network, nothing overwritten. Names
+      what it cannot write (the lab CA, the edge Alertmanager webhook,
+      provisioning/secrets.yaml). docs/init.md.
 
   scaffold <host> [--write]
       render the host's generated surface from its manifest,

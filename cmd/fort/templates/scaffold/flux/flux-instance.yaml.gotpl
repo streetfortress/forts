@@ -22,7 +22,7 @@ spec:
     domain: cluster.local
   sync:
     kind: GitRepository
-    url: ssh://git@gitea.zen.lofi:30022/sfi/deployments.git
+    url: {{ .RepoURL }}
     ref: refs/heads/main
     path: flux/clusters/{{ .Hostname }}
     pullSecret: flux-system

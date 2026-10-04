@@ -9,10 +9,11 @@ forts, built on this repo as a flake input. This repo holds no estate.
 ```
 flake.nix          nixosModules.<name> (one per file under modules/), packages.fort (+ fort-pulumi)
 modules/           the NixOS modules: the hardened profile, the mesh, k3s, flux, the ops verbs, ...
-cmd/fort/          the CLI; templates/scaffold, templates/add, templates/init are what it renders
+cmd/fort/          the CLI; templates/scaffold, templates/add and templates/init (an estate's
+                   skeleton, the shared flux layer included) are what it renders
 cmd/fort-pulumi/   the pulumi program fort provision execs
 internal/          manifest, contract, seed, b2
-flux/infrastructure/   the shared flux layer every cluster applies (rendered into an estate by fort init)
+tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh births one with fort init
 docs/              the CLI handbook — start at docs/README.md
 ```
 

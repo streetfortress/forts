@@ -57,6 +57,7 @@
   # -revision, sfi-systemd-restart); the loop is the only other way config
   # reaches this host.
   sfi.auto-rebuild.enable = true;
+  sfi.auto-rebuild.repoUrl = "{{ .RepoURL }}"; # the estate (estate.toml): what the gate watches and the rebuild clones
 
   # Static address on the hypervisor's LAN bridge — matches [libvirt] ip in
   # forts/{{ .Hostname }}.toml.

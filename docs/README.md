@@ -65,6 +65,7 @@ checkpoint in git history is an audit trail no backend gives you for free.
 ## Birth of a fort
 
 ```
+fort init --write        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
 forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
                                  mesh_ip, [dns], the provider table; fort check --all
 fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
@@ -153,6 +154,7 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [provision](provision.md) — birth and day-2 applies; `preview`, `adopt`
 - [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the hand-written birth
 - [add](add.md) — a chart's fort-side tree, from its contract
+- [init](init.md) — birth an estate: the files every other verb assumes
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
