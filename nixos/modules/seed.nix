@@ -26,7 +26,7 @@
 # the initrd's emergency target with the reader's message on the console
 # (journal+console). The shell is in ./seed/: reader.sh is the shared
 # half, channel-*.sh one per channel, POSIX sh run by bash under `set -e`
-# (shellcheck -s bash passes on both).
+# (shellcheck -s bash passes on all of them).
 #
 # Channels, by platform (#605's table):
 #   linode    → linode-metadata  metadata.user_data on the instance, read
@@ -39,10 +39,26 @@
 #               the unit's own, and it flushes the link before stage 2.
 #               Stage 2 then CLOSES the channel: a blackhole route to the
 #               service's two addresses (sfi-seed-close.service, below).
-#   qemu, baremetal → not yet: the NoCloud cidata volume follows #605's
-#               order. Until then `fort image` keeps the graft for those
-#               variants, and enabling this module on them is an eval error.
-#               Their close step is nothing: a block device is root-only.
+#   qemu      → nocloud          /user-data on a volume labelled cidata,
+#               the layout of cloud-init's NoCloud datasource (#657). On
+#               a lab fort it is the ISO that pulumi-libvirt's cloud-init
+#               disk resource writes into the images pool and attaches to
+#               the domain as a CD-ROM (forts/pulumi/libvirt.go); `fort
+#               provision` fills it from the sops file. The file is the
+#               seed text, no base64. The initrd gains isofs (the iso9660
+#               driver), sr_mod (cdrom with it) and the two IDE/SATA
+#               controller drivers libvirt may attach the CD to. No
+#               network.
+#               No close step. A block device is root-only — a pod or
+#               the unprivileged agent user cannot open /dev/sr0 — and
+#               the mount is undone in the initrd. The pair of the
+#               Linode close is therefore nothing, and it is written
+#               here so the pair is visible: the Linode channel is open to
+#               every process on the host until stage 2 blackholes it;
+#               this one was never open to anyone but root.
+#   baremetal → not yet: the same cidata layout on a USB stick follows
+#               as #658. Until then `fort image` keeps the graft for that
+#               variant, and enabling this module on it is an eval error.
 #
 # Each channel is a pair — open in the initrd, close in stage 2 — and both
 # halves live here, so nothing platform-specific reaches a generic module.
@@ -53,6 +69,7 @@ let
 
   channels = {
     linode = "linode-metadata";
+    qemu = "nocloud";
   };
   channel = channels.${config.sfi.platform} or null;
 
@@ -81,6 +98,7 @@ let
   readerScript = lib.replaceStrings [ "@channel@" ] [ (toString channel) ] (builtins.readFile ./seed/reader.sh);
   channelScript = {
     linode-metadata = lib.replaceStrings [ "@udhcpcScript@" ] [ "${udhcpcScript}" ] (builtins.readFile ./seed/channel-linode-metadata.sh);
+    nocloud = builtins.readFile ./seed/channel-nocloud.sh;
   }.${toString channel} or "";
 in
 {
@@ -93,13 +111,17 @@ in
       assertions = [
         {
           assertion = channel != null;
-          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud channel for qemu and baremetal follows #605's order; keep the graft (fort image) for this host";
+          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud stick for baremetal is #658; keep the graft (fort image) for this host";
         }
         {
           assertion = config.boot.initrd.systemd.enable;
           message = "sfi.seed: the reader is a unit of the systemd initrd (boot.initrd.systemd.services.sfi-seed); the scripted initrd would need a boot.initrd.postMountCommands hook instead";
         }
       ];
+
+      # sed and grep for the reader's split of the seed, whatever the
+      # channel; coreutils (base64, readlink, cut) is already there.
+      boot.initrd.systemd.initrdBin = [ pkgs.gnused pkgs.gnugrep ];
 
       boot.initrd.systemd.services.sfi-seed = {
         description = "Place the ssh host key from the ${toString channel} channel";
@@ -115,7 +137,8 @@ in
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
-          # The console is where the operator reads a stopped boot (Lish).
+          # The console is where the operator reads a stopped boot (Lish,
+          # or virsh console).
           StandardOutput = "journal+console";
           StandardError = "journal+console";
         };
@@ -135,10 +158,10 @@ in
       boot.initrd.kernelModules = [ "virtio_net" "af_packet" ];
 
       boot.initrd.systemd = {
-        # ip, sed, grep for the reader; base64 is coreutils', already there.
-        # curlMinimal: libcurl + openssl + zlib, no http2/idn/psl/ssh stacks —
-        # HTTP only here; the service is link-local and unencrypted by design.
-        initrdBin = [ pkgs.iproute2 pkgs.gnused pkgs.gnugrep pkgs.curlMinimal ];
+        # ip for the lease and the routes. curlMinimal: libcurl + openssl +
+        # zlib, no http2/idn/psl/ssh stacks — HTTP only here; the service
+        # is link-local and unencrypted by design.
+        initrdBin = [ pkgs.iproute2 pkgs.curlMinimal ];
         # One applet of busybox, by name: the multicall binary dispatches
         # on argv[0], and the symlink's name is udhcpc.
         extraBin.udhcpc = "${pkgs.busybox}/bin/udhcpc";
@@ -148,8 +171,8 @@ in
         storePaths = [ udhcpcScript ];
       };
 
-      # The close half (PR #654 review). The seed stays readable from inside
-      # the instance for its life: Linode has no call to disable the
+      # The close half (PR #654 review). The seed stays readable from inside the
+      # instance for its life: Linode has no call to disable the
       # Metadata service and user_data cannot be cleared on a running
       # instance, and the service answers any request from the instance's
       # network — a pod, or the unprivileged agent user on a dev fort,
@@ -185,6 +208,30 @@ in
           fi
         '';
       };
+    })
+
+    (lib.mkIf (channel == "nocloud") {
+      # The filesystem and the CD-ROM class driver, loaded by
+      # systemd-modules-load (the unit orders after it): isofs is the
+      # iso9660 driver — the module's name, not the filesystem type;
+      # `iso9660` here would match nothing, and only the kernel's alias
+      # fs-iso9660 resolves it (the local boot of #657 showed exactly
+      # that: the list said iso9660, /proc/modules said nothing, and the
+      # mount loaded isofs on demand). sr_mod gives the drive its
+      # /dev/sr0 and pulls cdrom in as a dependency. Loaded, not merely
+      # available, so the channel does not depend on request_module.
+      boot.initrd.kernelModules = [ "isofs" "sr_mod" ];
+      # The controllers the CD can hang off, loaded by udev from the PCI
+      # id: pulumi-libvirt attaches the cloud-init disk as `hdd` on the
+      # `ide` bus, which is the PIIX3 IDE controller (ata_piix) on the
+      # i440FX `pc` machine libvirt defaults to and a SATA port (ahci) on
+      # q35. The qemu-guest profile lists both already; listed here so
+      # the channel does not depend on the profile (the baremetal stick,
+      # #658, adds usb_storage and uas in the same place).
+      boot.initrd.availableKernelModules = [ "ata_piix" "ahci" "cdrom" ];
+
+      # No close half: see the header. A block device is root-only, and
+      # the initrd unmounts the volume before stage 2.
     })
   ]);
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/deployments/forts/internal/seed"
 	"github.com/pulumi/pulumi-libvirt/sdk/go/libvirt"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
@@ -26,6 +28,29 @@ import (
 // the birth and a rebuilt image never proposes a disk replacement — a
 // repave is `pulumi destroy` + provision, deliberately.
 //
+// The seed (#657; the model is #605's option 2): the host's ssh host key
+// travels apart from the image, as a NoCloud cidata volume — the
+// provider's cloud-init disk resource, an ISO in the same pool named
+// <host>-seed.iso, attached to the domain as a CD-ROM (`hdd` on the
+// `ide` bus, which is the i440FX machine's PIIX3 controller). The initrd
+// mounts it and places the key before activation (nixos/modules/seed.nix,
+// the nocloud channel). No cloud-init runs on the host; only the layout
+// is borrowed. `fort provision` hands the seed over in seed.Env (base64,
+// as for Linode) when the apply creates the domain, and records
+// `forts:seed = nocloud` on the stack: the program declares the volume
+// whenever that key is set, so a host born before the channel existed
+// (the three adopted lab VMs and the grafted dev fort) never sees a
+// spurious ISO proposed on a day-2 apply. userData is a pulumi secret
+// and ignored after creation, as the Linode instance ignores metadatas:
+// a rotation of the host key is a repave, never a diff on a running
+// domain. The volume stays in the pool for the domain's life — `pulumi
+// destroy` removes the domain, then it — and it holds the key in plain
+// text, as the root qcow2 beside it does: #605 accepts this trust in the
+// hypervisor, docs/forts/provision.md records it. The bridged provider
+// (terraform-provider-libvirt 0.8.1) writes the ISO by exec'ing
+// `mkisofs` on the machine that runs the apply; `fort provision` puts
+// nixpkgs' cdrtools on PATH when the host has none.
+//
 // Sizing is the manifest's [shape] (vcpus, memory, disk) with the lab
 // defaults. The provider refuses `size` next to
 // `source` (the volume takes the image's virtual size), so `fort
@@ -38,6 +63,11 @@ type Libvirt struct{}
 const (
 	libvirtPool   = "images"
 	libvirtBridge = "br0"
+	// seedChannel is the value of the stack's `forts:seed` config that
+	// says the host was born with the cidata volume (#657). `fort
+	// provision` sets it when the apply creates the domain; the name is
+	// the channel's in nixos/modules/seed.nix.
+	seedChannel = "nocloud"
 )
 
 func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host) error {
@@ -65,6 +95,38 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		return err
 	}
 
+	// The seed volume, for a host born with the channel (the type comment).
+	// userData comes from the environment when this run carries the seed
+	// (fort provision does, when the apply creates the domain; a bare
+	// `pulumi preview` from forts/pulumi does not, and ignoreChanges keeps
+	// the recorded value for an existing volume either way). Secret from
+	// the first moment the engine sees it. metaData is the datasource's
+	// one required file; the instance id is the hostname.
+	var cloudinit pulumi.StringPtrInput
+	if config.Get(ctx, "forts:seed") == seedChannel {
+		var userData pulumi.StringPtrInput
+		if ud := os.Getenv(seed.Env); ud != "" {
+			text, err := seed.Decode(ud)
+			if err != nil {
+				return err
+			}
+			userData = pulumi.ToSecret(pulumi.String(text)).(pulumi.StringOutput)
+		}
+		iso, err := libvirt.NewCloudInitDisk(ctx, name+"-seed", &libvirt.CloudInitDiskArgs{
+			Name:     pulumi.String(name + "-seed.iso"),
+			Pool:     pulumi.String(libvirtPool),
+			MetaData: pulumi.String("instance-id: " + name + "\n"),
+			UserData: userData,
+		}, append(opts,
+			pulumi.IgnoreChanges([]string{"userData"}),
+			pulumi.AdditionalSecretOutputs([]string{"userData"}),
+		)...)
+		if err != nil {
+			return err
+		}
+		cloudinit = iso.ID()
+	}
+
 	dom, err := libvirt.NewDomain(ctx, name, &libvirt.DomainArgs{
 		Name:   pulumi.String(name),
 		Memory: pulumi.Int(memory * 1024), // MiB
@@ -78,6 +140,11 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		Disks: libvirt.DomainDiskArray{
 			&libvirt.DomainDiskArgs{File: vol.ID()},
 		},
+		// The seed volume as a CD-ROM (the provider appends it after the
+		// disks, raw driver, serial "cloudinit"); nil for a host born
+		// before the channel. The XSLT below leaves it alone: it matches
+		// device='disk' only.
+		Cloudinit: cloudinit,
 		NetworkInterfaces: libvirt.DomainNetworkInterfaceArray{
 			&libvirt.DomainNetworkInterfaceArgs{Bridge: pulumi.String(libvirtBridge)},
 		},
@@ -114,7 +181,10 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		// different shape IS a repave (destroy + provision), never an
 		// in-place change. What stays managed live: autostart, running,
 		// memory, vcpu (the last two also replace: a deliberate act).
-	}, append(opts, pulumi.IgnoreChanges([]string{"disks", "consoles", "graphics", "xml", "type", "fwCfgName", "qemuAgent"}))...)
+		// cloudinit joins the list for the seed's reason: the key on the
+		// volume is the one the host was born with, and the provider
+		// would otherwise re-attach a changed ISO on the next reboot.
+	}, append(opts, pulumi.IgnoreChanges([]string{"disks", "consoles", "graphics", "xml", "type", "fwCfgName", "qemuAgent", "cloudinit"}))...)
 	if err != nil {
 		return err
 	}

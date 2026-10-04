@@ -10,9 +10,10 @@ import (
 
 // hostKeyPair is the host's ssh host key out of its sops file — the pair
 // `fort mint` wrote (ssh-host-key, ssh-host-key.pub). Two callers: the
-// seed `fort provision` hands the pulumi program for the Linode Metadata
-// channel (#606), and the graft `fort image` still performs for the
-// variants whose channel has not landed (qcow, baremetal; #605's order).
+// seed `fort provision` hands the pulumi program for the platform's
+// channel (Linode Metadata, #606; the NoCloud volume of a lab fort,
+// #657), and the graft `fort image` still performs for the baremetal
+// variant until its stick lands (#658).
 func hostKeyPair(tool secretsTool, root, host string) (private, public string, err error) {
 	secretsPath := filepath.Join("nixos/secrets", host+".yaml")
 	if !exists(root, secretsPath) {
@@ -33,13 +34,13 @@ func hostKeyPair(tool secretsTool, root, host string) (private, public string, e
 	return private, public, nil
 }
 
-// hostSeedUserData is the value the Linode instance's metadata.user_data
-// takes for this host: the seed (internal/seed), base64 as the Metadata
-// service stores it. `fort provision` sets it in the environment of
-// every Linode apply (seed.Env) — a birth creates the instance with it,
-// and a retry of a failed birth (without --image) must create the
-// instance with it too, which is why it is read on every run and not
-// only with --image. The program ignores it on a running host.
+// hostSeedUserData is the seed (internal/seed) for this host, base64 as
+// the Linode Metadata service stores it in metadata.user_data; the
+// libvirt program decodes the same value for the cidata volume. `fort
+// provision` sets it in the environment (seed.Env) of the apply that
+// creates the host — a birth, or a retry of a failed birth (without
+// --image), which is why the question is the stack's and not the flag's.
+// The programs ignore it on a running host.
 func hostSeedUserData(tool secretsTool, root, host string) (string, error) {
 	private, public, err := hostKeyPair(tool, root, host)
 	if err != nil {

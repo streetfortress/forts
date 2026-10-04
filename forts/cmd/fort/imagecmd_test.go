@@ -27,13 +27,17 @@ func TestImageVariant(t *testing.T) {
 	if metal.variant != "baremetal" || metal.attr != "./nixos#metal-fort-baremetal" || metal.rootDev != "/dev/sda2" || metal.ext() != ".img" {
 		t.Errorf("metal: %+v", metal)
 	}
-	// the graft is the qcow and baremetal variants'; linode's key travels
-	// through the Metadata channel (#606)
-	if cloud.grafts() || !lab.grafts() || !metal.grafts() {
+	// the graft is the baremetal variant's alone; linode's key travels
+	// through the Metadata channel (#606), qcow's through the NoCloud
+	// volume (#657)
+	if cloud.grafts() || lab.grafts() || !metal.grafts() {
 		t.Errorf("grafts: cloud=%v lab=%v metal=%v", cloud.grafts(), lab.grafts(), metal.grafts())
 	}
-	s := guestfishScript("/dev/sda1", "/w")
-	for _, want := range []string{"run\nmount /dev/sda1 /\n", "upload /w/key /etc/ssh/ssh_host_ed25519_key\n", "upload /w/key.pub /etc/ssh/ssh_host_ed25519_key.pub\n", "chmod 0600 /etc/ssh/ssh_host_ed25519_key\n"} {
+	if cloud.channel() != "linode-metadata" || lab.channel() != "nocloud" || metal.channel() != "" {
+		t.Errorf("channels: cloud=%q lab=%q metal=%q", cloud.channel(), lab.channel(), metal.channel())
+	}
+	s := guestfishScript("/dev/sda2", "/w")
+	for _, want := range []string{"run\nmount /dev/sda2 /\n", "upload /w/key /etc/ssh/ssh_host_ed25519_key\n", "upload /w/key.pub /etc/ssh/ssh_host_ed25519_key.pub\n", "chmod 0600 /etc/ssh/ssh_host_ed25519_key\n"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("script lacks %q:\n%s", want, s)
 		}

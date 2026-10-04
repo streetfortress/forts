@@ -16,6 +16,13 @@
 # Keeping both consumers on one module is what guarantees a switched
 # generation converges to the same shape the image booted with.
 #
+# The seed reader (./seed.nix, #657) rides with this contract: a lab
+# fort's image carries no host key; the key arrives on the cidata volume
+# pulumi-libvirt attaches to the domain (forts/pulumi/libvirt.go), placed
+# by the initrd before activation. A host whose key is already on the
+# root (the grafted images of today, and every switch of a running host)
+# boots unchanged — the reader finds the key and returns.
+#
 # Priorities: mkDefault wherever the image variant (or grub.nix's
 # internal device→devices wiring) defines the same value, so the extended
 # config merges cleanly. kernelParams stays at normal priority: a
@@ -34,8 +41,9 @@
 { lib, modulesPath, ... }:
 
 {
-  imports = [ ./platform.nix "${toString modulesPath}/profiles/qemu-guest.nix" ];
+  imports = [ ./platform.nix ./seed.nix "${toString modulesPath}/profiles/qemu-guest.nix" ];
   sfi.platform = "qemu";
+  sfi.seed.enable = lib.mkDefault true;
 
   fileSystems."/" = {
     device = lib.mkDefault "/dev/disk/by-label/nixos";

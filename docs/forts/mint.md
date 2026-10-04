@@ -31,9 +31,10 @@ Consequences worth knowing:
   file first — never a side effect.
 - **The host's ssh key doubles as its age identity** (ssh-to-age): the
   recipient in the sops rule is derived from it, and the birth reads the
-  same key back — `fort image` grafts it (qcow, baremetal) or `fort
-  provision` hands it to the Linode Metadata channel (#606) — so the host
-  boots already able to decrypt.
+  same key back — `fort image` grafts it (baremetal) or `fort provision`
+  hands it to the platform's channel (the Linode Metadata service, #606;
+  the lab's NoCloud volume, #657) — so the host boots already able to
+  decrypt.
 - **Nothing is ever printed but public material**: the host's age
   recipient, the cluster's, the wireguard public key.
 

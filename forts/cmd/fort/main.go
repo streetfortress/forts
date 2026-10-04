@@ -197,30 +197,32 @@ func usage() {
       linode|baremetal} (the variant from the manifest's provider table;
       --from skips the build). The key that decrypts the host's secrets on
       first boot must never enter the nix store, so it travels apart from
-      the build. linode: the build output IS the artifact, no secret inside
-      (#606) — the key arrives as metadata.user_data at provision and the
-      initrd places it before activation; the 6 GiB raw / 5 GiB gzip caps
-      are asserted. qcow, baremetal: guestfish grafts ssh-host-key + .pub
-      from nixos/secrets/<host>.yaml into /etc/ssh, until their NoCloud
-      channel lands (#605). Output: ~/.cache/forts/<host>-nixos.
-      {qcow2,img.gz,img} — for the grafted variants the SECRET-BEARING
+      the build. linode, qcow: the build output IS the artifact, no secret
+      inside — the key arrives at provision as metadata.user_data (#606)
+      or on a NoCloud cidata volume (#657) and the initrd places it before
+      activation; linode's 6 GiB raw / 5 GiB gzip caps are asserted.
+      baremetal: guestfish grafts ssh-host-key + .pub from nixos/secrets/
+      <host>.yaml into /etc/ssh, until the NoCloud stick lands (#658).
+      Output: ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img} — the
       single-use artifact provision --image consumes and deletes, or, for
-      a [baremetal] host, the one you write to the machine's disk from a
-      live ISO and then delete (docs/forts/baremetal.md); the work dir is
-      shredded. nix must be on PATH; a graft also needs sops, and
-      guestfish from PATH, else nixpkgs.
+      a [baremetal] host, the SECRET-BEARING one you write to the
+      machine's disk from a live ISO and then delete (docs/forts/
+      baremetal.md); the work dir is shredded. nix must be on PATH; the
+      graft also needs sops, and guestfish from PATH, else nixpkgs.
 
   provision <host> [--image <path>] [--yes]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
       the preview, or --yes confirms it — an agent, a script, CI; without
       a TTY and without --yes the verb refuses up front). With --image, the birth: create the stack if the host
       has none, stage the single-use bootstrap image and record
-      it as the stack's forts:imageId — linode: upload the .img.gz, and
-      on every linode apply hand the host key seed to the program for
-      metadata.user_data (#606, read from nixos/secrets/<host>.yaml);
+      it as the stack's forts:imageId — linode: upload the .img.gz;
       libvirt: grow the .qcow2 to disk_size, the program streams it into
       the pool as the root disk — and once the host exists, release it
-      (provider-side where applicable, and the local copy) (#42). Without
+      (provider-side where applicable, and the local copy) (#42). The
+      apply that creates the host (the stack says, not the flag) also
+      hands the host key seed to the program, read from nixos/secrets/
+      <host>.yaml: metadata.user_data on the instance (#606) or a NoCloud
+      cidata volume on the domain (#657), and records forts:seed. Without
       --image a host with no stack is refused. The state (and at birth
       Pulumi.<host>.yaml) is staged for its own PR. A [baremetal] host is
       refused outright: no backend raises it.

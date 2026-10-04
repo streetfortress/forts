@@ -23,22 +23,26 @@ import (
 //     ~/.cache/forts/<host>-nixos.img.gz, with the #42 size caps asserted
 //     (custom-image upload limits). The key travels as metadata.user_data
 //     on the instance (`fort provision`) and the initrd places it before
-//     activation (nixos/modules/seed.nix). This verb reads no secret for
-//     a linode host and needs neither sops nor guestfish.
-//   - qcow, baremetal: the graft, until their NoCloud channel lands. The
+//     activation (nixos/modules/seed.nix).
+//   - qcow: no graft (#657). The artifact is the plain nixos.qcow2 from
+//     the build, copied to ~/.cache/forts/<host>-nixos.qcow2 (`fort
+//     provision` grows that copy to the manifest's disk before the
+//     upload, as before). The key travels as a NoCloud cidata volume
+//     pulumi-libvirt attaches to the domain, and the same initrd module
+//     places it.
+//     For both, this verb reads no secret and needs neither sops nor
+//     guestfish.
+//   - baremetal: the graft, until the NoCloud stick lands (#658). The
 //     key is read straight from the sops-encrypted repo store (fort mint's
 //     custody model: no plaintext key material at rest anywhere) and
 //     guestfish mounts the root explicitly (not virt-customize: libguestfs
-//     OS inspection cannot identify a NixOS guest): /dev/sda1 for the qcow
-//     variant's single msdos partition, /dev/sda2 for the baremetal
-//     variant's GPT (the ESP is partition 1). The output is a
-//     SECRET-BEARING, single-use artifact `fort provision <host> --image`
-//     consumes and deletes on success — or, for a [baremetal] host, the
-//     one a human writes to the machine's disk and then deletes
-//     (docs/forts/baremetal.md).
+//     OS inspection cannot identify a NixOS guest): /dev/sda2 for the
+//     raw-efi variant's GPT (the ESP is partition 1). The output is a
+//     SECRET-BEARING artifact a human writes to the machine's disk and
+//     then deletes (docs/forts/baremetal.md).
 //
 // An author-side verb: it touches no provider. Tools: nix (the build;
-// skipped with --from); for a grafted variant also sops, and guestfish
+// skipped with --from); for the grafted variant also sops, and guestfish
 // from PATH or, failing that, from nixpkgs (ensureTool, as for virsh /
 // xsltproc / kustomize; the declared-prerequisites question is #160's).
 func image(args []string) error {
@@ -90,7 +94,7 @@ func image(args []string) error {
 	}
 	out := filepath.Join(*outDir, host+"-nixos"+v.ext())
 
-	// 2a. no graft: the build output is the artifact (#606)
+	// 2a. no graft: the build output is the artifact (#606, #657)
 	if !v.grafts() {
 		return plainImage(v, host, src, out)
 	}
@@ -150,34 +154,38 @@ func image(args []string) error {
 	return nil
 }
 
-// plainImage is the linode path: assert the #42 caps on the build output
-// and copy it to the artifact path `fort provision --image` expects. The
-// copy holds no secret; it goes under the same 0700 cache dir as the
-// grafted variants' artifacts, and provision still deletes it on success
-// (the single-use lifecycle is #605's step 3).
+// plainImage is the linode and qcow path: copy the build output to the
+// artifact path `fort provision --image` expects, after the #42 caps for
+// a linode image. The copy holds no secret; it goes under the same 0700
+// cache dir as the grafted variant's artifact, and provision still
+// deletes it on success (the single-use lifecycle is #605's step 3). A
+// copy and not the store path itself because provision's libvirt flow
+// grows the qcow2 in place (qemu-img resize) before the upload.
 func plainImage(v variantSpec, host, src, out string) error {
-	n, err := gunzipSize(src)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("   uncompressed: %d MiB (cap %d)\n", n>>20, linodeRawCap>>20)
-	if n > linodeRawCap {
-		return fmt.Errorf("image exceeds Linode's 6 GiB uncompressed cap")
-	}
-	st, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("   gzipped: %d MiB (cap %d)\n", st.Size()>>20, linodeGzCap>>20)
-	if st.Size() > linodeGzCap {
-		return fmt.Errorf("image exceeds Linode's 5 GiB gzip cap")
+	if v.variant == "linode" {
+		n, err := gunzipSize(src)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("   uncompressed: %d MiB (cap %d)\n", n>>20, linodeRawCap>>20)
+		if n > linodeRawCap {
+			return fmt.Errorf("image exceeds Linode's 6 GiB uncompressed cap")
+		}
+		st, err := os.Stat(src)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("   gzipped: %d MiB (cap %d)\n", st.Size()>>20, linodeGzCap>>20)
+		if st.Size() > linodeGzCap {
+			return fmt.Errorf("image exceeds Linode's 5 GiB gzip cap")
+		}
 	}
 	fmt.Printf("== copying %s → %s\n", filepath.Base(src), out)
 	if err := copyPrivate(src, out); err != nil {
 		return err
 	}
 	fmt.Printf("== done. Plain build output, no secret inside: %s\n", out)
-	fmt.Printf("== next: fort provision %s --image %s   (the host key arrives through the Metadata channel at first boot)\n", host, out)
+	fmt.Printf("== next: fort provision %s --image %s   (the host key arrives through the %s channel at first boot)\n", host, out, v.channel())
 	return nil
 }
 
@@ -207,9 +215,21 @@ func imageVariant(host string, h manifest.Host) variantSpec {
 
 // grafts says whether the variant's artifact carries the host key. The
 // linode variant reads its seed from the Metadata channel at first boot
-// (#606); qcow and baremetal keep the graft until their NoCloud channel
-// lands (#605's order).
-func (v variantSpec) grafts() bool { return v.variant != "linode" }
+// (#606) and the qcow variant from the NoCloud volume (#657); baremetal
+// keeps the graft until the NoCloud stick lands (#658).
+func (v variantSpec) grafts() bool { return v.variant == "baremetal" }
+
+// channel names the seed channel of a variant that does not graft
+// (nixos/modules/seed.nix's names), for the verb's next-step line.
+func (v variantSpec) channel() string {
+	switch v.variant {
+	case "linode":
+		return "linode-metadata"
+	case "qcow":
+		return "nocloud"
+	}
+	return ""
+}
 
 func (v variantSpec) ext() string {
 	switch v.variant {

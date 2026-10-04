@@ -25,13 +25,15 @@ import (
 // stack's forts:imageId is already set from the birth run, and the
 // instance ignores changes to it.
 //
-// A Linode host's ssh host key travels separately from the image (#606):
-// every Linode apply reads the pair from nixos/secrets/<host>.yaml and
-// hands the seed to the program in the environment (hostseed.Env), which sets
-// it as metadata.user_data on the instance at creation, as a pulumi
-// secret. The host's initrd reads it from the Metadata service before
-// activation (nixos/modules/seed.nix). The read needs the admin age key,
-// as the token lookups in cloudEnv already do.
+// The host's ssh host key travels separately from the image (#606, #657):
+// the apply that creates the host reads the pair from
+// nixos/secrets/<host>.yaml and hands the seed to the program in the
+// environment (hostseed.Env). The Linode program sets it as
+// metadata.user_data on the instance; the libvirt program writes it to a
+// NoCloud cidata volume attached to the domain. Both as a pulumi secret,
+// both read by the host's initrd before activation
+// (nixos/modules/seed.nix). The read needs the admin age key, as the
+// token lookups in cloudEnv already do.
 func provision(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("provision needs the host first: fort provision <host> [--image <path>]")
@@ -80,31 +82,43 @@ func provision(args []string) error {
 			return err
 		}
 	}
-	if entry.Cloud() {
-		// The seed for the Metadata channel, read only when this apply
-		// creates the instance (PR #654 review): a day-2 apply on a live
-		// host would otherwise put the key in plain text in the
-		// environment of pulumi and of every plugin it spawns, for
-		// nothing — the program ignores metadatas on an existing
-		// instance either way. The question is "does the stack hold an
-		// instance", not "was --image given": a retry of a failed birth
-		// runs without --image and must still create it with the seed.
-		// A replacement never creates one here — the root disk's image
-		// is gone after birth, so a replace is a repave through destroy
-		// and provision, which reads the seed again — and an instance
-		// deleted behind pulumi's back is the same story.
-		need, err := stackNeedsSeed(pulumiDir, host)
+	// The seed for the platform's channel, read only when this apply
+	// creates the host (PR #654 review): a day-2 apply on a live host
+	// would otherwise put the key in plain text in the environment of
+	// pulumi and of every plugin it spawns, for nothing — the programs
+	// ignore the seed on an existing host either way. The question is
+	// "does the stack hold the host", not "was --image given": a retry of
+	// a failed birth runs without --image and must still create it with
+	// the seed. A replacement never creates one here — the root disk's
+	// image is gone after birth, so a replace is a repave through destroy
+	// and provision, which reads the seed again — and a host deleted
+	// behind pulumi's back is the same story.
+	need, err := stackNeedsSeed(pulumiDir, host, entry.Provider)
+	if err != nil {
+		return err
+	}
+	if need {
+		// A birth without a seed is a boot that stops in the initrd, and
+		// the console is a worse place to learn that than here.
+		ud, err := hostSeedUserData(sopsCLI{root: root}, root, host)
 		if err != nil {
-			return err
+			return fmt.Errorf("the host key seed for the %s channel: %w", seedChannels[entry.Provider], err)
 		}
-		if need {
-			// A birth without a seed is a boot that stops in the initrd,
-			// and Lish is a worse place to learn that than here.
-			ud, err := hostSeedUserData(sopsCLI{root: root}, root, host)
-			if err != nil {
-				return fmt.Errorf("the host key seed for metadata.user_data: %w", err)
+		os.Setenv(hostseed.Env, ud)
+		if entry.Provider == "libvirt" {
+			// The provider writes the cidata ISO by exec'ing mkisofs on
+			// this machine (terraform-provider-libvirt 0.8.1); the plugin
+			// inherits our PATH, as for xsltproc.
+			if err := ensureTool("mkisofs", "nixpkgs#cdrtools"); err != nil {
+				return err
 			}
-			os.Setenv(hostseed.Env, ud)
+		}
+		// Committed provenance: which channel the host was born through
+		// (#657). The libvirt program declares the seed volume only when
+		// this says so, so a host born before the channel — adopted, or
+		// grafted — never sees an empty ISO proposed on a day-2 apply.
+		if err := runPulumi(pulumiDir, "config", "set", "seed", seedChannels[entry.Provider], "--stack", host); err != nil {
+			return fmt.Errorf("recording the seed channel: %w", err)
 		}
 	}
 
@@ -204,22 +218,39 @@ func stackGate(pulumiDir, host string, birth bool) (initNeeded bool, err error) 
 	return true, nil
 }
 
-// linodeInstanceType is the resource type the Linode backend registers
-// for the instance (forts/pulumi/linode.go) as it appears in state.
-const linodeInstanceType = "linode:index/instance:Instance"
+// seedHostTypes is, per provider, the resource type of the host itself as
+// it appears in state — the one whose creation consumes the seed: the
+// Linode instance (forts/pulumi/linode.go), the libvirt domain
+// (forts/pulumi/libvirt.go).
+var seedHostTypes = map[string]string{
+	"linode":  "linode:index/instance:Instance",
+	"libvirt": "libvirt:index/domain:Domain",
+}
+
+// seedChannels is, per provider, the channel the seed travels through
+// (nixos/modules/seed.nix's names) — recorded on the stack as
+// `forts:seed` at birth.
+var seedChannels = map[string]string{
+	"linode":  "linode-metadata",
+	"libvirt": "nocloud",
+}
 
 // stackNeedsSeed asks the stack, not the flags, whether this apply creates
-// the Linode instance: no resource of the instance type in `pulumi stack
+// the host: no resource of the provider's host type in `pulumi stack
 // export` means the apply creates one and must carry the seed. The CLI
 // already holds the passphrase (cloudEnv), and the export is the same
 // deployment pulumi itself reads — more robust than the checkpoint file's
 // layout.
-func stackNeedsSeed(pulumiDir, host string) (bool, error) {
+func stackNeedsSeed(pulumiDir, host, provider string) (bool, error) {
+	typ, ok := seedHostTypes[provider]
+	if !ok {
+		return false, fmt.Errorf("provider %q: no seed channel", provider)
+	}
 	out, err := outputPulumi(pulumiDir, "stack", "export", "--stack", host)
 	if err != nil {
-		return false, fmt.Errorf("pulumi stack export %s (to decide whether this apply creates the instance): %s", host, lastLine(exitDetail(err)))
+		return false, fmt.Errorf("pulumi stack export %s (to decide whether this apply creates the host): %s", host, lastLine(exitDetail(err)))
 	}
-	has, err := hasResourceType([]byte(out), linodeInstanceType)
+	has, err := hasResourceType([]byte(out), typ)
 	if err != nil {
 		return false, fmt.Errorf("pulumi stack export %s: %w", host, err)
 	}

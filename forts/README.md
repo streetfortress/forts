@@ -37,12 +37,13 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
 ## The image is a birth input, not a resource
 
 The bootstrap image is single-use by design (#42): built, uploaded,
-consumed by instance creation, then deleted on both sides. A lab or
-baremetal image carries the host's pre-seeded key; a Linode image no
-longer does — the key is `metadata.user_data` on the instance, set by
-`fort provision` and read by the initrd (#606, `nixos/modules/seed.nix`;
-the model is #605's). Modeling the image as a pulumi resource is wrong
-in both lifecycle directions:
+consumed by instance creation, then deleted on both sides. A baremetal
+image carries the host's pre-seeded key; a Linode or lab image no longer
+does — the key is `metadata.user_data` on the instance (#606), or a
+NoCloud `cidata` volume attached to the domain (#657), set by `fort
+provision` and read by the initrd (`nixos/modules/seed.nix`; the model
+is #605's). Modeling the image as a pulumi resource is wrong in both
+lifecycle directions:
 
 - *Deletion*: a deliberately-deleted resource is permanent drift —
   `--expect-no-changes` red forever, or `RetainOnDelete` gymnastics.
@@ -88,10 +89,15 @@ helper, so the domain uses a file disk on the volume's path; and a file
 disk renders `driver type='raw'`, so an XSLT (the provider's escape
 hatch) sets qcow2. The uploaded volume IS the root disk: not consumed,
 `source` and `disks` ignored after birth — a different disk is a repave
-(`pulumi destroy` + provision), never an in-place change.
+(`pulumi destroy` + provision), never an in-place change. The host key
+rides beside it (#657): a cloud-init disk `<host>-seed.iso` in the same
+pool, the NoCloud `cidata` layout, attached as an IDE CD-ROM and read by
+the initrd; `user_data` is a pulumi secret, ignored after birth, and the
+provider needs `mkisofs` on the machine that runs the apply (nixpkgs'
+`cdrtools` when the host has none).
 
 ```
-fort image lab1                                      # nix build (KVM: devbox) + the host-key graft
+fort image lab1                                      # nix build (KVM: devbox); no graft — the key rides on the seed volume
 fort provision lab1 --image ~/.cache/forts/lab1-nixos.qcow2
 ```
 

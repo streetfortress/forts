@@ -3,6 +3,9 @@
 // the channel its platform provides, so the bootstrap image carries no
 // secret. The reader on the host is nixos/modules/seed/reader.sh, and the
 // two must agree on the format — this package's test is that contract.
+// Two channels carry it today: the Linode Metadata service (base64 in
+// metadata.user_data) and the NoCloud cidata volume of a lab fort (the
+// text itself in /user-data, #657).
 //
 // The seed is the host's ed25519 ssh key as `fort mint` wrote it into
 // nixos/secrets/<host>.yaml (ssh-host-key, then ssh-host-key.pub), the two
@@ -19,11 +22,13 @@ import (
 
 // Env is how `fort provision` hands the seed to the pulumi program, per
 // run, as the value the Linode instance's metadata.user_data takes
-// (base64, the service's contract). An environment variable rather than
-// stack config: Pulumi.<host>.yaml would be a third copy of the key, and
-// the checkpoint already holds one (as a pulumi secret). The program
-// reads it at creation only (ignoreChanges on the instance's metadatas),
-// so a day-2 apply without it never diffs a running host.
+// (base64, the service's contract); the libvirt program decodes it back
+// to the text (Decode) for the cidata volume. An environment variable
+// rather than stack config: Pulumi.<host>.yaml would be a third copy of
+// the key, and the checkpoint already holds one (as a pulumi secret). The
+// programs read it at creation only (ignoreChanges on the instance's
+// metadatas, on the cloud-init disk's userData), so a day-2 apply without
+// it never diffs a running host.
 const Env = "FORT_SEED_USER_DATA"
 
 // LinodeUserDataMax is the Metadata service's cap on user_data: 65535
@@ -64,6 +69,21 @@ func UserData(private, public string) (string, error) {
 		return "", fmt.Errorf("seed: %d bytes encoded exceeds the Metadata service's %d-byte cap", len(enc), LinodeUserDataMax)
 	}
 	return enc, nil
+}
+
+// Decode is UserData's inverse, for the channel that carries the text
+// itself (the NoCloud volume, #657): the base64 from Env back to the seed,
+// checked with Parse so a wrong value fails in the program and not on a
+// host's console.
+func Decode(userData string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(userData))
+	if err != nil {
+		return "", fmt.Errorf("seed: %s is not base64: %w", Env, err)
+	}
+	if _, _, err := Parse(string(raw)); err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 // Parse mirrors the reader's split (nixos/modules/seed/reader.sh): the

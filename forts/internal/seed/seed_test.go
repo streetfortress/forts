@@ -54,6 +54,17 @@ func TestUserData(t *testing.T) {
 	if _, err := UserData(strings.Replace(testKey, "AAAA", strings.Repeat("A", 70000), 1), testPub); err == nil {
 		t.Error("user data over the cap should refuse")
 	}
+	// the libvirt program's side: the env value back to the text (#657)
+	text, err := Decode(ud + "\n")
+	if err != nil || text != testKey+testPub {
+		t.Errorf("decode: %q %v", text, err)
+	}
+	if _, err := Decode("not base64!"); err == nil {
+		t.Error("decode should refuse a non-base64 value")
+	}
+	if _, err := Decode(base64.StdEncoding.EncodeToString([]byte("not a seed"))); err == nil {
+		t.Error("decode should refuse base64 of something that is not a seed")
+	}
 }
 
 // The contract with the host: the shell reader (nixos/modules/seed/
