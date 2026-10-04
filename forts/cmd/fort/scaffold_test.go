@@ -253,70 +253,70 @@ func keys(m map[string]string) []string {
 	return out
 }
 
-// A dev fort ([dev], #413) renders the host dir — the dev shape, no
-// fleet surface — plus its pull-shaped file on the hub (#437) and the
+// A plain fort (no [cluster] table) renders the host dir — the baseline
+// shape, no fleet surface — plus its pull-shaped file on the hub and the
 // kustomization line that applies it.
-func TestRenderScaffoldDev(t *testing.T) {
+func TestRenderScaffoldPlain(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
 		t.Fatal(err, problems)
 	}
-	files := render(t, "dev-fort", hosts["dev-fort"])
+	files := render(t, "plain-fort", hosts["plain-fort"])
 	if len(files) != 4 {
-		t.Fatalf("want 4 files (default.nix, secrets.nix, clusters/dev-fort.yaml, + kustomization line), got %d", len(files))
+		t.Fatalf("want 4 files (default.nix, secrets.nix, clusters/plain-fort.yaml, + kustomization line), got %d", len(files))
 	}
 	m := map[string]string{}
 	for _, f := range files {
 		m[f.path] = string(f.content)
 	}
-	d := m["nixos/hosts/dev-fort/default.nix"]
-	// deployer@ is named beside the agent accounts: a dev fort carries the
-	// fort's operator account too (#647), and the header says how to reach it.
-	for _, s := range []string{"../../modules/qcow-runtime.nix", "../../modules/dev-fort.nix", "../../modules/wireguard.nix", "../../modules/auto-rebuild.nix", "agent@10.1.0.96", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "dev-fort"`, "zramSwap", "DEV PROFILE"} {
+	d := m["nixos/hosts/plain-fort/default.nix"]
+	// The baseline and nothing else: the hardened profile, the mesh,
+	// deployer with the ops verbs (#647), the shell, the rebuild loop.
+	for _, s := range []string{"../../modules/qcow-runtime.nix", "../../modules/hardened.nix", "../../modules/lab-host.nix", "../../modules/ops/deployer.nix", "../../modules/shell.nix", "../../modules/wireguard.nix", "../../modules/auto-rebuild.nix", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"} {
 		if !strings.Contains(d, s) {
-			t.Errorf("dev default.nix lacks %q", s)
+			t.Errorf("plain default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "sfi.k3s", "interactive.nix", "dotfiles.nix"} {
+	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "sfi.k3s", "interactive.nix", "dotfiles.nix", "dev-fort.nix"} {
 		if strings.Contains(d, s) {
-			t.Errorf("dev default.nix should not carry %q", s)
+			t.Errorf("plain default.nix should not carry %q", s)
 		}
 	}
-	sec := m["nixos/hosts/dev-fort/secrets.nix"]
-	if !strings.Contains(sec, "secrets/dev-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
-		t.Errorf("dev secrets.nix wrong:\n%s", sec)
+	sec := m["nixos/hosts/plain-fort/secrets.nix"]
+	if !strings.Contains(sec, "secrets/plain-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
+		t.Errorf("plain secrets.nix wrong:\n%s", sec)
 	}
-	mon := m[clusterMonitoringPath("dev-fort")]
-	// One ScrapeConfig per leg: the operator owns `job` (relabelled to
-	// jobName after the target labels), so the node leg has to be its own
-	// CR to file under host-node-exporter — the Host Overview's job (#442).
-	for _, s := range []string{"kind: ScrapeConfig", "name: dev-fort-dev-fort-node", "jobName: host-node-exporter", `targets: ["10.1.0.96:9100"]`, "name: dev-fort-dev-fort-claude", "jobName: claude-code", `targets: ["10.1.0.96:9464"]`, "component: node", "component: otel", `cluster: dev-fort`, "alert: DevFortDown", "alert: DevFortCollectorDown", `{job="systemd", cluster="dev-fort"}`} {
+	mon := m[clusterMonitoringPath("plain-fort")]
+	// One ScrapeConfig, node-exporter: the operator owns `job` (relabelled
+	// to jobName after the target labels), so the leg files under
+	// host-node-exporter — the Host Overview's job (#442).
+	for _, s := range []string{"kind: ScrapeConfig", "name: host-plain-fort-node", "jobName: host-node-exporter", `targets: ["10.1.0.96:9100"]`, "component: node", `cluster: plain-fort`, "alert: HostDown"} {
 		if !strings.Contains(mon, s) {
-			t.Errorf("dev hub file lacks %q", s)
+			t.Errorf("plain hub file lacks %q", s)
 		}
 	}
-	for _, s := range []string{"ClusterStreamSilent", "grafana_datasource", "fluent-bit", "30993"} {
+	for _, s := range []string{"ClusterStreamSilent", "grafana_datasource", "fluent-bit", "30993", "otel", "claude", "LogStreamSilent"} {
 		if strings.Contains(mon, s) {
-			t.Errorf("dev hub file should not carry %q (that is a cluster's)", s)
+			t.Errorf("plain hub file should not carry %q", s)
 		}
 	}
 	if strings.Contains(mon, "\n        job:") {
-		t.Errorf("dev hub file sets job as a target label — the operator overrides it with jobName")
+		t.Errorf("plain hub file sets job as a target label — the operator overrides it with jobName")
 	}
-	if strings.Count(mon, "kind: ScrapeConfig") != 2 {
-		t.Errorf("dev hub file wants one ScrapeConfig per leg, got %d", strings.Count(mon, "kind: ScrapeConfig"))
+	if strings.Count(mon, "kind: ScrapeConfig") != 1 {
+		t.Errorf("plain hub file wants one ScrapeConfig, got %d", strings.Count(mon, "kind: ScrapeConfig"))
 	}
 	var hasEdit bool
 	for _, f := range files {
 		if f.path == clusterMonitoringKustomization && f.edit != nil {
 			hasEdit = true
 			out, err := f.edit("resources:\n  - clusters/luxor.yaml\n")
-			if err != nil || !strings.Contains(out, "  - clusters/dev-fort.yaml\n") {
+			if err != nil || !strings.Contains(out, "  - clusters/plain-fort.yaml\n") {
 				t.Errorf("kustomization edit: %v\n%s", err, out)
 			}
 		}
 	}
 	if !hasEdit {
-		t.Error("a dev fort's file on the hub needs its kustomization line")
+		t.Error("a plain fort's file on the hub needs its kustomization line")
 	}
 }

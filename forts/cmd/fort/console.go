@@ -62,9 +62,9 @@ import (
 //
 // SCOPE: every fort. ops/ops-commands.nix pins every sfi-* sudo rule to
 // `deployer`, and the account is ops/deployer.nix's on cluster forts and
-// dev forts alike (#647) — a dev fort is one of our implementations on
-// top of a fort, and the hatch is the fort's. This verb used to refuse a
-// [dev] fort while #524 left that question open; it no longer does.
+// plain forts alike (#647) — whatever an estate builds on top of a fort,
+// the hatch is the fort's. This verb used to refuse a fort with no
+// cluster while #524 left that question open; it no longer does.
 func consolePassword(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort console-password <host> [--write] [--rotate] [--show]")
@@ -143,7 +143,7 @@ func (p *consolePlan) mints() bool { return !p.haveHash || p.rotate }
 // file, the same property `fort check` relies on. So a dry run needs no
 // age key. Only --write and --show do.
 func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
-	// A manifest is the gate — cluster or [dev], both carry deployer.
+	// A manifest is the gate — cluster or plain, both carry deployer.
 	if _, err := manifest.Load(root, host); err != nil {
 		return nil, err
 	}

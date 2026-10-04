@@ -55,13 +55,10 @@ type hostView struct {
 	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
 	// is reached by cluster DNS rather than over the mesh.
 	Hub bool
-	// Dev: a dev fort ([dev], #413) — the dev host shape (agent accounts,
-	// toolchains, no k3s/flux/backups) and no fleet surface at all.
-	Dev bool
-	// DevAccounts: the fort's Unix accounts, from [dev] (#532). The
-	// generated comment names them and the account the fort's own name
-	// answers as, so a reader of the host file sees who lives there.
-	DevAccounts []manifest.DevAccount
+	// Plain: a fort with no [cluster] table — the baseline host shape
+	// (hardened, the mesh, deployer + the ops verbs, the shell; no
+	// k3s/flux/backups) and no fleet surface at all.
+	Plain bool
 }
 
 // scaffoldFile is one rendered file: repo-relative path + content — or,
@@ -151,7 +148,7 @@ func scaffold(args []string) error {
 		fmt.Println("\ndry run — nothing written (scaffold --write).")
 		return nil
 	}
-	if entry.IsDev() {
+	if !entry.IsCluster() {
 		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (host keys, sops rule, deploy key — no cluster identity),\n", written, host)
 	} else {
 		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
@@ -165,8 +162,8 @@ func scaffold(args []string) error {
 }
 
 func scaffoldShape(e manifest.Host) string {
-	if e.IsDev() {
-		return "dev fort: lab VM, no cluster"
+	if !e.IsCluster() {
+		return "plain fort: lab VM, no cluster"
 	}
 	s := "lab VM"
 	if e.Baremetal() != nil {
@@ -194,8 +191,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 		Cloud:        entry.Cloud(),
 		Provider:     entry.Provider,
 		Hub:          host == hubHost,
-		Dev:          entry.IsDev(),
-		DevAccounts:  entry.Accounts(),
+		Plain:        !entry.IsCluster(),
 		AuditLogging: entry.AuditLogging(),
 	}
 	if entry.Backups.Backed() {
@@ -255,20 +251,20 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 	if view.Cloud {
 		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, split DNS over the mesh, zram)"
 	}
-	if view.Dev {
-		hostTpl, hostNote = "host-dev.nix.gotpl", "dev fort shape (qcow runtime, static LAN, agent account; no k3s/flux/backups)"
+	if view.Plain {
+		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)"
 	}
 	hostDir := filepath.Join("nixos/hosts", host)
 	plan := []struct{ path, tpl, note string }{
 		{filepath.Join(hostDir, "default.nix"), hostTpl, hostNote},
 		{filepath.Join(hostDir, "secrets.nix"), "secrets.nix.gotpl", "sops-nix wiring (host key → age)"},
 	}
-	if view.Dev {
+	if view.Plain {
 		// No fleet surface: no cluster dir, no apps root, no canary home.
-		// The hub still gets the fort's file (#437): with no edge
-		// Prometheus the hub PULLS — node-exporter and the fort's
-		// OpenTelemetry collector over the mesh — and arms the switches
-		// on both legs, in the same <host>-keyed place a cluster's live.
+		// The hub still gets the fort's file: with no edge Prometheus the
+		// hub PULLS node-exporter over the mesh and arms the switch, in
+		// the same <host>-keyed place a cluster's lives. Anything else the
+		// estate runs on the fort is the estate's to scrape.
 		var out []scaffoldFile
 		for _, p := range plan {
 			b, err := render(p.tpl)
@@ -277,11 +273,11 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 			}
 			out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
 		}
-		b, err := render("dev-monitoring.yaml.gotpl")
+		b, err := render("host-monitoring.yaml.gotpl")
 		if err != nil {
-			return nil, fmt.Errorf("dev-monitoring.yaml.gotpl: %w", err)
+			return nil, fmt.Errorf("host-monitoring.yaml.gotpl: %w", err)
 		}
-		return append(out, hubMonitoringFiles(host, b, devMonitoringNote)...), nil
+		return append(out, hubMonitoringFiles(host, b, plainMonitoringNote)...), nil
 	}
 	clusters := filepath.Join("fleet/clusters", host)
 	plan = append(plan,
@@ -317,7 +313,7 @@ func renderScaffold(host string, entry manifest.Host) ([]scaffoldFile, error) {
 
 // hubMonitoringFiles is a fort's file on the hub plus the line that
 // makes flux apply it (clustermon.go) — the same pair for a cluster and
-// a dev fort, different content.
+// a plain fort, different content.
 func hubMonitoringFiles(host string, content []byte, note string) []scaffoldFile {
 	item := "clusters/" + host + ".yaml"
 	return []scaffoldFile{

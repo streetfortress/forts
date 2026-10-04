@@ -9,7 +9,7 @@ import (
 	"gitea.zen.lofi/sfi/deployments/forts/internal/manifest"
 )
 
-// A small fleet: a dev fort, a lab cluster fort, two cloud forts sharing
+// A small fleet: a plain fort, a lab cluster fort, two cloud forts sharing
 // a stem (no alias for either), a fort named outside the convention, two
 // hand-managed peers and a roaming client.
 const testPeers = `{
@@ -27,29 +27,9 @@ const testPeers = `{
 }
 `
 
-// The [dev] accounts (#532): two of them, so the render is exercised
-// both for the account that rides the fort's own name and for the one
-// that needs an alias of its own.
-const testDevAccounts = `
-[[dev.accounts]]
-user = "agent"
-verb = "pickup"
-gitea_user = "sfi-agent"
-email = "support@streetfortress.com"
-token_scopes = ["write:repository", "write:issue"]
-
-[[dev.accounts]]
-user = "analyst"
-verb = "review"
-gitea_user = "sfi-analyst"
-email = "analyst@streetfortress.com"
-ssh_alias = "sfi-analyst"
-token_scopes = ["write:issue", "read:repository"]
-`
-
 var testManifests = map[string]string{
 	"luxor":            "mesh_ip = \"10.1.0.5\"\n[cluster]\ndatastore = \"etcd\"\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 16\ndisk = \"450G\"\n[libvirt]\nip = \"10.0.0.5\"\n",
-	"sfi-dev-abc1234":  "mesh_ip = \"10.1.0.61\"\n[dev]\n" + testDevAccounts + "\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 8\ndisk = \"80G\"\n[libvirt]\nip = \"10.0.0.61\"\n",
+	"sfi-dev-abc1234":  "mesh_ip = \"10.1.0.61\"\n[backups]\nprofile = \"none\"\n[shape]\nvcpus = 4\nmemory = 8\ndisk = \"80G\"\n[libvirt]\nip = \"10.0.0.61\"\n",
 	"sfi-prod-1111111": "mesh_ip = \"10.1.0.54\"\n[cluster]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p1\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
 	"sfi-prod-2222222": "mesh_ip = \"10.1.0.55\"\n[cluster]\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"p2\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
 }
@@ -95,11 +75,8 @@ func TestRenderSSHConfig(t *testing.T) {
 		t.Fatal("render is not deterministic")
 	}
 	for _, want := range []string{
-		// the dev fort: role alias, the first account, key by name
-		"# dev fort, libvirt — the sfi-dev role\nHost sfi-dev sfi-dev-abc1234\n  Hostname 10.1.0.61\n  User agent\n  HostKeyAlias sfi-dev-abc1234\n",
-		// its second account (#532): its own alias, its own user, the
-		// fort's host key
-		"# the analyst account on sfi-dev-abc1234 — the review verb\nHost sfi-analyst\n  Hostname 10.1.0.61\n  User analyst\n  HostKeyAlias sfi-dev-abc1234\n",
+		// the plain fort: role alias, deployer, key by name
+		"# plain fort, libvirt — the sfi-dev role\nHost sfi-dev sfi-dev-abc1234\n  Hostname 10.1.0.61\n  User deployer\n  HostKeyAlias sfi-dev-abc1234\n",
 		// a cluster fort outside the naming convention: no alias
 		"# cluster fort, libvirt\nHost luxor\n  Hostname 10.1.0.5\n  User deployer\n  HostKeyAlias luxor\n",
 		// two forts on one stem: neither gets the alias
@@ -129,35 +106,8 @@ func TestRenderSSHConfig(t *testing.T) {
 	if got := renderSSHConfig(m, hosts); !strings.Contains(got, "Host sfi-prod sfi-prod-1111111\n") {
 		t.Errorf("alias not restored with one prod fort:\n%s", got)
 	}
-	if got := sshConfigLine("sfi-dev-abc1234", hosts, "10.1.0.61"); got != "Host sfi-dev sfi-dev-abc1234 → agent@10.1.0.61 (+ sfi-analyst → analyst)" {
+	if got := sshConfigLine("sfi-dev-abc1234", hosts, "10.1.0.61"); got != "Host sfi-dev sfi-dev-abc1234 → deployer@10.1.0.61" {
 		t.Errorf("summary line: %q", got)
-	}
-}
-
-// An account alias is suspended the way a role alias is: while two dev
-// forts claim `sfi-analyst`, it points at neither (#532).
-func TestDevAliasesSuspended(t *testing.T) {
-	hosts := testHosts(t)
-	second, err := manifest.Parse("sfi-dev-def5678", []byte(testManifests["sfi-dev-abc1234"]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := devAliases(hosts); got["sfi-analyst"] != "sfi-dev-abc1234" {
-		t.Fatalf("one dev fort holds the alias: %v", got)
-	}
-	hosts["sfi-dev-def5678"] = second
-	if got := devAliases(hosts); len(got) != 0 {
-		t.Errorf("two dev forts claim it — want none: %v", got)
-	}
-	m, _ := parseMesh(testPeers)
-	if out := renderSSHConfig(m, hosts); strings.Contains(out, "Host sfi-analyst\n") {
-		t.Errorf("a suspended alias must not be rendered:\n%s", out)
-	}
-	// A fort whose name or role alias is already the alias takes it back:
-	// one Host pattern, one target.
-	clash := map[string]manifest.Host{"sfi-analyst": hosts["luxor"], "sfi-dev-abc1234": hosts["sfi-dev-abc1234"]}
-	if got := devAliases(clash); len(got) != 0 {
-		t.Errorf("an alias that is also a fort name is suspended: %v", got)
 	}
 }
 

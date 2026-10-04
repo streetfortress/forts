@@ -25,10 +25,9 @@ const (
 
 // clusterMonitoringPath is a cluster's file on the hub: its dead man's
 // switch (metrics and logs), the backup leg its profile promises, and
-// its edge Alertmanager as a Grafana datasource. A dev fort ([dev]) has
-// a file in the same place with the pull-shaped equivalent (#437): the
-// hub's ScrapeConfig for node-exporter + the fort's OpenTelemetry
-// collector over the mesh, and the switches on both legs.
+// its edge Alertmanager as a Grafana datasource. A plain fort has a file
+// in the same place with the pull-shaped equivalent: the hub's
+// ScrapeConfig for node-exporter over the mesh, and the switch on it.
 func clusterMonitoringPath(host string) string {
 	return filepath.Join(clusterMonitoringDir, host+".yaml")
 }
@@ -36,10 +35,10 @@ func clusterMonitoringPath(host string) string {
 // The post-scaffold notes for the two shapes (also what check reports).
 const (
 	clusterMonitoringNote = "dead man's switch (metrics, logs), edge Alertmanager datasource"
-	devMonitoringNote     = "mesh scrape targets (node-exporter, otel collector), DevFortDown, LogStreamSilent"
+	plainMonitoringNote   = "mesh scrape target (node-exporter), HostDown"
 )
 
-// clusterMonitoringFindings (--all): every flux cluster and every dev
+// clusterMonitoringFindings (--all): every flux cluster and every plain
 // fort has its file on the hub and the hub's kustomization lists it — a
 // fort with no dead man's switch is the silent failure the central layer
 // exists to catch — and every file there belongs to a manifest, so a
@@ -53,14 +52,14 @@ func clusterMonitoringFindings(root string, hosts map[string]manifest.Host) []fi
 	}
 	sort.Strings(names)
 	for _, host := range names {
-		dev := hosts[host].IsDev()
-		if !dev && !exists(root, filepath.Join("fleet/clusters", host)) {
+		plain := !hosts[host].IsCluster()
+		if !plain && !exists(root, filepath.Join("fleet/clusters", host)) {
 			continue
 		}
 		rel := clusterMonitoringPath(host)
 		what, note := "a flux cluster with no dead man's switch on the hub", clusterMonitoringNote
-		if dev {
-			what, note = "a dev fort the hub does not scrape", devMonitoringNote
+		if plain {
+			what, note = "a plain fort the hub does not scrape", plainMonitoringNote
 		}
 		switch {
 		case !exists(root, rel):

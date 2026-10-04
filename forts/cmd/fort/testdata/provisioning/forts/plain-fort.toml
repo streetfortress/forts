@@ -1,0 +1,15 @@
+# Test fixture: a plain fort — a lab VM with no [cluster] table: the
+# baseline host (hardened, the mesh, deployer + the ops verbs, the shell)
+# and nothing else the framework names.
+mesh_ip = "10.1.0.96"
+
+[backups]
+profile = "none"
+
+[shape]
+vcpus = 4
+memory = 8
+disk = "80G"
+
+[libvirt]
+ip = "10.0.0.96"

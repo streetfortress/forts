@@ -58,10 +58,10 @@ func TestParse(t *testing.T) {
 		t.Errorf("lab derived: endpoint %q shape %+v", h.Endpoint(), h.Shape)
 	}
 	// [cluster] (#426) is the shape: an empty table is a cluster on the
-	// default datastore, sqlite; "etcd" is the opt-in; a dev fort has
+	// default datastore, sqlite; "etcd" is the opt-in; a plain fort has
 	// no datastore at all.
-	if !h.IsCluster() || h.IsDev() || h.Datastore() != "sqlite" || h.Cluster.Datastore != "" {
-		t.Errorf("an empty [cluster] is a cluster on sqlite: cluster=%v dev=%v datastore %q (%+v)", h.IsCluster(), h.IsDev(), h.Datastore(), h.Cluster)
+	if !h.IsCluster() || h.Datastore() != "sqlite" || h.Cluster.Datastore != "" {
+		t.Errorf("an empty [cluster] is a cluster on sqlite: cluster=%v datastore %q (%+v)", h.IsCluster(), h.Datastore(), h.Cluster)
 	}
 	if e, err := Parse("lab", []byte(strings.Replace(lab, "[cluster]\n", "[cluster]\ndatastore = \"etcd\"\n", 1))); err != nil || e.Datastore() != "etcd" {
 		t.Errorf("[cluster] datastore = \"etcd\": %v %q", err, e.Datastore())
@@ -156,19 +156,20 @@ func TestParseRefuses(t *testing.T) {
 		{"unknown backups key", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\nhour = 5\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key"},
 		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
 		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
-		// The shape tables (#426) are handled like the provider tables:
-		// exactly one, strict keys, and the retired top-level
-		// k3s_cluster_init is an unknown key like any other — the
-		// loader special-cases nothing.
-		{"no shape", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.1\"\n", "no shape table — add [cluster] (a flux cluster) or [dev] (a dev fort)"},
+		// The shape table (#426) is handled like the provider tables:
+		// strict keys, and the retired top-level k3s_cluster_init is an
+		// unknown key like any other — the loader special-cases nothing.
+		// No [cluster] is a plain fort, which has nothing to back up.
+		{"plain with backups", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.1\"\n", "has nothing to back up"},
+		{"plain in the cloud", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"z\"\nname = \"n\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n", "is a lab VM for now"},
+		{"retired dev table", "mesh_ip = \"10.1.0.1\"\n[dev]\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key dev"},
 		{"retired k3s_cluster_init", "k3s_cluster_init = false\nmesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key k3s_cluster_init"},
 		{"bad datastore", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\ndatastore = \"postgres\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[cluster] datastore \"postgres\": want one of sqlite, etcd"},
 		{"datastore wrong type", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\ndatastore = false\n[libvirt]\nip = \"10.0.0.1\"\n", "datastore"},
-		// [cluster] (#626): a typo is not a default, and a dev fort has
+		// [cluster] (#626): a typo is not a default, and a plain fort has
 		// no API server to audit.
 		{"unknown cluster key", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\naudit_loging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key cluster.audit_loging"},
 		{"cluster wrong type", "mesh_ip = \"10.1.0.1\"\n[backups]\nprofile = \"lab\"\n[cluster]\naudit_logging = \"yes\"\n[libvirt]\nip = \"10.0.0.1\"\n", "audit_logging"},
-		{"dev with cluster", "mesh_ip = \"10.1.0.1\"\n[dev]\n[[dev.accounts]]\nuser = \"agent\"\nverb = \"pickup\"\ngitea_user = \"sfi-agent\"\nemail = \"a@b.c\"\ntoken_scopes = [\"write:issue\"]\n[backups]\nprofile = \"none\"\n[cluster]\naudit_logging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "[dev] and [cluster] together"},
 		{"baremetal missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[baremetal]\nmac = \"f8:ce:72:02:05:07\"\n", "[baremetal]: ip is required"},
 		{"baremetal bad mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"f8ce.7202.0507x\"\n", "[baremetal]: mac"},
 		{"baremetal upper mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"F8:CE:72:02:05:07\"\n", "lowercase"},
@@ -209,121 +210,18 @@ func TestLoadAll(t *testing.T) {
 	}
 }
 
-// devAccounts is a valid [dev] account list: the shape every dev-fort
-// fixture needs, since [dev] with no account is a refusal.
-const devAccounts = `
-[[dev.accounts]]
-user = "agent"
-verb = "pickup"
-gitea_user = "sfi-agent"
-email = "support@streetfortress.com"
-token_scopes = ["write:repository", "write:issue"]
-
-[[dev.accounts]]
-user = "analyst"
-verb = "review"
-gitea_user = "sfi-analyst"
-email = "analyst@streetfortress.com"
-ssh_alias = "sfi-analyst"
-token_scopes = ["write:issue", "read:repository"]
-`
-
-// [dev] (#413): a positive declaration with its own invariants — no
-// backups, no [cluster] table, a lab VM.
-func TestDev(t *testing.T) {
-	base := "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
-	h, err := Parse("dev-fort", []byte(base))
+// A plain fort: no [cluster] table, no backups, a lab VM — the baseline
+// host and nothing the framework names beyond it.
+func TestPlainFort(t *testing.T) {
+	h, err := Parse("plain-fort", []byte("mesh_ip = \"10.1.0.96\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !h.IsDev() || h.IsCluster() {
-		t.Errorf("want a dev fort that is not a cluster: dev=%v cluster=%v", h.IsDev(), h.IsCluster())
+	if h.IsCluster() || h.Datastore() != "" {
+		t.Errorf("want a plain fort: cluster=%v datastore %q", h.IsCluster(), h.Datastore())
 	}
-	if got := h.Accounts(); len(got) != 2 || got[0].User != "agent" || got[1].SSHAlias != "sfi-analyst" {
-		t.Errorf("accounts %+v", got)
-	}
-	if d := h.DefaultAccount(); d == nil || d.User != "agent" || d.Verb != "pickup" {
-		t.Errorf("the first account is the fort's own: %+v", d)
-	}
-	if h.Datastore() != "" {
-		t.Errorf("a dev fort has no k3s and so no datastore: %q", h.Datastore())
-	}
-	plain, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
-	if err != nil || plain.IsDev() || !plain.IsCluster() {
-		t.Errorf("a fort with [cluster] is a cluster: %v dev=%v", err, plain.IsDev())
-	}
-	if plain.Accounts() != nil || plain.DefaultAccount() != nil {
-		t.Error("a cluster fort has no accounts")
-	}
-	for name, raw := range map[string]string{
-		"backups": "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n",
-		"cluster": "mesh_ip = \"10.1.0.96\"\n[cluster]\ndatastore = \"sqlite\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
-		"cloud":   "mesh_ip = \"10.1.0.96\"\n[dev]\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[dns]\nzone = \"example.cloud\"\nname = \"dev\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n",
-		"unknown": "mesh_ip = \"10.1.0.96\"\n[dev]\nagent = \"sfi-agent\"\n" + devAccounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n",
-	} {
-		if _, err := Parse("dev-fort", []byte(raw)); err == nil {
-			t.Errorf("%s: want a refusal", name)
-		}
-	}
-}
-
-// The account list is the fort's identities (#532): every field is
-// required, the names are unique, and only the first account rides the
-// fort's own name.
-func TestDevAccounts(t *testing.T) {
-	dev := func(accounts string) error {
-		raw := "mesh_ip = \"10.1.0.96\"\n[dev]\n" + accounts + "\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n"
-		_, err := Parse("dev-fort", []byte(raw))
-		return err
-	}
-	one := func(fields ...string) string {
-		return "[[dev.accounts]]\n" + strings.Join(fields, "\n") + "\n"
-	}
-	full := []string{`user = "agent"`, `verb = "pickup"`, `gitea_user = "sfi-agent"`, `email = "support@streetfortress.com"`, `token_scopes = ["write:issue"]`}
-	if err := dev(one(full...)); err != nil {
-		t.Fatalf("a complete account: %v", err)
-	}
-	for name, want := range map[string]string{
-		"no accounts":  "names no accounts",
-		"no user":      "want a Unix account name",
-		"bad user":     "want a Unix account name",
-		"no verb":      "want one of pickup",
-		"bad verb":     "want one of pickup",
-		"no gitea":     "gitea_user is required",
-		"no email":     "want the address on gitea user",
-		"no scopes":    "token_scopes is required",
-		"first alias":  "must not name ssh_alias",
-		"second alias": "without one nothing reaches it",
-		"twice":        "user \"agent\" twice",
-	} {
-		var raw string
-		switch name {
-		case "no accounts":
-			raw = ""
-		case "no user":
-			raw = one(full[1:]...)
-		case "bad user":
-			raw = one(append([]string{`user = "Agent One"`}, full[1:]...)...)
-		case "no verb":
-			raw = one(full[0], full[2], full[3], full[4])
-		case "bad verb":
-			raw = one(full[0], `verb = "dispatch"`, full[2], full[3], full[4])
-		case "no gitea":
-			raw = one(full[0], full[1], full[3], full[4])
-		case "no email":
-			raw = one(full[0], full[1], full[2], full[4])
-		case "no scopes":
-			raw = one(full[:4]...)
-		case "first alias":
-			raw = one(append(append([]string{}, full...), `ssh_alias = "sfi-dev"`)...)
-		case "second alias":
-			raw = one(full...) + one(`user = "scout"`, `verb = "scout"`, `gitea_user = "sfi-scout"`, `email = "scout@streetfortress.com"`, `token_scopes = ["write:issue"]`)
-		case "twice":
-			raw = one(full...) + one(append(append([]string{}, full...), `ssh_alias = "sfi-two"`)...)
-		}
-		err := dev(raw)
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%s: want %q, got %v", name, want, err)
-		}
+	cluster, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
+	if err != nil || !cluster.IsCluster() {
+		t.Errorf("a fort with [cluster] is a cluster: %v", err)
 	}
 }

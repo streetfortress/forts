@@ -15,12 +15,10 @@ import (
 // and in the host file that scaffold rendered from it — or, on a host
 // that predates the key, that a hand wrote. Nix cannot read
 // provisioning/forts (it is outside the flake's root), so these tests
-// are what keep the two equal, in the shape of
-// TestDevAccountsMatchDevFortModule.
+// are what keep the two equal.
 //
 // clusterHostFiles is every cluster fort's manifest beside its host
-// file; a dev fort has no k3s, and manifest.Validate refuses [cluster]
-// there.
+// file; a plain fort has no k3s.
 func clusterHostFiles(t *testing.T) (map[string]manifest.Host, func(host string) (file, raw string, ok bool)) {
 	t.Helper()
 	repo := estateRoot(t)

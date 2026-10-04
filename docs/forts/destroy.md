@@ -66,15 +66,8 @@ missing manifest is no obstacle.
    (the image-id provenance lives on in git history).
 7. **Revoke the deploy key** `flux-<host>` on gitea — every key under
    that title. Not found is fine (no flux cluster, or removed by hand).
-   Then **the agent bundle** on the `sfi-agent` user, if the host was a
-   `[dev]` fort (#414): the ssh key and token titled `agent-<host>`, and
-   the GPG key by key id. gitea stores a GPG key as its bare primary-key
-   packet — no uid, no title — and the manifest and secrets file are gone
-   by now, so the id is derived from the retired `nixos/secrets/<host>.yaml`
-   read back from the commit that deleted it (still encrypted to the admin
-   key). Nothing under the name is fine too; a history read that fails
-   warns and names the key as the thing left to delete by hand.
-   `agent-claude-oauth-token` is fleet-wide and untouched.
+   An identity the estate minted for an account of its own on the fort is
+   the estate's to revoke; destroy knows only the fort's.
    Then **the B2 keys** (`sfi-pv-<host>`, the db keys, the legacy
    `fort-<host>`), by name from `b2_list_keys`; `sfi-restore-<host>` is
    left standing, since a dead fort's backups are what it reads. The same
@@ -129,7 +122,6 @@ pulumi destroy -s <host>
 pulumi stack rm <host>
 ```
 
-Then the deploy key through the repo's settings or the keys API, the
-agent bundle through the `sfi-agent` user's settings, and the residue
-above. This is exactly what `cloudEnv` sets for every fort
+Then the deploy key through the repo's settings or the keys API, and the
+residue above. This is exactly what `cloudEnv` sets for every fort
 command; the difference is only who types it.

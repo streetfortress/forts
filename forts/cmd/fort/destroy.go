@@ -145,10 +145,9 @@ func destroy(args []string) error {
 
 // revokeIdentities: the deploy key fort mint registered — the one
 // off-repo identity of the flux half (the flux age identity died with
-// the sops rule) — a dev fort's agent bundles, one per account its
-// retired manifest names (everything titled agent-<host> on each
-// account's gitea user: ssh key, gpg key, token; #414, #532) — and the B2
-// application keys. Both warned rather than
+// the sops rule) — and the B2 application keys. An identity the estate
+// minted for an account of its own on the fort is the estate's to revoke.
+// Both warned rather than
 // fatal: the minting credential is an operational input
 // (docs/infra/backups.md), and a destroy must not be blocked waiting for
 // it. A B2 key is scoped to its fort's prefix, so what it can still
@@ -169,27 +168,6 @@ func revokeIdentities(root, host string) {
 	if err != nil {
 		// Unknown, not none: the B2 half falls back to listing by name.
 		fmt.Fprintf(os.Stderr, "warning: retired secrets: %v\n", err)
-	}
-	// Who to revoke on, and which GPG key: the accounts come from the
-	// retired manifest and their key ids from the retired secrets file,
-	// both read back from the commit that deleted them (a GPG key has no
-	// title on gitea).
-	byHand := fmt.Sprintf(" — delete agent-%s (ssh key, gpg key, token) by hand on every agent user of that fort\n", host)
-	accounts, err := retiredAccounts(root, host, secrets, sopsCLI{root: root}.Decrypt)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: agent identity: %v\n", err)
-	}
-	switch g, err := giteaClient(root); {
-	case err != nil:
-		fmt.Fprintf(os.Stderr, "warning: agent identity: %v%s", err, byHand)
-	case len(accounts) == 0:
-		fmt.Println("  agent identity: no account in the retired manifest (not a dev fort, or a fort minted before #532 — check agent-" + host + " by hand)")
-	default:
-		if msg, err := revokeAgentIdentities(g, host, accounts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: agent identity: %v (done: %s)%s", err, msg, byHand)
-		} else {
-			fmt.Println("  agent identity:", msg)
-		}
 	}
 	if msg, err := revokeB2Key(host, secrets); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)

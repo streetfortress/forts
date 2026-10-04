@@ -21,9 +21,7 @@ import (
 //   - wireguard/ssh_config   one Host block per peer — the fort name, a
 //                            stable role alias where one fort holds the
 //                            role (sfi-dev, sfi-prod, sfi-stage), the mesh
-//                            address, the account — plus one block per
-//                            extra account of a dev fort (#532: `Host
-//                            sfi-scout` → `User scout`). Committed;
+//                            address, the account (deployer). Committed;
 //                            consumers Include it. mint and dismantle
 //                            re-render it, fort check --all fails when it
 //                            is stale.
@@ -40,19 +38,15 @@ import (
 //                            to the device: the key never leaves it, and
 //                            this CLI never handles one.
 //
-// The account comes from the manifest, never from peers.json: a cluster
-// fort answers as deployer (production.nix), a peer with no manifest is a
-// hand-managed interactive host — steven's (the ubuntu holdouts; no NixOS
-// interactive profile exists) — and a [dev] fort answers as each account
-// its [dev] table names (#532). peers.json stays three fields per peer;
-// nothing is added to it here.
-//
-// A dev fort therefore has one Host block per account. The first account
-// rides the fort's own name and its role alias (`ssh sfi-dev`), and every
-// other account names the alias that dials it (`ssh sfi-scout`, `ssh
-// sfi-analyst`). An alias two forts claim is suspended, the way a role
-// alias is: a replacement raised before the old fort is dismantled must
-// not send a verb to either one.
+// The account comes from the manifest, never from peers.json: a fort
+// answers as deployer, the operator account the framework gives every
+// host (ops/deployer.nix), and a peer with no manifest is a hand-managed
+// interactive host — steven's (the ubuntu holdouts; no NixOS interactive
+// profile exists). peers.json stays three fields per peer; nothing is
+// added to it here. An account the estate adds to a fort is reached from
+// the client's own config, above the Include. A role alias two forts
+// claim is suspended: a replacement raised before the old fort is
+// dismantled must not send a verb to either one.
 
 const (
 	sshConfigPath  = "wireguard/ssh_config"
@@ -115,22 +109,15 @@ func sortedNames[T any](m map[string]T) []string {
 // --- ssh_config
 
 // sshUser is the account that answers on a peer's 22 under the peer's own
-// name (the header of this file has the why). For a dev fort that is the
-// first account of its [dev] table; "" only for a dev manifest that names
-// none, which DevSpec.Validate refuses on load — the render then says so
-// rather than naming an account nobody declared.
+// name (the header of this file has the why): deployer on every fort, the
+// operator account the framework gives each host; an interactive user on
+// a hand-managed peer. An estate that adds accounts to a fort reaches them
+// by its own ssh config, above the Include.
 func sshUser(entry *manifest.Host) string {
-	switch {
-	case entry == nil:
+	if entry == nil {
 		return userInteractive
-	case entry.IsDev():
-		if a := entry.DefaultAccount(); a != nil {
-			return a.User
-		}
-		return ""
-	default:
-		return userDeployer
 	}
+	return userDeployer
 }
 
 // roleStemRE: a fort named by the convention <role>-<7-hex sha> (2026-09-12:
@@ -167,56 +154,6 @@ func roleAliases(hosts map[string]manifest.Host) map[string]string {
 	return out
 }
 
-// devAliases maps an account alias → the fort that holds the account, for
-// every alias exactly one fort claims and no fort name or role alias
-// already takes. Same rule as roleAliases, and for the same reason: while
-// two dev forts both name `sfi-scout`, the alias points at neither, and
-// `gotea scout` says the fort's name instead.
-func devAliases(hosts map[string]manifest.Host) map[string]string {
-	taken := map[string]int{}
-	for h := range hosts {
-		taken[h]++
-	}
-	for _, alias := range roleAliases(hosts) {
-		taken[alias]++
-	}
-	claims := map[string][]string{}
-	for h, entry := range hosts {
-		for _, a := range entry.Accounts() {
-			if a.SSHAlias != "" {
-				claims[a.SSHAlias] = append(claims[a.SSHAlias], h)
-			}
-		}
-	}
-	out := map[string]string{}
-	for alias, hs := range claims {
-		if len(hs) == 1 && taken[alias] == 0 {
-			out[alias] = hs[0]
-		}
-	}
-	return out
-}
-
-// devAccountBlocks is a dev fort's extra Host blocks: one per account
-// beyond the first, in manifest order, for the aliases that survived
-// devAliases. The first account needs none — it answers on the fort's own
-// block. HostKeyAlias is the fort, so every account trusts the one host
-// key the fort's known_hosts line carries.
-func devAccountBlocks(host string, entry manifest.Host, aliases map[string]string, ip string) string {
-	var sb strings.Builder
-	for i, a := range entry.Accounts() {
-		if i == 0 || aliases[a.SSHAlias] != host {
-			continue
-		}
-		fmt.Fprintf(&sb, "\n# the %s account on %s — the %s verb\n", a.User, host, a.Verb)
-		fmt.Fprintf(&sb, "Host %s\n", a.SSHAlias)
-		fmt.Fprintf(&sb, "  Hostname %s\n", ip)
-		fmt.Fprintf(&sb, "  User %s\n", a.User)
-		fmt.Fprintf(&sb, "  HostKeyAlias %s\n", host)
-	}
-	return sb.String()
-}
-
 const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-config`" + ` from
 # wireguard/peers.json + provisioning/forts/*.toml. Do not edit: fort mint
 # and fort dismantle re-render it, and fort check --all fails when it is
@@ -229,12 +166,11 @@ const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-
 #   Include ~/deployments/wireguard/ssh_config
 #   UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/wireguard/known_hosts
 #
-# Accounts follow the fort's shape: a cluster fort answers as deployer, a
-# peer with no manifest is a hand-managed interactive host (steven), and a
-# [dev] fort answers as each account its manifest names — one block per
-# account, the first on the fort's own name. A role alias (sfi-dev,
-# sfi-prod, …) and an account alias (sfi-scout, sfi-analyst) exist while
-# exactly one fort claims the name.
+# Every fort answers as deployer, the operator account the framework
+# gives each host; a peer with no manifest is a hand-managed interactive
+# host (steven). A role alias (sfi-dev, sfi-prod, …) exists while exactly
+# one fort claims the stem. Other accounts on a fort are the estate's:
+# reach them from the client's own config, above the Include.
 `
 
 // renderSSHConfig is the whole file: every mesh peer in name order (the
@@ -242,7 +178,6 @@ const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-
 // their own lines — ssh_config has no trailing comments.
 func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 	aliases := roleAliases(hosts)
-	accounts := devAliases(hosts)
 	var sb strings.Builder
 	sb.WriteString(sshConfigHeader)
 	for _, name := range sortedNames(m.Peers) {
@@ -252,8 +187,8 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 		patterns := name
 		if isFort {
 			kind := "cluster fort"
-			if entry.IsDev() {
-				kind = "dev fort"
+			if !entry.IsCluster() {
+				kind = "plain fort"
 			}
 			if entry.Provider != "" {
 				kind += ", " + entry.Provider
@@ -271,7 +206,6 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 			// successor at a reused mesh address is a new key under a new
 			// name, not a changed key under an old one.
 			fmt.Fprintf(&sb, "  HostKeyAlias %s\n", name)
-			sb.WriteString(devAccountBlocks(name, entry, accounts, p.IP))
 			continue
 		}
 		sb.WriteString("# hand-managed peer (no manifest)\n")
@@ -283,27 +217,14 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 }
 
 // sshConfigLine is the one-line summary a report prints for a fort's
-// block ("Host sfi-dev sfi-dev-831c637 → agent@10.1.0.61"), with a dev
-// fort's other accounts after it ("+ sfi-scout → scout").
+// block ("Host sfi-dev sfi-dev-831c637 → deployer@10.1.0.61").
 func sshConfigLine(host string, hosts map[string]manifest.Host, ip string) string {
 	entry := hosts[host]
 	patterns := host
 	if a := roleAliases(hosts)[host]; a != "" {
 		patterns = a + " " + host
 	}
-	line := fmt.Sprintf("Host %s → %s@%s", patterns, sshUser(&entry), ip)
-	accounts := devAliases(hosts)
-	var extra []string
-	for i, a := range entry.Accounts() {
-		if i == 0 || accounts[a.SSHAlias] != host {
-			continue
-		}
-		extra = append(extra, a.SSHAlias+" → "+a.User)
-	}
-	if len(extra) > 0 {
-		line += " (+ " + strings.Join(extra, ", ") + ")"
-	}
-	return line
+	return fmt.Sprintf("Host %s → %s@%s", patterns, sshUser(&entry), ip)
 }
 
 // renderSSHConfigFrom renders from the tree: peers.json as given (a

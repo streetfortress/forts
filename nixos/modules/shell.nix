@@ -287,7 +287,7 @@ in
     # that mkDefault, the same way the `ls` alias below wins over
     # nixpkgs's own mkDefault. home/base.nix's Home Manager EDITOR =
     # "nvim" is a different, later-sourced variable, so this line does
-    # not touch the dev-fort accounts — it is for deployer
+    # not touch an estate's Home Manager accounts — it is for deployer
     # (production.nix, no Home Manager user) and any other zsh account
     # this module reaches without one (#630).
     environment.variables.EDITOR = "vim";
@@ -295,7 +295,7 @@ in
     # zsh's own first-run check — not a NixOS default; the generated
     # /etc/zshrc carries none — runs on every login where none of
     # ~/.zshenv, ~/.zprofile, ~/.zshrc, ~/.zlogin exist. Home Manager
-    # creates ~/.zshrc for the dev-fort accounts (programs.zsh.enable,
+    # creates ~/.zshrc for an estate's accounts that have one (programs.zsh.enable,
     # home/base.nix); an account with no Home Manager profile —
     # deployer, production.nix's mkForce — never gets one, and the
     # message repeats on every SSH login (#630). An empty ~/.zshrc

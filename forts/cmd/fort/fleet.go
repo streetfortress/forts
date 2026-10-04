@@ -103,21 +103,21 @@ func orphanFindings(root string, hosts map[string]bool) []finding {
 
 // checkFleetFort: one fort's tree exists, its two layers build, and every
 // ${VAR} in them (and in the shared layers) is a key of its cluster-vars.
-// A dev fort ([dev], #413) has a host dir and no fleet surface: the host
+// A plain fort (no [cluster]) has a host dir and no fleet surface: the host
 // dir is checked, and a fleet dir that turned up anyway is the finding.
 func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) []finding {
 	var out []finding
 	if !entry.IsCluster() {
 		if !exists(root, filepath.Join("nixos/hosts", fort)) {
-			out = append(out, finding{"error", filepath.Join("nixos/hosts", fort), "missing — a dev fort has a manifest and a nix host dir (fort scaffold renders it)"})
+			out = append(out, finding{"error", filepath.Join("nixos/hosts", fort), "missing — a plain fort has a manifest and a nix host dir (fort scaffold renders it)"})
 		}
 		for _, rel := range []string{filepath.Join("fleet/clusters", fort), filepath.Join("fleet/apps", fort)} {
 			if exists(root, rel) {
-				out = append(out, finding{"error", rel, "a dev fort has no cluster — nothing reconciles this tree; remove it or drop [dev] from the manifest"})
+				out = append(out, finding{"error", rel, "a plain fort has no cluster — nothing reconciles this tree; remove it, or add [cluster] to the manifest"})
 			}
 		}
 		if len(out) == 0 {
-			out = append(out, finding{"ok", filepath.Join("nixos/hosts", fort), "dev fort: host dir present, no fleet surface expected"})
+			out = append(out, finding{"ok", filepath.Join("nixos/hosts", fort), "plain fort: host dir present, no fleet surface expected"})
 		}
 		return out
 	}

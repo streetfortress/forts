@@ -10,8 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fakeGitea is the deploy-key half of the fake instance (agent_test.go
-// has the whole of it): a list that POST appends to.
+// fakeGitea is the fake instance (gitea_test.go) with deploy keys
+// preloaded: a list that POST appends to.
 func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
 	st := &fakeGiteaState{deploy: keys}
 	return newFakeGitea(t, st), &st.deploy
@@ -48,8 +48,6 @@ func TestMint(t *testing.T) {
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}
 	gitea, registered := newFakeGitea(t, st), &st.deploy
-	fleetSecret = func(root, key string) (string, error) { return "fleet-claude-secret", nil }
-	t.Cleanup(func() { fleetSecret = secret })
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
@@ -266,14 +264,14 @@ func yamlUnmarshalFile(path string, v any) error {
 	return yaml.Unmarshal(raw, v)
 }
 
-// A dev fort ([dev], #413): host key, wireguard key and the deploy key
-// (auto-rebuild's credential) are minted; the cluster identity — k3s
-// token, cluster age key, fleet rule, infra recipient, canary — is not,
-// and mint's gate wants only the host dir. Dismantle round-trips without
-// a fleet rule to remove.
-func TestMintDevFort(t *testing.T) {
+// A plain fort (no [cluster] table): host key, wireguard key and the
+// deploy key (auto-rebuild's credential) are minted; the cluster identity
+// — k3s token, cluster age key, fleet rule, infra recipient, canary — is
+// not, and mint's gate wants only the host dir. Dismantle round-trips
+// without a fleet rule to remove.
+func TestMintPlainFort(t *testing.T) {
 	repo := estateRoot(t)
-	const host = "mint-dev"
+	const host = "mint-plain"
 	tmp := t.TempDir()
 	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
 		"fleet/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
@@ -288,18 +286,10 @@ func TestMintDevFort(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	// Two accounts (#532): the dispatch account, which rides the fort's
-	// own name, and a narrower one with its own alias and scopes.
-	accounts := []manifest.DevAccount{
-		testAccount("agent", "pickup", "sfi-agent", "write:repository", "write:issue"),
-		testAccount("analyst", "review", "sfi-analyst", "write:issue"),
-	}
-	write(manifest.Path(host), devManifest("10.1.0.96", "10.0.0.96", accounts...))
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[backups]\nprofile = \"none\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}
 	gitea, registered := newFakeGitea(t, st), &st.deploy
-	fleetSecret = func(root, key string) (string, error) { return "fleet-claude-secret", nil }
-	t.Cleanup(func() { fleetSecret = secret })
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
@@ -309,27 +299,17 @@ func TestMintDevFort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.newFile || len(p.missing) != 13 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
+	if !p.newFile || len(p.missing) != 4 || !p.registerOn || p.canaryPath != "" || len(p.rekey) != 0 || len(p.edits) != 2 {
 		t.Fatalf("plan: newFile=%v missing=%v register=%v canary=%q rekey=%v edits=%d", p.newFile, p.missing, p.registerOn, p.canaryPath, p.rekey, len(p.edits))
 	}
 	for _, k := range []string{keyK3sToken, keyAge} {
 		if contains(p.missing, k) {
-			t.Errorf("dev fort must not mint %s", k)
+			t.Errorf("a plain fort must not mint %s", k)
 		}
 	}
-	for _, k := range []string{keyAgentClaude,
-		keyAccountSSH("agent"), keyAccountSSHPub("agent"), keyAccountGPG("agent"), keyAccountToken("agent"),
-		keyAccountSSH("analyst"), keyAccountSSHPub("analyst"), keyAccountGPG("analyst"), keyAccountToken("analyst")} {
+	for _, k := range []string{keyWgPrivate, keySSHHost, keySSHHostPub, keyDeploy} {
 		if !contains(p.missing, k) {
-			t.Errorf("dev fort must mint %s", k)
-		}
-	}
-	if len(p.agents) != 2 || p.claude != "fleet-claude-secret" {
-		t.Fatalf("agent plans: %d, claude %q", len(p.agents), p.claude)
-	}
-	for _, a := range p.agents {
-		if !a.mintToken || !a.registerSSH || !a.registerGPG {
-			t.Fatalf("%s plan: %+v", a.account.User, a)
+			t.Errorf("a plain fort must mint %s", k)
 		}
 	}
 	if err := p.apply(tool, gitea); err != nil {
@@ -338,39 +318,16 @@ func TestMintDevFort(t *testing.T) {
 	var sb strings.Builder
 	p.report(&sb, true)
 	rep := sb.String()
-	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "dev fort") || !strings.Contains(rep, "registered flux-"+host) ||
-		!strings.Contains(rep, "ssh key agent-"+host+": registered") || !strings.Contains(rep, "registered + verified (key id "+p.agents[0].gpg.keyID) || !strings.Contains(rep, "token agent-"+host+": minted") || !strings.Contains(rep, "fleet-wide") {
-		t.Errorf("dev report:\n%s", rep)
-	}
-	// One bundle per gitea user: one of each, the gpg key verified by the
-	// signature mint sent, the token with that account's own scopes.
-	for _, a := range p.agents {
-		u := st.user(a.account.GiteaUser)
-		if len(u.keys) != 1 || u.keys[0].Title != "agent-"+host || len(u.gpg) != 1 || !u.gpg[0].Verified {
-			t.Errorf("%s bundle: keys=%+v gpg=%+v", a.account.GiteaUser, u.keys, u.gpg)
-		}
-		if len(u.tokens) != 1 || u.tokens[0].Name != "agent-"+host || strings.Join(u.tokens[0].Scopes, ",") != strings.Join(a.account.TokenScopes, ",") {
-			t.Errorf("%s token: %+v", a.account.GiteaUser, u.tokens)
-		}
-	}
-	// the secrets file holds each minted token and the fleet claude token, and no value was printed
-	sec := readFile(t, filepath.Join(tmp, "nixos/secrets", host+".yaml"))
-	if !strings.Contains(sec, keyAccountToken("agent")+": minted-sfi-agent-agent-"+host) || !strings.Contains(sec, keyAccountToken("analyst")+": minted-sfi-analyst-agent-"+host) ||
-		!strings.Contains(sec, keyAgentClaude+": fleet-claude-secret") || !strings.Contains(sec, "BEGIN PGP PRIVATE KEY BLOCK") {
-		t.Errorf("secrets file:\n%s", sec)
-	}
-	if strings.Contains(rep, "minted-sfi-") || strings.Contains(rep, "fleet-claude-secret") {
-		t.Errorf("report leaks a value:\n%s", rep)
+	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "plain fort") || !strings.Contains(rep, "registered flux-"+host) {
+		t.Errorf("plain report:\n%s", rep)
 	}
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
-		t.Error("a dev fort must not touch the fleet .sops.yaml")
+		t.Error("a plain fort must not touch the fleet .sops.yaml")
 	}
-	// The fort's own name answers as the first account; the second has its
-	// own alias (#532).
+	// The fort answers as deployer, like every fort.
 	sc := readFile(t, filepath.Join(tmp, sshConfigPath))
-	if !strings.Contains(sc, "# dev fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User agent\n") ||
-		!strings.Contains(sc, "Host sfi-analyst\n  Hostname 10.1.0.96\n  User analyst\n  HostKeyAlias "+host+"\n") {
-		t.Errorf("a dev fort answers as each of its accounts:\n%s", sc)
+	if !strings.Contains(sc, "# plain fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User deployer\n") {
+		t.Errorf("a plain fort answers as deployer:\n%s", sc)
 	}
 	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
 		t.Error("nixos rule missing")
@@ -388,14 +345,6 @@ func TestMintDevFort(t *testing.T) {
 	}
 	if p2.newFile || len(p2.missing) != 0 || len(p2.edits) != 0 || p2.registerOn {
 		t.Errorf("re-run plan: missing=%v edits=%d register=%v", p2.missing, len(p2.edits), p2.registerOn)
-	}
-	if len(p2.agents) != 2 {
-		t.Fatalf("re-run agent plans: %d", len(p2.agents))
-	}
-	for i, a := range p2.agents {
-		if a.mintToken || a.registerSSH || a.registerGPG || a.verifyGPG || a.gpg.keyID != p.agents[i].gpg.keyID || !strings.Contains(a.tokStatus, "registered") {
-			t.Errorf("re-run %s plan: %+v", a.account.User, a)
-		}
 	}
 	// round trip: dismantle without a fleet rule to remove
 	d, err := planDismantle(tmp, host)

@@ -29,9 +29,9 @@ func TestFleetTree(t *testing.T) {
 		t.Errorf("no cluster-vars: %+v", got)
 	}
 
-	// a dev fort ([dev], #413): the host dir is the whole tree, and a
+	// a plain fort (no [cluster]): the host dir is the whole tree, and a
 	// fleet dir that exists anyway is the finding
-	dev := manifest.Host{Dev: &manifest.DevSpec{}}
+	dev := manifest.Host{}
 	got = checkFleetFort(root, "d", dev, shared)
 	if len(got) != 1 || got[0].level != "error" || got[0].dir != "nixos/hosts/d" {
 		t.Errorf("dev without host dir: %+v", got)

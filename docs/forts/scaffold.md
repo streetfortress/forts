@@ -78,45 +78,44 @@ A manifest without `mesh_ip` is refused (by the loader, so every verb
 says so): every fort is a mesh member (`MESH_IP` is mandatory), and a
 hardened host without a mesh address has no login path at all. Every fort
 is the hardened profile — there is no key for it (#272) — and a
-`[cluster]` fort is a flux cluster; the shape table is required, so a
-manifest with neither `[cluster]` nor `[dev]` is refused too.
+`[cluster]` fort is a flux cluster; a manifest with no `[cluster]` table
+is a plain fort.
 
-## The dev shape
+## The plain shape
 
-A manifest with a `[dev]` table (#413) renders the host dir and the
-fort's file on the hub:
+A manifest with no `[cluster]` table renders the host dir and the fort's
+file on the hub:
 
 ```
-● nixos/hosts/sfi-dev-x/default.nix   dev fort shape (qcow runtime, static LAN, agent account; no k3s/flux/backups)
-● nixos/hosts/sfi-dev-x/secrets.nix   sops-nix wiring (host key → age)
+● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)
+● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
 fleet/apps/luxor/monitoring/
-● clusters/sfi-dev-x.yaml             mesh scrape targets (node-exporter, otel collector), DevFortDown, LogStreamSilent
-○ kustomization.yaml                  + clusters/sfi-dev-x.yaml
+● clusters/sfi-lab-x.yaml             mesh scrape target (node-exporter), HostDown
+○ kustomization.yaml                  + clusters/sfi-lab-x.yaml
 ```
 
-`default.nix` imports `dev-fort.nix` in place of `k3s-server.nix` +
-`production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`), keeps
-`wireguard.nix` and `auto-rebuild.nix`, and the LAN and zram blocks of
-the lab VM. Nothing under `fleet/`: there is no cluster to sync and no
-canary to prove decryption. `secrets.nix` declares no `k3s-token`.
+`default.nix` imports the baseline in place of `k3s-server.nix` +
+`production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`): `hardened.nix`,
+`lab-host.nix`, `ops/deployer.nix` and `shell.nix`, with `wireguard.nix`,
+`auto-rebuild.nix`, and the LAN and zram blocks of the lab VM. Nothing
+under `fleet/`: there is no cluster to sync and no canary to prove
+decryption. `secrets.nix` declares no `k3s-token`. The file is the estate's
+from then on: an account, a service, a role is plain NixOS written below
+the imports, and the framework names none of it.
 
-The hub file is the pull-shaped counterpart of a cluster's (#437): with
-no edge Prometheus, luxor scrapes the fort over the mesh — node-exporter
-on 9100 and the fort's OpenTelemetry collector on 9464, which holds
-Claude Code's usage metrics — and arms `DevFortDown` /
-`DevFortCollectorDown` on the targets and `LogStreamSilent` on the
-journal stream the collector pushes to Loki. `cluster` is the fort's
-name, as on every other fort. No edge Alertmanager datasource: a dev
-fort has none.
+The hub file is the pull-shaped counterpart of a cluster's: with no edge
+Prometheus, luxor scrapes the fort over the mesh — node-exporter on 9100 —
+and arms `HostDown` on the target. `cluster` is the fort's name, as on
+every other fort. No edge Alertmanager datasource: a plain fort has none.
+Anything else the estate runs on the fort is the estate's to scrape, in a
+file of its own beside this one.
 
-One `ScrapeConfig` per leg, because the operator owns `job`: it
-relabels it to the CR's `jobName` after the target's own labels are
-merged, so a `job:` under `staticConfigs` never survives. The node leg
-is `jobName: host-node-exporter` — the name a cluster fort's edge
-ServiceMonitor gives the same exporter, and the job the Host Overview
-dashboard keys every panel on — so a dev fort lists there the moment
-the hub scrapes it (#442). The collector leg is `jobName: claude-code`,
-the same name as its events' Loki stream.
+The operator owns `job`: it relabels it to the CR's `jobName` after the
+target's own labels are merged, so a `job:` under `staticConfigs` never
+survives. The leg is `jobName: host-node-exporter` — the name a cluster
+fort's edge ServiceMonitor gives the same exporter, and the job the Host
+Overview dashboard keys every panel on — so a plain fort lists there the
+moment the hub scrapes it (#442).
 
 ## Force-no semantics
 

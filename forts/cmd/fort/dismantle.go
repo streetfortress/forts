@@ -95,8 +95,8 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	}
 	p.edits = append(p.edits, dEdit{"nixos/.sops.yaml", "- BEGIN/END fort sops rule: " + host, func(s string) (string, error) { return removeMarkerBlock(s, host) }})
 
-	// 3. fleet layer: rule block + shared recipient(s). A dev fort
-	// ([dev], #413) never had either — mint skips the cluster identity —
+	// 3. fleet layer: rule block + shared recipient(s). A plain fort
+	// never had either — mint skips the cluster identity —
 	// so the edit is planned only where the block exists.
 	fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
 	recipients := strings.Count(string(fleetSops), "# cluster: "+host)

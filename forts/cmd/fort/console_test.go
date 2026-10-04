@@ -86,7 +86,7 @@ func TestConsoleFindings(t *testing.T) {
 // files one --write touches.
 func TestConsolePassword(t *testing.T) {
 	tmp := t.TempDir()
-	for _, host := range []string{"lab-fort", "dev-fort"} {
+	for _, host := range []string{"lab-fort", "plain-fort"} {
 		copyManifest(t, "testdata", tmp, host)
 	}
 	tool := &fakeTool{}
@@ -102,10 +102,10 @@ func TestConsolePassword(t *testing.T) {
 		}
 	}
 
-	// No identity yet: mint first. A dev fort is a fort (#647): it meets
+	// No identity yet: mint first. A plain fort is a fort (#647): it meets
 	// the same gate and no refusal — deployer is ops/deployer.nix's on
 	// both shapes.
-	for _, host := range []string{"lab-fort", "dev-fort"} {
+	for _, host := range []string{"lab-fort", "plain-fort"} {
 		if _, err := planConsolePassword(tmp, host, false); err == nil || !strings.Contains(err.Error(), "fort mint") {
 			t.Fatalf("%s without the secrets file: want the mint gate, got %v", host, err)
 		}

@@ -13,12 +13,14 @@ just <verb> …          # wrappers for the common ones (scaffold, preview, prov
 cd forts && go run ./cmd/fort <verb> …     # every verb
 ```
 
-Two shapes, one declaration apart: a fort is a flux cluster unless its
-manifest carries a `[dev]` table, which makes it a **dev fort** (#413) —
-the same hardened host and the same `deployer` (#647), plus an account
-per agent role, the toolchains, and no cluster. The verbs know the
-difference from the manifest; nothing else changes hands
-([manifest.md](manifest.md)).
+Two shapes, one table apart: a fort with a `[cluster]` table is a flux
+cluster; without one it is a **plain fort** — the same hardened host and
+the same `deployer` with the ops verbs (#647), and no cluster. The
+framework stops there on purpose: ideally nobody logs in, and the
+prescribed access is `deployer` over the mesh and the console password.
+What a plain fort does beyond that is plain NixOS in its host file, the
+estate's. The verbs know the difference from the manifest; nothing else
+changes hands ([manifest.md](manifest.md)).
 
 ## Verbs by intent
 
@@ -127,8 +129,7 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | need | comes from | verbs |
 |---|---|---|
 | admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` | `provisioning/secrets.yaml` | mint (register deploy key; on a `[dev]` fort the agent bundle, which needs `write:user`), destroy (revoke) |
-| `agent-claude-oauth-token` | `provisioning/secrets.yaml`, from `claude setup-token` | mint, `[dev]` forts only — copied into the host's file |
+| `gitea-token` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) |
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | `LIBVIRT_DEFAULT_URI` | defaults to soundship over ssh with `~/.ssh/id_ed25519` in the URI | the same, for `provider: libvirt` |
@@ -157,9 +158,6 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
-- [dev](dev.md) — the dev fort's dispatch loop: `pickup`, `scout` and
-  `review`, herdr as the supervisor, the resume path, what survives the
-  fort (#418)
 - [destroy](destroy.md) — the side-effects half, gated on the merge
 - [fort configuration contracts](fort-configuration-contracts.md) — the
   contract schema, overlays, the gate, chart-author guidelines (the #144
