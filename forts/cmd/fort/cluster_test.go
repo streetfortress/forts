@@ -23,10 +23,7 @@ import (
 // there.
 func clusterHostFiles(t *testing.T) (map[string]manifest.Host, func(host string) (file, raw string, ok bool)) {
 	t.Helper()
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	hosts, problems, err := manifest.LoadAll(repo)
 	if err != nil || len(problems) > 0 {
 		t.Fatalf("manifests: %v %v", err, problems)

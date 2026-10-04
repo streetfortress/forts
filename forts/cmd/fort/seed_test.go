@@ -17,10 +17,7 @@ import (
 // repo's encrypted_regex — no decryption). Extras are allowed (migration
 // supersets) and logged. This is what lets the python seeder retire.
 func TestFullFormParityWithFleet(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	contracts := fleetContracts(repo)
 	if len(contracts) == 0 {
 		t.Fatal("no contracts found")

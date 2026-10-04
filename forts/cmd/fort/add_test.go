@@ -188,6 +188,24 @@ func repoRootFrom(dir string) (string, error) {
 	}
 }
 
+// estateRoot is the checkout this test mirrors against: a repo root that
+// holds the manifests (manifest.Dir). The mirror tests compare the CLI
+// with a committed estate — its manifests, host files, sops rules, the
+// peers file — and that estate is not this repo once the CLI lives in
+// sfi/forts. Outside an estate they skip; inside one (an estate's CI runs
+// `go test` against the framework it pins) they are the gate.
+func estateRoot(t *testing.T) string {
+	t.Helper()
+	repo, err := repoRootFrom(mustGetwd(t))
+	if err != nil {
+		t.Skip("not inside a git checkout")
+	}
+	if _, err := os.Stat(filepath.Join(repo, manifest.Dir)); err != nil {
+		t.Skipf("no estate at %s (no %s): the mirror tests run in an estate checkout", repo, manifest.Dir)
+	}
+	return repo
+}
+
 func mustGetwd(t *testing.T) string {
 	d, err := os.Getwd()
 	if err != nil {

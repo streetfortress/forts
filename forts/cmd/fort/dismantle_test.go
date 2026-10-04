@@ -14,10 +14,7 @@ import (
 // survives. luxor is the bystander whose manifest, sops blocks and a
 // tree (rustfs-central) must come through untouched.
 func TestDismantle(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	for _, tc := range []struct {
 		host      string
 		cloud     bool

@@ -26,10 +26,7 @@ func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
 // provisioning/secrets.yaml through sops, which a tmpdir has no age key
 // for. The backup half's pure logic is covered in mintbackup_test.go.
 func TestMint(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	const host = "mint-fort"
 	tmp := t.TempDir()
 	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",
@@ -236,10 +233,7 @@ func TestMint(t *testing.T) {
 }
 
 func TestMintNeedsGitea(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	tmp := t.TempDir()
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
 	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
@@ -278,10 +272,7 @@ func yamlUnmarshalFile(path string, v any) error {
 // and mint's gate wants only the host dir. Dismantle round-trips without
 // a fleet rule to remove.
 func TestMintDevFort(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	const host = "mint-dev"
 	tmp := t.TempDir()
 	files := []string{".sops.yaml", "nixos/.sops.yaml", "wireguard/peers.json",

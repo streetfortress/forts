@@ -213,10 +213,7 @@ func TestRenderScaffold(t *testing.T) {
 // generator reproduces the tree the playbook-era cluster-init laid down (modulo nothing:
 // these files carry no hand edits today).
 func TestScaffoldMatchesCommittedClusters(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	hosts, problems, err := manifest.LoadAll(repo)
 	if err != nil || len(problems) > 0 {
 		t.Fatal(err, problems)

@@ -153,10 +153,7 @@ func TestPruneHolderFindings(t *testing.T) {
 // The checked-in luxor is the holder, and the textual read of its
 // default.nix agrees with what the module evaluates to: both tiers on.
 func TestLuxorIsThePruner(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	s := readPruneState(repo, "luxor")
 	if !s.enabled || strings.Join(s.sweeps, ",") != "rustfs,b2" || strings.Join(s.holds, ",") != "rustfs,b2" {
 		t.Errorf("luxor: %+v", s)

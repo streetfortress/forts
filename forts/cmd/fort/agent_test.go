@@ -614,10 +614,7 @@ func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
 // what keeps the two equal, field by field. A mismatch is a fort whose
 // git identity, GPG uid or token belongs to another role.
 func TestDevAccountsMatchDevFortModule(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	const module = "nixos/modules/dev-fort.nix"
 	raw, err := os.ReadFile(filepath.Join(repo, module))
 	if err != nil {

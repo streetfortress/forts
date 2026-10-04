@@ -34,7 +34,7 @@
 # shell in a dotfiles repo (sfi/.fortfiles#1) had that backwards.
 #
 # System level, not home-manager, for the same reason: /etc/zshrc and
-# /etc/bashrc reach deployer (production.nix) and agent (dev-fort.nix)
+# /etc/bashrc reach deployer (production.nix) and agent (the estate's dev role)
 # alike, and a cluster fort has no Home Manager user at all. The
 # zsh-vi-mode plugin is loaded HERE, not by Home Manager, so the module
 # owns the whole key chain: the plugin, then fzf after it
@@ -42,8 +42,8 @@
 # empty query.
 #
 # The guard is the import, like modules/ops/root.nix: a host gets this
-# only by naming the module and setting enable. dev-fort.nix enables it
-# for every dev fort; a cluster fort's own default.nix opts in (staging
+# only by naming the module and setting enable. The estate's dev role
+# enables it for every dev fort; a cluster fort's own default.nix opts in (staging
 # does). sfi-prod-439bf72 imports it too: #558 weighed the cost against the
 # posture of production.nix, settled the zsh question above, and a person
 # accepted the module on 2026-09-27 — that host's comment carries the
@@ -312,7 +312,7 @@ in
     # zsh, and zsh as the login shell: the module owns both halves of the
     # promise instead of waiting for a host to enable zsh (#558, #576). An
     # account that does not pin a shell — deployer (production.nix), agent
-    # (dev-fort.nix) — follows users.defaultUserShell, because nixpkgs
+    # (the dev role) — follows users.defaultUserShell, because nixpkgs
     # gives every isNormalUser `useDefaultShell = true`
     # (config/users-groups.nix). A fort that does not import this module
     # keeps the nixpkgs default of bashInteractive.

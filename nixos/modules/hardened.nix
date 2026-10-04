@@ -2,7 +2,7 @@
 # a server clock, and the closure trims. Carries NO account: the operator
 # account every fort shares is ops/deployer.nix (#647), and the profiles
 # add the rest — production.nix the cluster grant and the public/cluster
-# ports, dev-fort.nix the agent accounts and nothing public. Split out of
+# ports, the estate's dev role the agent accounts and nothing public. Split out of
 # production.nix so the two profiles are the same lines, not drifting
 # copies.
 #
@@ -15,7 +15,7 @@
 #     wg0 only. (The exporter's openFirewall injects an iptables rule
 #     outside allowedTCPPorts, so it must be disabled explicitly.)
 #   - Only root talks to the nix daemon by default. A profile whose
-#     accounts build (dev-fort.nix's agent accounts) appends them;
+#     accounts build (the dev role's agent accounts) appends them;
 #     deployer never builds.
 { config, lib, ... }:
 

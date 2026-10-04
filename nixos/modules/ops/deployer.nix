@@ -35,14 +35,14 @@
 # shell is users.defaultUserShell, which is bashInteractive on a fort
 # that carries no shell module and zsh where the host enables sfi.shell
 # (modules/shell.nix, #576) — one module decides it, so no `shell` here.
-# On a dev fort it is also not in `agents` (dev-fort.nix): the operator
+# On a dev fort it is also not in `agents` (the estate's dev role): the operator
 # cannot read the fort's Claude credential, and the agent accounts cannot
 # reach the operator's verbs — the kernel keeps the two roles apart, as
 # it keeps the agent accounts apart from each other (#532).
 #
 # The key set is the operator's devices; trim it when vetting (#415)
-# settles which devices hold an operator key. dev-fort.nix carries the
-# same list for the agent accounts today and says so — who may DISPATCH
+# settles which devices hold an operator key. The estate's dev role carries
+# the same list for the agent accounts today and says so — who may DISPATCH
 # and who may OPERATE are two questions, kept as two lists.
 { ... }:
 

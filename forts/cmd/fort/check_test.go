@@ -124,10 +124,7 @@ func TestCheckFindings(t *testing.T) {
 // the chart pulls are CI's job): every committed contract's Secret is
 // complete and every provider ref resolves.
 func TestCheckFleetOffline(t *testing.T) {
-	repo, err := repoRootFrom(mustGetwd(t))
-	if err != nil {
-		t.Skip("not inside the deployments checkout")
-	}
+	repo := estateRoot(t)
 	dirs := fleetContracts(repo)
 	for _, path := range dirs {
 		raw := readFile(t, path)

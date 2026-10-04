@@ -1,7 +1,8 @@
 # What makes a host a member of the SFI lab estate, on any provider (#417):
 # it trusts the lab CA, pins gitea's mesh address, and publishes the
 # metrics luxor scrapes. No k3s in here — k3s-server.nix imports this, and
-# so does dev-fort.nix (a fort with no cluster). Lifted out of
+# so does a role module of the estate, such as the dev role (a fort with no
+# cluster). Lifted out of
 # k3s-server.nix, where dotfiles.nix used to have to go looking for the CA.
 { ... }:
 

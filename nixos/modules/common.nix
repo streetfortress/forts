@@ -1,13 +1,13 @@
 # Shared base configuration for every SFI NixOS host — cluster forts,
 # dev forts and luxor alike — so only genuinely user-agnostic settings
 # belong here. Accounts are the profile's: `deployer` from
-# modules/production.nix, `agent` from modules/dev-fort.nix.
+# modules/production.nix, `agent` from the estate's dev role.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.
 { pkgs, ... }:
 
 {
   # Nix (allowed-users is per-profile: hardened.nix keeps it root-only,
-  # dev-fort.nix appends agent)
+  # a role module of the estate appends its accounts)
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nixpkgs.config.allowUnfree = true;
 

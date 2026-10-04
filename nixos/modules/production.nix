@@ -1,9 +1,9 @@
 # Hardened, slim profile for internet-facing production nodes (#86).
 # Imported by every flux fort's hosts/<name>/default.nix (`fort scaffold`
-# renders it unconditionally for a cluster fort, #272; dev-fort.nix is the
-# other profile, and the two are mutually exclusive). The hardening itself — mesh-only SSH, UTC, the
+# renders it unconditionally for a cluster fort, #272; the estate's dev role
+# is the other profile, and the two are mutually exclusive). The hardening itself — mesh-only SSH, UTC, the
 # closure trims, root-only nix — is hardened.nix (#417), shared with
-# dev-fort.nix; this module is what a CLUSTER fort adds on top:
+# the estate's role modules; this module is what a CLUSTER fort adds on top:
 #   - No Home Manager payload: the only login account is the unprivileged
 #     `deployer` (ops/deployer.nix — every fort's operator account,
 #     #647), and the home-manager.users force below keeps it so against
