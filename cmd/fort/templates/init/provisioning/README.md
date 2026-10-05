@@ -7,9 +7,8 @@ was raised.
   (`.sops.yaml` at the root has the rule). Create it with
   `sops provisioning/secrets.yaml` and the keys the verbs read:
   `gitea-token` (mint: the deploy key), `pulumi-passphrase` (provision),
-  `linode-token` (a cloud fort), `restic-password` and the
-  `rustfs-access-key` / `rustfs-secret-key` pair (a fort with a backups
-  profile), `b2-minting-key-id` (a production backups profile).
+  `linode-token` (a cloud fort), `restic-password` (a fort with a
+  `[[backups.pv]]` block), `b2-minting-key-id` (a pv block on `b2`).
 - `console-passwords.yaml` — the console registry, one passphrase per
   fort: `fort mint` adds a fort's entry at the first provision, `fort
   console-password --rotate` replaces it, `fort dismantle` withdraws it.

@@ -156,7 +156,10 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// Withdrawing it is what makes the credential go away
 	// — the IAM reconciler removes any user the contract no longer
 	// declares, so an orphaned identity cannot outlive its fort.
-	if entry.Backups.Backed() && est.HasHub() && secretHasKey(root, rustfsUsersPath(est.Hub), rustfsPVUser(host)) {
+	// Whatever the blocks minted is withdrawn — and whatever is there
+	// under the fort's name goes too, blocks or not: an identity the
+	// manifest no longer explains is the orphan `fort check` fails on.
+	if est.HasHub() && secretHasKey(root, rustfsUsersPath(est.Hub), rustfsPVUser(host)) {
 		p.rustfsUser = rustfsPVUser(host)
 		p.rustfsUsers = rustfsUsersPath(est.Hub)
 	}
@@ -197,7 +200,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
 	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
-	if p.entry.Backups.Profile == "production" {
+	if p.entry.Backups.Uses(manifest.StoreB2) {
 		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
 	}
 	sort.Strings(p.removes)

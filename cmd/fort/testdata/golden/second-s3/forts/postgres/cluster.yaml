@@ -38,16 +38,16 @@ spec:
   # console login.
   enableSuperuserAccess: false
 
-  # NO ARCHIVE — the manifest's [backups] profile is "lab".
-  # A lab fort's data is reproducible (seeds, imports; docs/infra/
-  # backups.md) and no lab fort ships barman anywhere today, so this is
-  # a declaration, not an oversight: no WAL archive, no base backups, a
-  # re-provision is a re-seed. When that stops being true, set the profile to
-  # production and lay the archive down the way sfi-prod-439bf72 has it:
+  # NO ARCHIVE — the manifest declares no [backups.db-physical] block.
+  # A fort whose data is reproducible (seeds, imports; docs/infra/
+  # backups.md) ships barman nowhere, so this is a declaration, not an
+  # oversight: no WAL archive, no base backups, a re-provision is a
+  # re-seed. When that stops being true, add the block (store = "b2",
+  # hour = <n>) and lay the archive down the way sfi-prod-439bf72 has it:
   # objectstore.yaml, a plugins: block here (barman-cloud.cloudnative-pg.io,
   # barmanObjectName b2, serverName postgres-v1), scheduled-backup.yaml
-  # with method: plugin, and the secrets-backup entry in
-  # forts.contract.yaml — key from `fort b2-key db-physical lab-fort
+  # with method: plugin at the block's hour, and the secrets-backup entry
+  # in forts.contract.yaml — key from `fort b2-key db-physical lab-fort
   # --write`.
 
   monitoring:

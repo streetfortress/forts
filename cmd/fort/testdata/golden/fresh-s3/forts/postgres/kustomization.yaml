@@ -5,7 +5,8 @@ resources:
   - database-gallery.yaml
   # Seeded from forts.contract.yaml (secrets-<app>: each tenant's role
   # password); listed-but-absent = the pre-merge kustomize guard. No
-  # secrets-backup: this fort's profile renders no archive (cluster.yaml).
+  # secrets-backup: this fort declares no [backups.db-physical] block, so
+  # there is no archive (cluster.yaml).
   - secrets-gallery.sops.yaml
 # Tenant registration: one JSON6902 patch per tenant appends its login
 # role to managed.roles (cluster.yaml carries the instance). fort add

@@ -69,7 +69,7 @@
     # sops file and the passphrase into provisioning/console-passwords.yaml.
     inputs.forts.nixosModules.shell
     inputs.forts.nixosModules.ops-console
-{{ if .BackupProfile }}    # restic PV backups (docs/infra/backups.md). CNPG owns the database
+{{ if .PV }}    # restic PV backups (docs/infra/backups.md). CNPG owns the database
     # layer and databasus the logical one; this is every other volume.
     inputs.forts.nixosModules.pv-backup
 {{ end }}  ];
@@ -102,14 +102,19 @@
   # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
   sfi.auto-rebuild.repoUrl = "{{ .RepoURL }}"; # the estate (estate.toml): what the gate watches and the rebuild clones
-{{ if .BackupProfile }}
-  # [backups] profile = "{{ .BackupProfile }}" in this fort's manifest. The
-  # profile names a destination set, not targets: `lab` is luxor's rustfs
-  # alone, `production` adds B2 so the offsite copy does not depend on the
-  # lab being reachable. `fort mint` seeds the credentials it implies.
+{{ if .PV }}
+  # [[backups.pv]] in this fort's manifest: one restic target per store it
+  # names. A target names a STORE and a cadence, nothing else — the
+  # endpoint, bucket, credential and phase are the store's (fleet facts,
+  # in the module), so no host file carries an endpoint to drift.
+  # `fort mint` seeds the credential each store implies.
   sfi.pv-backup = {
     enable = true;
-    profile = "{{ .BackupProfile }}";
+    targets = [
+{{- range .PV }}
+      { store = "{{ .Store }}"; every = "{{ .Cadence }}"; }
+{{- end }}
+    ];
   };
 {{ end }}{{ if .AuditLogging }}
   # [cluster] audit_logging = true in this fort's manifest (#626). The

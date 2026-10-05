@@ -6,7 +6,7 @@
 # prefix and takes a 401 both outside it and on delete (#47). `restic
 # forget --prune` removes pack files of any age, so it cannot run under
 # that credential, and `sfi.pv-backup` sets `pruneOpts = [ ]` on every
-# profile for exactly that reason. Retention therefore moves to one host
+# store target for exactly that reason. Retention therefore moves to one host
 # holding one delete-capable identity per tier. That host is luxor: the
 # hub already reaches its own rustfs and the internet, and concentrating
 # the only deleting credential in the fleet in one declared place is the
@@ -43,10 +43,11 @@ let
   defaultTiers = {
     # luxor's rustfs-central, over the mesh NodePort. Short window: the local
     # tier is the operational-recovery copy, and its disk is the fleet's
-    # real constraint. Production forts write here WEEKLY (pv-backup.nix's
-    # production profile — B2 carries their RPO), so the dailies only ever
-    # matter for lab forts, which are reproducible; three is enough to
-    # step back over a bad day. `--keep-last` stays the floor.
+    # real constraint. A fort whose B2 leg carries its RPO writes here
+    # WEEKLY (its rustfs-central pv block says `every = "weekly"`), so the
+    # dailies only ever matter for lab forts on this store alone, which
+    # are reproducible; three is enough to step back over a bad day.
+    # `--keep-last` stays the floor.
     rustfs = {
       endpoint = "http://10.1.0.5:30901";
       keep = [ "--keep-last 3" "--keep-daily 3" "--keep-weekly 4" ];

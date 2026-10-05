@@ -187,7 +187,7 @@ var b2HostRoles = map[string]func(host string) b2Role{
 // create and record — hostKeySpec builds mint's key from this same role,
 // so there is one definition — and this verb is for a host mint does
 // not mint for: one with no manifest (the pre-fort zenbook was one; none
-// exist today) or a manifest with [backups] profile = "none" (luxor,
+// exist today) or a manifest with no [[backups.pv]] block on b2 (a host
 // whose targets are hand-configured).
 func pvRole(host string) b2Role {
 	return b2Role{
@@ -202,8 +202,8 @@ func pvRole(host string) b2Role {
 			"    deleteFiles: pruning is luxor's job, under the one key that deletes. For a\n" +
 			"    fort, `fort mint` creates this key and records its id; a key made behind\n" +
 			"    mint's back is one it will refuse to shadow, so this verb refuses a host\n" +
-			"    whose manifest has a backups profile; profile \"none\" (hand-configured\n" +
-			"    targets) is let through — mint mints nothing for it.",
+			"    whose manifest has a [[backups.pv]] block on b2; a manifest without one\n" +
+			"    (hand-configured targets) is let through — mint mints nothing for it.",
 	}
 }
 
@@ -292,16 +292,16 @@ func b2Key(args []string) error {
 	// secret for. Hand-minting one here would produce exactly that
 	// standoff, so refuse before the call rather than after.
 	//
-	// Unless the manifest says [backups] profile = "none": mint renders
-	// no backup targets for such a host (Backups.Backed()), so there is
-	// no key of mint's to shadow — luxor, whose B2 target is configured
-	// by hand (#383), is exactly the case this verb exists for.
+	// Unless the manifest declares no [[backups.pv]] block on b2: mint
+	// mints the key exactly when one does, so for any other manifest
+	// there is no key of mint's to shadow — a host whose B2 target is
+	// configured by hand is the case this verb exists for.
 	if role.kind == "pv" {
 		root, err := repoRoot()
 		if err == nil && exists(root, manifest.Path(role.host)) {
 			h, lerr := manifest.Load(root, role.host)
-			if lerr != nil || h.Backups.Backed() {
-				return fmt.Errorf("%s has a fort manifest (%s) — its PV key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
+			if lerr != nil || h.Backups.PVTo(manifest.StoreB2) != nil {
+				return fmt.Errorf("%s has a fort manifest (%s) with a [[backups.pv]] block on b2 — its PV key belongs to `fort mint %s --write`, which records the id in nixos/secrets/%s.yaml. A key made here would be one mint refuses to shadow", role.host, manifest.Path(role.host), role.host, role.host)
 			}
 		}
 	}

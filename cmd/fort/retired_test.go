@@ -10,7 +10,7 @@ import (
 
 // The retired secrets file answers "did this fort ever hold a B2 key"
 // from its plaintext key names, so destroy asks for the minting key only
-// when there is something to revoke (#432: a profile "none" fort asked
+// when there is something to revoke (#432: a fort with no B2 leg asked
 // for it anyway, and the only way it could learn there was nothing to
 // revoke was to list). No record is "unknown", not "none".
 func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRetiredSecretsSayWhetherB2WasMinted(t *testing.T) {
 	// block opaque. The sops block is metadata, never a key name.
 	write("nixos/secrets/prod.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nrestic-s3-env-b2: ENC[x]\nsops:\n    age: []\n")
 	write("nixos/secrets/lab.yaml", "restic-password: ENC[x]\nrestic-s3-env-rustfs: ENC[x]\nsops:\n    age: []\n")
-	// The fleet's pruner (#400): profile "none" — no restic-s3-env-b2 —
+	// The fleet's pruner (#400): no B2 pv leg — no restic-s3-env-b2 —
 	// but the role-scoped pruning key's env file is in its record.
 	write("nixos/secrets/pruner.yaml", "restic-password: ENC[x]\nrestic-prune-s3-env-rustfs: ENC[x]\nrestic-prune-s3-env-b2: ENC[x]\nsops:\n    age: []\n")
 	git("add", "-A")

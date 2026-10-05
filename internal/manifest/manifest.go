@@ -58,8 +58,10 @@ type Host struct {
 	// StateVersion seeds system.stateVersion at scaffold time.
 	StateVersion string `toml:"nixos_state_version"`
 
-	Shape   Shape   `toml:"shape"`
-	DNS     DNS     `toml:"dns"`
+	Shape Shape `toml:"shape"`
+	DNS   DNS   `toml:"dns"`
+	// Backups is the [backups] table (backups.go): per-layer blocks by
+	// store name. Required; empty is a declaration.
 	Backups Backups `toml:"backups"`
 	// Cluster is the [cluster] table: this fort is a flux cluster (#426)
 	// — k3s on the datastore it names, flux, flux/clusters + flux/apps,
@@ -82,29 +84,6 @@ type Shape struct {
 	Disk   string `toml:"disk"`   // "80G"
 }
 
-// Backups is the host's PV-backup intent (docs/infra/backups.md). The
-// first real second variant the manifest has met (#272 kept toggles out
-// until one existed): every other standard component is per-fort
-// identical, but where a fort's volumes land is not — a lab fort is
-// reproducible and keeps one local copy, a production fort's offsite
-// copy must not depend on the lab being reachable.
-//
-// `profile` names a DESTINATION SET, never individual targets: there are
-// exactly two object stores at fleet level, and enumerating endpoints
-// per fort is how they drift. scaffold renders `sfi.pv-backup` from it.
-type Backups struct {
-	// Profile is "lab", "production", or "none". Required, with no
-	// default: a production fort silently inheriting lab-only backups is
-	// the failure worth one line of typing, and it cannot be inferred
-	// from the provider table (staging-k3s is a lab VM that may want
-	// covering; a Linode drill fort should not pay for B2).
-	//
-	// "none" is a positive declaration, not an omission — luxor is the
-	// hub of copies and an origin of nothing, so backing its volumes up
-	// to its own rustfs would be circular.
-	Profile string `toml:"profile"`
-}
-
 // ClusterSpec is the [cluster] table: the shape of a flux cluster
 // (#426), and the one place a key that only a cluster has can live.
 //
@@ -118,7 +97,7 @@ type Backups struct {
 // maps that to services.k3s.clusterInit (etcd = true).
 //
 // audit_logging (#626) is the second toggle the manifest carries, for
-// the same reason as the first ([backups] profile): every cluster fort
+// the same reason as the first ([backups]): every cluster fort
 // audits the same WAY, and not every fort pays the same disk for it. A
 // 4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
 // carry the same log.
@@ -171,12 +150,6 @@ func (h Host) AuditLogging() bool { return h.Cluster != nil && h.Cluster.AuditLo
 // k3s. A fort that is not a cluster is a plain fort: the host dir is its
 // whole tree.
 func (h Host) IsCluster() bool { return h.Cluster != nil }
-
-// Profiles are the accepted values of [backups] profile.
-var Profiles = []string{"lab", "production", "none"}
-
-// Backed reports whether this host's volumes are backed up at all.
-func (b Backups) Backed() bool { return b.Profile != "" && b.Profile != "none" }
 
 // DNS is the host's public name: <name>.<zone>, realized by the cloud
 // backend (A + wildcard) and the mesh peer's default endpoint.
@@ -337,6 +310,10 @@ func Parse(host string, raw []byte) (Host, error) {
 		return Host{}, fmt.Errorf("%s: %d provider tables (%s) — a fort has exactly one", Path(host), len(tables), strings.Join(tables, ", "))
 	}
 	h.Provider = tables[0]
+	// [backups] present-but-empty and [backups] absent decode to the same
+	// zero value, and they mean opposite things (backups.go): record
+	// which one the file said.
+	h.Backups.Declared = md.IsDefined("backups")
 
 	// The provider table, decoded by its own type; strict the same way.
 	var prims map[string]toml.Primitive
@@ -390,12 +367,8 @@ func (h Host) Validate(host string) error {
 	if h.Shape.Vcpus < 0 || h.Shape.Memory < 0 {
 		return fail("[shape] vcpus/memory: want positive")
 	}
-	switch h.Backups.Profile {
-	case "lab", "production", "none":
-	case "":
-		return fail("[backups] profile is required — one of %s. A fort that does not say silently gets nothing backed up; \"none\" says so out loud (docs/infra/backups.md)", strings.Join(Profiles, ", "))
-	default:
-		return fail("[backups] profile %q: want one of %s", h.Backups.Profile, strings.Join(Profiles, ", "))
+	if err := h.Backups.Validate(); err != nil {
+		return fail("%v", err)
 	}
 	// The shape (#426): [cluster] makes a flux cluster, and its keys are
 	// strict like a provider table's. No [cluster] table makes a plain
@@ -409,8 +382,8 @@ func (h Host) Validate(host string) error {
 		// manifest must not pretend otherwise. Lab VM only for now: the
 		// shape is a libvirt domain on the hypervisor, and a cloud or
 		// hardware plain fort would be its own host template.
-		if h.Backups.Profile != "none" {
-			return fail("a fort with no [cluster] table has nothing to back up — set [backups] profile = \"none\", or add [cluster]")
+		if h.Backups.Backed() {
+			return fail("a fort with no [cluster] table has nothing to back up — leave [backups] empty, or add [cluster]")
 		}
 		if h.Libvirt() == nil {
 			return fail("a fort with no [cluster] table is a lab VM for now — add the [libvirt] table, or add [cluster]")

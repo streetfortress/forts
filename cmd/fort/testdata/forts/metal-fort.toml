@@ -5,8 +5,12 @@ mesh_ip = "10.1.0.97"
 [cluster]
 datastore = "sqlite"
 
-[backups]
-profile = "production"
+[[backups.pv]]
+store = "b2"
+
+[[backups.pv]]
+store = "rustfs-central"
+every = "weekly"
 
 [baremetal]
 ip = "10.0.0.97"

@@ -161,7 +161,7 @@ func TestManifestFindings(t *testing.T) {
 		os.WriteFile(filepath.Join(root, manifest.Path(host)), []byte(content), 0o644)
 	}
 	write("d", "mesh_ip = \"10.1.0.2\"\n")
-	write("a", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.1\"\n")
+	write("a", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.1\"\n")
 	write("b", "[libvirt]\nip = \"10.0.0.2\"\n[linode]\nregion = \"r\"\ntype = \"t\"\n")
 	hosts, problems, err := manifest.LoadAll(root)
 	if err != nil || len(hosts) != 1 {

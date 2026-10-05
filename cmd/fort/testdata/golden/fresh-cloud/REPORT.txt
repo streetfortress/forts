@@ -9,7 +9,7 @@ flux/apps/cloud-fort/   (chart 0.3.0)
     ● kustomization.yaml         patches: role-sfi-website.yaml
     ● objectstore.yaml           ObjectStore b2: s3://sfi-db-physical-backups/cloud-fort, the fort's own key
     ● role-sfi-website.yaml      JSON6902 add /spec/managed/roles/-
-    ● scheduled-backup.yaml      nightly base backup via the plugin (stagger the hour by hand)
+    ● scheduled-backup.yaml      nightly base backup via the plugin at 04:00 UTC ([backups.db-physical] hour)
     ◆ secrets-backup.sops.yaml   seeded
     ◆ secrets-sfi-website.sops.yaml seeded
 ● gateway/

@@ -51,10 +51,10 @@ Consequences worth knowing:
 | ○ | `.sops.yaml` — the fleet rule for `flux/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `flux/infrastructure` rule | always |
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
-| ● | `nixos/secrets/<host>.yaml` — `restic-password`, `restic-s3-env-rustfs`, and on `production` `restic-s3-env-b2` | when `[backups] profile` is not `none` |
+| ● | `nixos/secrets/<host>.yaml` — `restic-password` for any `[[backups.pv]]` block; `restic-s3-env-rustfs` for a block on `rustfs-central`; `restic-s3-env-b2` for a block on `b2` | when the manifest declares a pv block |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
 | · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `repo`) | always; registered under `--write` only |
-| · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | `production` profile only; minted under `--write` |
+| · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | a `[[backups.pv]]` block on `b2` only; minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
@@ -76,7 +76,7 @@ hold. A host whose `default.nix` does not enable the module gets no
 console half at all.
 
 **The calls outside the tree** are the gitea deploy key and, on a
-`production` fort, the B2 application key. Both are registered only under `--write`,
+fort with a pv block on `b2`, the B2 application key. Both are registered only under `--write`,
 all are reported without printing a value, and all are revoked by `fort
 destroy`.
 
@@ -87,9 +87,12 @@ destroy`.
   `provisioning/secrets.yaml`, never generated per host. The central
   pruner on luxor opens every fort's repo; per-host passwords would mean
   a keyring there.
-- `restic-s3-env-rustfs` is built from the rustfs credentials in the same
-  file (the instance's root pair today — per-consumer rustfs IAM is the
-  `s3` provider's own piece of work).
+- `restic-s3-env-rustfs` is the fort's own identity on the hub's
+  rustfs-central, declared in the hub's tree
+  (`flux/apps/<hub>/rustfs-central/users.sops.yaml`) — so a pv block on
+  `rustfs-central` needs a hub in this estate, and a `hub_push` estate
+  cannot take one. A fort on `b2` alone registers nothing and needs no
+  hub.
 - `restic-s3-env-b2` is **minted against the B2 API**, and the credential
   that mints it is an **operational input**: from the password
   manager, for the moment of a raise — `fort mint --write` prompts for
@@ -190,11 +193,14 @@ check after importing a key by hand.
 
 The admin age key (to encrypt and to read the existing file), and for a
 flux cluster the `gitea-token` in `provisioning/secrets.yaml` (every
-fort, for the deploy key). A fort with a `[backups]` profile needs
-`restic-password` and the `rustfs-access-key` / `rustfs-secret-key` pair
-in that same file; a `production` one additionally needs the B2 minting key
-(its id from `b2-minting-key-id` in that file, the key prompted for or
-`B2_APP_KEY`), and only when the key it would mint does not exist yet. `jq` (the peers file is edited through it
+fort, for the deploy key). A fort with a `[[backups.pv]]` block needs
+`restic-password` in that same file; a block on `rustfs-central` needs
+the hub's `rustfs-central/users.sops.yaml` to exist (`fort seed <hub>
+flux/apps/<hub>/rustfs-central --write`); a block on `b2` needs the B2
+minting key (its id from `b2-minting-key-id` in that file, the key
+prompted for or `B2_APP_KEY`), and only when the key it would mint does
+not exist yet. The db blocks need nothing of mint: the db-physical key
+is in-cluster (`fort b2-key db-physical`, then `fort seed --set`). `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it). `mkpasswd` for the console password hash, when the host enables the
 door and the file has no hash — one of the CLI's declared tools, as

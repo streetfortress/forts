@@ -256,8 +256,8 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		return nil, err
 	}
 
-	// 2b. the backup credentials the manifest's [backups] profile
-	// implies — restored where the file has them, sourced or minted
+	// 2b. the backup credentials the manifest's [[backups.pv]] blocks
+	// imply — restored where the file has them, sourced or minted
 	// where not.
 	if err := p.planBackups(take); err != nil {
 		return nil, err
@@ -617,7 +617,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsersPath(p.est.Hub), p.host)
 	}
 	if p.entry.Backups.Backed() {
-		fmt.Fprintf(w, "· backups: profile %q — %s\n", p.entry.Backups.Profile, backupDestinations(p.entry.Backups.Profile))
+		fmt.Fprintf(w, "· backups: %s\n", p.entry.Backups.Summary())
 	}
 	fmt.Fprintln(w)
 	if !written {

@@ -33,14 +33,16 @@ type hostView struct {
 	// datastore is a positive declaration, with no silent default in
 	// the host file.
 	Datastore string
-	// BackupProfile is [backups] profile from the manifest. Empty when
-	// the manifest says "none": the host then imports no pv-backup module
+	// PV is the manifest's [[backups.pv]] list: one restic target per
+	// store, rendered as sfi.pv-backup.targets. Empty when the manifest
+	// declares no pv block: the host then imports no pv-backup module
 	// and declares nothing, rather than importing it disabled — a host
-	// that is not an origin should read as one.
-	BackupProfile string
+	// that is not an origin should read as one. The db blocks reach the
+	// cluster tree through `fort add`, never the host file.
+	PV []manifest.PVBackup
 	// AuditLogging is [cluster] audit_logging (#626): the host sets
 	// sfi.k3s.auditLog.enable. False renders nothing — a fort that does
-	// not audit carries no block, as with "none" above.
+	// not audit carries no block, as with an empty pv list above.
 	AuditLogging bool
 	// Cloud hosts (a cloud provider table): the linode-runtime shape —
 	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
@@ -234,9 +236,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		Plain:         !entry.IsCluster(),
 		AuditLogging:  entry.AuditLogging(),
 	}
-	if entry.Backups.Backed() {
-		view.BackupProfile = entry.Backups.Profile
-	}
+	view.PV = entry.Backups.PV
 	// The lab LAN block, from whichever lab table the host carries.
 	lan := func(ip string, prefix int, gw string, dns []string) {
 		view.IP = ip
@@ -351,7 +351,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		return nil, fmt.Errorf("cluster-monitoring.yaml.gotpl: %w", err)
 	}
 	note := clusterMonitoringNote
-	if view.BackupProfile == "production" {
+	if len(view.PV) > 0 {
 		note += ", PVBackupNotConfigured"
 	}
 	return append(out, hubMonitoringFiles(est.Hub, host, b, note)...), nil

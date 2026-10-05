@@ -1,10 +1,10 @@
 # {{ .Hostname }}'s per-cluster monitoring on the hub (#288) — rendered by
-# `fort scaffold` from the manifest (mesh_ip, [backups] profile), removed
+# `fort scaffold` from the manifest (mesh_ip, [[backups.pv]]), removed
 # by `fort dismantle`; `fort check --all` requires one per flux cluster.
 # Everything the central layer has to know about ONE cluster lives here,
 # so no fort is configured outside its own -keyed paths: the dead man's
 # switch for its metrics stream, the log analog, the backup leg its
-# profile promises, and its edge Alertmanager as a Grafana datasource.
+# pv blocks promise, and its edge Alertmanager as a Grafana datasource.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -27,11 +27,13 @@ spec:
             cluster: {{ .Hostname }}
           annotations:
             summary: "No data from {{ .Hostname }}'s edge Prometheus"
-{{- if eq .BackupProfile "production" }}
-        # [backups] profile = "production": the host imports sfi.pv-backup
-        # (fort scaffold), so a production fort publishing no pv-backup
-        # metrics is a manifest/host disagreement. The unit-side rules in
-        # rules-edge.yaml can only judge series that exist (#323).
+{{- if .PV }}
+        # [[backups.pv]] blocks: the host imports sfi.pv-backup (fort
+        # scaffold), so a fort that declares a pv leg and publishes no
+        # pv-backup metrics is a manifest/host disagreement. The unit-side
+        # rules in rules-edge.yaml can only judge series that exist (#323).
+        # No pv block, no rule: a fort whose backups are the db layers
+        # alone (the production fort) has nothing here to be silent about.
         - alert: PVBackupNotConfigured
           expr: absent(node_pv_backup_paths{cluster="{{ .Hostname }}"})
           for: 1h
@@ -39,7 +41,7 @@ spec:
             severity: warning
             cluster: {{ .Hostname }}
           annotations:
-            summary: "{{ .Hostname }} declares [backups] profile production but publishes no pv-backup metrics — sfi.pv-backup not enabled on the host?"
+            summary: "{{ .Hostname }} declares [[backups.pv]] blocks ({{ range $i, $p := .PV }}{{ if $i }}, {{ end }}{{ $p.Store }}{{ end }}) but publishes no pv-backup metrics — sfi.pv-backup not enabled on the host?"
 {{- end }}
 ---
 # Log analog of the dead man's switch, synced into the Loki ruler by the

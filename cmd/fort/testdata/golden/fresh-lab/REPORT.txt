@@ -3,7 +3,7 @@ flux/apps/lab-fort/   (chart 0.3.0)
   ● kustomization.yaml           namespace + postgres
   ● namespace.yaml               Namespace forts: every provider the fort runs
   ● postgres/
-    ● cluster.yaml               CNPG Cluster postgres: greenfield, NO archive (profile lab), roles via patches
+    ● cluster.yaml               CNPG Cluster postgres: greenfield, NO archive (no [backups.db-physical] block), roles via patches
     ● database-sfi-website.yaml  Database CR
     ● forts.contract.yaml        secrets-sfi-website
     ● kustomization.yaml         patches: role-sfi-website.yaml

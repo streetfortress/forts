@@ -37,7 +37,7 @@ func TestRenderScaffold(t *testing.T) {
 		}
 	}
 	// The per-cluster file: the dead man's switch on both, the expected
-	// backup leg only where the profile promises one, and the edge
+	// backup leg wherever a pv block promises one, and the edge
 	// Alertmanager over the mesh (the hub's own is cluster DNS).
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
 		got := m[clusterMonitoringPath("luxor", name)]
@@ -50,11 +50,17 @@ func TestRenderScaffold(t *testing.T) {
 			t.Errorf("%s: no hub kustomization append", name)
 		}
 	}
-	if !strings.Contains(cloud[clusterMonitoringPath("luxor", "cloud-fort")], "PVBackupNotConfigured") {
-		t.Errorf("production profile must render PVBackupNotConfigured")
+	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
+		if !strings.Contains(m[clusterMonitoringPath("luxor", name)], "PVBackupNotConfigured") {
+			t.Errorf("%s: a pv block must render PVBackupNotConfigured", name)
+		}
 	}
-	if strings.Contains(lab[clusterMonitoringPath("luxor", "lab-fort")], "PVBackupNotConfigured") {
-		t.Errorf("lab profile must not render PVBackupNotConfigured")
+	// No pv block, no rule — the production fort's shape: db layers to
+	// B2, nothing restic could be silent about.
+	dbOnly := hosts["cloud-fort"]
+	dbOnly.Backups.PV = nil
+	if got := byPath(render(t, "cloud-fort", dbOnly))[clusterMonitoringPath("luxor", "cloud-fort")]; strings.Contains(got, "PVBackupNotConfigured") {
+		t.Errorf("no pv block must render no PVBackupNotConfigured:\n%s", got)
 	}
 	if !strings.Contains(cloud[clusterMonitoringPath("luxor", "cloud-fort")], "url: http://10.1.0.98:30993") {
 		t.Errorf("a fort's edge Alertmanager is reached over the mesh")
@@ -139,24 +145,35 @@ func TestRenderScaffold(t *testing.T) {
 	}
 
 	// a fort off the mesh is refused (MESH_IP is mandatory, #99)
-	// The profile reaches the host file as a declaration, not a toggle —
-	// and "none" leaves no trace at all, so a host that is not an origin
-	// reads as one rather than as a disabled module.
+	// The pv blocks reach the host file as declarations, one target per
+	// store with the block's own words (store, cadence) and no endpoint
+	// — and no pv block leaves no trace at all, so a host that is not an
+	// origin reads as one rather than as a disabled module. The db blocks
+	// never reach the host file: they are the cluster tree's (fort add).
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
 		got := m["nixos/hosts/"+name+"/default.nix"]
-		want := map[string]string{"cloud-fort": "production", "lab-fort": "lab"}[name]
+		want := map[string]string{"cloud-fort": `{ store = "b2"; every = "6h"; }`, "lab-fort": `{ store = "rustfs-central"; every = "6h"; }`}[name]
 		if !strings.Contains(got, "inputs.forts.nixosModules.pv-backup") {
 			t.Errorf("%s: no pv-backup import", name)
 		}
-		if !strings.Contains(got, `profile = "`+want+`";`) {
-			t.Errorf("%s: want sfi.pv-backup profile %q", name, want)
+		if !strings.Contains(got, want) || !strings.Contains(got, "targets = [") {
+			t.Errorf("%s: want sfi.pv-backup target %s:\n%s", name, want, got)
+		}
+		for _, no := range []string{`profile = "`, "db-physical", "backblazeb2", "30901"} {
+			if strings.Contains(got, no) {
+				t.Errorf("%s: host file must not carry %q", name, no)
+			}
 		}
 	}
+	two := byPath(render(t, "metal-fort", hosts["metal-fort"]))["nixos/hosts/metal-fort/default.nix"]
+	if !strings.Contains(two, `{ store = "b2"; every = "6h"; }`) || !strings.Contains(two, `{ store = "rustfs-central"; every = "weekly"; }`) {
+		t.Errorf("two pv blocks render two targets, in manifest order with the cadence resolved:\n%s", two)
+	}
 	none := hosts["lab-fort"]
-	none.Backups.Profile = "none"
+	none.Backups.PV = nil
 	nf := byPath(render(t, "lab-fort", none))["nixos/hosts/lab-fort/default.nix"]
 	if strings.Contains(nf, "pv-backup") {
-		t.Errorf(`profile "none" must render no pv-backup wiring at all:\n%s`, nf)
+		t.Errorf(`no pv block must render no pv-backup wiring at all:\n%s`, nf)
 	}
 
 	// [cluster] audit_logging (#626) reaches the host file the same way:
@@ -204,7 +221,7 @@ func TestRenderScaffold(t *testing.T) {
 	// when the manifest names one, everything else as the lab VM.
 	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
 	m := metal["nixos/hosts/metal-fort/default.nix"]
-	for _, s := range append([]string{"inputs.forts.nixosModules.baremetal-runtime", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", `profile = "production";`, "docs/baremetal.md"}, operatorDefaults...) {
+	for _, s := range append([]string{"inputs.forts.nixosModules.baremetal-runtime", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", `{ store = "rustfs-central"; every = "weekly"; }`, "docs/baremetal.md"}, operatorDefaults...) {
 		if !strings.Contains(m, s) {
 			t.Errorf("metal default.nix lacks %q", s)
 		}

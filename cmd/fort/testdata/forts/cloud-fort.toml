@@ -1,8 +1,17 @@
 # Test fixture: a cloud host (see lab-fort.toml).
 mesh_ip = "10.1.0.98"
 
-[backups]
-profile = "production"
+# The production shape (sfi/forts#39): physical and logical to B2, and
+# a PV leg on B2 so the scaffold tests see one; no hub needed.
+[[backups.pv]]
+store = "b2"
+
+[backups.db-physical]
+store = "b2"
+hour = 4
+
+[backups.db-logical]
+store = "b2"
 
 [cluster]
 audit_logging = true

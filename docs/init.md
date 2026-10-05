@@ -54,9 +54,9 @@ shared layer for the one it is told (`--hub`, `--hub-push`, neither):
 
 | estate.toml | the hub's tree | the edges push | backups register |
 |---|---|---|---|
-| `hub = "<host>"` | a fort here: scaffold renders every other fort's file into `flux/apps/<hub>/monitoring/clusters/` | `HUB_MESH_IP` = the hub's `mesh_ip` | with `flux/apps/<hub>/rustfs-central` |
-| `hub_push = "<mesh ip>"` | in another estate: nothing renders here, that estate decides what it scrapes | `HUB_MESH_IP` = the address | refused: a `[backups]` profile needs a hub here |
-| neither | none | the layer carries no `remote_write` and no fluent-bit | refused |
+| `hub = "<host>"` | a fort here: scaffold renders every other fort's file into `flux/apps/<hub>/monitoring/clusters/` | `HUB_MESH_IP` = the hub's `mesh_ip` | a `[[backups.pv]]` block on `rustfs-central` registers with `flux/apps/<hub>/rustfs-central`; a block on `b2` needs nothing |
+| `hub_push = "<mesh ip>"` | in another estate: nothing renders here, that estate decides what it scrapes | `HUB_MESH_IP` = the address | a block on `rustfs-central` is refused (nothing here to register with); `b2` blocks are fine |
+| neither | none | the layer carries no `remote_write` and no fluent-bit | the same: `b2` only |
 
 `scaffold` writes `HUB_MESH_IP` into a cluster's `cluster-vars.yaml` when
 there is somewhere to push; the layer's edge Prometheus `remote_write` and

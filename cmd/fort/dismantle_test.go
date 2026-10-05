@@ -147,7 +147,7 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 		}
 	}
 	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\nhub = \"luxor\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.94\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.94\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")

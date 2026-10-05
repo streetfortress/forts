@@ -12,8 +12,8 @@ mesh_ip = "10.1.0.15"
 [cluster]
 datastore = "sqlite"
 
-[backups]
-profile = "lab"   # luxor's rustfs only — reproducible, and not an original
+[[backups.pv]]
+store = "rustfs-central"   # luxor's rustfs only — reproducible, and not an original
 
 [shape]
 vcpus = 2

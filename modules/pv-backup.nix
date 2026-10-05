@@ -5,35 +5,42 @@
 # app content in the fort-local rustfs, which is deliberately backed up
 # as a *volume* rather than replicated bucket-to-bucket.
 #
-# Two ways to configure it, and the difference is the point:
+# A target names a STORE, and the store decides the rest:
 #
-#   sfi.pv-backup.profile = "lab" | "production"
-#     A fort. The profile names a DESTINATION SET, not a target list —
-#     `lab` is luxor's rustfs-central alone, every 6 h (a lab fort is
-#     reproducible; it is not an original, and the local copy is its
-#     only one), `production` is B2 every 6 h — the RPO — plus a WEEKLY
-#     copy to rustfs-central for LAN-speed restore and the day B2 is
-#     unreachable (restic is the one layer that fans out natively, so a
-#     production fort's offsite copy does not depend on the lab being
-#     up). Endpoints, bucket and the sops key names all follow; a fort
-#     declares intent and nothing else.
+#   sfi.pv-backup.targets = [
+#     { store = "b2"; every = "6h"; }
+#     { store = "rustfs-central"; every = "weekly"; }
+#   ];
 #
-#   sfi.pv-backup.targets = [ … ]
-#     A hand-configured host that is neither profile — the pre-fort
-#     zenbook was one, naming its own two targets 12h apart. Every host
-#     in the fleet is a fort today, but the list stays the primitive;
-#     `profile` is sugar that fills it.
+#   What `fort scaffold` renders from the manifest's [[backups.pv]] blocks
+#   (sfi/forts#39), word for word: the store and the cadence are the
+#   block's, and the endpoint, the bucket, the credential (the sops key
+#   `fort mint` seeds) and the PHASE — which hour of the cycle each store
+#   runs at, so two stores on one fort never read the PVCs together — are
+#   fleet facts, written once below. There are exactly two object stores
+#   at fleet level, and enumerating endpoints per host is how they drift.
+#
+#   { name = …; repository = …; environmentFile = …; }
+#     A hand-configured target on a host that is not a fort — the
+#     pre-fort zenbook named its own two, 12 h apart. Every host in the
+#     fleet is a fort today, but the explicit form stays the primitive;
+#     a store target is sugar that fills it.
+#
+# The destination SET used to be one word, `profile = "lab" | "production"`,
+# which bundled the stores and the cadences and could not say what the
+# production fort wants (no PV leg at all) or what the hub wants (B2
+# alone). The manifest's per-layer blocks replaced it (sfi/forts#4, #39),
+# and this module took the same shape.
 #
 # THE PRUNE GAP, on purpose. A fort's B2 credential deliberately holds no
 # `deleteFiles` (docs/infra/backups.md: a compromised fort must not be
 # able to erase the offsite copy — an observed pair of 401s, not a
 # citation). `restic forget --prune` deletes pack files of any age, so it
-# cannot run on the fort: the repo would fail every cycle. Profile-driven
-# hosts therefore back up and never prune, and retention is owed by a
-# central job holding the one delete-capable identity in the fleet. Until
-# that job exists a fort's repo grows monotonically — a known gap with an
-# owner, not an oversight. Hosts configuring `targets` by hand keep their
-# own pruneOpts, because their credentials can delete.
+# cannot run on the fort: the repo would fail every cycle. Store targets
+# therefore back up and never prune, and retention is owed by a central
+# job holding the one delete-capable identity in the fleet (sfi.pv-prune
+# on the hub). Hand-configured targets keep their own pruneOpts, because
+# their credentials can delete.
 #
 # Crash-consistent by nature: a PVC is copied while pods write to it.
 # That is the right trade for content and for a gitea data dir; it is the
@@ -51,7 +58,7 @@ let
     # luxor's rustfs-central — the fleet backup destination, NodePort 30901
     # opened on wg0 only. Plain HTTP over
     # the mesh, path-style (docs/infra/providers.md).
-    rustfs = "http://10.1.0.5:30901";
+    "rustfs-central" = "http://10.1.0.5:30901";
     b2 = "https://s3.us-west-004.backblazeb2.com";
   };
 
@@ -59,60 +66,69 @@ let
   # which is also what a fort's B2 key is restricted to.
   repo = endpoint: "s3:${endpoint}/${cfg.bucket}/${cfg.prefix}";
 
-  profileTargets = {
-    lab = [
-      {
-        name = "rustfs";
-        repository = repo cfg.endpoints.rustfs;
-        environmentFile = config.sops.secrets.restic-s3-env-rustfs.path;
-      }
-    ];
-    production = [
-      {
-        name = "rustfs";
-        repository = repo cfg.endpoints.rustfs;
-        environmentFile = config.sops.secrets.restic-s3-env-rustfs.path;
-        # Weekly, not the 6-hourly default: B2 holds the RPO for a
-        # production fort, and this copy exists for restore at LAN
-        # speed and for a B2 outage — a week-old local snapshot serves
-        # both. Sunday 00:30, before pv-prune's rustfs tier (Sun 02:00)
-        # walks the repo and clear of the barman base-backup hours. It
-        # also halves the read load the two targets put on the PVCs.
-        timerConfig = {
-          OnCalendar = "Sun *-*-* 00:30:00";
-          Persistent = "true";
-          RandomizedDelaySec = toString cfg.randomizedDelaySec;
-        };
-        # A weekly target's staleness threshold travels with its cadence
-        # (see maxAge): the fleet rule reads it, so a flat 36 h never
-        # again fires on this copy from Monday to Sunday.
-        maxAge = 8 * 86400;
-      }
-      {
-        name = "b2";
-        repository = repo cfg.endpoints.b2;
-        environmentFile = config.sops.secrets.restic-s3-env-b2.path;
-        # Offsite runs on the opposite half of the cycle: the two targets
-        # read the same PVCs, and overlapping them doubles the read load
-        # on a 4 GB fort for no gain.
-        timerConfig = {
-          OnCalendar = "*-*-* 03/6:00:00";
-          Persistent = "true";
-          RandomizedDelaySec = toString cfg.randomizedDelaySec;
-        };
-      }
-    ];
+  # The store registry, the restic half (the fort CLI holds the other:
+  # which layers a store takes, and whether it needs a hub). Per store:
+  #
+  #   unit     the target's name — the systemd unit `restic-backups-pv-<unit>`,
+  #            the `target=` label on every metric, what `sfi-backup-now`
+  #            takes. `rustfs`, not `rustfs-central`: the unit and the
+  #            label predate the store name, and the fleet rules
+  #            (rules-edge.yaml, target=rustfs|b2) and the pruner read
+  #            them.
+  #   secret   the sops key `fort mint` seeds for the store, declared
+  #            below only when a target names the store — a declared-
+  #            but-absent sops key fails activation.
+  #   phase    which hour of each 6 h cycle (or of the day, or of Sunday)
+  #            the store's run starts at. Offsite runs on the opposite
+  #            half of the cycle from the hub copy: the two read the same
+  #            PVCs, and overlapping them doubles the read load on a
+  #            4 GB fort for no gain. The rustfs phase also keeps Sunday's
+  #            weekly copy ahead of pv-prune's rustfs tier (Sun 02:00) and
+  #            clear of the barman base-backup hours.
+  stores = {
+    "rustfs-central" = { unit = "rustfs"; secret = "restic-s3-env-rustfs"; phase = 0; };
+    b2 = { unit = "b2"; secret = "restic-s3-env-b2"; phase = 3; };
   };
 
-  # Profile targets are plain attrsets — they never pass through the
-  # `targets` submodule, so they carry none of its defaults. Normalize
-  # both paths here or every optional field is a missing-attribute error
-  # at use (caught by evaluating the profile path with no host consuming
-  # it yet).
-  normalize = t: { passwordFile = null; pruneOpts = null; timerConfig = null; maxAge = null; } // t;
+  # The cadence vocabulary (the manifest's `every`, sfi/forts#4): the
+  # OnCalendar for a phase, and the staleness threshold that travels with
+  # it — twice the cadence, as maxAge documents — so PVBackupStale never
+  # judges a weekly copy by a 6-hourly clock.
+  cadences = {
+    "6h" = { calendar = phase: "*-*-* ${lib.fixedWidthNumber 2 phase}/6:00:00"; maxAge = 36 * 3600; };
+    daily = { calendar = phase: "*-*-* ${lib.fixedWidthNumber 2 phase}:30:00"; maxAge = 48 * 3600; };
+    weekly = { calendar = phase: "Sun *-*-* ${lib.fixedWidthNumber 2 phase}:30:00"; maxAge = 8 * 86400; };
+  };
 
-  targets = map normalize
-    (if cfg.profile != null then profileTargets.${cfg.profile} else cfg.targets);
+  isStore = t: t.store != null;
+  storeTargets = builtins.filter isStore cfg.targets;
+  storesInUse = lib.unique (map (t: t.store) storeTargets);
+
+  # A store target, filled: the submodule's own fields win where set
+  # (a host that wants its B2 copy on another timer says so), the store
+  # and the cadence supply the rest. A hand target passes through.
+  resolve = t:
+    if !isStore t then t else
+    let
+      st = stores.${t.store};
+      every = if t.every != null then t.every else "6h";
+      c = cadences.${every};
+    in
+    t // {
+      name = if t.name != null then t.name else st.unit;
+      repository = if t.repository != null then t.repository else repo cfg.endpoints.${t.store};
+      environmentFile = if t.environmentFile != null then t.environmentFile else config.sops.secrets.${st.secret}.path;
+      timerConfig =
+        if t.timerConfig != null then t.timerConfig
+        else {
+          OnCalendar = c.calendar st.phase;
+          Persistent = "true";
+          RandomizedDelaySec = toString cfg.randomizedDelaySec;
+        };
+      maxAge = if t.maxAge != null then t.maxAge else c.maxAge;
+    };
+
+  targets = map resolve cfg.targets;
 
   # A pattern list as a shell `case` arm. Deliberately UNQUOTED: a
   # quoted arm in `case` is a literal, not a glob, so escaping here would
@@ -210,17 +226,6 @@ in
   options.sfi.pv-backup = {
     enable = lib.mkEnableOption "restic backups of k3s persistent volumes";
 
-    profile = lib.mkOption {
-      type = lib.types.nullOr (lib.types.enum [ "lab" "production" ]);
-      default = null;
-      description = ''
-        The destination set for a fort. `lab` backs up to luxor's rustfs
-        only; `production` adds B2 so the offsite copy does not depend on
-        the lab being reachable. Mutually exclusive with `targets`, which
-        is what a hand-configured host uses instead.
-      '';
-    };
-
     prefix = lib.mkOption {
       type = lib.types.str;
       default = config.networking.hostName;
@@ -242,7 +247,7 @@ in
     endpoints = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = defaultEndpoints;
-      description = "S3 endpoints the profiles resolve against.";
+      description = "S3 endpoints by store name, what a store target's repository resolves against.";
     };
 
     storagePath = lib.mkOption {
@@ -288,18 +293,18 @@ in
     schedule = lib.mkOption {
       type = lib.types.str;
       default = "*-*-* 00/6:00:00";
-      description = "Default OnCalendar for a target that does not override it.";
+      description = "Default OnCalendar for a hand-configured target that does not override it. A store target's calendar is its cadence's.";
     };
 
     maxAge = lib.mkOption {
       type = lib.types.int;
       default = 36 * 3600;
       description = ''
-        Seconds a target's last success may age before PVBackupStale fires,
-        published as node_pv_backup_max_age_seconds. Twice the cadence:
-        36 h for the 6-hourly default (the timers carry jitter). A target
-        with its own timer sets its own — the production profile's weekly
-        rustfs copy carries 8 d.
+        Seconds a hand-configured target's last success may age before
+        PVBackupStale fires, published as node_pv_backup_max_age_seconds.
+        Twice the cadence: 36 h for the 6-hourly default (the timers carry
+        jitter). A store target's threshold is its cadence's — a weekly
+        copy carries 8 d.
       '';
     };
 
@@ -316,7 +321,7 @@ in
     passwordFile = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
-      description = "Repo password, shared across targets. Defaults to the `restic-password` sops secret when a profile is set.";
+      description = "Repo password, shared across targets. Defaults to the `restic-password` sops secret when any target names a store.";
     };
 
     pruneOpts = lib.mkOption {
@@ -333,21 +338,47 @@ in
 
     targets = lib.mkOption {
       default = [ ];
-      description = "Explicit destination list, for hosts that are not forts. Mutually exclusive with `profile`.";
+      example = lib.literalExpression ''
+        [
+          { store = "b2"; every = "6h"; }
+          { store = "rustfs-central"; every = "weekly"; }
+        ]
+      '';
+      description = ''
+        The destinations, one target per store (what `fort scaffold`
+        renders from the manifest's [[backups.pv]] blocks), or explicit
+        `name` + `repository` + `environmentFile` triples on a host that
+        is not a fort. A store target's name, repository, credential and
+        timer follow from the store and the cadence; set any of them to
+        override.
+      '';
       type = lib.types.listOf (lib.types.submodule {
         options = {
+          store = lib.mkOption {
+            type = lib.types.nullOr (lib.types.enum (builtins.attrNames stores));
+            default = null;
+            description = "The store this target writes to, by its fleet name. Fills name, repository, environmentFile, timerConfig and maxAge.";
+          };
+          every = lib.mkOption {
+            type = lib.types.nullOr (lib.types.enum (builtins.attrNames cadences));
+            default = null;
+            description = "A store target's cadence: 6h (the default), daily or weekly. The store supplies the phase.";
+          };
           name = lib.mkOption {
-            type = lib.types.str;
-            description = "Identifier for this target; names the systemd unit and the freshness metric.";
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Identifier for this target; names the systemd unit and the freshness metric. Required without `store`.";
           };
           repository = lib.mkOption {
-            type = lib.types.str;
+            type = lib.types.nullOr lib.types.str;
+            default = null;
             example = "s3:http://10.1.0.5:30901/sfi-pv-backups/sfi-fort-zenbook";
-            description = "restic S3 repository URL.";
+            description = "restic S3 repository URL. Required without `store`.";
           };
           environmentFile = lib.mkOption {
-            type = lib.types.path;
-            description = "File defining AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and RESTIC_PASSWORD if no passwordFile).";
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            description = "File defining AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and RESTIC_PASSWORD if no passwordFile). Required without `store`.";
           };
           passwordFile = lib.mkOption {
             type = lib.types.nullOr lib.types.path;
@@ -362,12 +393,12 @@ in
           timerConfig = lib.mkOption {
             type = lib.types.nullOr (lib.types.attrsOf lib.types.str);
             default = null;
-            description = "Per-target override; null takes the top-level schedule.";
+            description = "Per-target override; null takes the cadence's calendar (a store target) or the top-level schedule.";
           };
           maxAge = lib.mkOption {
             type = lib.types.nullOr lib.types.int;
             default = null;
-            description = "Per-target override; null takes the top-level maxAge. Set it with a slower timerConfig.";
+            description = "Per-target override; null takes the cadence's threshold (a store target) or the top-level maxAge. Set it with a slower timerConfig.";
           };
         };
       });
@@ -377,11 +408,31 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = (cfg.profile != null) != (cfg.targets != [ ]);
+        assertion = cfg.targets != [ ];
         message = ''
-          sfi.pv-backup: set exactly one of `profile` (a fort — the
-          destination set follows) or `targets` (a hand-configured host).
+          sfi.pv-backup: enabled with no targets. A fort's targets come
+          from its manifest's [[backups.pv]] blocks (fort scaffold); a
+          fort with none does not import this module at all.
         '';
+      }
+      {
+        assertion = builtins.all (t: isStore t || (t.name != null && t.repository != null && t.environmentFile != null)) cfg.targets;
+        message = ''
+          sfi.pv-backup: a target names a `store`, or it names all of
+          `name`, `repository` and `environmentFile` by hand.
+        '';
+      }
+      {
+        assertion = builtins.all (t: isStore t || t.every == null) cfg.targets;
+        message = "sfi.pv-backup: `every` is a store target's cadence; a hand target sets timerConfig.";
+      }
+      {
+        assertion = builtins.length storesInUse == builtins.length storeTargets;
+        message = "sfi.pv-backup: one target per store — two targets name the same store.";
+      }
+      {
+        assertion = lib.allUnique (map (t: t.name) targets);
+        message = "sfi.pv-backup: two targets resolve to the same name; each names its own systemd unit.";
       }
       {
         assertion = builtins.all (t: cfg.passwordFile != null || t.passwordFile != null) targets;
@@ -394,18 +445,17 @@ in
     ];
 
     # Declared here so a fort's secrets.nix needs no edit, and declared
-    # CONDITIONALLY: a declared-but-absent sops key fails activation, and
-    # a lab fort has no B2 credential to declare.
-    sops.secrets = lib.mkIf (cfg.profile != null) (
-      {
-        restic-password = { };
-        restic-s3-env-rustfs = { };
-      }
-      // lib.optionalAttrs (cfg.profile == "production") { restic-s3-env-b2 = { }; }
+    # CONDITIONALLY, per store in use: a declared-but-absent sops key
+    # fails activation, and a fort on the hub's rustfs alone has no B2
+    # credential to declare — `fort mint` seeds exactly these keys from
+    # the same blocks.
+    sops.secrets = lib.mkIf (storeTargets != [ ]) (
+      { restic-password = { }; }
+      // builtins.listToAttrs (map (s: { name = stores.${s}.secret; value = { }; }) storesInUse)
     );
 
     sfi.pv-backup.passwordFile =
-      lib.mkIf (cfg.profile != null) (lib.mkDefault config.sops.secrets.restic-password.path);
+      lib.mkIf (storeTargets != [ ]) (lib.mkDefault config.sops.secrets.restic-password.path);
 
     environment.systemPackages = [ pkgs.restic ];
 

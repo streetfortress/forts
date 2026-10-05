@@ -74,7 +74,7 @@ missing manifest is no obstacle.
    retired `nixos/secrets/<host>.yaml` says whether there is anything to
    revoke: key *names* are plaintext, and `fort mint` writes
    `restic-s3-env-b2` exactly when it mints a B2 key. A fort whose file
-   never held it (`[backups] profile` was not `production`) prints
+   never held it (no `[[backups.pv]]` block named `b2`) prints
    `b2 key: none minted for this fort` and asks for nothing. A fort whose
    file held it — or a fort with no retired file in history, since a
    missing record must not skip a live revoke — gets the prompt: the

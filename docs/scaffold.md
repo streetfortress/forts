@@ -63,15 +63,19 @@ hub, rendered here, removed by [`dismantle`](dismantle.md), and required
 by `fort check --all` — a flux cluster with no file, or a file with no
 manifest, is an error. The kustomization line is a text-level append,
 idempotent, so a re-run reports `○ exists — kept (already listed)`.
-`PVBackupNotConfigured` is rendered only where the profile promises the
-leg (`production`).
+`PVBackupNotConfigured` is rendered only where a `[[backups.pv]]` block
+promises the leg — no pv block, no rule, so a fort whose backups are the
+db layers alone has nothing to be silent about.
 
 Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
 `lan_gateway`, `lan_dns`; `[baremetal]` `mac`, which turns the LAN
 block's `en*` name match into a MAC match; `[linode]` `region` + `type`
 for the header comment), `mesh_ip`, `[cluster] datastore` (rendered as
-the host's `sfi.k3s.datastore` line, `sqlite` when unset; #426), and the
+the host's `sfi.k3s.datastore` line, `sqlite` when unset; #426),
+`[[backups.pv]]` (rendered as `sfi.pv-backup.targets`, one
+`{ store; every }` per block, word for word — the module holds the
+endpoint and the phase per store; no block, no import), and the
 optional seed `nixos_state_version`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
 `25.11`.

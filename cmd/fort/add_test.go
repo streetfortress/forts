@@ -282,11 +282,11 @@ func yamlPath(t *testing.T, file, path string) any {
 // UPDATE_GOLDEN=1 rewrites it (then review the diff like any other
 // generated code).
 func TestAddFreshCloudFort(t *testing.T) {
-	// testdata manifest: linode, dns zone example.cloud, profile production
+	// testdata manifest: linode, dns zone example.cloud, db-physical on b2 at 04:00
 	testAddFresh(t, addFixture{fort: "cloud-fort", golden: "testdata/golden/fresh-cloud", chart: "sfi-website", version: "0.3.0"})
 }
 
-// The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
+// The lab twin: libvirt, no db-physical block — step-ca, <app>.<fort>.lofi, and
 // a postgres rendered with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {

@@ -200,15 +200,16 @@ carry no namespace of their own (kustomize refuses two Namespace
 documents with the same id). Each is rendered on first need from
 `templates/add/{postgres,valkey,rustfs}` into `forts/<name>/`, then
 registered per tenant. The postgres instance's archive follows the
-manifest's `[backups] profile`: `production` renders the barman-cloud
-plugin with an `ObjectStore` on B2 (`s3://sfi-db-physical-backups/<fort>`),
-the nightly `ScheduledBackup`, and a `secrets-backup` contract entry whose
-two keys are `external` — the fort's own `sfi-db-physical-<fort>` key,
-minted by `fort b2-key db-physical <fort> --write` and set with
-`fort seed <fort> postgres --set`. `lab` (and `none`) render **no archive**
-and say so in `cluster.yaml`: no lab fort ships barman anywhere, and a
-cluster that silently archives into nothing is the failure the backups
-design refuses ([`docs/infra/backups.md`](../infra/backups.md)). Tenants
+manifest's `[backups.db-physical]` block: a block (`store = "b2"`, the
+one store that takes the layer) renders the barman-cloud plugin with an
+`ObjectStore` on B2 (`s3://sfi-db-physical-backups/<fort>`), the nightly
+`ScheduledBackup` at the block's `hour`, and a `secrets-backup` contract
+entry whose two keys are `external` — the fort's own
+`sfi-db-physical-<fort>` key, minted by `fort b2-key db-physical <fort>
+--write` and set with `fort seed <fort> postgres --set`. No block renders
+**no archive** and says so in `cluster.yaml`: a cluster that silently
+archives into nothing is the failure the backups design refuses
+([`docs/infra/backups.md`](../infra/backups.md)). Tenants
 are then registered the same way on either: a `Database` CR, a JSON6902 patch adding the
 role to `spec.managed.roles` (kept an empty list in the template so the
 patch has a target), and the tenant's credentials Secret in the

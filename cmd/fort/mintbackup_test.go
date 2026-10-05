@@ -237,8 +237,10 @@ func TestRustfsIdentityFindings(t *testing.T) {
 		}
 		os.WriteFile(filepath.Join(root, rustfsUsersPath("luxor")), []byte(body), 0o644)
 	}
-	backed := manifest.Host{Backups: manifest.Backups{Profile: "production"}}
-	none := manifest.Host{Backups: manifest.Backups{Profile: "none"}}
+	backed := manifest.Host{Backups: manifest.Backups{Declared: true, PV: []manifest.PVBackup{{Store: manifest.StoreRustfsCentral}}}}
+	none := manifest.Host{Backups: manifest.Backups{Declared: true}}
+	// A fort on b2 alone is "none" to the hub: it registers nothing.
+	b2only := manifest.Host{Backups: manifest.Backups{Declared: true, PV: []manifest.PVBackup{{Store: manifest.StoreB2}}, DBPhysical: &manifest.DBPhysical{Store: manifest.StoreB2, Hour: new(int)}}}
 	levels := func(fs []finding) string {
 		var out []string
 		for _, f := range fs {
@@ -267,9 +269,22 @@ func TestRustfsIdentityFindings(t *testing.T) {
 		t.Errorf("reverse: %v (%s)", fs, levels(fs))
 	}
 
-	// Disagreement: the fort exists but says it backs up nowhere.
+	// Disagreement: the fort exists but says it backs up nowhere — or
+	// only to b2, which registers nothing with the hub.
 	if fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{"sfi-a": none}); len(fs) != 1 || fs[0].level != "error" {
-		t.Errorf(`profile "none" with an identity must be an error: %v`, fs)
+		t.Errorf(`an empty [backups] with an identity must be an error: %v`, fs)
+	}
+	if fs := rustfsIdentityFindings(root, "luxor", map[string]manifest.Host{"sfi-a": b2only}); len(fs) != 1 || fs[0].level != "error" {
+		t.Errorf(`a b2-only fort with an identity must be an error: %v`, fs)
+	}
+
+	// No hub (sfi/production: its hub is another estate's): a block on
+	// b2 is fine, a block on rustfs-central has nothing to register with.
+	if fs := rustfsIdentityFindings(root, "", map[string]manifest.Host{"sfi-a": b2only, "sfi-b": none}); len(fs) != 0 {
+		t.Errorf("no hub and no rustfs-central block must say nothing: %v", fs)
+	}
+	if fs := rustfsIdentityFindings(root, "", map[string]manifest.Host{"sfi-a": backed}); len(fs) != 1 || fs[0].level != "error" || !strings.Contains(fs[0].msg, "names no hub") {
+		t.Errorf("no hub with a rustfs-central block must be an error: %v", fs)
 	}
 
 	// `prune` has its own lifecycle and is never mistaken for a fort.

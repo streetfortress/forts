@@ -13,19 +13,24 @@ import (
 )
 
 // The backup half of `fort mint` (docs/infra/backups.md). A fort whose
-// manifest declares a [backups] profile carries the credentials
-// `sfi.pv-backup` reads, and where each comes from is the design:
+// manifest declares [[backups.pv]] blocks carries the credentials
+// `sfi.pv-backup` reads — one per store the blocks name — and where each
+// comes from is the design:
 //
 //	restic-password        FLEET secret, copied from provisioning/secrets.yaml.
 //	                       The central pruner opens every fort's repo, so
 //	                       per-host passwords would mean a keyring on
-//	                       luxor. Never generated per host.
-//	restic-s3-env-rustfs   built from the rustfs credentials in
-//	                       provisioning/secrets.yaml (the instance's root
-//	                       pair today — per-consumer rustfs IAM is the
-//	                       `s3` provider's own piece of work).
-//	restic-s3-env-b2       MINTED against the B2 API, production profile
-//	                       only, from a credential supplied per-invocation.
+//	                       luxor. Never generated per host. Any pv block.
+//	restic-s3-env-rustfs   the fort's own identity on the hub's
+//	                       rustfs-central, declared in the hub's tree.
+//	                       A pv block on rustfs-central.
+//	restic-s3-env-b2       MINTED against the B2 API from a credential
+//	                       supplied per-invocation. A pv block on b2.
+//
+// The db blocks mint nothing here: db-physical's key lives in the
+// cluster beside postgres (`fort b2-key db-physical`, then `fort seed
+// --set` — the add report lists it), and db-logical renders nothing yet
+// (#4). What the HOST holds is what mint mints.
 //
 // That last one is the shape the probe (#47/#291) settled. B2 does not
 // enforce capability subsetting — a key holding writeKeys can mint one
@@ -98,11 +103,11 @@ func envKeyID(env string) string {
 	return ""
 }
 
-// planBackups fills the backup credentials a profile implies. Values
+// planBackups fills the backup credentials the pv blocks imply. Values
 // that already exist in the secrets file are restored, never re-minted —
 // rotation stays a deliberate act, as with every other key here.
 func (p *mintPlan) planBackups(take func(string) (string, bool)) error {
-	if !p.entry.Backups.Backed() {
+	if len(p.entry.Backups.PV) == 0 {
 		return nil
 	}
 	if v, ok := take(keyResticPassword); ok {
@@ -121,25 +126,31 @@ func (p *mintPlan) planBackups(take func(string) (string, bool)) error {
 	// s3:DeleteObject, so a compromised fort can neither read another
 	// fort's repo nor erase its own — the posture B2 already has, and
 	// the precondition for the fleet-wide restic password being sound.
-	if v, ok := take(keyResticRustfs); ok {
-		p.resticRustfs = v
-		p.rustfsUser = envKeyID(v)
-	} else {
-		if !p.est.HasHub() {
-			return fmt.Errorf("[backups] profile %s needs a hub that hosts rustfs-central, and %s names none (a hub_push in another estate cannot take a registration yet)", p.entry.Backups.Profile, estate.Path)
+	// Only for a block that names the store: a fort on b2 alone has no
+	// business in the hub's users file, and needs no hub at all. (A key
+	// the file holds for a store no block names is left where it is —
+	// mint never deletes — and not reported.)
+	if p.entry.Backups.PVTo(manifest.StoreRustfsCentral) != nil {
+		if v, ok := take(keyResticRustfs); ok {
+			p.resticRustfs = v
+			p.rustfsUser = envKeyID(v)
+		} else {
+			if !p.est.HasHub() {
+				return fmt.Errorf("[[backups.pv]] store = %q needs a hub that hosts rustfs-central, and %s names none (a hub_push in another estate cannot take a registration yet; a block on %q needs no hub)", manifest.StoreRustfsCentral, estate.Path, manifest.StoreB2)
+			}
+			if users := rustfsUsersPath(p.est.Hub); !exists(p.root, users) {
+				return fmt.Errorf("%s does not exist — seed the hub's rustfs provider first: fort seed %s flux/apps/%s/rustfs-central --write", users, p.est.Hub, p.est.Hub)
+			}
+			sec, err := newToken()
+			if err != nil {
+				return err
+			}
+			p.rustfsUser, p.rustfsSecret = rustfsPVUser(p.host), sec
+			p.resticRustfs = s3Env(p.rustfsUser, sec)
 		}
-		if users := rustfsUsersPath(p.est.Hub); !exists(p.root, users) {
-			return fmt.Errorf("%s does not exist — seed the hub's rustfs provider first: fort seed %s flux/apps/%s/rustfs-central --write", users, p.est.Hub, p.est.Hub)
-		}
-		sec, err := newToken()
-		if err != nil {
-			return err
-		}
-		p.rustfsUser, p.rustfsSecret = rustfsPVUser(p.host), sec
-		p.resticRustfs = s3Env(p.rustfsUser, sec)
 	}
 
-	if p.entry.Backups.Profile != "production" {
+	if p.entry.Backups.PVTo(manifest.StoreB2) == nil {
 		return nil
 	}
 	if v, ok := take(keyResticB2); ok {
@@ -373,7 +384,7 @@ func revokeB2Key(host string, retired *retiredSecrets) (string, error) {
 		names = append(names, b2PruningKeyName)
 	}
 	if retired != nil && !retired.has(keyResticB2) && !pruner {
-		return fmt.Sprintf("none minted for this fort (the retired %s never held %s — the profile was not production); nothing to revoke", retired.rel, keyResticB2), nil
+		return fmt.Sprintf("none minted for this fort (the retired %s never held %s — no [[backups.pv]] block named b2); nothing to revoke", retired.rel, keyResticB2), nil
 	}
 	c, err := b2Session(needMinting, "Revoking "+host+"'s B2 keys")
 	if err != nil {
@@ -411,19 +422,6 @@ func revokeB2Key(host string, retired *retiredSecrets) (string, error) {
 	return msg, nil
 }
 
-// backupDestinations is the one-line reminder of what a profile means,
-// for mint's report: the manifest says intent, and the report says where
-// that lands.
-func backupDestinations(profile string) string {
-	switch profile {
-	case "production":
-		return "luxor's rustfs AND B2 (offsite does not depend on the lab)"
-	case "lab":
-		return "luxor's rustfs only (reproducible; not an original)"
-	}
-	return "nothing"
-}
-
 // secretHasKey reports whether a committed sops Secret carries a key.
 // Key NAMES are plaintext under the repo's encrypted_regex, so this
 // needs no age key — the same property `fort check` runs on in CI.
@@ -442,17 +440,24 @@ func secretHasKey(root, rel, key string) bool {
 //	forward   a fort that backs up has an identity        → else a WARNING
 //	reverse   an identity belongs to a fort that exists   → else an ERROR
 //
-// The asymmetry is deliberate. A fort that declares a profile and has no
-// identity yet is an unfinished raise: visible, harmless, and cleared by
-// `fort mint`. An ORPHANED identity is a live credential scoped to a
-// prefix whose backups are still sitting there — that is the direction
-// that earns the cross-fort write, and the one that must fail CI.
+// The asymmetry is deliberate. A fort that declares a pv block on
+// rustfs-central and has no identity yet is an unfinished raise:
+// visible, harmless, and cleared by `fort mint`. An ORPHANED identity is
+// a live credential scoped to a prefix whose backups are still sitting
+// there — that is the direction that earns the cross-fort write, and the
+// one that must fail CI.
+//
+// Only the blocks that name rustfs-central take part. A fort on b2 alone
+// registers nothing with the hub and needs none, which is what lets an
+// estate with no hub (sfi/production, whose hub is another estate's)
+// declare backups at all.
 func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []finding {
 	var out []finding
+	onRustfs := func(h manifest.Host) bool { return h.Backups.PVTo(manifest.StoreRustfsCentral) != nil }
 	if hub == "" {
 		for host, h := range hosts {
-			if h.Backups.Backed() {
-				return []finding{{"error", estate.Path, host + " declares [backups] profile " + h.Backups.Profile + " but the estate names no hub — nothing hosts rustfs-central for it to register with"}}
+			if onRustfs(h) {
+				return []finding{{"error", estate.Path, host + " declares a [[backups.pv]] block on " + manifest.StoreRustfsCentral + " but the estate names no hub — nothing hosts rustfs-central for it to register with (a block on b2 needs no hub)"}}
 			}
 		}
 		return nil
@@ -460,8 +465,8 @@ func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []
 	rustfsUsers := rustfsUsersPath(hub)
 	if !exists(root, rustfsUsers) {
 		for host, h := range hosts {
-			if h.Backups.Backed() {
-				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up — seed the hub's rustfs provider: fort seed " + hub + " flux/apps/" + hub + "/rustfs-central --write"}}
+			if onRustfs(h) {
+				return []finding{{"warn", rustfsUsers, "missing, but " + host + " backs up to " + manifest.StoreRustfsCentral + " — seed the hub's rustfs provider: fort seed " + hub + " flux/apps/" + hub + "/rustfs-central --write"}}
 			}
 		}
 		return nil
@@ -472,8 +477,8 @@ func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []
 	}
 
 	for host, h := range hosts {
-		if h.Backups.Backed() && !hasKey(names, rustfsPVUser(host)) {
-			out = append(out, finding{"warning", rustfsUsers, "no identity " + rustfsPVUser(host) + " yet — " + host + " declares [backups] profile " + h.Backups.Profile + "; fort mint adds it (until then the fort cannot reach rustfs)"})
+		if onRustfs(h) && !hasKey(names, rustfsPVUser(host)) {
+			out = append(out, finding{"warning", rustfsUsers, "no identity " + rustfsPVUser(host) + " yet — " + host + " declares a [[backups.pv]] block on " + manifest.StoreRustfsCentral + "; fort mint adds it (until then the fort cannot reach rustfs)"})
 		}
 	}
 	for _, name := range names {
@@ -483,8 +488,8 @@ func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []
 		}
 		if h, declared := hosts[host]; !declared {
 			out = append(out, finding{"error", rustfsUsers, "ORPHANED identity " + name + ": no manifest for " + host + " — a live credential for a fort that no longer exists (fort dismantle withdraws it)"})
-		} else if !h.Backups.Backed() {
-			out = append(out, finding{"error", rustfsUsers, "identity " + name + " but " + host + " declares [backups] profile \"none\" — one of the two is wrong"})
+		} else if !onRustfs(h) {
+			out = append(out, finding{"error", rustfsUsers, "identity " + name + " but " + host + " declares no [[backups.pv]] block on " + manifest.StoreRustfsCentral + " — one of the two is wrong (fort dismantle withdraws it; or add the block)"})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].msg < out[j].msg })

@@ -124,12 +124,13 @@ type view struct {
 	// — no secrets.sops.yaml, no fort-side full form, no
 	// `existingSecret` value the chart never reads.
 	HasSecret bool
-	// Archive: the postgres instance ships base backups + WAL to B2 —
-	// the production profile. Lab and none render no archive at all,
-	// and say so in cluster.yaml (docs/infra/backups.md: no lab fort
-	// archives physically anywhere; "none, documented" is honest).
+	// Archive: the postgres instance ships base backups + WAL to the
+	// store the manifest's [backups.db-physical] block names (b2, the
+	// one store that takes the layer), at BackupHour. No block renders
+	// no archive at all, and says so in cluster.yaml (docs/infra/
+	// backups.md: "none, documented" is honest).
 	Archive                          bool
-	BackupProfile                    string
+	BackupHour                       int
 	ChartURL, ChartRepo, Version, PR string
 	// Main: the fort follows the chart repo's main branch through its
 	// per-commit prereleases, rather than a tag or a PR.
@@ -234,13 +235,13 @@ func planAdd(o addOpts) (*plan, error) {
 	repoPath := strings.SplitN(strings.TrimPrefix(o.ref, "oci://"), ":", 2)[0]
 	v := view{
 		Fort: o.fort, App: app, SecretName: app + "-env",
-		NoContract:    !c.Present,
-		Lab:           !entry.Cloud(),
-		Archive:       entry.Backups.Profile == "production",
-		BackupProfile: entry.Backups.Profile,
-		ChartURL:      "oci://" + repoPath,
-		ChartRepo:     strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
-		Version:       resolved, PR: o.followPR, Main: o.followMain,
+		NoContract: !c.Present,
+		Lab:        !entry.Cloud(),
+		Archive:    entry.Backups.DBPhysical != nil,
+		BackupHour: entry.Backups.DBPhysical.HourValue(),
+		ChartURL:   "oci://" + repoPath,
+		ChartRepo:  strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
+		Version:    resolved, PR: o.followPR, Main: o.followMain,
 		HTTP: c.HTTP, Metrics: c.Metrics,
 		GatewayPatchesComment:  gatewayPatchesComment,
 		ValkeyPatchesComment:   valkeyPatchesComment,
@@ -316,8 +317,8 @@ func planAdd(o addOpts) (*plan, error) {
 	values := map[string]any{}
 	providers := map[string]providerBinding{} // "type.handle" → outputs + the secret output's var
 	// The postgres archive key, when this add creates the instance on a
-	// production fort: listed with the chart's externals so the report
-	// says what to mint and how to set it.
+	// fort with a db-physical block: listed with the chart's externals so
+	// the report says what to mint and how to set it.
 	var dbExternals []contract.Key
 	for _, r := range c.Instances() {
 		if o.without[r.Type] {
@@ -347,13 +348,14 @@ func planAdd(o addOpts) (*plan, error) {
 				// this tenant already registered in its kustomization
 				// and contract (the same shape a later append produces).
 				if v.Archive {
-					// The archive is the profile's: production ships to
+					// The archive is the db-physical block's: it ships to
 					// B2 through the barman-cloud plugin with the fort's
 					// own key, which the report lists as the external it
-					// is (mint, then seed --set). Lab renders none.
+					// is (mint, then seed --set), nightly at the block's
+					// hour. No block renders none.
 					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster postgres: greenfield, barman archive to B2 (plugin), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "objectstore.yaml"), mark: '●', note: "ObjectStore b2: s3://sfi-db-physical-backups/" + o.fort + ", the fort's own key", content: render("postgres/objectstore.yaml.gotpl")})
-					p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup via the plugin (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
+					p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: fmt.Sprintf("nightly base backup via the plugin at %02d:00 UTC ([backups.db-physical] hour)", v.BackupHour), content: render("postgres/scheduled-backup.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-backup (the fort's B2 db-physical key, external) + secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
@@ -362,7 +364,7 @@ func planAdd(o addOpts) (*plan, error) {
 						{Name: "ACCESS_SECRET_KEY", External: "postgres: the same mint; `fort seed " + o.fort + " postgres --set ACCESS_SECRET_KEY --write`"},
 					}
 				} else {
-					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster postgres: greenfield, NO archive (profile " + v.BackupProfile + "), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster postgres: greenfield, NO archive (no [backups.db-physical] block), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 				}
