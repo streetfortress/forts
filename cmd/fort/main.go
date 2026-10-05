@@ -343,12 +343,12 @@ func usage() {
       shared-infrastructure recipient (then sops updatekeys on the files
       that lost it), the wireguard peer, flux/clusters/<host> and
       flux/apps/<host> — and prints the
-      residue: every remaining mention of the host for the reviewer to
-      triage in the same PR, cross-fort sops refs into it, and whether
-      the host is the fleet's B2 pruner (#400: its sops file names
-      restic-prune-s3-env-b2; destroy revokes the key). Touches
-      no pulumi state: fort destroy is the second, gated step after the
-      merge.
+      residue: every remaining mention of the host that the plan does not
+      settle, for the reviewer to triage in the same PR, cross-fort sops
+      refs into it, and whether the host is the fleet's B2 pruner (#400:
+      its sops file names restic-prune-s3-env-b2; destroy revokes the
+      key). Touches no pulumi state: the report's last line is the one
+      next step, fort destroy <host> after the merge.
 
   destroy <host> [--yes] [--no-stack]
       the half with side effects outside git, gated on the merge: refuses

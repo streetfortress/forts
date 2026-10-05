@@ -29,14 +29,14 @@ dismantle sfi-x   (cloud: linode)
 ◆ mesh/ssh_config           re-rendered without sfi-x
 ◆ mesh/known_hosts          - the sfi-x line
 ○ provisioning/console-passwords.yaml   - the sfi-x entry (its console passphrase, #524)
-! residue — 3 file(s) still mention sfi-x; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):
-    README.md: 2 mention(s)   (doc)
-    flux/apps/luxor/monitoring/s3-exporter-targets.yaml: 3 mention(s)   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
+○ flux/apps/luxor/rustfs-central/users.sops.yaml   - the fort-sfi-x-pv entry (its identity on the hub's rustfs)
+! residue — 3 file(s) still mention sfi-x:
+    README.md: 2   (doc)
+    flux/apps/luxor/monitoring/s3-exporter-targets.yaml: 3   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)
     cmd/fort/testdata/forts/sfi-x/…   (CLI test fixture / golden — keep)
-· pulumi stack `sfi-x` still exists — untouched by design; `fort destroy sfi-x` after this merges. `just iac-drift` is red for it in between, which is the correct signal.
 · the gitea deploy key `flux-sfi-x` stays registered until fort destroy revokes it.
 
-staged. Next: triage the residue, commit, PR — then fort destroy after the merge.
+Dismantle staged. Merge, then run `fort destroy sfi-x` to delete the pulumi stack.
 ```
 
 Three things deserve the explanation:
@@ -55,7 +55,12 @@ Three things deserve the explanation:
   retired host loses access in the same PR.
 - **The residue is a report, not an action.** Everything outside the
   generated surface that still names the host is listed with a triage
-  hint: docs and CLI fixtures are usually kept (history, goldens); the
+  hint — and nothing the retirement already settles is listed at all:
+  the console registry and the hub's rustfs users file lose the host's
+  entry in this plan, and the stack config goes with the stack in `fort
+  destroy`, so all three get a `○` line of their own instead of a
+  residue count. What the list holds is work for the reviewer, one item
+  per line. Docs and CLI fixtures are usually kept (history, goldens); the
   cluster's own file on the hub (`clusters/<host>.yaml`, its dead man's
   switch and datasource) is part of the generated surface and goes with
   the plan, so anything else under central monitoring that names the
@@ -82,10 +87,13 @@ planned only where the host's rule block exists.
 
 ## What stays, on purpose
 
-- **The pulumi stack** and its state. Touching it here would put a
-  provider-side action inside a repo mutation; `destroy` is gated on this
-  PR's merge instead, and `fort preview --all` reports the stack as
-  `PENDING` until then.
+- **The pulumi stack**, its state and its config file
+  (`provisioning/pulumi/Pulumi.<host>.yaml`). Touching them here would
+  put a provider-side action inside a repo mutation; `destroy` is gated
+  on this PR's merge instead, and `fort preview --all` reports the stack
+  as `PENDING` until then. `just iac-drift` is red for the host between
+  the merge and the destroy, which is the correct signal. The last line
+  of the report is that one next step.
 - **The gitea deploy key**, revoked by `destroy`.
 - **The B2 keys**, the fort's own and — when this host is the pruner —
   `sfi-b2-pruning-key`, revoked by `destroy`.

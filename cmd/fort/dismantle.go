@@ -66,6 +66,7 @@ type dismantlePlan struct {
 	rustfsUser  string
 	rustfsUsers string   // the hub's users file the identity is withdrawn from   // the fort's identity to withdraw from luxor's provider contract
 	consolePass bool     // the fort has an entry in the console-password registry
+	stack       bool     // a pulumi stack exists: fort destroy deletes it after the merge
 	pruner      bool     // the fort's sops file names restic-prune-s3-env-b2: it holds the fleet's B2 pruning key (#400)
 	residue     []string // "path: N mention(s)"
 	crossRefs   []string // other forts' contracts sourcing from this fort
@@ -146,32 +147,10 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		return nil, err
 	}
 
-	// 5. residue: everything else that still names the host — counted
-	// on the post-edit text for the files this plan edits, so a dry run
-	// shows what the reviewer will actually face.
-	edited := map[string]string{}
-	for _, e := range p.edits {
-		raw, err := os.ReadFile(filepath.Join(root, e.path))
-		if err != nil {
-			continue
-		}
-		if out, err := e.fn(string(raw)); err == nil {
-			edited[e.path] = out
-		}
-	}
-	if p.sshConfig != "" {
-		edited[sshConfigPath] = p.sshConfig
-	}
-	if p.knownHosts != "" {
-		edited[knownHostsPath] = p.knownHosts
-	}
-	p.residue, p.crossRefs = scanResidue(root, host, p.removes, edited)
-	if exists(root, filepath.Join("forts/pulumi", "Pulumi."+host+".yaml")) || exists(root, filepath.Join("provisioning/pulumi/state/.pulumi/stacks/forts", host+".json")) {
-		p.notes = append(p.notes, "pulumi stack `"+host+"` still exists — untouched by design; `fort destroy "+host+"` after this merges (docs/destroy.md). `just iac-drift` is red for it in between, which is the correct signal.")
-	}
-	if !entry.Realized() {
-		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack — after this merges, `fort destroy "+host+" --no-stack` revokes the deploy key and B2 keys mint made; the machine itself is powered off and its disk wiped by hand (docs/baremetal.md).")
-	}
+	// 5. the credentials and the stack this fort still owns. They come
+	// before the residue scan, because the scan skips the files they
+	// account for (p.settled).
+	//
 	// The registration with the hub's rustfs-central lives in the hub's
 	// tree, because that fort hosts the backup destination.
 	// Withdrawing it is what makes the credential go away
@@ -192,12 +171,58 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// key dies with it. Dismantle never reaches outside the tree, so
 	// this is reported, not acted on — destroy revokes.
 	p.pruner = holdsPruneKey(root, host)
+	p.stack = exists(root, stackConfigPath(host)) || exists(root, stackStatePath(host))
+
+	// 6. residue: everything else that still names the host — counted
+	// on the post-edit text for the files this plan edits, so a dry run
+	// shows what the reviewer will actually face.
+	edited := map[string]string{}
+	for _, e := range p.edits {
+		raw, err := os.ReadFile(filepath.Join(root, e.path))
+		if err != nil {
+			continue
+		}
+		if out, err := e.fn(string(raw)); err == nil {
+			edited[e.path] = out
+		}
+	}
+	if p.sshConfig != "" {
+		edited[sshConfigPath] = p.sshConfig
+	}
+	if p.knownHosts != "" {
+		edited[knownHostsPath] = p.knownHosts
+	}
+	p.residue, p.crossRefs = scanResidue(root, host, append(p.settled(), p.removes...), edited)
+	if !entry.Realized() {
+		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
+	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
 	if p.entry.Backups.Profile == "production" {
 		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
 	}
 	sort.Strings(p.removes)
 	return p, nil
+}
+
+// settled names the files this retirement already accounts for, so the
+// residue scan must not count them. Two of them lose the host's entry in
+// apply, through `sops unset` — the registry of console passphrases and
+// the hub's rustfs users file. Their post-edit text is not computable
+// here, because the files are encrypted, so the plan names the file
+// instead. The third is the pulumi stack config, which `fort destroy`
+// deletes with the stack after the merge.
+func (p *dismantlePlan) settled() []string {
+	var out []string
+	if p.consolePass {
+		out = append(out, consoleRegistry)
+	}
+	if p.rustfsUser != "" {
+		out = append(out, p.rustfsUsers)
+	}
+	if p.stack {
+		out = append(out, stackConfigPath(p.host))
+	}
+	return out
 }
 
 func (p *dismantlePlan) apply(tool secretsTool) error {
@@ -285,6 +310,9 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	if p.consolePass {
 		fmt.Fprintf(w, "○ %-32s - the %s entry (its console passphrase, #524)\n", consoleRegistry, p.host)
 	}
+	if p.rustfsUser != "" {
+		fmt.Fprintf(w, "○ %-32s - the %s entry (its identity on the hub's rustfs)\n", p.rustfsUsers, p.rustfsUser)
+	}
 	if len(p.crossRefs) > 0 {
 		fmt.Fprintln(w, "! cross-fort sops refs INTO this fort — those contracts lose their source (fort check will fail them):")
 		for _, r := range p.crossRefs {
@@ -295,7 +323,7 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "! %s is the fleet's B2 pruner — %s names %s, the env file sfi.pv-prune's b2 tier reads. fort destroy revokes %s with the host, and the fleet then has no B2 pruner: enable sfi.pv-prune's b2 tier on another host and mint again (fort b2-key pruning --write). fort check --all warns until then.\n", p.host, filepath.Join("nixos/secrets", p.host+".yaml"), pruneEnvKey(pruneTierB2), b2PruningKeyName)
 	}
 	if len(p.residue) > 0 {
-		fmt.Fprintf(w, "! residue — %d file(s) still mention %s; triage in the same PR (incident comments may be worth keeping as provenance — the reviewer's call):\n", len(p.residue), p.host)
+		fmt.Fprintf(w, "! residue — %d file(s) still mention %s:\n", len(p.residue), p.host)
 		for _, r := range p.residue {
 			fmt.Fprintf(w, "    %s\n", r)
 		}
@@ -308,7 +336,11 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing changed (dismantle --write).")
 		return
 	}
-	fmt.Fprintln(w, "staged. Next: triage the residue, commit, PR — then fort destroy after the merge.")
+	if p.stack {
+		fmt.Fprintf(w, "Dismantle staged. Merge, then run `fort destroy %s` to delete the pulumi stack.\n", p.host)
+		return
+	}
+	fmt.Fprintf(w, "Dismantle staged. Merge, then run `fort destroy %s --no-stack` to revoke the fort's identities.\n", p.host)
 }
 
 // planMesh re-renders the client-side files (mesh.go) on the peers.json
@@ -402,13 +434,15 @@ func removePeer(text, host string) (string, error) {
 
 var textExt = map[string]bool{".yaml": true, ".yml": true, ".nix": true, ".md": true, ".json": true, ".py": true, ".go": true, ".gotpl": true, ".sh": true, ".txt": true, ".conf": true, "": true}
 
-// scanResidue lists every tracked text file outside the removed paths
-// that still mentions the host (edited files are judged on their
-// post-edit text), tagged for triage, and every other fort's contract
-// whose sops refs point into this fort's app tree.
-func scanResidue(root, host string, removed []string, edited map[string]string) (residue, crossRefs []string) {
-	skip := map[string]bool{"provisioning/pulumi/state": true}
-	for _, r := range removed {
+// scanResidue lists every tracked text file the retirement does not
+// account for and that still mentions the host (edited files are judged
+// on their post-edit text), tagged for triage, and every other fort's
+// contract whose sops refs point into this fort's app tree. The
+// accounted paths are what the plan removes, edits by `sops unset` or
+// hands to `fort destroy` (dismantlePlan.settled).
+func scanResidue(root, host string, accounted []string, edited map[string]string) (residue, crossRefs []string) {
+	skip := map[string]bool{filepath.Join(pulumiProject, "state"): true}
+	for _, r := range accounted {
 		skip[r] = true
 	}
 	skipped := func(rel string) bool {

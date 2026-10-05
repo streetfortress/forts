@@ -128,3 +128,79 @@ func TestDismantleEdits(t *testing.T) {
 		t.Error("missing block should error")
 	}
 }
+
+// The residue report is for the reviewer, so it counts only what the
+// retirement leaves for the reviewer. Three files are not residue: the
+// console registry and the hub's rustfs users file (apply unsets the
+// host's entry in both) and the stack config (`fort destroy` deletes it
+// after the merge). The doc that names the host IS residue.
+func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
+	const host = "dismantle-residue"
+	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
+	tmp := t.TempDir()
+	write := func(rel, content string) {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\nhub = \"luxor\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.94\"\n")
+	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
+	// the three files the retirement settles
+	write(consoleRegistry, host+": ENC[AES256_GCM,data:aaaa,type:str]\nsops:\n    age: []\n")
+	write(rustfsUsersPath("luxor"), "stringData:\n    "+rustfsPVUser(host)+": ENC[AES256_GCM,data:bbbb,type:str]\nsops:\n    age: []\n")
+	write(stackConfigPath(host), "encryptionsalt: v1:abc\nconfig:\n  forts:name: "+host+"\n")
+	// and one the reviewer must still see
+	write("README.md", "# fleet\n\nthe fort "+host+" is mentioned here\n")
+
+	p, err := planDismantle(tmp, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.consolePass || p.rustfsUser != rustfsPVUser(host) || !p.stack {
+		t.Fatalf("plan: consolePass=%v rustfsUser=%q stack=%v", p.consolePass, p.rustfsUser, p.stack)
+	}
+	if len(p.residue) != 1 || !strings.HasPrefix(p.residue[0], "README.md:") {
+		t.Errorf("residue: want README.md alone, got %v", p.residue)
+	}
+	var sb strings.Builder
+	p.report(&sb, true)
+	rep := sb.String()
+	// the report names both settled secrets, so the skip is not silence
+	for _, want := range []string{
+		"! residue — 1 file(s) still mention " + host + ":",
+		"○ " + consoleRegistry,
+		"○ " + rustfsUsersPath("luxor"),
+		"Dismantle staged. Merge, then run `fort destroy " + host + "` to delete the pulumi stack.",
+	} {
+		if !strings.Contains(rep, want) {
+			t.Errorf("report misses %q:\n%s", want, rep)
+		}
+	}
+	for _, unwanted := range []string{"triage", "reviewer's call", stackConfigPath(host) + ":"} {
+		if strings.Contains(rep, unwanted) {
+			t.Errorf("report still says %q:\n%s", unwanted, rep)
+		}
+	}
+}
+
+// Without a stack the next step is the --no-stack destroy, and a dry run
+// never names a next step at all.
+func TestDismantleNextStep(t *testing.T) {
+	p := &dismantlePlan{host: "metal", entry: manifest.Host{Provider: "baremetal"}}
+	var sb strings.Builder
+	p.report(&sb, true)
+	if !strings.Contains(sb.String(), "Dismantle staged. Merge, then run `fort destroy metal --no-stack` to revoke the fort's identities.") {
+		t.Errorf("no stack:\n%s", sb.String())
+	}
+	sb.Reset()
+	p.report(&sb, false)
+	if !strings.Contains(sb.String(), "dry run — nothing changed") || strings.Contains(sb.String(), "Dismantle staged") {
+		t.Errorf("dry run:\n%s", sb.String())
+	}
+}

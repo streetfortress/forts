@@ -55,7 +55,7 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
+	pulumiDir := filepath.Join(root, pulumiProject)
 
 	git, err := tools.Runner("git")
 	if err != nil {
@@ -135,7 +135,7 @@ func destroy(args []string) error {
 	for _, rel := range stateResidue(host) {
 		os.RemoveAll(filepath.Join(pulumiDir, rel))
 	}
-	os.Remove(filepath.Join(pulumiDir, "Pulumi."+host+".yaml"))
+	os.Remove(filepath.Join(root, stackConfigPath(host)))
 
 	// 5. the off-repo identities mint registered.
 	revokeIdentities(root, host)
@@ -198,7 +198,7 @@ func destroyGates(root, host string, onMain, clean, noStack bool) (provider stri
 	if !clean {
 		problems = append(problems, "working tree not clean — the state removal must land as its own commit")
 	}
-	state := filepath.Join(root, "provisioning/pulumi/state/.pulumi/stacks/forts", host+".json")
+	state := filepath.Join(root, stackStatePath(host))
 	raw, err := os.ReadFile(state)
 	if noStack {
 		if err == nil {
@@ -238,6 +238,21 @@ func providerFromState(raw []byte) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no pulumi:providers:* resource in the checkpoint (empty stack?)")
+}
+
+// pulumiProject is the estate's pulumi project directory, and
+// stackConfigPath and stackStatePath are the two files it holds for one
+// stack: the stack's config and its checkpoint under the file backend.
+// `fort destroy` deletes both. `fort dismantle` only reads them, to say
+// whether a stack is still there.
+const pulumiProject = "provisioning/pulumi"
+
+func stackConfigPath(host string) string {
+	return filepath.Join(pulumiProject, "Pulumi."+host+".yaml")
+}
+
+func stackStatePath(host string) string {
+	return filepath.Join(pulumiProject, "state/.pulumi/stacks/forts", host+".json")
 }
 
 // stateResidue: what the file backend leaves behind after stack rm.

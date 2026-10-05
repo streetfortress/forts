@@ -124,6 +124,7 @@ the host side.
 fort dismantle <host> --write   ← the manifest, nix host dir + secrets, both
                                   sops rules (+ updatekeys), the peer, both fleet
                                   trees; prints the residue to triage → PR → merge
+                                  (the residue excludes what the plan settles)
 fort destroy <host>             ← gated on that merge: power off, refresh,
                                   unprotect, destroy, stack rm, deploy key revoked;
                                   state removal staged → "<host>: destroyed" PR
