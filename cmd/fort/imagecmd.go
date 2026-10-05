@@ -34,7 +34,7 @@ import (
 //   - baremetal: ~/.cache/forts/<host>-nixos.img, the raw-efi build, which
 //     a human writes to the machine's disk (docs/baremetal.md). The
 //     channel — the same cidata layout on a USB stick — is #658 and is
-//     not built yet, so a baremetal birth waits for it.
+//     not built yet, so a baremetal provision waits for it.
 //
 // The graft this verb performed until #659 (guestfish writing the key
 // into the image; the baremetal variant kept it last) is gone, and with

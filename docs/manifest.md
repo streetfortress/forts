@@ -112,7 +112,7 @@ than a negated boolean: the reader asks *which datastore*, not *was
 cluster-init set*. `sqlite` (the default — every fort today is a single
 node, and k3s-server with etcd was a third of a 4 GB node, #163/#164) or
 `etcd` (embedded, cluster-init — the opt-in for an HA join; sqlite→etcd
-migrates in place, the reverse is a repave). No `sfi.` prefix and no
+migrates in place, the reverse is a re-provision). No `sfi.` prefix and no
 nesting: TOML dotted keys nest tables, and everything in a manifest is
 ours — if k3s ever needs its own group it becomes `[cluster.k3s]` then.
 scaffold renders `sfi.k3s.datastore = "<value>"` into the host file, always

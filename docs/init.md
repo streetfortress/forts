@@ -1,4 +1,4 @@
-# fort init — birth an estate
+# fort init — create an estate
 
 ```
 fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--hub <host>] [--forts <flake url>] [--write]

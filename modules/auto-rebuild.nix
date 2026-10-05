@@ -54,9 +54,9 @@
 #   - Auth reuses the host's flux-git-deploy-key (read-only deploy key,
 #     already in every flux host's sops file) via GIT_SSH_COMMAND; the
 #     pinned gitea host key matches flux-bootstrap.nix.
-#   - allowReboot off: kernel/major bumps go through the repave path. This
-#     module is the hybrid's "patch" leg — routine changes land within a
-#     minute or two of merging; majors are deliberate.
+#   - allowReboot off: kernel/major bumps go through the re-provision
+#     path. This module is the hybrid's "patch" leg — routine changes land
+#     within a minute or two of merging; majors are deliberate.
 #   - A failed switch fails nixos-upgrade.service and stays on the old
 #     generation (atomic) — and so does an unreachable gitea (gate exit
 #     255; nix would otherwise rebuild the cached clone and report
@@ -346,7 +346,7 @@ in
       # `dir=nixos#<host>` into a bare env assignment, and executes
       # `--upgrade` as a command — the unit fails on every run (caught live
       # by the rebuild-now escape hatch + NixosUpgradeFailed on staging's
-      # first repave).
+      # first re-provision).
       # The allowReboot=false branch upstream is this single line, so
       # replace it wholesale with a properly escaped ref; --refresh bypasses
       # the flake fetcher's cache so every run sees main's tip (upstream

@@ -54,7 +54,7 @@ in
       The k3s datastore: sqlite (a single node, the default) or etcd
       (embedded, cluster-init — the opt-in for an HA join). From the
       manifest's [cluster] datastore; sqlite→etcd migrates in place, the
-      reverse is a repave.
+      reverse is a re-provision.
     '';
   };
 
@@ -106,7 +106,7 @@ in
     # apply; on every restart the SAR passes instantly on the half-applied
     # RBAC, the CCM dies within a second, and the addon controller (which
     # starts a beat later) never gets to finish. sfi-stage-d95cc36 looped
-    # 218 times this way at birth; upstream k3s-io/k3s#7328 is the race.
+    # 218 times this way at bootstrap; upstream k3s-io/k3s#7328 is the race.
     #
     # The signature is stable — ClusterRoleBinding present, RoleBinding
     # absent — and lasts milliseconds on a healthy start, forever in the

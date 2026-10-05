@@ -350,7 +350,7 @@ wiring from plaintext key names without any age key:
    `forts/kustomization.yaml` lists it and every provider dir that is
    there, and no provider dir carries a namespace of its own
    (deployments#671). A pre-#671 `sites-db/`, `valkey/` or `rustfs/` at
-   the apps root is a warning until the fort is reborn.
+   the apps root is a warning until the fort is re-provisioned.
 6. `forts/rustfs/`: every key of `rustfs-users` is sourced by an app on the
    fort (an orphaned key is a live credential with no consumer —
    **fail**), and has its `policies/<name>.json` (the CronJob skips a

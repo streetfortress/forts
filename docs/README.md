@@ -55,14 +55,15 @@ Every fort change follows the same beat, and the reasons are the rules.
    act `protect: true` was guarding for.
 4. **Commit the pulumi state as its own PR.** Apply verbs write the file
    backend under `provisioning/pulumi/state/` and stage it. That PR carries no
-   code, just the checkpoint: it is the provenance of the host's birth (or
-   death), and `fort preview --all` is red until it lands.
+   code, just the checkpoint: it is the provenance — how the host was
+   provisioned, or destroyed — and `fort preview --all` is red until it
+   lands.
 
 The state lives in the repo on purpose: the owning repo is where state
 lives, which dissolves the client-buildout bootstrap problem, and a
 checkpoint in git history is an audit trail no backend gives you for free.
 
-## Birth of a fort
+## The first provision of a fort
 
 ```
 fort init --write        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
@@ -109,11 +110,11 @@ the host side.
   --expect-no-changes`, one `OK` / `DRIFT` / `FAILED` / `PENDING` line per
   stack. `PENDING` means state without a manifest: a dismantle merged and
   `fort destroy` has not run. The `--refresh` block above the program diff
-  compares the provider with the *checkpoint*, not the program — birth-time
+  compares the provider with the *checkpoint*, not the program — provision-time
   outputs (status, disks, firewall devices) look stale there until a
   `pulumi refresh` is committed; only the program diff counts.
 - **A new workload:** `fort add` → `fort seed` → `fort check` → PR, as at
-  birth. Replacing a chart version is an edit to `repository.yaml`
+  the first provision. Replacing a chart version is an edit to `repository.yaml`
   (renovate proposes it; the gate checks the new contract).
 - **OS updates** are pull-based on the host (`auto-rebuild`): a merge to
   main is the deploy. The CLI is not involved.
@@ -189,10 +190,10 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [manifest](manifest.md) — the fort's declaration: neutral intent + one provider table
 - [scaffold](scaffold.md) — the host's generated surface, from its manifest
 - [mint](mint.md) — the host's identity, sops-encrypted in-repo
-- [provision](provision.md) — birth and day-2 applies; `preview`, `adopt`
-- [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the hand-written birth
+- [provision](provision.md) — the first provision and day-2 applies; `preview`, `adopt`
+- [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
 - [add](add.md) — a chart's fort-side tree, from its contract
-- [init](init.md) — birth an estate: the files every other verb assumes
+- [init](init.md) — create an estate: the files every other verb assumes
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
 - [links](links.md) — a host on another estate's mesh: `sfi.links`, the reconciler, the `remotes` entry

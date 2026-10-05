@@ -18,7 +18,7 @@
 # is. It exists for DISPOSABLE forts, where the intervention a runbook
 # needs (delete a Cluster and its PVC so flux recreates it empty; strip a
 # finalizer) is not worth a curated verb each, and where nothing the
-# operator can do costs more than a repave.
+# operator can do costs more than a re-provision.
 #
 # The guard is the import: a host gets this only by naming it in its own
 # default.nix and setting enable, and production.nix hosts must not.

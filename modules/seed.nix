@@ -63,7 +63,7 @@
 #               this one was never open to anyone but root.
 #   baremetal → not yet: the same cidata layout on a USB stick follows
 #               as #658. The image carries no key on this variant either
-#               (#659), so a baremetal birth waits for that channel;
+#               (#659), so a baremetal provision waits for that channel;
 #               enabling this module on it is an eval error until then.
 #
 # Each channel is a pair — open in the initrd, close in stage 2 — and both
@@ -117,7 +117,7 @@ in
       assertions = [
         {
           assertion = channel != null;
-          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud stick for baremetal is #658; a birth on this platform waits for it";
+          message = "sfi.seed: no channel for sfi.platform = \"${config.sfi.platform}\" yet — the NoCloud stick for baremetal is #658; a provision on this platform waits for it";
         }
         {
           assertion = config.boot.initrd.systemd.enable;

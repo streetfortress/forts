@@ -447,7 +447,7 @@ func renderWGConf(m mesh, iface, member string) (string, error) {
 // in peers.json — a fort's, a client's, a linked host's — is inside it,
 // and so is every manifest's mesh_ip. Two estates whose meshes overlap
 // cannot link (deployments#674); the subnet is where that is caught,
-// before a host is born into it.
+// before a host is provisioned into it.
 func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
 	if est.Mesh == "" {
 		return nil

@@ -14,7 +14,7 @@
 # every operator out of every fort at the same time. The policy this
 # module amends — "no account has a password" (ops/deployer.nix, root.nix)
 # — assumes a fort is replaceable. The fleet is one estate now, and a
-# repave is not a remedy for a fault that repaves into the next host.
+# re-provision is not a remedy for a fault that the next host inherits.
 #
 # THIS GRANTS NO NEW REACH. It gives the rungs that already exist a
 # second door:
@@ -42,7 +42,7 @@
 # at evaluation; that assertion is gone with the reason for it). The
 # credential is minted per fort by `fort mint`, with the rest of the
 # identity, or by `fort console-password <host> --write` for a host that
-# opted in after its birth; either writes the hash here and the
+# opted in after the first provision; either writes the hash here and the
 # passphrase into provisioning/console-passwords.yaml — the registry an
 # operator reads with `console-password --show`, encrypted to the admin
 # age keys and NOT to the fort. A host holds the hash and nothing more,

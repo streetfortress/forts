@@ -66,7 +66,7 @@ import (
 // shared console session, after a drill — so rotation stays here, as
 // `--rotate`, and `--show` is the read. `--write` without `--rotate`
 // mints only where mint did not: a host that enabled the module after
-// its birth.
+// the first provision.
 //
 // SCOPE: every fort. ops/ops-commands.nix pins every sfi-* sudo rule to
 // `deployer`, and the account is ops/deployer.nix's on cluster forts and

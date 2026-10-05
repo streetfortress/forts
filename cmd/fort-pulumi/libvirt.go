@@ -21,12 +21,12 @@ import (
 // the LAN bridge and the lab dnsmasq are the hypervisor's, and the
 // host's own nftables is the only filter, as for every lab VM today.
 //
-// The birth-input discipline is the same as Linode's but the artifact
+// The provision-input discipline is the same as Linode's but the artifact
 // is not consumed: the uploaded volume IS the root disk. `forts:imageId`
 // records the image's path (provenance); the volume ignores changes to
-// `source`, so the local file is deleted after the birth (hygiene — it
+// `source`, so the local file is deleted after the provision (hygiene — it
 // holds no secret, #659) and a rebuilt image never proposes a disk
-// replacement — a repave is `pulumi destroy` + provision, deliberately.
+// replacement — a re-provision is `pulumi destroy` + provision, deliberately.
 //
 // The seed (#657; the model is #605's option 2): the host's ssh host key
 // travels apart from the image, as a NoCloud cidata volume — the
@@ -38,12 +38,12 @@ import (
 // is borrowed. `fort provision` hands the seed over in seed.Env (base64,
 // as for Linode) when the apply creates the domain, and records
 // `forts:seed = nocloud` on the stack: the program declares the volume
-// whenever that key is set, so a host born before the channel existed
-// (the three adopted lab VMs, and the dev fort born from an image that
-// carried the key) never sees a
+// whenever that key is set, so a host provisioned before the channel
+// existed (the three adopted lab VMs, and the dev fort provisioned from
+// an image that carried the key) never sees a
 // spurious ISO proposed on a day-2 apply. userData is a pulumi secret
 // and ignored after creation, as the Linode instance ignores metadatas:
-// a rotation of the host key is a repave, never a diff on a running
+// a rotation of the host key is a re-provision, never a diff on a running
 // domain. The volume stays in the pool for the domain's life — `pulumi
 // destroy` removes the domain, then it — and it holds the key in plain
 // text, as the root qcow2 beside it does: #605 accepts this trust in the
@@ -65,7 +65,7 @@ const (
 	libvirtPool   = "images"
 	libvirtBridge = "br0"
 	// seedChannel is the value of the stack's `forts:seed` config that
-	// says the host was born with the cidata volume (#657). `fort
+	// says the host was provisioned with the cidata volume (#657). `fort
 	// provision` sets it when the apply creates the domain; the name is
 	// the channel's in nixos/modules/seed.nix.
 	seedChannel = "nocloud"
@@ -96,9 +96,9 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		return err
 	}
 
-	// The seed volume, for a host born with the channel (the type comment).
-	// userData comes from the environment when this run carries the seed
-	// (fort provision does, when the apply creates the domain; a bare
+	// The seed volume, for a host provisioned with the channel (the type
+	// comment). userData comes from the environment when this run carries
+	// the seed (fort provision does, when the apply creates the domain; a bare
 	// `pulumi preview` from provisioning/pulumi does not, and ignoreChanges keeps
 	// the recorded value for an existing volume either way). Secret from
 	// the first moment the engine sees it. metaData is the datasource's
@@ -142,9 +142,9 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 			&libvirt.DomainDiskArgs{File: vol.ID()},
 		},
 		// The seed volume as a CD-ROM (the provider appends it after the
-		// disks, raw driver, serial "cloudinit"); nil for a host born
-		// before the channel. The XSLT below leaves it alone: it matches
-		// device='disk' only.
+		// disks, raw driver, serial "cloudinit"); nil for a host
+		// provisioned before the channel. The XSLT below leaves it alone:
+		// it matches device='disk' only.
 		Cloudinit: cloudinit,
 		NetworkInterfaces: libvirt.DomainNetworkInterfaceArray{
 			&libvirt.DomainNetworkInterfaceArgs{Bridge: pulumi.String(libvirtBridge)},
@@ -175,15 +175,15 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		// patch the driver in the rendered XML — the provider's own
 		// escape hatch for exactly this.
 		Xml: &libvirt.DomainXmlArgs{Xslt: pulumi.String(qcow2DriverXSLT)},
-		// Birth-time shape, ignored after creation: the provider reads a
+		// Provision-time shape, ignored after creation: the provider reads a
 		// pool-resident file disk back as a volume ref, and reads no
 		// consoles/graphics/defaults back from a playbook-defined domain
 		// (fort adopt) — every one of these is replace-forcing, and a
-		// different shape IS a repave (destroy + provision), never an
+		// different shape IS a re-provision (destroy + provision), never an
 		// in-place change. What stays managed live: autostart, running,
 		// memory, vcpu (the last two also replace: a deliberate act).
 		// cloudinit joins the list for the seed's reason: the key on the
-		// volume is the one the host was born with, and the provider
+		// volume is the one the host was provisioned with, and the provider
 		// would otherwise re-attach a changed ISO on the next reboot.
 	}, append(opts, pulumi.IgnoreChanges([]string{"disks", "consoles", "graphics", "xml", "type", "fwCfgName", "qemuAgent", "cloudinit"}))...)
 	if err != nil {

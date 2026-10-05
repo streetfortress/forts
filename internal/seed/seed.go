@@ -1,5 +1,5 @@
 // Package seed is the Go side of the seed format (#606; the decision is
-// deployments#605): what travels from the repo to a fort at birth, through
+// deployments#605): what travels from the repo to a fort at bootstrap, through
 // the channel its platform provides, so the bootstrap image carries no
 // secret. The reader on the host is nixos/modules/seed/reader.sh, and the
 // two must agree on the format — this package's test is that contract.

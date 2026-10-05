@@ -99,7 +99,7 @@ func usage() {
   read    check, preview, wg-conf
 
   init --name <estate> --repo <git url> --admin <age1…> [--hub <host>] [--write]
-      birth an estate: render into the root of a git checkout the files
+      create an estate: render into the root of a git checkout the files
       every other verb assumes — estate.toml, the estate flake (sfi/forts
       as inputs.forts), the two sops rule files with the admin
       recipients, the empty mesh, the Pulumi project file, the shared
@@ -177,7 +177,7 @@ func usage() {
       rotate (--rotate) and read (--show) the console password of the
       host's deployer account (#524); fort mint mints the first one with
       the identity, and --write alone mints it only for a host that
-      enabled the door after its birth. Two halves for two readers: the yescrypt hash into
+      enabled the door after the first provision. Two halves for two readers: the yescrypt hash into
       nixos/secrets/<host>.yaml as deployer-password-hash, which the
       HOST reads, and the passphrase into
       provisioning/console-passwords.yaml, the registry an OPERATOR
@@ -227,7 +227,7 @@ func usage() {
   provision <host> [--image <path>] [--yes]
       apply the host's pulumi stack (execs 'pulumi up -s <host>'; you read
       the preview, or --yes confirms it — an agent, a script, CI; without
-      a TTY and without --yes the verb refuses up front). With --image, the birth: create the stack if the host
+      a TTY and without --yes the verb refuses up front). With --image, the first provision: create the stack if the host
       has none, stage the bootstrap image and record it as the stack's
       forts:imageId — linode: upload the .img.gz; libvirt: grow the
       .qcow2 to disk_size, the program streams it into the pool as the
@@ -238,12 +238,12 @@ func usage() {
       hands the host key seed to the program, read from nixos/secrets/
       <host>.yaml: metadata.user_data on the instance (#606) or a NoCloud
       cidata volume on the domain (#657), and records forts:seed. Without
-      --image a host with no stack is refused. The state (and at birth
-      Pulumi.<host>.yaml) is staged for its own PR. A [baremetal] host is
+      --image a host with no stack is refused. The state (and at the
+      first provision, Pulumi.<host>.yaml) is staged for its own PR. A [baremetal] host is
       refused outright: no backend raises it.
 
   adopt <host> [--yes]
-      bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a repave: rescan the pool, import the
+      bring a playbook-era lab VM (a [libvirt] manifest, no stack yet) under the backend WITHOUT a re-provision: rescan the pool, import the
       live domain + volume into a new stack (reads the hypervisor, writes
       local state only), preview the program against them and refuse
       unless the only changes are live properties (autostart, running),

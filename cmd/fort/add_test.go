@@ -287,7 +287,7 @@ func TestAddFreshCloudFort(t *testing.T) {
 }
 
 // The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
-// a postgres born with NO archive (forts#5): no ObjectStore, no
+// a postgres rendered with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {
 	testAddFresh(t, addFixture{fort: "lab-fort", golden: "testdata/golden/fresh-lab", chart: "sfi-website", version: "0.3.0"})
@@ -343,7 +343,7 @@ func TestAddFollowMain(t *testing.T) {
 
 // The s3 provider on a fresh lab fort (#326): gallery requires postgres
 // and s3, so the tree gets forts/postgres AND forts/rustfs from template — the
-// rustfs instance born with its first tenant registered (bucket line,
+// rustfs instance rendered with its first tenant registered (bucket line,
 // policy document, identity key) — and the app contract carries one
 // var per provider over the conventional sops refs.
 func TestAddFreshS3(t *testing.T) {

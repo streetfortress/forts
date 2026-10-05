@@ -126,7 +126,7 @@ type ClusterSpec struct {
 	// Datastore is k3s's datastore: "sqlite" (a single node, the
 	// default — every fort today) or "etcd" (embedded, cluster-init;
 	// the opt-in for an HA join, and a third of a 4 GB node, #163/#164).
-	// sqlite→etcd migrates in place; the reverse is a repave.
+	// sqlite→etcd migrates in place; the reverse is a re-provision.
 	Datastore string `toml:"datastore"`
 	// AuditLogging: the API server writes an audit log under
 	// /var/log/kube-audit (modules/k3s-audit.nix), and the fleet's

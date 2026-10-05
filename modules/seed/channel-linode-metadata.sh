@@ -74,7 +74,7 @@ sfi_seed_channel() {
   fi
   sfi_seed_link_down
   if [ -z "$data" ]; then
-    echo "sfi-seed: the instance has no user_data (was it born through fort provision?)" >&2
+    echo "sfi-seed: the instance has no user_data (did fort provision create it?)" >&2
     return 1
   fi
   printf '%s' "$data" | base64 -d

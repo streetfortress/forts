@@ -14,16 +14,17 @@ import (
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
-// provision is the birth flow (#42): the bootstrap image is uploaded,
-// consumed by `pulumi up`, then deleted on both sides. The image is
-// deliberately NOT a pulumi resource — it is a birth input
-// (forts/README.md has the full argument); pulumi owns only the durable
-// surface (instance, firewall, DNS), and the apply is still the stock
-// CLI with inherited stdio: a human reads the preview and confirms.
+// provision is the flow that creates the host (#42): the bootstrap
+// image is uploaded, consumed by `pulumi up`, then deleted on both
+// sides. The image is deliberately NOT a pulumi resource — it is a
+// provision input (forts/README.md has the full argument); pulumi owns
+// only the durable surface (instance, firewall, DNS), and the apply is
+// still the stock CLI with inherited stdio: a human reads the preview
+// and confirms.
 //
 // Without --image this is just a `pulumi up -s <host>` wrapper — the
-// stack's forts:imageId is already set from the birth run, and the
-// instance ignores changes to it.
+// stack's forts:imageId is already set from the first provision, and
+// the instance ignores changes to it.
 //
 // The image holds no secret (#605, #659): it is the plain build output
 // of `fort image`. The host's ssh host key travels through the
@@ -81,31 +82,31 @@ func provision(args []string) error {
 		return err
 	}
 	if initNeeded {
-		// Birth: the stack is created here, not by hand — its config
-		// file (Pulumi.<host>.yaml, the encryption salt) and the
-		// checkpoint are what the state PR carries.
+		// The first provision: the stack is created here, not by hand —
+		// its config file (Pulumi.<host>.yaml, the encryption salt) and
+		// the checkpoint are what the state PR carries.
 		if err := initStack(pulumiDir, host); err != nil {
 			return err
 		}
 	}
 	// The seed for the platform's channel, read only when this apply
-	// creates the host (PR #654 review): a day-2 apply on a live host
-	// would otherwise put the key in plain text in the environment of
-	// pulumi and of every plugin it spawns, for nothing — the programs
-	// ignore the seed on an existing host either way. The question is
-	// "does the stack hold the host", not "was --image given": a retry of
-	// a failed birth runs without --image and must still create it with
-	// the seed. A replacement never creates one here — the root disk's
-	// image is gone after birth, so a replace is a repave through destroy
-	// and provision, which reads the seed again — and a host deleted
-	// behind pulumi's back is the same story.
+	// creates the host (PR #654 review): a day-2 apply on a live host would
+	// otherwise put the key in plain text in the environment of pulumi and
+	// of every plugin it spawns, for nothing — the programs ignore the seed
+	// on an existing host either way. The question is "does the stack hold
+	// the host", not "was --image given": a retry of a failed provision
+	// runs without --image and must still create it with the seed. A
+	// replacement never creates one here — the root disk's image is gone
+	// after the provision, so a replace is a re-provision through destroy
+	// and provision, which reads the seed again — and a host deleted behind
+	// pulumi's back is the same story.
 	need, err := stackNeedsSeed(pulumiDir, host, entry.Provider)
 	if err != nil {
 		return err
 	}
 	if need {
-		// A birth without a seed is a boot that stops in the initrd, and
-		// the console is a worse place to learn that than here.
+		// A provision without a seed is a boot that stops in the initrd,
+		// and the console is a worse place to learn that than here.
 		ud, err := hostSeedUserData(sopsCLI{root: root}, root, host)
 		if err != nil {
 			return fmt.Errorf("the host key seed for the %s channel: %w", seedChannels[entry.Provider], err)
@@ -119,11 +120,11 @@ func provision(args []string) error {
 				return err
 			}
 		}
-		// Committed provenance: which channel the host was born through
-		// (#657). The libvirt program declares the seed volume only when
-		// this says so, so a host born before the channel — adopted, or
-		// born from an image that carried the key — never sees an empty
-		// ISO proposed on a day-2 apply.
+		// Committed provenance: which channel the host was provisioned
+		// through (#657). The libvirt program declares the seed volume
+		// only when this says so, so a host provisioned before the channel
+		// — adopted, or provisioned from an image that carried the key —
+		// never sees an empty ISO proposed on a day-2 apply.
 		if err := runPulumi(pulumiDir, "config", "set", "seed", seedChannels[entry.Provider], "--stack", host); err != nil {
 			return fmt.Errorf("recording the seed channel: %w", err)
 		}
@@ -143,7 +144,7 @@ func provision(args []string) error {
 		}
 		imageID = id
 		// Committed provenance: the stack config records which image the
-		// host was born from; the program reads it at creation only.
+		// host was provisioned from; the program reads it at creation only.
 		if err := runPulumi(pulumiDir, "config", "set", "imageId", imageID, "--stack", host); err != nil {
 			return fmt.Errorf("recording imageId (image %s stays staged): %w", imageID, err)
 		}
@@ -155,8 +156,8 @@ func provision(args []string) error {
 		}
 		return err
 	}
-	// The apply verbs stage the file backend: the checkpoint (and, at
-	// birth, Pulumi.<host>.yaml) is the state PR.
+	// The apply verbs stage the file backend: the checkpoint (and, at the
+	// first provision, Pulumi.<host>.yaml) is the state PR.
 	stage(root)
 
 	if flow != nil {
@@ -210,17 +211,17 @@ func hasStack(pulumiDir, host string) bool {
 }
 
 // stackGate decides, before anything touches the provider, whether
-// provision creates the host's stack. A birth (--image) creates it when
-// absent, so `pulumi stack init` is no longer a by-hand step (#250
-// finding 15). A day-2 apply on a host with no stack refuses: that is a
-// typo or a host not yet born, and an empty stack would put a host that
-// never was on `preview --all`.
-func stackGate(pulumiDir, host string, birth bool) (initNeeded bool, err error) {
+// provision creates the host's stack. The first provision (--image)
+// creates it when absent, so `pulumi stack init` is no longer a by-hand
+// step (#250 finding 15). A day-2 apply on a host with no stack refuses:
+// that is a typo or a host not yet provisioned, and an empty stack would
+// put a host that never was on `preview --all`.
+func stackGate(pulumiDir, host string, first bool) (initNeeded bool, err error) {
 	if hasStack(pulumiDir, host) {
 		return false, nil
 	}
-	if !birth {
-		return false, fmt.Errorf("host %q has no stack — a birth needs --image (fort image %s, then fort provision %s --image …)", host, host, host)
+	if !first {
+		return false, fmt.Errorf("host %q has no stack — the first provision needs --image (fort image %s, then fort provision %s --image …)", host, host, host)
 	}
 	return true, nil
 }
@@ -236,7 +237,7 @@ var seedHostTypes = map[string]string{
 
 // seedChannels is, per provider, the channel the seed travels through
 // (nixos/modules/seed.nix's names) — recorded on the stack as
-// `forts:seed` at birth.
+// `forts:seed` at the first provision.
 var seedChannels = map[string]string{
 	"linode":  "linode-metadata",
 	"libvirt": "nocloud",
@@ -315,9 +316,9 @@ func outputPulumi(dir string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// stage puts the file backend in the index: the checkpoint (and, at
-// birth, Pulumi.<host>.yaml) is the state PR. Best effort, as it was
-// before the tool set — the apply already happened, and the commit is
+// stage puts the file backend in the index: the checkpoint (and, at the
+// first provision, Pulumi.<host>.yaml) is the state PR. Best effort, as
+// it was before the tool set — the apply already happened, and the commit is
 // the operator's either way.
 func stage(root string) {
 	if git, err := tools.Command("git", "-C", root, "add", "-A", "provisioning/pulumi"); err == nil {

@@ -83,21 +83,21 @@ The baremetal channel is the same NoCloud `cidata` layout the lab reads,
 on a USB stick, with a verb to write it — #658, deferred until the next
 machine (likely #125). Until it lands, an image written by the runbook
 below boots with no key on its root: sops-nix cannot decrypt, and wg0,
-k3s and flux never start. A baremetal birth waits for #658.
-`sfi-fort-zenbook`, the one baremetal fort, was born before the channel
+k3s and flux never start. A baremetal provision waits for #658.
+`sfi-fort-zenbook`, the one baremetal fort, came up before the channel
 and keeps its key on the root; no rebuild touches it.
 
 ## Writing the image — the runbook
 
 The writer is the stock NixOS minimal ISO on a USB stick and `dd`. It
-keeps the birth identical to a VM's: the artifact `fort image` produced
+keeps the provision identical to a VM's: the artifact `fort image` produced
 is what boots, and nothing is placed by hand on the machine. The host
 key arrives through the channel above.
 
-**Before the machine is touched**: if it is being *repaved* (an existing
-host becoming a fort), everything on its disk is gone at step 4. Its data
-must already be somewhere else and verified there. For zenbook that is
-the gitea interim's hop one (#338); the write happens only after the
+**Before the machine is touched**: if it is being *re-provisioned* (an
+existing host becoming a fort), everything on its disk is gone at step 4.
+Its data must already be somewhere else and verified there. For zenbook that
+is the gitea interim's hop one (#338); the write happens only after the
 interim has served through the name.
 
 1. **The stick.** Any NixOS minimal ISO of a recent release
@@ -137,7 +137,7 @@ interim has served through the name.
    get gitrepository -n flux-system` through the ops-ro kubeconfig.
 
 Nothing is registered anywhere: no stack, no `Pulumi.<host>.yaml`, no
-state PR. `git log` on the manifest is the provenance of the birth.
+state PR. `git log` on the manifest is the provenance of the provision.
 
 ## What is proven, and where
 

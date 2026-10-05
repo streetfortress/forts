@@ -31,7 +31,7 @@ Consequences worth knowing:
   orphan key. Rotation is a deliberate act — remove the key from the sops
   file first — never a side effect.
 - **The host's ssh key doubles as its age identity** (ssh-to-age): the
-  recipient in the sops rule is derived from it, and the birth reads the
+  recipient in the sops rule is derived from it, and the provision reads the
   same key back — `fort provision` hands it to the platform's channel
   (the Linode Metadata service, #606; the lab's NoCloud volume, #657;
   the baremetal stick, #658) — so the host boots already able to

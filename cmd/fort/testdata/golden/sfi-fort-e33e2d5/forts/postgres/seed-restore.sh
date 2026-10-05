@@ -27,7 +27,7 @@ echo "   cluster: $(psql -XAtc "select current_setting('server_version')")"
 echo "== the target must be virgin"
 n=$(psql -XAtd "$db" -c "select count(*) from pg_tables where schemaname not in ('pg_catalog','information_schema')")
 echo "   user tables in $db: $n"
-test "$n" = "0" || { echo "REFUSING: $db is not empty — this cluster already holds data. A lab fort repaves; it does not get loaded twice."; exit 1; }
+test "$n" = "0" || { echo "REFUSING: $db is not empty — this cluster already holds data. A lab fort is re-provisioned; it does not get loaded twice."; exit 1; }
 
 # Extensions come from the sidecar, created here by the superuser before
 # the restore, and their TOC entries are filtered out of the restore —

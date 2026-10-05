@@ -215,7 +215,7 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 
 // legacyProviderDirs are the pre-#671 provider dirs at the apps root,
 // each with a namespace of its own. A fort that still has one converges
-// at its rebirth (a renamed CNPG Cluster is a new cluster plus a
+// at its re-provision (a renamed CNPG Cluster is a new cluster plus a
 // restore, never an edit in place); until then check says so, once per
 // dir, and nothing else about them.
 var legacyProviderDirs = map[string]string{"postgres": "sites-db", "valkey": "valkey", "s3": "rustfs"}
@@ -233,7 +233,7 @@ func checkFortsNamespace(root, fort string) []finding {
 	for _, typ := range contract.Types {
 		old := legacyProviderDirs[typ]
 		if exists(root, filepath.Join(apps, old)) {
-			out = append(out, finding{"warning", filepath.Join(apps, old), "a provider dir at the apps root predates the forts namespace (deployments#671) — the fort converges at rebirth: fort add renders " + providerDirs[typ] + "/ on the new fort"})
+			out = append(out, finding{"warning", filepath.Join(apps, old), "a provider dir at the apps root predates the forts namespace (deployments#671) — the fort converges at the re-provision: fort add renders " + providerDirs[typ] + "/ on the new fort"})
 		}
 	}
 	fortsRoot := filepath.Join(apps, fortsDir)

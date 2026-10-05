@@ -90,7 +90,7 @@ func TestRenderScaffold(t *testing.T) {
 	// The operator defaults (sfi/forts#24): the shell at a pane and the
 	// console door on every shape, imported and enabled — the first fort
 	// of a new estate came up with neither, and both had to be added by
-	// hand after birth. The secrets.nix names the key the door reads.
+	// hand after the provision. The secrets.nix names the key the door reads.
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
 		got := m["nixos/hosts/"+name+"/default.nix"]
 		for _, s := range operatorDefaults {

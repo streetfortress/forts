@@ -2,7 +2,7 @@
 # One line per app on this fort, bucket = <app> with no fort prefix
 # (docs/infra/backups.md, "Fort-local rustfs": the instance is already the
 # scope, and a generated fort name in the bucket would churn every app's
-# config on a rebirth). `fort add` appends a line here when a later app
+# config on a re-provision). `fort add` appends a line here when a later app
 # requires s3; `rc bucket create` never deletes, so a bucket outlives its
 # line until removed by hand — the Job only guarantees what IS listed
 # exists. `--ignore-existing` makes it idempotent. No

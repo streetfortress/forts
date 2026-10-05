@@ -21,8 +21,8 @@ sfi_seed_fail() {
   echo "sfi-seed: $1"
   echo "sfi-seed: the root has no /etc/ssh/ssh_host_ed25519_key, and sops-nix cannot"
   echo "sfi-seed: decrypt this host's secrets without it. Stage 2 would activate with"
-  echo "sfi-seed: no secret, so the boot stops here. A fort born through fort provision"
-  echo "sfi-seed: gets its key from the @channel@ channel (docs/provision.md)."
+  echo "sfi-seed: no secret, so the boot stops here. fort provision gives a fort"
+  echo "sfi-seed: its key through the @channel@ channel (docs/provision.md)."
   echo "sfi-seed: Place the key by hand from a rescue boot, or destroy and provision"
   echo "sfi-seed: the host again."
   echo

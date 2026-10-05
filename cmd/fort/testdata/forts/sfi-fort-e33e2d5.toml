@@ -1,12 +1,12 @@
 # sfi-fort-e33e2d5 — the fort CLI's test environment, on the lab hypervisor.
 #
-# Born as the CNPG backup-drill fort (generated-name convention): seed the
+# Created as the CNPG backup-drill fort (generated-name convention): seed the
 # sites-db monolith from db2, barman-archive to luxor's rustfs (mesh NodePort
-# 30900), repave, restore via bootstrap.recovery — proving repaves ride the
-# physical path. Same SKU as staging so the restore-vs-import timing is
-# honest. Disposable by design. Adopted under the libvirt backend 2026-09-14
-# (fort adopt: imported, no repave) — the first of the playbook-era VMs to
-# move.
+# 30900), re-provision, restore via bootstrap.recovery — proving a re-provision
+# rides the physical path. Same SKU as staging so the restore-vs-import timing
+# is honest. Disposable by design. Adopted under the libvirt backend 2026-09-14
+# (fort adopt: imported, no re-provision) — the first of the playbook-era VMs
+# to move.
 mesh_ip = "10.1.0.15"
 
 [cluster]

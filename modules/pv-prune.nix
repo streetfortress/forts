@@ -14,7 +14,7 @@
 #
 # WHAT IT PRUNES IS DISCOVERED, NOT CONFIGURED. Repos are the top-level
 # prefixes of the bucket — one per fort, `<fort>/` — so the list is read
-# from the bucket at run time. A fort born yesterday is pruned tonight
+# from the bucket at run time. A fort provisioned yesterday is pruned tonight
 # with no config change, and a retired fort's repo keeps ageing out on
 # its own policy instead of being forgotten about. A prefix without a
 # restic `config` object is skipped and named, so a stray upload can

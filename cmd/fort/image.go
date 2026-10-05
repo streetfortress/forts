@@ -11,7 +11,7 @@ import (
 	"github.com/linode/linodego"
 )
 
-// imageFlow is the per-provider half of the birth flow (#42): how the
+// imageFlow is the per-provider half of the provision flow (#42): how the
 // bootstrap image — the plain build output of `fort image`, no secret
 // inside (#659) — reaches the pulumi program, and how it goes away once
 // the host exists. The program itself only ever sees `forts:imageId` —
@@ -21,7 +21,7 @@ type imageFlow interface {
 	// as forts:imageId. It must leave the artifact retrievable if the
 	// apply then fails (the retry runs without --image).
 	Stage(ctx context.Context, entry manifest.Host, host, path string) (id string, err error)
-	// Release deletes the artifact after a confirmed birth: provider-side
+	// Release deletes the artifact after a confirmed provision: provider-side
 	// where one exists (Linode bills custom images), then the local copy.
 	// Hygiene: the host does not need the image once it has booted.
 	Release(ctx context.Context, id, path string) error

@@ -9,12 +9,12 @@
 #
 # Greenfield: no bootstrap block, so CNPG initdb's its default app/app
 # database and the tenants' Database CRs create theirs. A fort that is
-# born from a backup instead flips this to bootstrap.recovery by hand
+# provisioned from a backup instead flips this to bootstrap.recovery by hand
 # (the drill fort's cluster.yaml in the CLI's golden tree is the worked
 # example); initdb/recovery only run at cluster CREATION, so that is a
-# repave, never a live edit. A fort born from a fort that predates the
-# forts namespace recovers from externalClusters serverName sites-db-v1
-# (deployments#671).
+# re-provision, never a live edit. A fort provisioned from a fort that
+# predates the forts namespace recovers from externalClusters serverName
+# sites-db-v1 (deployments#671).
 #
 # The name is the type: `postgres`, so the Services read as what they
 # are (postgres-rw.forts), and the kind already says CNPG.
@@ -38,12 +38,12 @@ spec:
   # console login.
   enableSuperuserAccess: false
 
-  # Continuous archiving from day one, so the fort is born on the
+  # Continuous archiving from day one, so the fort starts on the
   # physical-restore path: base backups + WAL to B2 through the
   # barman-cloud plugin — objectstore.yaml carries the destination and
   # the fort's own key (the in-tree barmanObjectStore is deprecated and
   # pointed every fort at luxor's rustfs until 2026-09-18). serverName
-  # is versioned for the restore cycle: a repave that recovers FROM v1
+  # is versioned for the restore cycle: a re-provision that recovers FROM v1
   # archives as v2. No retentionPolicy: the fort's key cannot delete,
   # the bucket's lifecycle rule is the retention (objectstore.yaml).
   plugins:

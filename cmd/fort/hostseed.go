@@ -38,8 +38,9 @@ func hostKeyPair(tool secretsTool, root, host string) (private, public string, e
 // the Linode Metadata service stores it in metadata.user_data; the
 // libvirt program decodes the same value for the cidata volume. `fort
 // provision` sets it in the environment (seed.Env) of the apply that
-// creates the host — a birth, or a retry of a failed birth (without
-// --image), which is why the question is the stack's and not the flag's.
+// creates the host — the first provision, or a retry of a failed
+// provision (without --image), which is why the question is the stack's
+// and not the flag's.
 // The programs ignore it on a running host.
 func hostSeedUserData(tool secretsTool, root, host string) (string, error) {
 	private, public, err := hostKeyPair(tool, root, host)

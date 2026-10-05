@@ -131,7 +131,7 @@ mesh alone, so a merged change that breaks wireguard locks every
 operator out of every fort at once, and the getty login to `sudo
 sfi-nixos-rollback` is the way back in (#524). The first fort of
 sfi/second-estate came up with neither, and both had to be added by
-hand after birth; a door each estate must remember to add is not a
+hand after the provision; a door each estate must remember to add is not a
 door. The three cluster forts of sfi/deployments had added the same
 lines by hand.
 

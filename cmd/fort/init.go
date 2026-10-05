@@ -15,7 +15,7 @@ import (
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 )
 
-// init is the verb that births an estate (#385): the files a checkout
+// init is the verb that creates an estate (#385): the files a checkout
 // needs before its first `fort scaffold` — what every verb assumes is
 // there. estate.toml (the estate's name, git URL and hub), the estate
 // flake (sfi/forts as inputs.forts, hosts auto-discovered), the two sops
@@ -83,7 +83,7 @@ func initCmd(args []string) error {
 		return fmt.Errorf("fort init renders into the root of a git checkout — git init first (%w)", err)
 	}
 	if exists(root, estate.Path) {
-		return fmt.Errorf("%s already has %s — this checkout is an estate; init births one, it does not re-render", root, estate.Path)
+		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
 	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Mesh: est.Mesh, Interface: est.Interface, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
 	if err != nil {

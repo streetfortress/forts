@@ -36,7 +36,7 @@ import (
 // mint registered (deploy key, B2 keys). The machine itself goes by hand
 // (docs/baremetal.md). The flag is a declaration, not a detection:
 // with the manifest gone nothing says whether "no stack" meant hardware
-// or a host never born, and only a human knows which.
+// or a host never provisioned, and only a human knows which.
 func destroy(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort destroy <host> [--yes] [--no-stack]")

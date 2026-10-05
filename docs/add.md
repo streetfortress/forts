@@ -207,7 +207,7 @@ two keys are `external` — the fort's own `sfi-db-physical-<fort>` key,
 minted by `fort b2-key db-physical <fort> --write` and set with
 `fort seed <fort> postgres --set`. `lab` (and `none`) render **no archive**
 and say so in `cluster.yaml`: no lab fort ships barman anywhere, and a
-cluster silently born archiving into nothing is the failure the backups
+cluster that silently archives into nothing is the failure the backups
 design refuses ([`docs/infra/backups.md`](../infra/backups.md)). Tenants
 are then registered the same way on either: a `Database` CR, a JSON6902 patch adding the
 role to `spec.managed.roles` (kept an empty list in the template so the
@@ -311,13 +311,13 @@ then: review, commit, PR — flux applies on merge.
   lists that no chart asked for: mint it, seed it, and only then merge —
   the `ObjectStore` with an empty Secret is a cluster that archives
   nothing while its manifest says `production`.
-- **A fort born from a backup** flips the greenfield `postgres` cluster
+- **A fort provisioned from a backup** flips the greenfield `postgres` cluster
   to `bootstrap.recovery` by hand before the first apply; initdb and
-  recovery run at creation only, so it is a repave, never a live edit.
+  recovery run at creation only, so it is a re-provision, never a live edit.
   The barman plugin stores a cluster under its `serverName`, so a fort
-  born from a fort that predates the forts namespace recovers from
-  `serverName: sites-db-v1` in the `externalClusters` block.
-  Stagger the nightly backup hour across forts while you are there.
+  provisioned from a fort that predates the forts namespace recovers from
+  `serverName: sites-db-v1` in the `externalClusters` block. Stagger the
+  nightly backup hour across forts while you are there.
 - **Alert rules are policy**: the PodMonitor is rendered, the rules that
   page someone are added by hand.
 

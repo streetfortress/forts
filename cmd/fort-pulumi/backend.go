@@ -9,7 +9,7 @@ import (
 // provider-side surface is deliberately three things — instance, firewall,
 // DNS — because the mesh owns machine-to-machine traffic, flux owns
 // everything above the machine (no managed services: rustfs/valkey/cnpg
-// ride the clusters), and the bootstrap image is a birth input owned by
+// ride the clusters), and the bootstrap image is a provision input owned by
 // `fort provision`, not a resource.
 type Backend interface {
 	Provision(ctx *pulumi.Context, name string, host manifest.Host) error

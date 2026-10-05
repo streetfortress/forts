@@ -13,7 +13,7 @@
 #      release — same name + namespace — and reconciles to its own pin after);
 #      a release left `pending-*` by an earlier run that died mid-install
 #      is cleared first, since helm refuses every operation while one is
-#      pending (#408: the birth run was SIGTERMed with k3s and every later
+#      pending (#408: the bootstrap run was SIGTERMed with k3s and every later
 #      run failed "another operation is in progress" until a human deleted
 #      the release secret)
 #   7. apply the cluster's FluxInstance
@@ -79,7 +79,7 @@ in
     sops.secrets.flux-sops-age-key = { };
     sops.secrets.flux-git-deploy-key = { };
 
-    # Day 0 is when k3s is most likely to flap under it (#408: the birth
+    # Day 0 is when k3s is most likely to flap under it (#408: the day-0
     # bootstrap died with k3s and the fort had to be rebooted to retry) —
     # a oneshot's retry is a restart.
     sfi.ops.restartableUnits = [ "flux-bootstrap" ];

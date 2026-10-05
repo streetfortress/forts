@@ -15,11 +15,11 @@ import (
 )
 
 // adopt brings a playbook-era lab VM under the libvirt backend without a
-// repave: the live domain and its volume are imported into a new stack
+// re-provision: the live domain and its volume are imported into a new stack
 // (read-only against the hypervisor), then the program is previewed
 // against them and the only changes allowed through are the live ones
 // (autostart, running) — anything replace-forcing means the program's
-// shape and the VM's differ, and adopt refuses rather than repave. The
+// shape and the VM's differ, and adopt refuses rather than re-provision. The
 // one `pulumi up` that follows (you confirm) converges autostart, which
 // the playbook never set. Provenance: forts:imageId records the
 // adoption, not an image. After this, `fort destroy` is the VM's exit.
@@ -153,7 +153,7 @@ func adoptable(previewJSON string) error {
 		}
 	}
 	if len(bad) > 0 {
-		return fmt.Errorf("the program would change more than the live properties — the VM's shape differs from what the backend renders (a repave, not an adoption):\n  %s", strings.Join(bad, "\n  "))
+		return fmt.Errorf("the program would change more than the live properties — the VM's shape differs from what the backend renders (a re-provision, not an adoption):\n  %s", strings.Join(bad, "\n  "))
 	}
 	return nil
 }

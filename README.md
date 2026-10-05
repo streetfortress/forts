@@ -14,7 +14,7 @@ cmd/fort/          the CLI; templates/scaffold, templates/add and templates/init
                    skeleton, the shared flux layer included) are what it renders
 cmd/fort-pulumi/   the pulumi program fort provision execs
 internal/          manifest, contract, seed, b2, tools (the CLI's tool set: internal/tools/tools.json)
-tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh births one with fort init
+tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh creates one with fort init
 docs/              the CLI handbook — start at docs/README.md
 ```
 
@@ -61,7 +61,7 @@ rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
   host carries `protect: true` so even that requires deliberate
   unprotecting first.
 
-## The image is a birth input, not a resource
+## The image is a provision input, not a resource
 
 The bootstrap image is the plain build output of `fort image` (#42,
 #659): built, uploaded, consumed by instance creation, then deleted on
@@ -82,10 +82,10 @@ in both lifecycle directions:
 Same shape as Packer→AMI→Terraform: the artifact is a pipeline step, IaC
 consumes its ID. So `fort provision --image` uploads via the Linode API,
 records the ID as stack config `forts:imageId` (committed provenance:
-which image this host was born from), execs `pulumi up`, and deletes the
+which image this host was provisioned from), execs `pulumi up`, and deletes the
 image provider-side and locally once the instance exists — hygiene,
 because Linode bills a custom image for as long as it exists, not
-custody. The instance sets `ignoreChanges: ["image"]` — birth input, not
+custody. The instance sets `ignoreChanges: ["image"]` — a provision input, not a
 managed property — which keeps refresh and drift green after the image
 is gone.
 
@@ -118,13 +118,13 @@ order); a `<disk type='volume'>` never starts under Ubuntu's AppArmor
 helper, so the domain uses a file disk on the volume's path; and a file
 disk renders `driver type='raw'`, so an XSLT (the provider's escape
 hatch) sets qcow2. The uploaded volume IS the root disk: not consumed,
-`source` and `disks` ignored after birth — a different disk is a repave
-(`pulumi destroy` + provision), never an in-place change. The host key
-rides beside it (#657): a cloud-init disk `<host>-seed.iso` in the same
-pool, the NoCloud `cidata` layout, attached as an IDE CD-ROM and read by
-the initrd; `user_data` is a pulumi secret, ignored after birth, and the
-provider needs `mkisofs` on the machine that runs the apply (nixpkgs'
-`cdrtools`, which the `fort` package carries).
+`source` and `disks` ignored after the provision — a different disk is a
+re-provision (`pulumi destroy` + provision), never an in-place change. The
+host key rides beside it (#657): a cloud-init disk `<host>-seed.iso` in the
+same pool, the NoCloud `cidata` layout, attached as an IDE CD-ROM and read
+by the initrd; `user_data` is a pulumi secret, ignored after the provision,
+and the provider needs `mkisofs` on the machine that runs the apply
+(nixpkgs' `cdrtools`, which the `fort` package carries).
 
 ```
 fort image lab1                                      # nix build (KVM: devbox); the key rides on the seed volume, not in the image
@@ -132,20 +132,21 @@ fort provision lab1 --image ~/.cache/forts/lab1-nixos.qcow2
 ```
 
 Hosts without `provider` are untouched. A playbook-era VM joins without
-a repave: set `provider: libvirt` on its entry and run `fort adopt
+a re-provision: set `provider: libvirt` on its entry and run `fort adopt
 <host>` — the live domain and volume are imported (read-only against
 the hypervisor), the program is previewed against them, and only live
 properties (autostart, which the playbook never set) are allowed to
-change; anything replace-forcing refuses. Birth-time shape (disk,
+change; anything replace-forcing refuses. Provision-time shape (disk,
 consoles, graphics, the driver XSLT, the provider's defaults) is ignored
-after creation for exactly this reason — a different shape is a repave.
-`fort destroy` for a lab host is the same `pulumi destroy` as for a
-cloud one.
+after creation for exactly this reason — a different shape is a
+re-provision. `fort destroy` for a lab host is the same `pulumi destroy` as
+for a cloud one.
 
 ## Setup
 
 None per host: `fort provision <host> --image …` creates the stack at
-birth (`fort adopt` at adoption), and `fort destroy` removes it.
+the first provision (`fort adopt` at adoption), and `fort destroy`
+removes it.
 
 `fort` commands pin `PULUMI_BACKEND_URL` to this checkout's
 `provisioning/pulumi/state`, so no `pulumi login` is needed for them — and a

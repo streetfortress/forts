@@ -19,7 +19,7 @@
 # fort's image carries no host key; the key arrives on the cidata volume
 # pulumi-libvirt attaches to the domain (cmd/fort-pulumi/libvirt.go), placed
 # by the initrd before activation. A host whose key is already on the
-# root (a host born before the channel, and every switch of a running
+# root (a host provisioned before the channel, and every switch of a running
 # host) boots unchanged — the reader finds the key and returns.
 #
 # Priorities: mkDefault wherever the image variant (or grub.nix's

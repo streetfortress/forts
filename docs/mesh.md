@@ -19,7 +19,7 @@ and `fort check --all` says so (`estate.toml   mesh 10.2.0.0/24 — 3
 address(es) inside it`; an address outside is an error). Two estates
 link only when their meshes do not overlap, so the subnet is the first
 thing a new estate chooses: `fort init --mesh <cidr>`. The key is
-optional for an estate born before it existed; such an estate is checked
+optional for an estate created before it existed; such an estate is checked
 by nothing, as before. The convention in the lab is that a fort's last
 octet follows its LAN address.
 

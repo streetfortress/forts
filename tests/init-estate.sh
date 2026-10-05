@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The exit test of fort init (deployments#385, step 5): an estate born
-# from it, with one plain fort scaffolded in, evaluates against THIS
+# The exit test of fort init (deployments#385, step 5): the estate it
+# creates, with one plain fort scaffolded in, evaluates against THIS
 # checkout as its framework input. No build: the eval of the host's
 # toplevel derivation is the proof the pieces compose.
 #
@@ -29,4 +29,4 @@ nix flake lock ./nixos --override-input forts "path:$repo"
 echo "== eval plain-fort"
 nix eval --raw ./nixos#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath --override-input forts "path:$repo"
 echo
-echo "ok: an estate born from fort init evaluates against this checkout"
+echo "ok: an estate that fort init created evaluates against this checkout"

@@ -1,8 +1,8 @@
 # Load the promoted symbology seed into this cluster (seed-restore.sh).
 # SUSPENDED: flip `suspend` to false once the cluster has been (re)created
 # from cluster.yaml's empty initdb; bump seed.sfi/run to run again after a
-# failure (a lab fort that half-loaded repaves rather than being loaded
-# twice — the script refuses a non-empty database).
+# failure (a lab fort that half-loaded is re-provisioned rather than
+# loaded twice — the script refuses a non-empty database).
 #
 #   fetch    rclone     sfi-seeds-reader   latest.dump + latest.json → emptyDir
 #   restore  postgres   the superuser      checksum, extensions, pg_restore

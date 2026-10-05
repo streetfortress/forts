@@ -228,7 +228,7 @@ in
       description = ''
         The repo's prefix inside the bucket, and the `namePrefix` a
         fort's B2 key is restricted to. The hostname by default: a fort
-        is never renamed, and a rebirth deliberately starts a fresh
+        is never renamed, and a re-provision deliberately starts a fresh
         prefix that ages out on its own retention.
       '';
     };

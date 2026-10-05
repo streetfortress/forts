@@ -8,13 +8,13 @@
 # is borrowed, this script is the reader. The file is the seed text
 # itself — no base64 on this channel, unlike the Metadata service's.
 #
-# The device: udev links it as /dev/disk/by-label/cidata once the
-# controller driver (ata_piix on the i440FX machine libvirt defaults to,
-# ahci on q35), sr_mod and the iso9660 filesystem (the module is isofs)
-# are in the initrd — seed.nix lists them. The wait is bounded: a domain born without the
-# volume must stop in the initrd with the reader's message, not hang. The
-# mount is read-only and undone before the seed is returned, so nothing of
-# the initrd's view of the volume survives into stage 2.
+# The device: udev links it as /dev/disk/by-label/cidata once the controller
+# driver (ata_piix on the i440FX machine libvirt defaults to, ahci on q35),
+# sr_mod and the iso9660 filesystem (the module is isofs) are in the initrd
+# — seed.nix lists them. The wait is bounded: a domain provisioned without
+# the volume must stop in the initrd with the reader's message, not hang.
+# The mount is read-only and undone before the seed is returned, so nothing
+# of the initrd's view of the volume survives into stage 2.
 #
 # The same layout serves the baremetal channel (#658): a second USB stick
 # labelled cidata, with a longer wait for USB enumeration.

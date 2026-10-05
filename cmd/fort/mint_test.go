@@ -363,9 +363,10 @@ func TestMintPlainFort(t *testing.T) {
 	}
 }
 
-// The console door at birth (sfi/forts#24): a host whose default.nix
-// enables sfi.ops.console gets the credential with its identity — the
-// hash as one more key of the secrets file, the passphrase in the
+// The console door at the first provision (sfi/forts#24): a host whose
+// default.nix enables sfi.ops.console gets the credential with its
+// identity — the hash as one more key of the secrets file, the
+// passphrase in the
 // registry, the registry written first. Restore-not-rotate holds: a
 // re-run mints nothing, and a hash whose passphrase is gone from the
 // registry is reported, never replaced — console-password --rotate is

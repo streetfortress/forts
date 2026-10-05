@@ -27,7 +27,7 @@ import (
 
 // orphanAllowlist: host dirs allowed to exist without a manifest. Empty
 // since zenbook — the hand-managed gitea laptop that predated the
-// manifests — was repaved as a fort (#338); every host has a manifest.
+// manifests — was re-provisioned as a fort (#338); every host has a manifest.
 var orphanAllowlist = map[string]bool{}
 
 // The shared layers every cluster reconciles; built once per run and

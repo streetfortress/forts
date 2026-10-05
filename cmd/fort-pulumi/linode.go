@@ -46,10 +46,10 @@ func linodePlanDiskMB(instanceType string) (int, error) {
 // reads metadata.user_data in the initrd, #606) and flux-bootstraps itself
 // — no SSH in the provisioning path.
 //
-// The image itself is NOT a resource here. It is a birth input (#42):
+// The image itself is NOT a resource here. It is a provision input (#42):
 // `fort provision --image` uploads it, sets `forts:imageId` on the stack,
 // and deletes it (provider-side and local) once the instance exists. The
-// root disk carries ignoreChanges on `image` — a birth input, not a
+// root disk carries ignoreChanges on `image` — a provision input, not a
 // managed property, so neither the image's deletion nor a later rebuild
 // ever diffs a running host. Since #606 the image carries no secret;
 // the delete is hygiene (Linode bills custom images), not custody (#659).
@@ -63,9 +63,9 @@ func linodePlanDiskMB(instanceType string) (int, error) {
 // recorded in docs/provision.md. The instance ignores changes to
 // `metadatas`: Linode's metadata cannot change on a running instance (the
 // rebuild endpoint takes new metadata with new disks, and a rebuild is a
-// repave), the API never returns user_data (only has_user_data, so a
+// re-provision), the API never returns user_data (only has_user_data, so a
 // refresh reads it back empty), and a re-minted key must show as a
-// deliberate repave, not as a diff on a running host.
+// deliberate re-provision, not as a diff on a running host.
 //
 // The instance is built the explicit way — empty instance + disks +
 // config profile — rather than instance-from-image, because the implicit
@@ -87,7 +87,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 
 	// Set by `fort provision --image` after uploading the artifact. It
 	// stays in Pulumi.<host>.yaml as committed provenance:
-	// the record of which image this host was born from.
+	// the record of which image this host was provisioned from.
 	imageID := config.Require(ctx, "forts:imageId")
 
 	// protect applies to every fort and to the whole host surface, not just
@@ -174,7 +174,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		// provider implements as a shutdown (caught on the first
 		// `preview --refresh` after the fort went live, 2026-09-13).
 		// `metadatas` for the reasons in the type comment: fixed for the
-		// instance's life, never read back, and a rotation is a repave.
+		// instance's life, never read back, and a rotation is a re-provision.
 	}, append(opts,
 		pulumi.IgnoreChanges([]string{"booted", "metadatas"}),
 		pulumi.AdditionalSecretOutputs([]string{"metadatas"}),
