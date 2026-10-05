@@ -39,8 +39,17 @@ jobs:
       - name: Eval every host with a manifest
         run: |
           set -euo pipefail
+          # nullglob: with no manifest the bare glob would stay literal and
+          # basename would print "*", which re-globs to every top-level entry.
+          shopt -s nullglob
+          manifests=(forts/*.toml)
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            echo "no fort has a manifest; nothing to eval"
+            exit 0
+          fi
           fail=0
-          for host in $(basename -s .toml forts/*.toml); do
+          for f in "${manifests[@]}"; do
+            host=$(basename -s .toml "$f")
             echo "== nix eval $host"
             if ! nix eval --raw "./nixos#nixosConfigurations.${host}.config.system.build.toplevel.drvPath"; then
               echo "::error::nix eval failed for ${host}"
