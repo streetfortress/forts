@@ -264,8 +264,9 @@ func usage() {
       render a chart's fort-side tree from the forts.contract.yaml it
       ships (docs/fort-configuration-contracts.md): app dir + HelmRelease with the
       contract's wire: values filled by convention, gateway listener +
-      certificate, provider instances (valkey) on first need and tenant
-      registration (sites-db, valkey) after that, the seeding contract.
+      certificate, provider instances (forts/postgres, forts/valkey,
+      forts/rustfs — one namespace, forts) on first need and tenant
+      registration after that, the seeding contract.
       New files + appended list entries only; prints the marked tree.
       --write lays it down for a PR, then seed the ◆ files. --follow-pr
       pins a PR's per-commit preview charts via a semver filter, and
@@ -279,7 +280,8 @@ func usage() {
       committed full-form forts.contract.yaml where there is one, else
       the chart's own contract (pulled at the pinned tag) + the fort's
       overlay, resolved against the fort's providers by convention.
-      A <dir> is the app's name (sites-db) or its repo-relative path;
+      A <dir> is the app's name (symbology), a provider's (postgres,
+      valkey, rustfs — under forts/) or its repo-relative path;
       dirs default to every contract/chart dir of the fort, in
       dependency order. Existing files are never rewritten: missing keys
       are added (sops set); --set KEY takes one value from stdin for an

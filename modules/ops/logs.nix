@@ -2,7 +2,7 @@
 # exists (#185).
 #
 #   sudo sfi-k8s-logs                                  # menu: pods + phase
-#   sudo sfi-k8s-logs sites-db-1 sites-db
+#   sudo sfi-k8s-logs postgres-1 forts
 #   sudo sfi-k8s-logs symbology-worker-abc symbology --previous
 #   sudo sfi-k8s-logs source-controller-x flux-system --tail 500
 #

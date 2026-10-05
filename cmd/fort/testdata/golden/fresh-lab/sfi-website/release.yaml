@@ -1,6 +1,6 @@
 # sfi-website — HelmRelease rendered by `fort add` from the chart's contract:
 # the `wire:` values paths are filled from the fort's providers by
-# convention (postgres → the shared sites-db, tenant `sfi-website`); password-class
+# convention (postgres → the fort's postgres, tenant `sfi-website`); password-class
 # keys ride the sfi-website-env Secret. Retry forever: the first install
 # races its providers (and a preview pin races the images) — never park
 # on a failed release waiting for an ops nudge. Refine in place after
@@ -29,6 +29,6 @@ spec:
     ui:
       env:
         POSTGRES_DB: sfi-website
-        POSTGRES_HOST: sites-db-rw.sites-db.svc.cluster.local
+        POSTGRES_HOST: postgres-rw.forts.svc.cluster.local
         POSTGRES_PORT: "5432"
         POSTGRES_USER: sfi-website

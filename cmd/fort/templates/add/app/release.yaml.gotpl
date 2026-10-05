@@ -5,7 +5,7 @@
 {{ else -}}
 # {{ .App }} — HelmRelease rendered by `fort add` from the chart's contract:
 {{ if .ValuesYAML }}# the `wire:` values paths are filled from the fort's providers by
-# convention{{ if .Postgres }} (postgres → the shared sites-db, tenant `{{ .App }}`){{ end }}{{ if .Valkey }}{{ if .Postgres }};{{ end }}
+# convention{{ if .Postgres }} (postgres → the fort's postgres, tenant `{{ .App }}`){{ end }}{{ if .Valkey }}{{ if .Postgres }};{{ end }}
 # (valkey → the shared valkey, ACL user `{{ .App }}`, db{{ .Valkey.DB }}){{ end }}{{ if .S3 }}{{ if or .Postgres .Valkey }};{{ end }}
 # (s3 → the shared rustfs, bucket and identity `{{ .App }}`){{ end }}; {{ if .HasSecret }}password-class
 # keys ride the {{ .SecretName }} Secret{{ else }}the contract declares no

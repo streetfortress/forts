@@ -1,6 +1,6 @@
-# {{ .App }}'s login role on the shared sites-db cluster — appended to
+# {{ .App }}'s login role on the fort's postgres — appended to
 # managed.roles by the patch entry in kustomization.yaml; the password
-# is sites-db-{{ .App }}-credentials (secrets-{{ .App }}.sops.yaml).
+# is postgres-{{ .App }}-credentials (secrets-{{ .App }}.sops.yaml).
 - op: add
   path: /spec/managed/roles/-
   value:
@@ -8,4 +8,4 @@
     ensure: present
     login: true
     passwordSecret:
-      name: sites-db-{{ .App }}-credentials
+      name: postgres-{{ .App }}-credentials

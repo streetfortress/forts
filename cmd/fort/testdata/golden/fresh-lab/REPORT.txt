@@ -1,4 +1,14 @@
 flux/apps/lab-fort/   (chart 0.3.0)
+● forts/
+  ● kustomization.yaml           namespace + postgres
+  ● namespace.yaml               Namespace forts: every provider the fort runs
+  ● postgres/
+    ● cluster.yaml               CNPG Cluster postgres: greenfield, NO archive (profile lab), roles via patches
+    ● database-sfi-website.yaml  Database CR
+    ● forts.contract.yaml        secrets-sfi-website
+    ● kustomization.yaml         patches: role-sfi-website.yaml
+    ● role-sfi-website.yaml      JSON6902 add /spec/managed/roles/-
+    ◆ secrets-sfi-website.sops.yaml seeded
 ● gateway/
   ● certificate-sfi-website.yaml step-ca, sfi-website.lab-fort.lofi
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
@@ -6,7 +16,7 @@ flux/apps/lab-fort/   (chart 0.3.0)
   ● kustomization.yaml           patches: listener-sfi-website.yaml
   ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
   ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sites-db, sfi-website
+○ kustomization.yaml             + gateway, forts, sfi-website
 ● sfi-website/
   ● forts.contract.yaml          pre-`fort seed` full form, 3 keys
   ● kustomization.yaml           
@@ -16,14 +26,6 @@ flux/apps/lab-fort/   (chart 0.3.0)
   ● route.yaml                   HTTPRoute sfi-website.lab-fort.lofi → sfi-website-ui:3000
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
-● sites-db/
-  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, NO archive (profile lab), roles via patches
-  ● database-sfi-website.yaml    Database CR
-  ● forts.contract.yaml          secrets-sfi-website
-  ● kustomization.yaml           patches: role-sfi-website.yaml
-  ● namespace.yaml               
-  ● role-sfi-website.yaml        JSON6902 add /spec/managed/roles/-
-  ◆ secrets-sfi-website.sops.yaml seeded
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed lab-fort --write

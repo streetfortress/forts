@@ -85,7 +85,7 @@ let
       # as an operator runs. The group below quiets the lease of an
       # operator that runs in a platform namespace; this rule reaches
       # the one it cannot — CNPG gives each Cluster its own service
-      # account in the *tenant's* namespace (sites-db on this fort),
+      # account in the *tenant's* namespace (forts on this fort),
       # and that account holds the primary-election lease, so a
       # namespace list would need an edit for every new database
       # (#653). The who, the verb and the name stay in the event.

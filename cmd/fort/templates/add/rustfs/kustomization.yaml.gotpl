@@ -1,7 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
   - repository.yaml
   - release.yaml
   - otel-collector.yaml
@@ -21,6 +20,6 @@ configMapGenerator:
   # below. The namespace is NOT inherited by a generator (a namespaced
   # object without one fails the whole apps layer at apply, 2026-09-16).
   - name: rustfs-policies
-    namespace: rustfs
+    namespace: forts
     files:
       - policies/{{ .App }}.json

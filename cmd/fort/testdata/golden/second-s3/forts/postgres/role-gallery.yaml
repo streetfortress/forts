@@ -1,0 +1,11 @@
+# gallery's login role on the fort's postgres — appended to
+# managed.roles by the patch entry in kustomization.yaml; the password
+# is postgres-gallery-credentials (secrets-gallery.sops.yaml).
+- op: add
+  path: /spec/managed/roles/-
+  value:
+    name: gallery
+    ensure: present
+    login: true
+    passwordSecret:
+      name: postgres-gallery-credentials

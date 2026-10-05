@@ -23,21 +23,21 @@ keys, each key one of:
 |---|---|
 | `generate` | mints a random value (passwords, tokens) |
 | `literal` | writes the given value (usernames, non-secret config) |
-| `sops: [file, path]` | copies a value from another sops file — a provider's output (`sites-db/secrets-<app>.sops.yaml` `stringData.password`), or a sibling fort's file (`../../<fort>/…`, the drill-fort precedent for cloning staging) |
+| `sops: [file, path]` | copies a value from another sops file — a provider's output (`forts/postgres/secrets-<app>.sops.yaml` `stringData.password`), or a sibling fort's file (`../../<fort>/…`, the drill-fort precedent for cloning staging) |
 | `external` | leaves the key **absent until set** — an API key from a third party; `--set KEY` prompts for one value (or reads stdin) |
 
-Providers come first: `sites-db`, `valkey` and `rustfs` dirs are seeded before the
-apps whose `sops:` refs point into them, and the order is derived from
+Providers come first: the `forts/postgres`, `forts/valkey` and `forts/rustfs`
+dirs are seeded before the apps whose `sops:` refs point into them, and the order is derived from
 the refs, not declared. The contract schema itself is in
 [fort configuration contracts](fort-configuration-contracts.md).
 
 ## What it does
 
 ```
-flux/apps/sfi-x/sites-db/   (forts.contract.yaml (full form))
+flux/apps/sfi-x/forts/postgres/   (forts.contract.yaml (full form))
   ◆ secrets-backup.sops.yaml     seeded (2 keys)
   ◆ secrets-symbology.sops.yaml  seeded (2 keys)
-flux/apps/sfi-x/valkey/
+flux/apps/sfi-x/forts/valkey/
   ◆ secrets.sops.yaml            seeded (2 keys)
 flux/apps/sfi-x/symbology/     (chart 0.1.9 contract + overlay)
   ◆ secrets.sops.yaml            seeded (8 keys); absent until set: STRIPE_SECRET_KEY
@@ -72,7 +72,8 @@ dry run — nothing seeded (seed --write).
 - Decrypted material flows through memory only; the report shows key
   names, never values.
 
-`<dir>` is the app's name (`sites-db`) or its repo-relative path; with
+`<dir>` is the app's name (`symbology`), a provider's (`postgres`, `valkey`,
+`rustfs` — they live under `forts/`) or its repo-relative path; with
 none, every contract-bearing dir of the fort in dependency order. A
 named dir with nothing to seed is an error (a typo), an auto-enumerated
 one (the gateway) is skipped.

@@ -14,7 +14,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: rustfs-bucket-init
-  namespace: rustfs
+  namespace: forts
   annotations:
     kustomize.toolkit.fluxcd.io/force: Enabled
 spec:

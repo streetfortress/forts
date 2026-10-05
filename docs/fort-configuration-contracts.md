@@ -33,9 +33,10 @@ One file name, one schema, two locations:
   `requires.<x>.provider` is overridable. It exists only when the fort
   deviates from convention — a non-default provider placement, a
   migration-era seeding source, a superset key kept during a cutover.
-- **Provider directories** (`sites-db/`, `valkey/`, `rustfs/`) are not
-  our charts, so `fort add` renders their contract into the provider dir
-  from its embedded template. Same schema, same seeder, same gate.
+- **Provider directories** (`forts/postgres/`, `forts/valkey/`,
+  `forts/rustfs/`) are not our charts, so `fort add` renders their
+  contract into the provider dir from its embedded template. Same
+  schema, same seeder, same gate.
 
 Charts that ship no contract fall back to the fort-side file being the
 whole contract — which is exactly the nine files the repo carries today.
@@ -145,7 +146,7 @@ satisfies it):
 
 The vocabulary is **closed** and small on purpose: three provider types
 plus `secret`, `http`, `metrics`. No transitive requires (a provider's
-own needs — sites-db's backup credentials, valkey's default user — are
+own needs — postgres's backup credentials, valkey's default user — are
 the provider directory's own contract, rendered from the template).
 Adding a type means adding a template directory to the CLI and a row to
 this table, nothing else.
@@ -180,7 +181,7 @@ needed:
 contract: v1
 requires:
   postgres.db:
-    provider: {fort: db-fort, service: sites-db}   # non-default placement
+    provider: {fort: db-fort, service: postgres}   # non-default placement
 sources:
   legacy-env: ~/app/secrets/production.env         # migration-era seeding input
 secret:
@@ -191,12 +192,13 @@ secret:
 
 `provider` has three shapes, in order of preference:
 
-1. **absent** → shared instance on this fort, named by type (`sites-db`,
-   `valkey`, `rustfs`). Config B is production's topology. Created from
-   the embedded template on first need.
+1. **absent** → shared instance on this fort, under `forts/` in the one
+   namespace `forts`, named for what it is (`postgres`, `valkey`,
+   `rustfs` — deployments#671). Config B is production's topology.
+   Created from the embedded template on first need.
 2. `{dedicated: true}` — the app's own instance in its own namespace
    (`fort add --dedicated postgres`). web3's old shape.
-3. `{fort: db-fort, service: sites-db}` — **another fort's instance over
+3. `{fort: db-fort, service: postgres}` — **another fort's instance over
    the mesh**, for the dedicated-DB-fort + scattered web/cache forts
    topology. Host resolves from the manifest's `mesh_ip` plus the service's
    mesh port; credentials come in as cross-fort `sops:` refs, which the
@@ -224,7 +226,7 @@ Conventions that make the output deterministic (no flags for these):
 |---|---|
 | namespace, release name, app dir | `<app>` = chart name unless `--name` |
 | Secret | `<app>-env` in namespace `<app>` |
-| postgres tenant | database `<app>`, role `<app>`, secret `sites-db-<app>-credentials`, per-tenant file `secrets-<app>.sops.yaml` in the provider dir |
+| postgres tenant | database `<app>`, role `<app>`, secret `postgres-<app>-credentials`, per-tenant file `secrets-<app>.sops.yaml` in the provider dir |
 | valkey tenant | ACL user `<app>`, next free logical db, key `<app>` in the shared `valkey-users` secret |
 | s3 tenant | bucket `<app>` (no fort prefix — [backups](../infra/backups.md), "Fort-local rustfs"), IAM identity `<app>` whose name is its access key, policy `policies/<app>.json`, key `<app>` in the shared `rustfs-users` secret |
 | hostname | `<app>.<fort>.streetfortress.cloud` unless `--hostname` (apex domains are always explicit) |
@@ -309,9 +311,9 @@ with new files + kustomization lines:
 
 | Type | Instance (first need) | Per-tenant files |
 |---|---|---|
-| `postgres` | `sites-db/` from the sfi-prod template (cluster, backup, contract) | `database-<app>.yaml` (Database CR, extensions); `role-<app>.yaml` JSON6902 patch adding the `managed.roles` entry; provider contract gains `secrets-<app>.sops.yaml` (`username` literal, `password` generate hex24) |
-| `valkey` | `valkey/` from PR #182's staging template (cache profile) or luxor's (persistent) | `acl-<app>.yaml` JSON6902 patch adding `auth.aclUsers.<app>`; key `<app>` added to the existing `valkey-users` contract → seeder's **add-missing-keys** mode (`sops set`) |
-| `s3` | `rustfs/` from luxor's template (in-cluster only, no route): the instance, its OTLP→Prometheus bridge and `RustfsDown` rule, the bucket Job, the `rustfs-iam` CronJob, the contract with the root pair and `rustfs-users` | `policies/<app>.json` (get/put/list/delete on `<app>`, nothing else); one `rc bucket create` line in the bucket Job; one `files:` entry in the `rustfs-policies` generator; key `<app>` added to the `rustfs-users` contract → seeder's **add-missing-keys** mode. The CronJob reconciles users and policies into the instance on a 15 min interval and removes any user the contract no longer declares |
+| `postgres` | `forts/postgres/` from the sfi-prod template (cluster, backup, contract) | `database-<app>.yaml` (Database CR, extensions); `role-<app>.yaml` JSON6902 patch adding the `managed.roles` entry; provider contract gains `secrets-<app>.sops.yaml` (`username` literal, `password` generate hex24) |
+| `valkey` | `forts/valkey/` from PR #182's staging template (cache profile) or luxor's (persistent) | `acl-<app>.yaml` JSON6902 patch adding `auth.aclUsers.<app>`; key `<app>` added to the existing `valkey-users` contract → seeder's **add-missing-keys** mode (`sops set`) |
+| `s3` | `forts/rustfs/` from luxor's template (in-cluster only, no route): the instance, its OTLP→Prometheus bridge and `RustfsDown` rule, the bucket Job, the `rustfs-iam` CronJob, the contract with the root pair and `rustfs-users` | `policies/<app>.json` (get/put/list/delete on `<app>`, nothing else); one `rc bucket create` line in the bucket Job; one `files:` entry in the `rustfs-policies` generator; key `<app>` added to the `rustfs-users` contract → seeder's **add-missing-keys** mode. The CronJob reconciles users and policies into the instance on a 15 min interval and removes any user the contract no longer declares |
 
 Operators (CNPG) stay fleet-wide in `flux/infrastructure/controllers`;
 `fort add` never touches the infrastructure layer. If an operator ever
@@ -343,11 +345,13 @@ wiring from plaintext key names without any age key:
    committed file that carries the key.
 4. Every non-optional `requires` instance has its provider dir on the
    fort and its `wire` values paths set in the HelmRelease.
-5. Every provider dir on the fort (`sites-db/`, `valkey/`, `rustfs/`)
-   labels its namespace `forts.sfi/provider: <type>` — the one label that
-   lets the gate and `kubectl get ns -l forts.sfi/provider` enumerate the
-   forts-managed set (#326).
-6. `rustfs/`: every key of `rustfs-users` is sourced by an app on the
+5. Every provider dir on the fort lives under `forts/`, which owns the
+   one Namespace `forts`: `forts/namespace.yaml` is that Namespace,
+   `forts/kustomization.yaml` lists it and every provider dir that is
+   there, and no provider dir carries a namespace of its own
+   (deployments#671). A pre-#671 `sites-db/`, `valkey/` or `rustfs/` at
+   the apps root is a warning until the fort is reborn.
+6. `forts/rustfs/`: every key of `rustfs-users` is sourced by an app on the
    fort (an orphaned key is a live credential with no consumer —
    **fail**), and has its `policies/<name>.json` (the CronJob skips a
    user without one — **fail**); a policy document with no key warns.
@@ -379,7 +383,7 @@ make "deterministic" a checked claim rather than a hope.
 ## Rotation is an operational duty, so design for it now
 
 Every seeding today is create-once (existing files are never
-overwritten), and the lockstep pairs — the sites-db role password
+overwritten), and the lockstep pairs — the postgres role password
 mirrored into symbology's env, the valkey ACL password mirrored as
 `CACHE_PASSWORD` — are exactly where rotation hurts first. The contract
 graph makes it mechanical, with no registry:
@@ -389,7 +393,7 @@ graph makes it mechanical, with no registry:
 1. Regenerate the named `generate:` key(s) in place with `sops set`
    (or take a new `external` value from stdin — same primitive, so an
    API-key rotation is the same command). For a provider tenant secret
-   (`fort rotate <fort> sites-db symbology`), the same.
+   (`fort rotate <fort> postgres symbology`), the same.
 2. Resolve every app's effective contract on the fort; every `template`
    that references the rotated output is re-resolved and `sops set`.
 3. Stage everything, report which Secrets changed. One PR carries the
@@ -449,7 +453,7 @@ Two consequences to accept and record:
    [monitoring.coreos.com, ...]` list, checked by `fort check`), since
    a chart cannot install on a cluster without them.
    **Backups stay fort-ops** (decided 2026-09-13): the CNPG barman
-   archive is the sites-db template's, and a logical-backup CR
+   archive is the postgres template's, and a logical-backup CR
    (databasus-operator) would live fort-side too — its Storage target is
    fort posture (an app's bucket is the app's; a Storage CR is not) — until
    consistent patterns across apps justify contracting it, the way
@@ -486,7 +490,7 @@ worker `metrics`). Two scenarios.
 
 ### A fresh fort
 
-`sfi-fort-e33e2d5` has `sites-db/` and nothing else. After
+`sfi-fort-e33e2d5` has `forts/postgres/` and nothing else. After
 
 ```
 fort add sfi-fort-e33e2d5 oci://gitea.zen.lofi/sfi/symbology:0.1.3 --hostname symbology.online
@@ -497,7 +501,7 @@ the tree (● new, ○ existing + appended lines, ◆ written by seed):
 
 ```
 flux/apps/sfi-fort-e33e2d5/
-○ kustomization.yaml            + gateway, valkey, symbology
+○ kustomization.yaml            + gateway, symbology
 ● gateway/                      first http need → from template
     kustomization.yaml          resources: issuer, gateway.yaml, redirect-https.yaml, certificate-symbology.yaml; patches: listener-symbology.yaml
     cluster-issuer-step-ca.yaml lab issuer (per-lab-cluster, not shared infra)
@@ -505,18 +509,20 @@ flux/apps/sfi-fort-e33e2d5/
     redirect-https.yaml         catch-all http→https 301 on the http listener
     certificate-symbology.yaml  letsencrypt, dnsNames [symbology.online]
     listener-symbology.yaml     JSON6902 add /spec/listeners/- {name: https-symbology, hostname, tls: symbology-tls}
-○ sites-db/                     exists → tenant registration only
-    kustomization.yaml          + database-symbology.yaml; patches: + role-symbology.yaml
-  ● database-symbology.yaml     Database CR: name/owner symbology, extensions [vector]
-  ● role-symbology.yaml         JSON6902 add /spec/managed/roles/- {name: symbology, login, passwordSecret: sites-db-symbology-credentials}
-  ○ forts.contract.yaml         + secrets-symbology.sops.yaml: {username: literal symbology, password: generate hex24}
-  ◆ secrets-symbology.sops.yaml
-● valkey/                       first valkey need → cache-profile template (PR #182)
-    kustomization.yaml, namespace.yaml, repository.yaml
-    release.yaml                aclUsers: default only; patches: acl-symbology.yaml
-    acl-symbology.yaml          JSON6902 add /spec/values/auth/aclUsers/symbology {permissions: "~* &* +@all -@admin -@dangerous"}
-    forts.contract.yaml         valkey-users: {default: generate hex24, symbology: generate hex24}
-  ◆ secrets.sops.yaml
+○ forts/                        the one namespace every provider shares
+  ○ kustomization.yaml          + valkey
+  ○ postgres/                   exists → tenant registration only
+      kustomization.yaml        + database-symbology.yaml; patches: + role-symbology.yaml
+    ● database-symbology.yaml   Database CR: name/owner symbology, extensions [vector]
+    ● role-symbology.yaml       JSON6902 add /spec/managed/roles/- {name: symbology, login, passwordSecret: postgres-symbology-credentials}
+    ○ forts.contract.yaml       + secrets-symbology.sops.yaml: {username: literal symbology, password: generate hex24}
+    ◆ secrets-symbology.sops.yaml
+  ● valkey/                     first valkey need → cache-profile template (PR #182)
+      kustomization.yaml, repository.yaml
+      release.yaml              aclUsers: default only; patches: acl-symbology.yaml
+      acl-symbology.yaml        JSON6902 add /spec/values/auth/aclUsers/symbology {permissions: "~* &* +@all -@admin -@dangerous"}
+      forts.contract.yaml       valkey-users: {default: generate hex24, symbology: generate hex24}
+    ◆ secrets.sops.yaml
 ● symbology/
     kustomization.yaml          namespace, repository, release, secrets.sops.yaml, route, monitoring
     namespace.yaml
@@ -543,12 +549,12 @@ spec:
   values:
     existingSecret: symbology-env
     database:
-      host: sites-db-rw.sites-db.svc.cluster.local
+      host: postgres-rw.forts.svc.cluster.local
       port: "5432"
       name: symbology
       user: symbology
     cache:
-      host: valkey.valkey.svc.cluster.local
+      host: valkey.forts.svc.cluster.local
       port: "6379"
       db: "0"
       user: symbology
@@ -627,9 +633,9 @@ reading the chart's contract, `fort check sfi-prod-439bf72` would say:
   `database.*` in release.yaml (the #180 follow-up), then get dropped
   from the Secret with `sops unset` at the next natural edit.
 - **`wire` unset**: `database.*` values are empty in release.yaml while
-  the contract wires them — set them (the sites-db tenant already exists
+  the contract wires them — set them (the postgres tenant already exists
   under the conventional names, so the values are the ones above).
-- **Optional provider absent**: no `valkey/` on the fort; `cache.*`
+- **Optional provider absent**: no `forts/valkey/` on the fort; `cache.*`
   stays empty; fine.
 - The fort-side `forts.contract.yaml` carries nothing the chart's does
   not, so it is deleted; sfi-prod's symbology dir ends up with no
@@ -652,7 +658,7 @@ human replaced `external` keys with sops refs. Implemented:
   parsing (`internal/contract`), `--chart-dir` for chart authors
 - the app dir; gateway from template on first http need, listener patch
   + certificate after; valkey from the cache template on first need, ACL
-  patch + contract key after; **sites-db from the greenfield template on
+  patch + contract key after; **postgres from the greenfield template on
   first need** (barman archive to luxor's rustfs, roles only via
   patches), tenant registration (Database CR, role patch, contract
   entry) after — tenant present → untouched
@@ -682,7 +688,7 @@ superseded and stays only until the next fort is seeded with the Go one.
 
 `fort check` is the gate above, in CI as of this step.
 
-`fort add` renders the **s3** provider since #326: `rustfs/` from the
+`fort add` renders the **s3** provider since #326: `forts/rustfs/` from the
 embedded template on first need (the instance, its metrics bridge, the
 bucket Job, the IAM CronJob, a contract with the root pair and the
 identity list), then per tenant a policy document, a bucket line, a

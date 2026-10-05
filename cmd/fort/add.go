@@ -124,7 +124,7 @@ type view struct {
 	// — no secrets.sops.yaml, no fort-side full form, no
 	// `existingSecret` value the chart never reads.
 	HasSecret bool
-	// Archive: the sites-db instance ships base backups + WAL to B2 —
+	// Archive: the postgres instance ships base backups + WAL to B2 —
 	// the production profile. Lab and none render no archive at all,
 	// and say so in cluster.yaml (docs/infra/backups.md: no lab fort
 	// archives physically anywhere; "none, documented" is honest).
@@ -145,7 +145,10 @@ type view struct {
 	Vars                                        []ctrVar
 	Keys                                        []NamedSpec
 	GatewayPatchesComment, ValkeyPatchesComment string
-	SitesDBPatchesComment, TenantContractEntry  string
+	PostgresPatchesComment, TenantContractEntry string
+	// Providers: the provider dirs forts/kustomization.yaml lists when
+	// this add creates the forts/ directory (deployments#671).
+	Providers []string
 }
 
 type pgTenant struct {
@@ -173,7 +176,7 @@ const valkeyPatchesComment = `# Tenant registration: one JSON6902 patch per cons
 # to the HelmRelease values (release.yaml carries only the instance and
 # its admin ` + "`default`" + ` user). fort add adds a file + an entry here.
 `
-const sitesDBPatchesComment = `# Tenant registration: one JSON6902 patch per tenant appends its login
+const postgresPatchesComment = `# Tenant registration: one JSON6902 patch per tenant appends its login
 # role to managed.roles (cluster.yaml carries the instance). fort add
 # adds a file + an entry here.
 `
@@ -239,9 +242,9 @@ func planAdd(o addOpts) (*plan, error) {
 		ChartRepo:     strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
 		Version:       resolved, PR: o.followPR, Main: o.followMain,
 		HTTP: c.HTTP, Metrics: c.Metrics,
-		GatewayPatchesComment: gatewayPatchesComment,
-		ValkeyPatchesComment:  valkeyPatchesComment,
-		SitesDBPatchesComment: sitesDBPatchesComment,
+		GatewayPatchesComment:  gatewayPatchesComment,
+		ValkeyPatchesComment:   valkeyPatchesComment,
+		PostgresPatchesComment: postgresPatchesComment,
 	}
 	if v.Lab {
 		v.Issuer, v.Zone = "step-ca", "lofi"
@@ -297,8 +300,14 @@ func planAdd(o addOpts) (*plan, error) {
 		}
 		return b
 	}
-	var rootAdds []string // gateway, then providers, then the app
+	var rootAdds []string // gateway, then forts/, then the app
 	createdGateway := false
+	// fortsAdds: the provider dirs this add creates under forts/ — the
+	// one directory, one namespace, every provider the fort runs
+	// (deployments#671). Listed in forts/kustomization.yaml, which this
+	// add renders with the directory or appends to.
+	var fortsAdds []string
+	fortsRoot := filepath.Join(apps, fortsDir)
 
 	// --- providers: outputs by convention, instance on first need,
 	// tenant registration otherwise.
@@ -306,7 +315,7 @@ func planAdd(o addOpts) (*plan, error) {
 	// contract with keys names a Secret (#460).
 	values := map[string]any{}
 	providers := map[string]providerBinding{} // "type.handle" → outputs + the secret output's var
-	// The sites-db archive key, when this add creates the instance on a
+	// The postgres archive key, when this add creates the instance on a
 	// production fort: listed with the chart's externals so the report
 	// says what to mint and how to set it.
 	var dbExternals []contract.Key
@@ -325,7 +334,7 @@ func planAdd(o addOpts) (*plan, error) {
 			}
 			v.Postgres = &pgTenant{Handle: r.Handle, Extensions: r.Instance.Extensions}
 			v.TenantContractEntry = tenantContractEntry(app)
-			dbDir := filepath.Join(apps, "sites-db")
+			dbDir := filepath.Join(apps, providerDirs["postgres"])
 			providers[key] = conventionalBinding(r.Type, r.Handle, app, 0)
 			tenant := func() {
 				p.add(action{path: filepath.Join(dbDir, "database-"+app+".yaml"), mark: '●', note: "Database CR" + extNote(r.Instance.Extensions), content: render("postgres/database.yaml.gotpl")})
@@ -337,29 +346,28 @@ func planAdd(o addOpts) (*plan, error) {
 				// Instance on first need: the greenfield template, with
 				// this tenant already registered in its kustomization
 				// and contract (the same shape a later append produces).
-				p.add(action{path: filepath.Join(dbDir, "namespace.yaml"), mark: '●', content: static("postgres/namespace.yaml")})
 				if v.Archive {
 					// The archive is the profile's: production ships to
 					// B2 through the barman-cloud plugin with the fort's
 					// own key, which the report lists as the external it
 					// is (mint, then seed --set). Lab renders none.
-					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster postgres: greenfield, barman archive to B2 (plugin), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "objectstore.yaml"), mark: '●', note: "ObjectStore b2: s3://sfi-db-physical-backups/" + o.fort + ", the fort's own key", content: render("postgres/objectstore.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "scheduled-backup.yaml"), mark: '●', note: "nightly base backup via the plugin (stagger the hour by hand)", content: static("postgres/scheduled-backup.yaml")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-backup (the fort's B2 db-physical key, external) + secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "secrets-backup.sops.yaml"), mark: '◆', note: "seeded"})
 					dbExternals = []contract.Key{
-						{Name: "ACCESS_KEY_ID", External: "sites-db: `fort b2-key db-physical " + o.fort + " --write`, then `fort seed " + o.fort + " sites-db --set ACCESS_KEY_ID --write`"},
-						{Name: "ACCESS_SECRET_KEY", External: "sites-db: the same mint; `fort seed " + o.fort + " sites-db --set ACCESS_SECRET_KEY --write`"},
+						{Name: "ACCESS_KEY_ID", External: "postgres: `fort b2-key db-physical " + o.fort + " --write`, then `fort seed " + o.fort + " postgres --set ACCESS_KEY_ID --write`"},
+						{Name: "ACCESS_SECRET_KEY", External: "postgres: the same mint; `fort seed " + o.fort + " postgres --set ACCESS_SECRET_KEY --write`"},
 					}
 				} else {
-					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster sites-db: greenfield, NO archive (profile " + v.BackupProfile + "), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
+					p.add(action{path: filepath.Join(dbDir, "cluster.yaml"), mark: '●', note: "CNPG Cluster postgres: greenfield, NO archive (profile " + v.BackupProfile + "), roles via patches", content: render("postgres/cluster.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, "kustomization.yaml"), mark: '●', note: "patches: role-" + app + ".yaml", content: render("postgres/kustomization.yaml.gotpl")})
 					p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '●', note: "secrets-" + app, content: render("postgres/forts.contract.yaml.gotpl")})
 				}
 				tenant()
-				rootAdds = append(rootAdds, "sites-db")
+				fortsAdds = append(fortsAdds, providerSubdir("postgres"))
 			case exists(o.root, filepath.Join(dbDir, "database-"+app+".yaml")):
 				p.add(action{path: dbDir, mark: '○', note: "untouched — tenant `" + app + "` already registered"})
 			default:
@@ -374,7 +382,7 @@ func planAdd(o addOpts) (*plan, error) {
 						if err != nil {
 							return "", err
 						}
-						return appendPatch(s, sitesDBPatchesComment, "role-"+app+".yaml", "postgresql.cnpg.io", "v1", "Cluster", "sites-db", "sites-db"), nil
+						return appendPatch(s, postgresPatchesComment, "role-"+app+".yaml", "postgresql.cnpg.io", "v1", "Cluster", "postgres", fortsNamespace), nil
 					}})
 				p.add(action{path: filepath.Join(dbDir, contract.FileName), mark: '○', note: "+ secrets-" + app + ".sops.yaml (username literal, password generate)",
 					edit: func(s string) (string, error) { return appendBlock(s, tenantContractEntry(app)), nil }})
@@ -383,7 +391,7 @@ func planAdd(o addOpts) (*plan, error) {
 			if v.Valkey != nil {
 				return nil, fmt.Errorf("one valkey instance per chart in v1")
 			}
-			vkDir := filepath.Join(apps, "valkey")
+			vkDir := filepath.Join(apps, providerDirs["valkey"])
 			db := 0
 			if exists(o.root, vkDir) {
 				acls, _ := filepath.Glob(filepath.Join(o.root, vkDir, "acl-*.yaml"))
@@ -395,7 +403,7 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "kustomization.yaml"), mark: '○', note: "patches: + acl-" + app + ".yaml",
 					edit: func(s string) (string, error) {
-						return appendPatch(s, valkeyPatchesComment, "acl-"+app+".yaml", "helm.toolkit.fluxcd.io", "v2", "HelmRelease", "valkey", "valkey"), nil
+						return appendPatch(s, valkeyPatchesComment, "acl-"+app+".yaml", "helm.toolkit.fluxcd.io", "v2", "HelmRelease", "valkey", fortsNamespace), nil
 					}})
 				p.add(action{path: filepath.Join(vkDir, contract.FileName), mark: '○', note: "+ key " + app,
 					edit: func(s string) (string, error) {
@@ -403,7 +411,7 @@ func planAdd(o addOpts) (*plan, error) {
 					}})
 				p.add(action{path: filepath.Join(vkDir, "secrets.sops.yaml"), mark: '◆', note: "+ key " + app + " (seeder add-missing-keys; until then: sops set)"})
 			} else {
-				for _, f := range []string{"namespace.yaml", "repository.yaml", "release.yaml"} {
+				for _, f := range []string{"repository.yaml", "release.yaml"} {
 					p.add(action{path: filepath.Join(vkDir, f), mark: '●', content: static("valkey/" + f)})
 				}
 				p.add(action{path: filepath.Join(vkDir, "monitoring.yaml"), mark: '●', note: "PodMonitor + ValkeyDown (cache duty: no eviction alert)", content: static("valkey/monitoring.yaml")})
@@ -411,13 +419,13 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(vkDir, "acl-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/values/auth/aclUsers/" + app, content: render("valkey/acl.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, contract.FileName), mark: '●', note: "valkey-users: default + " + app, content: render("valkey/forts.contract.yaml.gotpl")})
 				p.add(action{path: filepath.Join(vkDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
-				rootAdds = append(rootAdds, "valkey")
+				fortsAdds = append(fortsAdds, providerSubdir("valkey"))
 			}
 		case "s3":
 			if v.S3 != nil {
 				return nil, fmt.Errorf("one s3 instance per chart in v1")
 			}
-			rsDir := filepath.Join(apps, "rustfs")
+			rsDir := filepath.Join(apps, providerDirs["s3"])
 			v.S3 = &s3Tenant{Handle: r.Handle, Key: keyReferencing(c, r.Type, r.Handle)}
 			providers[key] = conventionalBinding(r.Type, r.Handle, app, 0)
 			policy := filepath.Join(rsDir, "policies", app+".json")
@@ -426,7 +434,7 @@ func planAdd(o addOpts) (*plan, error) {
 				// Instance on first need, with this tenant already
 				// registered: its bucket line, its policy document, its
 				// identity key — the same shape a later append produces.
-				for _, f := range []string{"namespace.yaml", "repository.yaml", "release.yaml", "otel-collector.yaml", "iam-cronjob.yaml"} {
+				for _, f := range []string{"repository.yaml", "release.yaml", "otel-collector.yaml", "iam-cronjob.yaml"} {
 					p.add(action{path: filepath.Join(rsDir, f), mark: '●', content: static("rustfs/" + f)})
 				}
 				p.add(action{path: filepath.Join(rsDir, "monitoring.yaml"), mark: '●', note: "PrometheusRule RustfsDown (scrape is the collector's ServiceMonitor)", content: static("rustfs/monitoring.yaml")})
@@ -436,7 +444,7 @@ func planAdd(o addOpts) (*plan, error) {
 				p.add(action{path: filepath.Join(rsDir, contract.FileName), mark: '●', note: "rustfs-credentials (root pair) + rustfs-users: " + app, content: render("rustfs/forts.contract.yaml.gotpl")})
 				p.add(action{path: filepath.Join(rsDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
 				p.add(action{path: filepath.Join(rsDir, "users.sops.yaml"), mark: '◆', note: "seeded"})
-				rootAdds = append(rootAdds, "rustfs")
+				fortsAdds = append(fortsAdds, providerSubdir("s3"))
 			case exists(o.root, policy):
 				p.add(action{path: rsDir, mark: '○', note: "untouched — identity `" + app + "` already registered"})
 			default:
@@ -462,6 +470,30 @@ func planAdd(o addOpts) (*plan, error) {
 				return nil, fmt.Errorf("requires.%s.wire.%s: not a non-secret output of %s", key, out, r.Type)
 			}
 			setPath(values, path, val)
+		}
+	}
+
+	// --- forts/: the one directory and the one namespace every provider
+	// lives in (deployments#671). Rendered with the first provider the
+	// fort needs; a later provider type is one appended line.
+	if len(fortsAdds) > 0 {
+		if !exists(o.root, fortsRoot) {
+			v.Providers = fortsAdds
+			p.add(action{path: filepath.Join(fortsRoot, "namespace.yaml"), mark: '●', note: "Namespace forts: every provider the fort runs", content: static("forts/namespace.yaml")})
+			p.add(action{path: filepath.Join(fortsRoot, "kustomization.yaml"), mark: '●', note: "namespace + " + strings.Join(fortsAdds, ", "), content: render("forts/kustomization.yaml.gotpl")})
+			rootAdds = append(rootAdds, fortsDir)
+		} else {
+			adds := fortsAdds
+			p.add(action{path: filepath.Join(fortsRoot, "kustomization.yaml"), mark: '○', note: "+ " + strings.Join(adds, ", "),
+				edit: func(s string) (string, error) {
+					for _, r := range adds {
+						var err error
+						if s, err = appendListItem(s, "resources", r); err != nil {
+							return "", err
+						}
+					}
+					return s, nil
+				}})
 		}
 	}
 
@@ -637,8 +669,8 @@ func rewriteTemplate(k contract.Key, providers map[string]providerBinding, vars 
 func tenantContractEntry(app string) string {
 	return fmt.Sprintf(`  secrets-%[1]s.sops.yaml:
     metadata:
-      name: sites-db-%[1]s-credentials
-      namespace: sites-db
+      name: postgres-%[1]s-credentials
+      namespace: forts
       type: kubernetes.io/basic-auth
     keys:
       username: {literal: %[1]s}
@@ -700,15 +732,25 @@ func (p *plan) report(w io.Writer, written bool) {
 	base := filepath.Join("flux/apps", p.fort)
 	fmt.Fprintf(w, "%s/   (chart %s)\n", base, p.resolved)
 	sort.SliceStable(p.actions, func(i, j int) bool { return p.actions[i].path < p.actions[j].path })
-	lastDir := ""
+	lastDir, lastSub := "", ""
 	for _, a := range p.actions {
 		rel := strings.TrimPrefix(a.path, base+"/")
 		// Grouped by the instance or app dir, one level deep: a file in a
 		// subdirectory (rustfs/policies/<app>.json) lists under its
 		// instance with the subpath as its name, not as a dir of its own.
+		// forts/ is the exception — the one dir that holds dirs — and its
+		// providers list as dirs of their own, one level further in.
 		dir, file, _ := strings.Cut(rel, "/")
 		if file == "" {
 			dir, file = "", rel
+		}
+		sub := ""
+		if dir == fortsDir {
+			if s, f, ok := strings.Cut(file, "/"); ok {
+				sub, file = s, f
+			} else if a.content == nil && a.edit == nil {
+				sub, file = file, "" // the dir itself: `○ untouched`
+			}
 		}
 		if dir != "" {
 			if dir != lastDir {
@@ -717,13 +759,25 @@ func (p *plan) report(w io.Writer, written bool) {
 					mark = '●'
 				}
 				fmt.Fprintf(w, "%c %s/\n", mark, dir)
-				lastDir = dir
+				lastDir, lastSub = dir, ""
+			}
+			indent := "  "
+			if sub != "" {
+				if sub != lastSub {
+					mark := '○'
+					if p.creates(filepath.Join(base, dir, sub)) {
+						mark = '●'
+					}
+					fmt.Fprintf(w, "  %c %s/\n", mark, sub)
+					lastSub = sub
+				}
+				indent = "    "
 			}
 			if file == "" {
-				fmt.Fprintf(w, "    %s\n", a.note)
+				fmt.Fprintf(w, "%s  %s\n", indent, a.note)
 				continue
 			}
-			fmt.Fprintf(w, "  %c %-28s %s\n", a.mark, file, a.note)
+			fmt.Fprintf(w, "%s%c %-*s %s\n", indent, a.mark, 30-len(indent), file, a.note)
 		} else {
 			fmt.Fprintf(w, "%c %-30s %s\n", a.mark, file, a.note)
 		}

@@ -136,15 +136,9 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 	dirs := o.dirs
 	explicit := len(dirs) > 0
 	if !explicit {
-		entries, err := os.ReadDir(filepath.Join(o.root, apps))
-		if err != nil {
+		var err error
+		if dirs, err = contractDirs(o.root, apps); err != nil {
 			return nil, err
-		}
-		for _, e := range entries {
-			d := filepath.Join(apps, e.Name())
-			if e.IsDir() && (contract.Present(filepath.Join(o.root, d)) || exists(o.root, filepath.Join(d, "repository.yaml"))) {
-				dirs = append(dirs, d)
-			}
 		}
 	}
 	var plans []*seedPlan
@@ -222,12 +216,57 @@ func planSeed(o seedOpts) ([]*seedPlan, error) {
 	return orderPlans(plans)
 }
 
-// appDir resolves a <dir> argument: a bare app name (`sites-db`, the
-// form docs/fort-configuration-contracts.md uses) lives under the fort's apps root; anything with
-// a slash is taken as repo-relative and must land there too.
+// contractDirs lists the dirs of a fort's apps root that carry a
+// contract or a pinned chart — the app dirs one level down, and the
+// provider dirs one level further, under forts/ (deployments#671), which
+// itself carries neither.
+func contractDirs(root, apps string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(root, apps))
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		d := filepath.Join(apps, e.Name())
+		if e.Name() == fortsDir {
+			subs, err := os.ReadDir(filepath.Join(root, d))
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range subs {
+				sd := filepath.Join(d, s.Name())
+				if s.IsDir() && (contract.Present(filepath.Join(root, sd)) || exists(root, filepath.Join(sd, "repository.yaml"))) {
+					dirs = append(dirs, sd)
+				}
+			}
+			continue
+		}
+		if contract.Present(filepath.Join(root, d)) || exists(root, filepath.Join(d, "repository.yaml")) {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs, nil
+}
+
+// appDir resolves a <dir> argument: a bare app name (`symbology`) lives
+// under the fort's apps root; a bare provider name (`postgres`, `valkey`,
+// `rustfs` — the form docs/fort-configuration-contracts.md uses) under
+// forts/ beneath it, as does `forts/<provider>`; anything else with a
+// slash is taken as repo-relative and must land under the apps root too.
 func appDir(apps, d string) string {
 	d = filepath.Clean(d)
+	if strings.HasPrefix(d, fortsDir+"/") && !strings.Contains(strings.TrimPrefix(d, fortsDir+"/"), "/") {
+		return filepath.Join(apps, d)
+	}
 	if !strings.Contains(d, "/") {
+		for _, pd := range providerDirs {
+			if pd == fortsDir+"/"+d {
+				return filepath.Join(apps, pd)
+			}
+		}
 		return filepath.Join(apps, d)
 	}
 	return d

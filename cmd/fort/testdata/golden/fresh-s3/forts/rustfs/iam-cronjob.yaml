@@ -1,0 +1,140 @@
+# The fort's rustfs IAM reconciler: the identities the tree declares,
+# applied to the instance. The generic form of luxor's rustfs-central
+# reconciler (flux/apps/luxor/rustfs-central/iam-cronjob.yaml, which
+# carries the history): here every identity is an app, and an app is
+# declared by two files — a key in users.sops.yaml (the secret half) and a
+# policy document policies/<app>.json (its scope) — so there is no
+# per-identity case in this script and `fort add` never edits it.
+#
+# WHY A CRONJOB AND NOT A JOB. The bucket Job beside this one re-runs only
+# when its spec changes (Jobs are immutable; the flux force annotation
+# deletes and recreates it). Identities arrive by a *Secret* gaining a key
+# — `fort seed` adding a tenant's key — which changes no spec at all, so a
+# Job would never notice a new app. A CronJob re-reads what is mounted
+# every time it runs: an app added now has its identity within the
+# interval, a removed app's identity is gone within the interval, and an
+# identity deleted by hand in the console comes back.
+#
+# WHAT IT ENFORCES (proved against luxor, #47): rustfs implements the
+# AWS-modelled admin IAM and honours it — a user scoped to a bucket is
+# allowed inside it, DENIED another bucket entirely, and denied the
+# actions its policy does not grant. The canned policies are all
+# account-wide, so every identity here needs its own document.
+#
+# The identity's name IS its access key, so `<app>` reads as itself in
+# `rc admin user ls`, in an audit, and in the app's wired values. `rc admin
+# user add` on an existing user updates its secret, so rotation is a new
+# value in users.sops.yaml and nothing else (`rc admin user passwd` is
+# NotImplemented in 1.0.0-beta.12, #614).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rustfs-iam
+  namespace: forts
+  annotations:
+    # The script uses shell parameter expansion — ${p##*/}, ${name%.json}
+    # — and flux's post-build envsubst processes ${...} before anything
+    # reaches the cluster. Under STRICT substitution an unset name fails
+    # the WHOLE apps layer, not just this document (luxor, 2026-09-16).
+    # This resource references no cluster vars, so exempt it wholesale.
+    kustomize.toolkit.fluxcd.io/substitute: disabled
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          # Never, not OnFailure: with OnFailure the job controller deletes
+          # the pod once the backoff limit is exceeded, and a pod that
+          # fails in under a second is gone before fluent-bit has tailed
+          # its log — readable in NEITHER place (measured 2026-09-16). With
+          # Never each attempt keeps its pod.
+          #
+          #   logcli/Grafana, against luxor's Loki:
+          #     {namespace="forts", pod=~"rustfs-iam-.*"}
+          restartPolicy: Never
+          containers:
+            - name: rc
+              # rc, rustfs's own client, on the fleet's job-runner image
+              # (sfi/action-runner-image job-runner/): rc, jq and sh.
+              # Pinned by sha for the same reason as the bucket Job.
+              image: gitea.zen.lofi/sfi/job-runner:9dd44f4
+              envFrom:
+                - secretRef:
+                    name: rustfs-credentials
+              volumeMounts:
+                - { name: users, mountPath: /users, readOnly: true }
+                - { name: policies, mountPath: /policies, readOnly: true }
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -u
+                  until rc alias set r http://rustfs-svc:9000 "$RUSTFS_ACCESS_KEY" "$RUSTFS_SECRET_KEY" >/dev/null; do
+                    echo "waiting for rustfs-svc..."; sleep 2
+                  done
+                  failed=0
+
+                  # Every /policies/<name>.json is a policy named <name>.
+                  # `policy create` on an existing name updates it, so a
+                  # changed document lands on the next sweep.
+                  for p in /policies/*.json; do
+                    [ -e "$p" ] || continue
+                    name=${p##*/}; name=${name%.json}
+                    rc admin policy create r "$name" "$p" >/dev/null || { echo "!! policy $name failed"; failed=1; }
+                  done
+
+                  # Declared identities -> users + their policy. The key
+                  # name is the access key; the file content is the secret
+                  # half. An identity with no policy document gets NO user
+                  # rather than an unscoped one.
+                  #
+                  # NO `set -e` around the loop: one bad identity must not
+                  # strand every other, nor the unwind below.
+                  for f in /users/*; do
+                    [ -e "$f" ] || continue
+                    user=${f##*/}
+                    if [ ! -e "/policies/$user.json" ]; then
+                      echo "!! $user: no policies/$user.json - skipped"; failed=1; continue
+                    fi
+                    if ! rc admin user add r "$user" "$(cat "$f")" >/dev/null; then
+                      echo "!! $user: user add failed"; failed=1; continue
+                    fi
+                    # rc's attach succeeds on a policy already attached, so
+                    # a failure here is real.
+                    if ! rc admin policy attach r "$user" --user "$user" >/dev/null; then
+                      echo "!! $user: attach $user failed"; failed=1; continue
+                    fi
+                    echo "ok $user -> $user"
+                  done
+
+                  # The unwind half. A removed app's key leaves
+                  # users.sops.yaml; without this its credential stays live
+                  # and scoped to a bucket whose objects are still there.
+                  # The list is read whole BEFORE the loop, so a failed
+                  # list is a failed run rather than an empty one that
+                  # unwinds nothing and reports success. The root pair is
+                  # not an IAM user and never appears here.
+                  if ! listed=$(rc admin user ls r --json) ||
+                     ! existing=$(printf '%s' "$listed" | jq -r 'if (.users | type) == "array" then .users[].accessKey else error("no users array") end'); then
+                    echo "!! user list failed - nothing unwound this run"
+                    exit 1
+                  fi
+                  for name in $existing; do
+                    if [ ! -f "/users/$name" ]; then
+                      echo "-- $name: no longer declared, removing"
+                      rc admin user rm r "$name" >/dev/null || { echo "!! $name: remove failed"; failed=1; }
+                    fi
+                  done
+
+                  exit "$failed"
+          volumes:
+            - name: users
+              secret:
+                secretName: rustfs-users
+            - name: policies
+              configMap:
+                name: rustfs-policies

@@ -1,0 +1,16 @@
+# The fort's own namespace: every provider the fort runs — its postgres,
+# its valkey, its rustfs — lives here, and nothing an app owns does. One
+# namespace, so `kubectl get pods -n forts` is the set, with no label and
+# no filter (deployments#671). The instances are upstream deployments
+# and keep their own names inside it (postgres, valkey, rustfs); the apps
+# reach them cross-namespace through the Services this namespace
+# publishes: postgres-rw.forts, valkey.forts, rustfs-svc.forts.
+#
+# Rendered by `fort add` on the fort's first provider need, owned by the
+# kustomization beside it, and never rendered twice: kustomize refuses
+# two Namespace documents with the same id, so the provider dirs below
+# carry none of their own.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forts

@@ -1,0 +1,28 @@
+# Alert wiring for the fort's rustfs. The scrape itself is the
+# otel-collector chart's ServiceMonitor (otel-collector.yaml); this file
+# is the fleet policy on top, beside the instance like every other
+# provider's (#53). One rule: the store is gone or unscraped. Capacity is
+# the root-disk alert's — local-path does not enforce the PVC size, so
+# the fort's disk is the ceiling and its alert the signal. Bucket
+# contents are the app's to watch; the restic PV backup of rustfs-data
+# is watched by the backups rules on luxor.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rustfs
+  namespace: forts
+spec:
+  groups:
+    - name: rustfs-fort-battery
+      rules:
+        - alert: RustfsDown
+          # Pushed by rustfs over OTLP and re-exposed by the collector;
+          # absent means rustfs stopped pushing OR the bridge is gone,
+          # and either way nothing answers "is the store OK".
+          expr: absent(rustfs_runtime_readiness_ready{namespace="forts"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "the fort's rustfs is down or unscraped"
+            description: "Every app that requires s3 on this fort has lost its object store — uploads fail, reads of stored content fail. Check the rustfs pod and the otel-collector bridge in namespace forts."

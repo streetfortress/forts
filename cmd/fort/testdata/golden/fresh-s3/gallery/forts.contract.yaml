@@ -11,10 +11,10 @@
 # sops/env ref (a source the seeder can read) or `sops set` the value
 # after seeding.
 vars:
-  # requires.postgres.db → the sites-db tenant role (lockstep pair).
-  db_password: {sops: [../sites-db/secrets-gallery.sops.yaml, stringData.password]}
+  # requires.postgres.db → the postgres tenant role (lockstep pair).
+  db_password: {sops: [../forts/postgres/secrets-gallery.sops.yaml, stringData.password]}
   # requires.s3.media → the rustfs-users identity gallery (lockstep pair).
-  media_secret_key: {sops: [../rustfs/users.sops.yaml, stringData.gallery]}
+  media_secret_key: {sops: [../forts/rustfs/users.sops.yaml, stringData.gallery]}
 secrets:
   secrets.sops.yaml:
     metadata:

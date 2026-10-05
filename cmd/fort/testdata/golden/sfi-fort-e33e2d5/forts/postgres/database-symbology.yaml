@@ -1,0 +1,15 @@
+# The drill payload: created and filled by the bootstrap import (phase
+# 1) or by recovery (phase 3) — either way this CR just keeps owner +
+# extension reconciled afterwards.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: symbology
+  namespace: forts
+spec:
+  name: symbology
+  owner: symbology
+  cluster:
+    name: postgres
+  extensions:
+    - name: vector

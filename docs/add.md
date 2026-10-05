@@ -9,8 +9,10 @@ fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name 
 `add` turns a chart into everything a fort needs to run it: the app's
 own directory (source, release, route, monitoring, the seeding
 contract), the gateway listener and certificate for its hostname, and
-the provider instances it requires — a `sites-db` tenant, a valkey ACL
-user — created on first need and registered on every need after. It
+the provider instances it requires — a postgres tenant, a valkey ACL
+user — created on first need under `forts/`, the one directory and the
+one namespace every provider the fort runs shares (deployments#671), and
+registered on every need after. It
 reads one thing from the chart: the `forts.contract.yaml` it ships,
 the chart author's declaration of what the workload needs
 ([fort configuration contracts](fort-configuration-contracts.md)). What
@@ -44,18 +46,28 @@ flux/apps/sfi-x/   (chart 0.1.9)
   ● kustomization.yaml           patches: listener-symbology.yaml
   ● listener-symbology.yaml      JSON6902 add /spec/listeners/- (https-symbology)
   ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sites-db, valkey, symbology
-● sites-db/
-  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, barman archive to B2 (plugin), roles via patches
-  ● database-symbology.yaml      Database CR (extensions: vector)
-  ● forts.contract.yaml          secrets-backup (the fort's B2 db-physical key, external) + secrets-symbology
-  ● kustomization.yaml           patches: role-symbology.yaml
-  ● namespace.yaml
-  ● objectstore.yaml             ObjectStore b2: s3://sfi-db-physical-backups/sfi-x, the fort's own key
-  ● role-symbology.yaml          JSON6902 add /spec/managed/roles/-
-  ● scheduled-backup.yaml        nightly base backup via the plugin (stagger the hour by hand)
-  ◆ secrets-backup.sops.yaml     seeded
-  ◆ secrets-symbology.sops.yaml  seeded
+● forts/
+  ● kustomization.yaml           namespace + postgres, valkey
+  ● namespace.yaml               Namespace forts: every provider the fort runs
+  ● postgres/
+    ● cluster.yaml               CNPG Cluster postgres: greenfield, barman archive to B2 (plugin), roles via patches
+    ● database-symbology.yaml    Database CR (extensions: vector)
+    ● forts.contract.yaml        secrets-backup (the fort's B2 db-physical key, external) + secrets-symbology
+    ● kustomization.yaml         patches: role-symbology.yaml
+    ● objectstore.yaml           ObjectStore b2: s3://sfi-db-physical-backups/sfi-x, the fort's own key
+    ● role-symbology.yaml        JSON6902 add /spec/managed/roles/-
+    ● scheduled-backup.yaml      nightly base backup via the plugin (stagger the hour by hand)
+    ◆ secrets-backup.sops.yaml   seeded
+    ◆ secrets-symbology.sops.yaml seeded
+  ● valkey/
+    ● acl-symbology.yaml         JSON6902 add /spec/values/auth/aclUsers/symbology
+    ● forts.contract.yaml        valkey-users: default + symbology
+    ● kustomization.yaml         patches: acl-symbology.yaml
+    ● monitoring.yaml            PodMonitor + ValkeyDown (cache duty: no eviction alert)
+    ● release.yaml
+    ● repository.yaml
+    ◆ secrets.sops.yaml          seeded
+○ kustomization.yaml             + gateway, forts, symbology
 ● symbology/
   ● forts.contract.yaml          pre-`fort seed` full form, 8 keys
   ● kustomization.yaml
@@ -66,15 +78,6 @@ flux/apps/sfi-x/   (chart 0.1.9)
   ● route.yaml                   HTTPRoute symbology.sfi-x.streetfortress.cloud → symbology-ui:3000
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
-● valkey/
-  ● acl-symbology.yaml           JSON6902 add /spec/values/auth/aclUsers/symbology
-  ● forts.contract.yaml          valkey-users: default + symbology
-  ● kustomization.yaml           patches: acl-symbology.yaml
-  ● monitoring.yaml              PodMonitor + ValkeyDown (cache duty: no eviction alert)
-  ● namespace.yaml
-  ● release.yaml
-  ● repository.yaml
-  ◆ secrets.sops.yaml            seeded
 
 dry run — nothing written (add --write).
 ```
@@ -185,14 +188,24 @@ beside the gateway — per cluster, not shared, because a cloud cluster
 can never reach `step-ca.lofi` and a `Ready=False` issuer wedged web3's
 infrastructure health checks for hours.
 
-**Providers.** Rendered on first need from `templates/add/{postgres,valkey,rustfs}`,
-then registered per tenant. The postgres instance's archive follows the
+**Providers.** Every provider the fort runs lives under one directory,
+`forts/`, in the one namespace that directory owns, `forts`
+(deployments#671): `kubectl get pods -n forts` is the set, with no label
+and no filter. The first provider need renders `forts/namespace.yaml`
+and `forts/kustomization.yaml` with the root kustomization's one `forts`
+entry; a later need of another type appends one line to the forts
+kustomization. The instances keep the names of what they are — the
+CNPG Cluster `postgres`, the HelmReleases `valkey` and `rustfs` — and
+carry no namespace of their own (kustomize refuses two Namespace
+documents with the same id). Each is rendered on first need from
+`templates/add/{postgres,valkey,rustfs}` into `forts/<name>/`, then
+registered per tenant. The postgres instance's archive follows the
 manifest's `[backups] profile`: `production` renders the barman-cloud
 plugin with an `ObjectStore` on B2 (`s3://sfi-db-physical-backups/<fort>`),
 the nightly `ScheduledBackup`, and a `secrets-backup` contract entry whose
 two keys are `external` — the fort's own `sfi-db-physical-<fort>` key,
 minted by `fort b2-key db-physical <fort> --write` and set with
-`fort seed <fort> sites-db --set`. `lab` (and `none`) render **no archive**
+`fort seed <fort> postgres --set`. `lab` (and `none`) render **no archive**
 and say so in `cluster.yaml`: no lab fort ships barman anywhere, and a
 cluster silently born archiving into nothing is the failure the backups
 design refuses ([`docs/infra/backups.md`](../infra/backups.md)). Tenants
@@ -201,7 +214,7 @@ role to `spec.managed.roles` (kept an empty list in the template so the
 patch has a target), and the tenant's credentials Secret in the
 provider's own contract; for valkey an ACL user patch and a key in
 `valkey-users`. The valkey `db` index is the count of existing
-`acl-*.yaml`. For s3 (#326) the first need renders `rustfs/` — luxor's
+`acl-*.yaml`. For s3 (#326) the first need renders `forts/rustfs/` — luxor's
 instance without the route, its metrics bridge and `RustfsDown` rule, the
 bucket Job, the `rustfs-iam` CronJob, and a contract with the root pair
 and the identity list — and every tenant is `policies/<app>.json`
@@ -219,12 +232,12 @@ The chart declares its needs; the fort fills the values by convention:
 
 | provider | output | value |
 |---|---|---|
-| postgres | `host` / `port` / `name` / `user` | `sites-db-rw.sites-db.svc.cluster.local` / `5432` / `<app>` / `<app>` |
-| postgres | `password` | secret-typed: a `sops:` ref into `../sites-db/secrets-<app>.sops.yaml`, only reachable from `secret.keys` templates |
-| valkey | `host` / `port` / `db` / `user` | `valkey.valkey.svc.cluster.local` / `6379` / next free index / `<app>` |
-| valkey | `password` | secret-typed, from `../valkey/secrets.sops.yaml` key `<app>` |
-| s3 | `endpoint` / `bucket` / `accessKey` | `http://rustfs-svc.rustfs.svc.cluster.local:9000` / `<app>` / `<app>` |
-| s3 | `secretKey` | secret-typed, from `../rustfs/users.sops.yaml` key `<app>` |
+| postgres | `host` / `port` / `name` / `user` | `postgres-rw.forts.svc.cluster.local` / `5432` / `<app>` / `<app>` |
+| postgres | `password` | secret-typed: a `sops:` ref into `../forts/postgres/secrets-<app>.sops.yaml`, only reachable from `secret.keys` templates |
+| valkey | `host` / `port` / `db` / `user` | `valkey.forts.svc.cluster.local` / `6379` / next free index / `<app>` |
+| valkey | `password` | secret-typed, from `../forts/valkey/secrets.sops.yaml` key `<app>` |
+| s3 | `endpoint` / `bucket` / `accessKey` | `http://rustfs-svc.forts.svc.cluster.local:9000` / `<app>` / `<app>` |
+| s3 | `secretKey` | secret-typed, from `../forts/rustfs/users.sops.yaml` key `<app>` |
 
 `uri` outputs are deliberately not composed. Non-secret outputs go into
 HelmRelease values through `wire:`; secret-typed ones may only feed
@@ -281,8 +294,8 @@ next: seed the ◆ files (dependency order is derived):
   fort seed sfi-x --write
 external keys — absent from the Secret until set (sops set, or a sops/env ref in the contract):
   STRIPE_SECRET_KEY   Stripe → API keys
-  ACCESS_KEY_ID       sites-db: `fort b2-key db-physical sfi-x --write`, then `fort seed sfi-x sites-db --set ACCESS_KEY_ID --write`
-  ACCESS_SECRET_KEY   sites-db: the same mint; `fort seed sfi-x sites-db --set ACCESS_SECRET_KEY --write`
+  ACCESS_KEY_ID       postgres: `fort b2-key db-physical sfi-x --write`, then `fort seed sfi-x postgres --set ACCESS_KEY_ID --write`
+  ACCESS_SECRET_KEY   postgres: the same mint; `fort seed sfi-x postgres --set ACCESS_SECRET_KEY --write`
 then: review, commit, PR — flux applies on merge.
 ```
 
@@ -298,9 +311,12 @@ then: review, commit, PR — flux applies on merge.
   lists that no chart asked for: mint it, seed it, and only then merge —
   the `ObjectStore` with an empty Secret is a cluster that archives
   nothing while its manifest says `production`.
-- **A fort born from a backup** flips the greenfield `sites-db` cluster
+- **A fort born from a backup** flips the greenfield `postgres` cluster
   to `bootstrap.recovery` by hand before the first apply; initdb and
   recovery run at creation only, so it is a repave, never a live edit.
+  The barman plugin stores a cluster under its `serverName`, so a fort
+  born from a fort that predates the forts namespace recovers from
+  `serverName: sites-db-v1` in the `externalClusters` block.
   Stagger the nightly backup hour across forts while you are there.
 - **Alert rules are policy**: the PodMonitor is rendered, the rules that
   page someone are added by hand.

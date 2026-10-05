@@ -1,6 +1,6 @@
 # Shared rustfs instance for this fort — the S3 battery an app turns on
 # by declaring `requires.s3.<handle>` in its chart contract, the same way
-# sites-db and valkey are turned on (docs/infra/providers.md). It is the
+# postgres and valkey are turned on (docs/infra/providers.md). It is the
 # template `fort add` renders on a fort's first s3 need, adapted from
 # luxor's own instance (flux/apps/luxor/rustfs/release.yaml). In-cluster
 # only: no route, no console hostname, no mesh NodePort — the consumers
@@ -17,7 +17,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: rustfs
-  namespace: rustfs
+  namespace: forts
 spec:
   interval: 1h
   chart:

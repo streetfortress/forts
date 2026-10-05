@@ -6,7 +6,7 @@
 # hours this way.
 #
 #   sudo sfi-k8s-restart deployment symbology-worker
-#   sudo sfi-k8s-restart pod sites-db-1            # delete; controller recreates
+#   sudo sfi-k8s-restart pod postgres-1            # delete; controller recreates
 #   sudo sfi-k8s-scale deployment symbology-worker 0
 #
 # One deliberate nuance to the framework's "never desired state" rule:

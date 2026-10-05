@@ -1,6 +1,6 @@
 # sfi-kubectl: the ADMIN rung as a verb, for hosts that opt in.
 #
-#   sudo sfi-kubectl delete cluster -n sites-db sites-db
+#   sudo sfi-kubectl delete cluster -n forts postgres
 #   sudo sfi-kubectl get pvc -A
 #   sudo sfi-kubectl edit helmrelease symbology -n symbology
 #

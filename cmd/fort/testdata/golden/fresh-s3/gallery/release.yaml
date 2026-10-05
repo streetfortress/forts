@@ -1,6 +1,6 @@
 # gallery — HelmRelease rendered by `fort add` from the chart's contract:
 # the `wire:` values paths are filled from the fort's providers by
-# convention (postgres → the shared sites-db, tenant `gallery`);
+# convention (postgres → the fort's postgres, tenant `gallery`);
 # (s3 → the shared rustfs, bucket and identity `gallery`); password-class
 # keys ride the gallery-env Secret. Retry forever: the first install
 # races its providers (and a preview pin races the images) — never park
@@ -27,7 +27,7 @@ spec:
       retries: -1
   values:
     database:
-      host: sites-db-rw.sites-db.svc.cluster.local
+      host: postgres-rw.forts.svc.cluster.local
       name: gallery
       port: "5432"
       user: gallery
@@ -35,4 +35,4 @@ spec:
     storage:
       accessKey: gallery
       bucket: gallery
-      endpoint: http://rustfs-svc.rustfs.svc.cluster.local:9000
+      endpoint: http://rustfs-svc.forts.svc.cluster.local:9000

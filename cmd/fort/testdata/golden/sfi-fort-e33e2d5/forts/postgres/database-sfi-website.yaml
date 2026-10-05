@@ -1,0 +1,12 @@
+# Created empty on staging (no import); sfi-website's migrations build
+# the schema from scratch.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: sfi-website
+  namespace: forts
+spec:
+  name: sfi-website
+  owner: deployer
+  cluster:
+    name: postgres

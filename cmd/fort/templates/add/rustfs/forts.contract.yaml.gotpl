@@ -15,13 +15,13 @@ secrets:
   secrets.sops.yaml:
     metadata:
       name: rustfs-credentials
-      namespace: rustfs
+      namespace: forts
     keys:
       RUSTFS_ACCESS_KEY: {generate: hex8}
       RUSTFS_SECRET_KEY: {generate: hex24}
   users.sops.yaml:
     metadata:
       name: rustfs-users
-      namespace: rustfs
+      namespace: forts
     keys:
       {{ .App }}: {generate: hex24}

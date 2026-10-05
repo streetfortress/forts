@@ -45,7 +45,7 @@ func TestDismantle(t *testing.T) {
 			hosts, _, _ := manifest.LoadAll(tmp)
 			write(sshConfigPath, renderSSHConfig(m, hosts))
 			write(knownHostsPath, knownHostsSet(knownHostsSet("", tc.host, m.Peers[tc.host].IP, "ssh-ed25519 GONE"), "luxor", "10.1.0.5", "ssh-ed25519 STAYS"))
-			write("flux/apps/luxor/app/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/sites-db/secrets-db.sops.yaml, stringData.password]}\n")
+			write("flux/apps/luxor/app/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: a, namespace: a}\n    keys:\n      X: {sops: [../../"+tc.host+"/forts/postgres/secrets-db.sops.yaml, stringData.password]}\n")
 
 			p, err := planDismantle(tmp, tc.host)
 			if err != nil {

@@ -1,17 +1,17 @@
 # Provider contract (docs/fort-configuration-contracts.md) — NON-SECRET, rendered from the
-# fort CLI's sites-db template (there is no chart of ours to carry it);
+# fort CLI's postgres template (there is no chart of ours to carry it);
 # `fort seed` executes it. Each tenant registration appends its
 # secrets-<app>.sops.yaml entry at the end.
 secrets:
 {{- if .Archive }}
   secrets-backup.sops.yaml:
     metadata:
-      name: sites-db-backup-credentials
-      namespace: sites-db
+      name: postgres-backup-credentials
+      namespace: forts
     keys:
       # The fort's OWN B2 key for the physical bucket — sfi-db-physical-
       # {{ .Fort }}, minted by `fort b2-key db-physical {{ .Fort }}
-      # --write` and set with `fort seed {{ .Fort }} sites-db --set
+      # --write` and set with `fort seed {{ .Fort }} postgres --set
       # <KEY> --write`. Held here, in the cluster, beside postgres, and
       # in no host's nixos secrets (docs/infra/backups.md, "One key per
       # host per bucket").

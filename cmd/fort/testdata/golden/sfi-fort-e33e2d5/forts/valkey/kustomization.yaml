@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - repository.yaml
+  - release.yaml
+  - monitoring.yaml
+  # Secret valkey-users (key per ACL user: default + symbology), seeded
+  # from forts.contract.yaml; listed-but-absent = the pre-merge
+  # kustomize guard.
+  - secrets.sops.yaml
+# Tenant registration: one JSON6902 patch per consumer adds its ACL user
+# to the HelmRelease values (release.yaml carries only the instance and
+# its admin `default` user). fort add adds a file + an entry here.
+patches:
+  - path: acl-symbology.yaml
+    target:
+      group: helm.toolkit.fluxcd.io
+      version: v2
+      kind: HelmRelease
+      name: valkey
+      namespace: forts

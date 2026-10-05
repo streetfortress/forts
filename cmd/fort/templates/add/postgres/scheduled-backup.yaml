@@ -9,8 +9,8 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
-  name: sites-db-nightly
-  namespace: sites-db
+  name: postgres-nightly
+  namespace: forts
 spec:
   # Six-field cron (CNPG uses seconds): 04:00 UTC daily.
   schedule: "0 0 4 * * *"
@@ -20,4 +20,4 @@ spec:
   pluginConfiguration:
     name: barman-cloud.cloudnative-pg.io
   cluster:
-    name: sites-db
+    name: postgres

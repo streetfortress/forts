@@ -11,8 +11,8 @@
 # sops/env ref (a source the seeder can read) or `sops set` the value
 # after seeding.
 vars:
-  # requires.postgres.db → the sites-db tenant role (lockstep pair).
-  db_password: {sops: [../sites-db/secrets-sfi-website.sops.yaml, stringData.password]}
+  # requires.postgres.db → the postgres tenant role (lockstep pair).
+  db_password: {sops: [../forts/postgres/secrets-sfi-website.sops.yaml, stringData.password]}
 secrets:
   secrets.sops.yaml:
     metadata:
@@ -20,5 +20,5 @@ secrets:
       namespace: sfi-website
     keys:
       BETTER_AUTH_SECRET: {generate: b64_32}
-      DATABASE_URL: {template: "postgresql://sfi-website:${db_password}@sites-db-rw.sites-db.svc.cluster.local:5432/sfi-website"}
+      DATABASE_URL: {template: "postgresql://sfi-website:${db_password}@postgres-rw.forts.svc.cluster.local:5432/sfi-website"}
       RESEND_API_KEY: {external: "Resend → API keys (re_)", optional: true}

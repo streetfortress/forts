@@ -1,0 +1,15 @@
+# gallery's database on the fort's postgres — tenant registration
+# by `fort add` (requires.postgres.db): this CR keeps
+# owner + extensions reconciled; the role rides role-gallery.yaml and
+# its password secrets-gallery.sops.yaml (mirrored into the app's env —
+# lockstep pair on rotation).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: gallery
+  namespace: forts
+spec:
+  name: gallery
+  owner: gallery
+  cluster:
+    name: postgres

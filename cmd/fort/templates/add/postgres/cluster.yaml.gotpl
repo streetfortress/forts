@@ -10,14 +10,19 @@
 # Greenfield: no bootstrap block, so CNPG initdb's its default app/app
 # database and the tenants' Database CRs create theirs. A fort that is
 # born from a backup instead flips this to bootstrap.recovery by hand
-# (flux/apps/sfi-fort-e33e2d5/sites-db/cluster.yaml is the worked
+# (the drill fort's cluster.yaml in the CLI's golden tree is the worked
 # example); initdb/recovery only run at cluster CREATION, so that is a
-# repave, never a live edit.
+# repave, never a live edit. A fort born from a fort that predates the
+# forts namespace recovers from externalClusters serverName sites-db-v1
+# (deployments#671).
+#
+# The name is the type: `postgres`, so the Services read as what they
+# are (postgres-rw.forts), and the kind already says CNPG.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: sites-db
-  namespace: sites-db
+  name: postgres
+  namespace: forts
 spec:
   instances: 1
 
@@ -48,7 +53,7 @@ spec:
       isWALArchiver: true
       parameters:
         barmanObjectName: b2
-        serverName: sites-db-v1
+        serverName: postgres-v1
 {{- else }}
 
   # NO ARCHIVE — the manifest's [backups] profile is "{{ .BackupProfile }}".
@@ -58,7 +63,7 @@ spec:
   # repave is a re-seed. When that stops being true, set the profile to
   # production and lay the archive down the way sfi-prod-439bf72 has it:
   # objectstore.yaml, a plugins: block here (barman-cloud.cloudnative-pg.io,
-  # barmanObjectName b2, serverName sites-db-v1), scheduled-backup.yaml
+  # barmanObjectName b2, serverName postgres-v1), scheduled-backup.yaml
   # with method: plugin, and the secrets-backup entry in
   # forts.contract.yaml — key from `fort b2-key db-physical {{ .Fort }}
   # --write`.

@@ -236,7 +236,7 @@ spec:
         # archive_timeout (5 m default), so an hour without one is stuck.
         # Known false positive: postgres only forces the timed switch if
         # WAL was written since the last one, so a cluster nobody writes
-        # to (the drill fort's sites-db after gitea left it, 2026-09-21)
+        # to (the drill fort's postgres after gitea left it, 2026-09-21)
         # trips this too. On a production fort an hour of silence is
         # itself worth a look; on a fort being dismantled it goes with
         # the fort.

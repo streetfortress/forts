@@ -37,8 +37,8 @@
 #
 # Crash-consistent by nature: a PVC is copied while pods write to it.
 # That is the right trade for content and for a gitea data dir; it is the
-# wrong trade for a database, which is why sites-db is excluded below and
-# CNPG owns that layer.
+# wrong trade for a database, which is why the fort's postgres is excluded
+# below and CNPG owns that layer.
 { config, lib, pkgs, ... }:
 
 let
@@ -268,8 +268,12 @@ in
       type = lib.types.listOf lib.types.str;
       default = [
         # CNPG owns physical + WAL through barman; restic-ing a live
-        # PGDATA produces a copy nobody should ever restore from.
-        "*_sites-db_*"
+        # PGDATA produces a copy nobody should ever restore from. The
+        # Cluster is `postgres` in the fort's `forts` namespace, beside
+        # valkey and rustfs (deployments#671), so the match is the PVC
+        # name, not the namespace: rustfs's data volume in the same
+        # namespace IS the content backup and must stay in.
+        "*_forts_postgres-*"
         # Derived: the TSDB is rebuilt by remote_write, chunks by
         # re-ingest. Backing them up buys a slower version of both.
         "*_monitoring_*"

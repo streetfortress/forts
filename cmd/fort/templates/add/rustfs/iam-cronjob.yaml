@@ -30,7 +30,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: rustfs-iam
-  namespace: rustfs
+  namespace: forts
   annotations:
     # The script uses shell parameter expansion — ${p##*/}, ${name%.json}
     # — and flux's post-build envsubst processes ${...} before anything
@@ -55,7 +55,7 @@ spec:
           # Never each attempt keeps its pod.
           #
           #   logcli/Grafana, against luxor's Loki:
-          #     {namespace="rustfs", pod=~"rustfs-iam-.*"}
+          #     {namespace="forts", pod=~"rustfs-iam-.*"}
           restartPolicy: Never
           containers:
             - name: rc

@@ -9,7 +9,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: valkey
-  namespace: valkey
+  namespace: forts
 spec:
   selector:
     matchLabels:
@@ -22,13 +22,13 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: valkey
-  namespace: valkey
+  namespace: forts
 spec:
   groups:
     - name: valkey-cache-duty
       rules:
         - alert: ValkeyDown
-          expr: absent(redis_up{job="valkey/valkey"} == 1)
+          expr: absent(redis_up{job="forts/valkey"} == 1)
           for: 15m
           labels:
             severity: warning

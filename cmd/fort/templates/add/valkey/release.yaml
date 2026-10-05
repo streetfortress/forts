@@ -9,7 +9,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: valkey
-  namespace: valkey
+  namespace: forts
 spec:
   interval: 1h
   chart:

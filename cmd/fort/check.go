@@ -160,20 +160,13 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 		return nil, err
 	}
 	apps := filepath.Join("flux/apps", fort)
-	entries, err := os.ReadDir(filepath.Join(o.root, apps))
+	dirs, err := contractDirs(o.root, apps)
 	if err != nil {
 		return nil, fmt.Errorf("%s: no flux/apps tree (%w)", fort, err)
 	}
 	var out []finding
 	consumed := sopsRefs{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		dir := filepath.Join(apps, e.Name())
-		if !contract.Present(filepath.Join(o.root, dir)) && !exists(o.root, filepath.Join(dir, "repository.yaml")) {
-			continue
-		}
+	for _, dir := range dirs {
 		so := seedOpts{root: o.root, fort: fort, chartDir: o.chartDir, charts: o.charts}
 		ff, c, source, err := effectiveContract(so, dir)
 		if err != nil {
@@ -215,43 +208,87 @@ func checkFort(o checkOpts, fort string) ([]finding, error) {
 			out = append(out, finding{"ok", dir, source})
 		}
 	}
-	out = append(out, checkProviderNamespaces(o.root, fort)...)
+	out = append(out, checkFortsNamespace(o.root, fort)...)
 	out = append(out, checkRustfsIdentities(o.root, fort, consumed)...)
 	return out, nil
 }
 
-// providerLabel is the one well-known label every provider namespace a
-// fort renders carries, value = the provider type (#326). It is what
-// lets `fort check` and a kubectl selector enumerate the forts-managed
-// set before the namespaces are grouped under one prefix.
-const providerLabel = "forts.sfi/provider"
+// legacyProviderDirs are the pre-#671 provider dirs at the apps root,
+// each with a namespace of its own. A fort that still has one converges
+// at its rebirth (a renamed CNPG Cluster is a new cluster plus a
+// restore, never an edit in place); until then check says so, once per
+// dir, and nothing else about them.
+var legacyProviderDirs = map[string]string{"postgres": "sites-db", "valkey": "valkey", "s3": "rustfs"}
 
-// checkProviderNamespaces: each provider dir on the fort labels its
-// namespace. A dir that is there is an instance the fort runs, whatever
-// rendered it, so the label is required on every one.
-func checkProviderNamespaces(root, fort string) []finding {
+// checkFortsNamespace: every provider the fort runs lives under forts/,
+// in the one Namespace that directory owns (deployments#671). The
+// namespace is the container of the set — no label enumerates it — so
+// the check is the shape: forts/namespace.yaml is Namespace forts,
+// forts/kustomization.yaml lists it and every provider dir that is
+// there, and no provider dir carries a namespace of its own (kustomize
+// refuses two Namespace documents with the same id).
+func checkFortsNamespace(root, fort string) []finding {
 	var out []finding
+	apps := filepath.Join("flux/apps", fort)
 	for _, typ := range contract.Types {
-		dir := filepath.Join("flux/apps", fort, providerDirs[typ])
+		old := legacyProviderDirs[typ]
+		if exists(root, filepath.Join(apps, old)) {
+			out = append(out, finding{"warning", filepath.Join(apps, old), "a provider dir at the apps root predates the forts namespace (deployments#671) — the fort converges at rebirth: fort add renders " + providerDirs[typ] + "/ on the new fort"})
+		}
+	}
+	fortsRoot := filepath.Join(apps, fortsDir)
+	var present []string
+	for _, typ := range contract.Types {
+		dir := filepath.Join(apps, providerDirs[typ])
 		if !exists(root, dir) {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(root, dir, "namespace.yaml"))
-		if err != nil {
-			out = append(out, finding{"error", dir, "namespace.yaml: " + err.Error()})
-			continue
+		present = append(present, providerSubdir(typ))
+		if exists(root, filepath.Join(dir, "namespace.yaml")) {
+			out = append(out, finding{"error", dir, "namespace.yaml: a provider dir carries no namespace of its own — forts/namespace.yaml is the one Namespace every provider shares"})
 		}
+	}
+	if len(present) == 0 {
+		return out
+	}
+	raw, err := os.ReadFile(filepath.Join(root, fortsRoot, "namespace.yaml"))
+	if err != nil {
+		out = append(out, finding{"error", fortsRoot, "namespace.yaml: " + err.Error()})
+	} else {
 		var ns struct {
+			Kind     string `yaml:"kind"`
 			Metadata struct {
-				Labels map[string]string `yaml:"labels"`
+				Name string `yaml:"name"`
 			} `yaml:"metadata"`
 		}
 		if err := yaml.Unmarshal(raw, &ns); err != nil {
-			out = append(out, finding{"error", dir, "namespace.yaml: " + err.Error()})
-			continue
+			out = append(out, finding{"error", fortsRoot, "namespace.yaml: " + err.Error()})
+		} else if ns.Kind != "Namespace" || ns.Metadata.Name != fortsNamespace {
+			out = append(out, finding{"error", fortsRoot, fmt.Sprintf("namespace.yaml: want Namespace %s, got %s %q — the one namespace every provider the fort runs shares", fortsNamespace, ns.Kind, ns.Metadata.Name)})
 		}
-		if got := ns.Metadata.Labels[providerLabel]; got != typ {
-			out = append(out, finding{"error", dir, fmt.Sprintf("namespace.yaml: label %s: %s missing (got %q) — every provider namespace a fort renders carries it", providerLabel, typ, got)})
+	}
+	kraw, err := os.ReadFile(filepath.Join(root, fortsRoot, "kustomization.yaml"))
+	if err != nil {
+		out = append(out, finding{"error", fortsRoot, "kustomization.yaml: " + err.Error()})
+		return out
+	}
+	var k struct {
+		Resources []string `yaml:"resources"`
+	}
+	if err := yaml.Unmarshal(kraw, &k); err != nil {
+		out = append(out, finding{"error", fortsRoot, "kustomization.yaml: " + err.Error()})
+		return out
+	}
+	listed := map[string]bool{}
+	for _, r := range k.Resources {
+		listed[strings.TrimSuffix(r, "/")] = true
+	}
+	if !listed["namespace.yaml"] {
+		out = append(out, finding{"error", fortsRoot, "kustomization.yaml: namespace.yaml not listed — the directory owns the Namespace"})
+	}
+	for _, sub := range present {
+		if !listed[sub] {
+			out = append(out, finding{"error", fortsRoot, fmt.Sprintf("kustomization.yaml: %s/ is there but not listed — flux never applies it", sub)})
 		}
 	}
 	return out
@@ -297,7 +334,7 @@ func (r sopsRefs) collect(dir string, ff *FullForm) {
 // with no policies/<name>.json, and a document with no user is dead
 // text.
 func checkRustfsIdentities(root, fort string, consumed sopsRefs) []finding {
-	dir := filepath.Join("flux/apps", fort, "rustfs")
+	dir := filepath.Join("flux/apps", fort, providerDirs["s3"])
 	if !exists(root, dir) {
 		return nil
 	}

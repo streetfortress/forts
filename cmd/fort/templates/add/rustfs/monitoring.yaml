@@ -10,7 +10,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: rustfs
-  namespace: rustfs
+  namespace: forts
 spec:
   groups:
     - name: rustfs-fort-battery
@@ -19,10 +19,10 @@ spec:
           # Pushed by rustfs over OTLP and re-exposed by the collector;
           # absent means rustfs stopped pushing OR the bridge is gone,
           # and either way nothing answers "is the store OK".
-          expr: absent(rustfs_runtime_readiness_ready{namespace="rustfs"} == 1)
+          expr: absent(rustfs_runtime_readiness_ready{namespace="forts"} == 1)
           for: 15m
           labels:
             severity: warning
           annotations:
             summary: "the fort's rustfs is down or unscraped"
-            description: "Every app that requires s3 on this fort has lost its object store — uploads fail, reads of stored content fail. Check the rustfs pod and the otel-collector bridge in namespace rustfs."
+            description: "Every app that requires s3 on this fort has lost its object store — uploads fail, reads of stored content fail. Check the rustfs pod and the otel-collector bridge in namespace forts."

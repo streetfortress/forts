@@ -1,15 +1,16 @@
 flux/apps/lab-fort/   (chart 0.1.0)
+○ forts/
+  ○ rustfs/
+    ○ bucket-job.yaml            + rc bucket create uploads
+    ○ forts.contract.yaml        rustfs-users: + key uploads
+    ○ kustomization.yaml         configMapGenerator rustfs-policies: + policies/uploads.json
+    ● policies/uploads.json      get/put/list/delete on bucket uploads, nothing else
+    ◆ users.sops.yaml            + key uploads (seeder add-missing-keys; until then: sops set)
 ○ gateway/
   ● certificate-uploads.yaml     step-ca, uploads.lab-fort.lofi
   ○ kustomization.yaml           + certificate-uploads.yaml; patches: + listener-uploads.yaml
   ● listener-uploads.yaml        JSON6902 add /spec/listeners/- (https-uploads)
 ○ kustomization.yaml             + uploads
-○ rustfs/
-  ○ bucket-job.yaml              + rc bucket create uploads
-  ○ forts.contract.yaml          rustfs-users: + key uploads
-  ○ kustomization.yaml           configMapGenerator rustfs-policies: + policies/uploads.json
-  ● policies/uploads.json        get/put/list/delete on bucket uploads, nothing else
-  ◆ users.sops.yaml              + key uploads (seeder add-missing-keys; until then: sops set)
 ● uploads/
   ● forts.contract.yaml          pre-`fort seed` full form, 1 keys
   ● kustomization.yaml           

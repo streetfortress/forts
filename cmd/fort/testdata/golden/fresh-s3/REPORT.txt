@@ -1,4 +1,26 @@
 flux/apps/lab-fort/   (chart 0.2.0)
+● forts/
+  ● kustomization.yaml           namespace + postgres, rustfs
+  ● namespace.yaml               Namespace forts: every provider the fort runs
+  ● postgres/
+    ● cluster.yaml               CNPG Cluster postgres: greenfield, NO archive (profile lab), roles via patches
+    ● database-gallery.yaml      Database CR
+    ● forts.contract.yaml        secrets-gallery
+    ● kustomization.yaml         patches: role-gallery.yaml
+    ● role-gallery.yaml          JSON6902 add /spec/managed/roles/-
+    ◆ secrets-gallery.sops.yaml  seeded
+  ● rustfs/
+    ● bucket-job.yaml            rc bucket create gallery
+    ● forts.contract.yaml        rustfs-credentials (root pair) + rustfs-users: gallery
+    ● iam-cronjob.yaml           
+    ● kustomization.yaml         configMapGenerator rustfs-policies: policies/gallery.json
+    ● monitoring.yaml            PrometheusRule RustfsDown (scrape is the collector's ServiceMonitor)
+    ● otel-collector.yaml        
+    ● policies/gallery.json      get/put/list/delete on bucket gallery, nothing else
+    ● release.yaml               
+    ● repository.yaml            
+    ◆ secrets.sops.yaml          seeded
+    ◆ users.sops.yaml            seeded
 ● gallery/
   ● forts.contract.yaml          pre-`fort seed` full form, 3 keys
   ● kustomization.yaml           
@@ -15,28 +37,7 @@ flux/apps/lab-fort/   (chart 0.2.0)
   ● kustomization.yaml           patches: listener-gallery.yaml
   ● listener-gallery.yaml        JSON6902 add /spec/listeners/- (https-gallery)
   ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sites-db, rustfs, gallery
-● rustfs/
-  ● bucket-job.yaml              rc bucket create gallery
-  ● forts.contract.yaml          rustfs-credentials (root pair) + rustfs-users: gallery
-  ● iam-cronjob.yaml             
-  ● kustomization.yaml           configMapGenerator rustfs-policies: policies/gallery.json
-  ● monitoring.yaml              PrometheusRule RustfsDown (scrape is the collector's ServiceMonitor)
-  ● namespace.yaml               
-  ● otel-collector.yaml          
-  ● policies/gallery.json        get/put/list/delete on bucket gallery, nothing else
-  ● release.yaml                 
-  ● repository.yaml              
-  ◆ secrets.sops.yaml            seeded
-  ◆ users.sops.yaml              seeded
-● sites-db/
-  ● cluster.yaml                 CNPG Cluster sites-db: greenfield, NO archive (profile lab), roles via patches
-  ● database-gallery.yaml        Database CR
-  ● forts.contract.yaml          secrets-gallery
-  ● kustomization.yaml           patches: role-gallery.yaml
-  ● namespace.yaml               
-  ● role-gallery.yaml            JSON6902 add /spec/managed/roles/-
-  ◆ secrets-gallery.sops.yaml    seeded
+○ kustomization.yaml             + gateway, forts, gallery
 
 staged. next: seed the ◆ files (dependency order is derived):
   fort seed lab-fort --write

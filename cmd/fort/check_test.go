@@ -12,7 +12,7 @@ import (
 // The gate on a synthetic fort: a full-form dir that is complete, one
 // missing a key, a chart-contract dir with an unset required external
 // key, an unset wire value, a provider ref into a file without the key,
-// a provider namespace without its label, and a rustfs identity nobody
+// a provider dir with a namespace of its own, and a rustfs identity nobody
 // sources (#326). Uses the fixture manifest and the symbology contract
 // fixture.
 func TestCheckFindings(t *testing.T) {
@@ -35,27 +35,29 @@ func TestCheckFindings(t *testing.T) {
 		}
 		return s + "sops: {}\n"
 	}
-	// provider namespaces: valkey labelled, sites-db NOT (one label
-	// finding), rustfs labelled
-	write("valkey/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: valkey\n  labels:\n    forts.sfi/provider: valkey\n")
-	write("sites-db/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sites-db\n")
-	write("rustfs/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: rustfs\n  labels:\n    forts.sfi/provider: s3\n")
+	// forts/: the one namespace, listing postgres and rustfs but NOT
+	// valkey (one shape finding); postgres carries a namespace of its
+	// own (a second); a pre-#671 sites-db/ at the apps root (a warning)
+	write("forts/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: forts\n")
+	write("forts/kustomization.yaml", "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - namespace.yaml\n  - postgres\n  - rustfs\n")
+	write("forts/postgres/namespace.yaml", "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: postgres\n")
+	write("sites-db/kustomization.yaml", "resources: []\n")
 	// rustfs: two identities declared and seeded; gallery is sourced by
 	// the gallery app below and has its policy, orphan has neither a
 	// consumer nor a policy; dead.json names no identity
-	write("rustfs/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: rustfs-credentials, namespace: rustfs}\n    keys:\n      RUSTFS_ACCESS_KEY: {generate: hex8}\n      RUSTFS_SECRET_KEY: {generate: hex24}\n  users.sops.yaml:\n    metadata: {name: rustfs-users, namespace: rustfs}\n    keys:\n      gallery: {generate: hex24}\n      orphan: {generate: hex24}\n")
-	write("rustfs/secrets.sops.yaml", secret("rustfs-credentials", "rustfs", "RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY"))
-	write("rustfs/users.sops.yaml", secret("rustfs-users", "rustfs", "gallery", "orphan"))
-	write("rustfs/policies/gallery.json", "{}\n")
-	write("rustfs/policies/dead.json", "{}\n")
-	write("gallery/forts.contract.yaml", "vars:\n  media_secret_key: {sops: [../rustfs/users.sops.yaml, stringData.gallery]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: gallery-env, namespace: gallery}\n    keys:\n      S3_SECRET_KEY: {template: \"${media_secret_key}\"}\n")
+	write("forts/rustfs/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: rustfs-credentials, namespace: forts}\n    keys:\n      RUSTFS_ACCESS_KEY: {generate: hex8}\n      RUSTFS_SECRET_KEY: {generate: hex24}\n  users.sops.yaml:\n    metadata: {name: rustfs-users, namespace: forts}\n    keys:\n      gallery: {generate: hex24}\n      orphan: {generate: hex24}\n")
+	write("forts/rustfs/secrets.sops.yaml", secret("rustfs-credentials", "forts", "RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY"))
+	write("forts/rustfs/users.sops.yaml", secret("rustfs-users", "forts", "gallery", "orphan"))
+	write("forts/rustfs/policies/gallery.json", "{}\n")
+	write("forts/rustfs/policies/dead.json", "{}\n")
+	write("gallery/forts.contract.yaml", "vars:\n  media_secret_key: {sops: [../forts/rustfs/users.sops.yaml, stringData.gallery]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: gallery-env, namespace: gallery}\n    keys:\n      S3_SECRET_KEY: {template: \"${media_secret_key}\"}\n")
 	write("gallery/secrets.sops.yaml", secret("gallery-env", "gallery", "S3_SECRET_KEY"))
 	// complete full-form provider
-	write("valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      symbology: {generate: hex24}\n")
-	write("valkey/secrets.sops.yaml", secret("valkey-users", "valkey", "default", "symbology"))
-	// sites-db: the symbology tenant secret lacks its password key
-	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-symbology.sops.yaml:\n    metadata: {name: c, namespace: sites-db}\n    keys:\n      username: {literal: symbology}\n      password: {generate: hex24}\n")
-	write("sites-db/secrets-symbology.sops.yaml", secret("c", "sites-db", "username"))
+	write("forts/valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: forts}\n    keys:\n      default: {generate: hex24}\n      symbology: {generate: hex24}\n")
+	write("forts/valkey/secrets.sops.yaml", secret("valkey-users", "forts", "default", "symbology"))
+	// postgres: the symbology tenant secret lacks its password key
+	write("forts/postgres/forts.contract.yaml", "secrets:\n  secrets-symbology.sops.yaml:\n    metadata: {name: c, namespace: forts}\n    keys:\n      username: {literal: symbology}\n      password: {generate: hex24}\n")
+	write("forts/postgres/secrets-symbology.sops.yaml", secret("c", "forts", "username"))
 	// symbology: chart contract (fixture), wires partly unset, Secret
 	// lacks STRIPE_SECRET_KEY (required external) and RESEND_API_KEY
 	// (optional), and carries an extra key
@@ -83,37 +85,40 @@ func TestCheckFindings(t *testing.T) {
 	}
 	joined := strings.Join(got, "\n")
 	for _, want := range []string{
-		"ok valkey: forts.contract.yaml (full form)",
-		"error sites-db: secrets-symbology.sops.yaml: missing password",
+		"ok forts/valkey: forts.contract.yaml (full form)",
+		"error forts/postgres: secrets-symbology.sops.yaml: missing password",
 		"error symbology: secrets.sops.yaml: required external key(s) not set: STRIPE_SECRET_KEY",
 		"warning symbology: secrets.sops.yaml: optional external key(s) unset: RESEND_API_KEY",
 		"warning symbology: secrets.sops.yaml: extra key(s) not in the contract: LEGACY_KEY",
-		"error symbology: var db_password: ../sites-db/secrets-symbology.sops.yaml has no key password",
+		"error symbology: var db_password: ../forts/postgres/secrets-symbology.sops.yaml has no key password",
 		"error symbology: requires.postgres.db: release.yaml values unset: database.user (user)",
 		"error legacy: chart contract declares STRIPE_SECRET_KEY — the fort-side",
 		"warning legacy: chart contract's optional key(s) not carried fort-side: RESEND_API_KEY",
 		"error legacy: requires.valkey.cache: release.yaml values unset: cache.db (db)",
-		"error sites-db: namespace.yaml: label forts.sfi/provider: postgres missing",
-		"error rustfs: ORPHANED identity orphan: no app on lab-fort sources users.sops.yaml stringData.orphan",
-		"error rustfs: identity orphan has no policies/orphan.json",
-		"warning rustfs: policies/dead.json names no declared identity",
+		"error forts/postgres: namespace.yaml: a provider dir carries no namespace of its own",
+		"error forts: kustomization.yaml: valkey/ is there but not listed",
+		"warning sites-db: a provider dir at the apps root predates the forts namespace",
+		"error forts/rustfs: ORPHANED identity orphan: no app on lab-fort sources users.sops.yaml stringData.orphan",
+		"error forts/rustfs: identity orphan has no policies/orphan.json",
+		"warning forts/rustfs: policies/dead.json names no declared identity",
 		"ok gallery: forts.contract.yaml (full form)",
-		"ok rustfs: forts.contract.yaml (full form)",
+		"ok forts/rustfs: forts.contract.yaml (full form)",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing finding %q in:\n%s", want, joined)
 		}
 	}
 	// valkey's wires are all set → no wire finding for it; gallery is
-	// sourced, so it is no orphan; the labelled namespaces pass
-	for _, unwanted := range []string{"symbology: requires.valkey.cache: release.yaml", "identity gallery", "valkey: namespace.yaml", "rustfs: namespace.yaml"} {
+	// sourced, so it is no orphan; the listed providers and the forts
+	// namespace itself pass
+	for _, unwanted := range []string{"symbology: requires.valkey.cache: release.yaml", "identity gallery", "valkey/namespace.yaml", "rustfs/namespace.yaml", "forts: namespace.yaml", "postgres/ is there", "rustfs/ is there"} {
 		if strings.Contains(joined, unwanted) {
 			t.Errorf("unexpected finding mentioning %q in:\n%s", unwanted, joined)
 		}
 	}
 	var sb strings.Builder
-	if n := reportFindings(&sb, fort, findings, true); n != 9 {
-		t.Errorf("errors: want 9, got %d\n%s", n, sb.String())
+	if n := reportFindings(&sb, fort, findings, true); n != 10 {
+		t.Errorf("errors: want 10, got %d\n%s", n, sb.String())
 	}
 	if !strings.Contains(sb.String(), "::error::") {
 		t.Errorf("annotations missing:\n%s", sb.String())

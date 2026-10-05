@@ -9,4 +9,4 @@ resources:
   # Deliberately lean: no gateway, no sites, no symbology app. This fort
   # exists to drill the CNPG backup/restore cycle on the monolith shape;
   # workloads would only blur the timings.
-  - sites-db
+  - forts

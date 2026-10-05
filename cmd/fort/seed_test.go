@@ -142,13 +142,13 @@ func TestSeedFullForm(t *testing.T) {
 	// A provider dir (new file) and an app dir referencing it (new file
 	// with every primitive), plus an existing provider secret that is
 	// missing a key.
-	write("valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: valkey}\n    keys:\n      default: {generate: hex24}\n      app: {generate: hex24}\n")
-	write("valkey/secrets.sops.yaml", "apiVersion: v1\nkind: Secret\nmetadata: {name: valkey-users, namespace: valkey}\nstringData:\n  default: ENC[...]\nsops: {}\n")
-	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-app.sops.yaml:\n    metadata: {name: sites-db-app-credentials, namespace: sites-db, type: kubernetes.io/basic-auth}\n    keys:\n      username: {literal: app}\n      password: {generate: hex24}\n")
+	write("forts/valkey/forts.contract.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: valkey-users, namespace: forts}\n    keys:\n      default: {generate: hex24}\n      app: {generate: hex24}\n")
+	write("forts/valkey/secrets.sops.yaml", "apiVersion: v1\nkind: Secret\nmetadata: {name: valkey-users, namespace: forts}\nstringData:\n  default: ENC[...]\nsops: {}\n")
+	write("forts/postgres/forts.contract.yaml", "secrets:\n  secrets-app.sops.yaml:\n    metadata: {name: postgres-app-credentials, namespace: forts, type: kubernetes.io/basic-auth}\n    keys:\n      username: {literal: app}\n      password: {generate: hex24}\n")
 	write("app/forts.contract.yaml", `sources:
   legacy: `+tmp+`/legacy.env
 vars:
-  db_password: {sops: [../sites-db/secrets-app.sops.yaml, stringData.password]}
+  db_password: {sops: [../forts/postgres/secrets-app.sops.yaml, stringData.password]}
 secrets:
   secrets.sops.yaml:
     metadata:
@@ -156,16 +156,16 @@ secrets:
       namespace: app
     keys:
       SESSION: {generate: b64_32}
-      DATABASE_URL: {template: "postgresql://app:${db_password}@sites-db-rw:5432/app"}
+      DATABASE_URL: {template: "postgresql://app:${db_password}@postgres-rw:5432/app"}
       MAIL_KEY: {env: [legacy, MAIL_KEY]}
-      CACHE_PASSWORD: {sops: [../valkey/secrets.sops.yaml, stringData.app]}
+      CACHE_PASSWORD: {sops: [../forts/valkey/secrets.sops.yaml, stringData.app]}
       STRIPE_KEY: {external: "Stripe dashboard"}
       OPTIONAL_KEY: {external: "somewhere", optional: true}
 `)
 	tool := &fakeTool{plain: map[string]string{
-		filepath.Join(apps, "sites-db/secrets-app.sops.yaml"): "stringData:\n  username: app\n  password: dbpw\n",
-		filepath.Join(apps, "valkey/secrets.sops.yaml"):       "stringData:\n  default: x\n  app: cachepw\n",
-		filepath.Join(tmp, "legacy.env"):                      "# legacy\nMAIL_KEY=\"re_123\"\nOTHER=1\n",
+		filepath.Join(apps, "forts/postgres/secrets-app.sops.yaml"): "stringData:\n  username: app\n  password: dbpw\n",
+		filepath.Join(apps, "forts/valkey/secrets.sops.yaml"):       "stringData:\n  default: x\n  app: cachepw\n",
+		filepath.Join(tmp, "legacy.env"):                            "# legacy\nMAIL_KEY=\"re_123\"\nOTHER=1\n",
 	}}
 	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true}
 	plans, err := planSeed(o)
@@ -177,7 +177,7 @@ secrets:
 		order = append(order, filepath.Base(p.dir))
 	}
 	// providers first (the app's sops: refs point at both), alphabetical among peers
-	if want := []string{"sites-db", "valkey", "app"}; !reflect.DeepEqual(order, want) {
+	if want := []string{"postgres", "valkey", "app"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("order: want %v, got %v", want, order)
 	}
 	for _, p := range plans {
@@ -186,10 +186,10 @@ secrets:
 		}
 	}
 	// valkey: existed, missing `app` → one sops set, no rewrite
-	if len(tool.sets) != 1 || tool.sets[0][1] != "app" || !strings.HasSuffix(tool.sets[0][0], "valkey/secrets.sops.yaml") {
+	if len(tool.sets) != 1 || tool.sets[0][1] != "app" || !strings.HasSuffix(tool.sets[0][0], "forts/valkey/secrets.sops.yaml") {
 		t.Errorf("valkey add-missing-keys: sets = %v", tool.sets)
 	}
-	// sites-db + app: created, encrypted in place, git added
+	// forts/postgres + app: created, encrypted in place, git added
 	if len(tool.encrypted) != 2 || len(tool.added) != 2 {
 		t.Errorf("created files: encrypted %v added %v", tool.encrypted, tool.added)
 	}
@@ -201,7 +201,7 @@ secrets:
 		t.Errorf("app keys: want %v (externals absent), got %v", want, names)
 	}
 	raw := readFile(t, filepath.Join(apps, "app/secrets.sops.yaml"))
-	for _, want := range []string{`DATABASE_URL: "postgresql://app:dbpw@sites-db-rw:5432/app"`, `MAIL_KEY: "re_123"`, `CACHE_PASSWORD: "cachepw"`, "# Seeded by `fort seed`"} {
+	for _, want := range []string{`DATABASE_URL: "postgresql://app:dbpw@postgres-rw:5432/app"`, `MAIL_KEY: "re_123"`, `CACHE_PASSWORD: "cachepw"`, "# Seeded by `fort seed`"} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("app secret lacks %q:\n%s", want, raw)
 		}
@@ -248,7 +248,7 @@ func TestSeedFromChartContract(t *testing.T) {
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
 	golden := filepath.Join("testdata/golden", fort)
-	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "sites-db/forts.contract.yaml", "valkey/forts.contract.yaml"} {
+	for _, rel := range []string{"symbology/repository.yaml", "symbology/release.yaml", "forts/postgres/forts.contract.yaml", "forts/valkey/forts.contract.yaml"} {
 		copyFile(t, filepath.Join(golden, rel), filepath.Join(tmp, "flux/apps", fort, rel))
 	}
 	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, chartDir: "testdata/charts/symbology", dirs: []string{filepath.Join("flux/apps", fort, "symbology")}}
@@ -331,13 +331,13 @@ func TestSeedEdgeCases(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("sites-db/forts.contract.yaml", "secrets:\n  secrets-a.sops.yaml:\n    metadata: {name: a, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n  secrets-b.sops.yaml:\n    metadata: {name: b, namespace: sites-db}\n    keys:\n      password: {generate: hex24}\n")
-	write("sites-db/secrets-a.sops.yaml", "stringData:\n  password: ENC\n")
-	write("sites-db/secrets-b.sops.yaml", "stringData:\n  password: ENC\n")
-	write("app/forts.contract.yaml", "vars:\n  pw: {sops: [../sites-db/secrets-a.sops.yaml, stringData.password]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: app-env, namespace: app}\n    keys:\n      URL: {template: \"x://u:${pw}@h/db\"}\n")
+	write("forts/postgres/forts.contract.yaml", "secrets:\n  secrets-a.sops.yaml:\n    metadata: {name: a, namespace: forts}\n    keys:\n      password: {generate: hex24}\n  secrets-b.sops.yaml:\n    metadata: {name: b, namespace: forts}\n    keys:\n      password: {generate: hex24}\n")
+	write("forts/postgres/secrets-a.sops.yaml", "stringData:\n  password: ENC\n")
+	write("forts/postgres/secrets-b.sops.yaml", "stringData:\n  password: ENC\n")
+	write("app/forts.contract.yaml", "vars:\n  pw: {sops: [../forts/postgres/secrets-a.sops.yaml, stringData.password]}\nsecrets:\n  secrets.sops.yaml:\n    metadata: {name: app-env, namespace: app}\n    keys:\n      URL: {template: \"x://u:${pw}@h/db\"}\n")
 
 	// null provider value → error, never "<nil>" in a URL
-	tool := &fakeTool{plain: map[string]string{filepath.Join(apps, "sites-db/secrets-a.sops.yaml"): "stringData:\n  password:\n"}}
+	tool := &fakeTool{plain: map[string]string{filepath.Join(apps, "forts/postgres/secrets-a.sops.yaml"): "stringData:\n  password:\n"}}
 	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "app")}}
 	plans, err := planSeed(o)
 	if err != nil {
@@ -351,14 +351,14 @@ func TestSeedEdgeCases(t *testing.T) {
 	}
 
 	// --set with a typo'd key on a two-file dir → error, not exit 0
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "sites-db")}, setKey: "pasword", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "forts/postgres")}, setKey: "pasword", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "not a key of any Secret") {
 		t.Errorf("--set typo: want an error, got %v", err)
 	}
 
 	// --set with a key two Secrets of the dir share → refused, naming
 	// the qualified form; FILE/KEY then lands in that one file only
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "sites-db")}, setKey: "password", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{filepath.Join("flux/apps", fort, "forts/postgres")}, setKey: "password", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "--set secrets-a.sops.yaml/password") {
 		t.Errorf("--set shared key: want the ambiguity error, got %v", err)
 	}
@@ -422,12 +422,16 @@ func yamlNode(t *testing.T, s string) *yaml.Node {
 func TestAppDir(t *testing.T) {
 	apps := "flux/apps/f"
 	for in, want := range map[string]string{
-		"sites-db":                 "flux/apps/f/sites-db",
-		"sites-db/":                "flux/apps/f/sites-db",
-		"./sites-db":               "flux/apps/f/sites-db",
-		"flux/apps/f/sites-db":     "flux/apps/f/sites-db",
-		"flux/apps/f/sites-db/":    "flux/apps/f/sites-db",
-		"flux/apps/other/sites-db": "flux/apps/other/sites-db", // caller's prefix check rejects it
+		"symbology":                      "flux/apps/f/symbology",
+		"symbology/":                     "flux/apps/f/symbology",
+		"./symbology":                    "flux/apps/f/symbology",
+		"postgres":                       "flux/apps/f/forts/postgres", // a bare provider name lives under forts/
+		"rustfs":                         "flux/apps/f/forts/rustfs",
+		"forts/postgres":                 "flux/apps/f/forts/postgres",
+		"forts/postgres/":                "flux/apps/f/forts/postgres",
+		"flux/apps/f/forts/postgres":     "flux/apps/f/forts/postgres",
+		"flux/apps/f/symbology/":         "flux/apps/f/symbology",
+		"flux/apps/other/forts/postgres": "flux/apps/other/forts/postgres", // caller's prefix check rejects it
 	} {
 		if got := appDir(apps, in); got != want {
 			t.Errorf("appDir(%q) = %q, want %q", in, got, want)
@@ -515,8 +519,8 @@ func TestSeedS3Provider(t *testing.T) {
 	copyTree(t, "testdata/golden/fresh-s3", apps)
 	os.Remove(filepath.Join(apps, "REPORT.txt"))
 	tool := &fakeTool{plain: map[string]string{
-		filepath.Join(apps, "rustfs/users.sops.yaml"):             "stringData:\n  gallery: s3secret\n",
-		filepath.Join(apps, "sites-db/secrets-gallery.sops.yaml"): "stringData:\n  username: gallery\n  password: dbpw\n",
+		filepath.Join(apps, "forts/rustfs/users.sops.yaml"):             "stringData:\n  gallery: s3secret\n",
+		filepath.Join(apps, "forts/postgres/secrets-gallery.sops.yaml"): "stringData:\n  username: gallery\n  password: dbpw\n",
 	}}
 	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true}
 	plans, err := planSeed(o)
@@ -527,10 +531,10 @@ func TestSeedS3Provider(t *testing.T) {
 	for _, p := range plans {
 		order = append(order, filepath.Base(p.dir))
 	}
-	if want := []string{"rustfs", "sites-db", "gallery"}; !reflect.DeepEqual(order, want) {
+	if want := []string{"postgres", "rustfs", "gallery"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("order: want %v, got %v", want, order)
 	}
-	if n := len(plans[0].files); n != 2 {
+	if n := len(plans[1].files); n != 2 {
 		t.Fatalf("rustfs: want 2 Secret files (root pair + identities), got %d", n)
 	}
 	for _, p := range plans {
@@ -538,11 +542,11 @@ func TestSeedS3Provider(t *testing.T) {
 			t.Fatalf("%s: %v", p.dir, err)
 		}
 	}
-	names, err := secretKeyNames(filepath.Join(apps, "rustfs/users.sops.yaml"))
+	names, err := secretKeyNames(filepath.Join(apps, "forts/rustfs/users.sops.yaml"))
 	if err != nil || !reflect.DeepEqual(names, []string{"gallery"}) {
 		t.Errorf("rustfs-users keys: %v (%v)", names, err)
 	}
-	names, err = secretKeyNames(filepath.Join(apps, "rustfs/secrets.sops.yaml"))
+	names, err = secretKeyNames(filepath.Join(apps, "forts/rustfs/secrets.sops.yaml"))
 	if err != nil || !reflect.DeepEqual(names, []string{"RUSTFS_ACCESS_KEY", "RUSTFS_SECRET_KEY"}) {
 		t.Errorf("rustfs-credentials keys: %v (%v)", names, err)
 	}
@@ -564,7 +568,7 @@ func TestSeedS3Provider(t *testing.T) {
 	for _, v := range ff.Vars {
 		vars = append(vars, v.Name+"="+v.Spec.YAML())
 	}
-	if want := []string{"db_password={sops: [../sites-db/secrets-gallery.sops.yaml, stringData.password]}", "media_secret_key={sops: [../rustfs/users.sops.yaml, stringData.gallery]}"}; !reflect.DeepEqual(vars, want) {
+	if want := []string{"db_password={sops: [../forts/postgres/secrets-gallery.sops.yaml, stringData.password]}", "media_secret_key={sops: [../forts/rustfs/users.sops.yaml, stringData.gallery]}"}; !reflect.DeepEqual(vars, want) {
 		t.Errorf("derived vars: want %v, got %v", want, vars)
 	}
 }

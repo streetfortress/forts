@@ -29,14 +29,17 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	golden := filepath.Join("testdata/golden", fort)
 
 	// Pre-add state: the manifest, the CA, the fort's root kustomization as
-	// it was before #230, sops-canary + the whole sites-db dir as-is
-	// (the symbology tenant already existed from the restore drill).
+	// it was before #230, sops-canary + the whole forts/postgres dir as-is
+	// (the symbology tenant already existed from the restore drill) under
+	// a forts/ that lists postgres alone (deployments#671).
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
 	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, filepath.Join("testdata/trees", fort, "kustomization.yaml"), filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "flux/apps", fort, "sops-canary.yaml"))
-	copyTree(t, filepath.Join(golden, "sites-db"), filepath.Join(tmp, "flux/apps", fort, "sites-db"))
+	copyFile(t, filepath.Join("testdata/trees", fort, "forts/kustomization.yaml"), filepath.Join(tmp, "flux/apps", fort, "forts/kustomization.yaml"))
+	copyFile(t, filepath.Join(golden, "forts/namespace.yaml"), filepath.Join(tmp, "flux/apps", fort, "forts/namespace.yaml"))
+	copyTree(t, filepath.Join(golden, "forts/postgres"), filepath.Join(tmp, "flux/apps", fort, "forts/postgres"))
 
 	// The fort followed #189's previews while the PR was open; since the
 	// merge it pins the release tag like every fort, and so does the
@@ -59,8 +62,9 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	exact := []string{
 		"gateway/kustomization.yaml", "gateway/gateway.yaml", "gateway/redirect-https.yaml",
 		"gateway/cluster-issuer-step-ca.yaml", "gateway/certificate-symbology.yaml", "gateway/listener-symbology.yaml",
-		"valkey/kustomization.yaml", "valkey/namespace.yaml", "valkey/repository.yaml", "valkey/release.yaml",
-		"valkey/acl-symbology.yaml", "valkey/forts.contract.yaml", "valkey/monitoring.yaml",
+		"forts/kustomization.yaml", "forts/namespace.yaml",
+		"forts/valkey/kustomization.yaml", "forts/valkey/repository.yaml", "forts/valkey/release.yaml",
+		"forts/valkey/acl-symbology.yaml", "forts/valkey/forts.contract.yaml", "forts/valkey/monitoring.yaml",
 		"symbology/kustomization.yaml", "symbology/namespace.yaml", "symbology/route.yaml",
 		"symbology/monitoring.yaml", "symbology/step-ca-root.pem",
 	}
@@ -72,10 +76,10 @@ func TestAddReproducesDrillFort(t *testing.T) {
 		}
 	}
 
-	// sites-db: tenant present → untouched.
+	// forts/postgres: tenant present → untouched.
 	for _, rel := range []string{"kustomization.yaml", "forts.contract.yaml"} {
-		if readFile(t, filepath.Join(golden, "sites-db", rel)) != readFile(t, filepath.Join(tmp, "flux/apps", fort, "sites-db", rel)) {
-			t.Errorf("sites-db/%s was edited although the tenant already exists", rel)
+		if readFile(t, filepath.Join(golden, "forts/postgres", rel)) != readFile(t, filepath.Join(tmp, "flux/apps", fort, "forts/postgres", rel)) {
+			t.Errorf("forts/postgres/%s was edited although the tenant already exists", rel)
 		}
 	}
 
@@ -283,7 +287,7 @@ func TestAddFreshCloudFort(t *testing.T) {
 }
 
 // The lab twin: libvirt, profile lab — step-ca, <app>.<fort>.lofi, and
-// a sites-db born with NO archive (forts#5): no ObjectStore, no
+// a postgres born with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {
 	testAddFresh(t, addFixture{fort: "lab-fort", golden: "testdata/golden/fresh-lab", chart: "sfi-website", version: "0.3.0"})
@@ -338,7 +342,7 @@ func TestAddFollowMain(t *testing.T) {
 }
 
 // The s3 provider on a fresh lab fort (#326): gallery requires postgres
-// and s3, so the tree gets sites-db AND rustfs from template — the
+// and s3, so the tree gets forts/postgres AND forts/rustfs from template — the
 // rustfs instance born with its first tenant registered (bucket line,
 // policy document, identity key) — and the app contract carries one
 // var per provider over the conventional sops refs.
@@ -347,7 +351,7 @@ func TestAddFreshS3(t *testing.T) {
 }
 
 // A second s3 tenant on the same instance (#326): uploads is added after
-// gallery, so rustfs/ already exists and add registers rather than
+// gallery, so forts/rustfs/ already exists and add registers rather than
 // creates — a new policy file, a bucket line, a configMapGenerator
 // entry and a contract key appended (○), users.sops.yaml marked for the
 // seeder's add-missing-keys. The golden is the whole tree after both

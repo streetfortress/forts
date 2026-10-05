@@ -225,9 +225,31 @@ type providerBinding struct {
 	secretOutput string
 }
 
+// fortsDir is the one directory under a fort's apps root that holds
+// every provider the fort runs, and fortsNamespace the one namespace
+// they share (deployments#671): `kubectl get pods -n forts` is the set.
+// The directory owns the Namespace; the provider dirs under it carry
+// none of their own.
+const (
+	fortsDir       = "forts"
+	fortsNamespace = "forts"
+)
+
 // providerDirs: the shared instance each provider type lives in on a
-// fort (docs/fort-configuration-contracts.md conventions).
-var providerDirs = map[string]string{"postgres": "sites-db", "valkey": "valkey", "s3": "rustfs"}
+// fort, relative to the apps root (docs/fort-configuration-contracts.md
+// conventions). The dir is named for what runs in it — the type's name
+// for postgres and valkey; for s3 the implementation, rustfs, because
+// s3 is the interface.
+var providerDirs = map[string]string{
+	"postgres": fortsDir + "/postgres",
+	"valkey":   fortsDir + "/valkey",
+	"s3":       fortsDir + "/rustfs",
+}
+
+// providerSubdir is the provider's directory name under fortsDir —
+// what `fort seed <fort> postgres` names, and what forts/kustomization.yaml
+// lists.
+func providerSubdir(typ string) string { return strings.TrimPrefix(providerDirs[typ], fortsDir+"/") }
 
 // conventionalBinding is THE place the per-fort conventions for a
 // tenant live — add renders them into the tree, seed and check resolve
@@ -237,14 +259,14 @@ func conventionalBinding(typ, handle, app string, db int) providerBinding {
 	switch typ {
 	case "postgres":
 		return providerBinding{
-			outputs:      map[string]string{"host": "sites-db-rw.sites-db.svc.cluster.local", "port": "5432", "name": app, "user": app},
-			passwordVar:  ctrVar{handle + "_password", "requires.postgres." + handle + " → the sites-db tenant role (lockstep pair).", "../sites-db/secrets-" + app + ".sops.yaml", "stringData.password"},
+			outputs:      map[string]string{"host": "postgres-rw." + fortsNamespace + ".svc.cluster.local", "port": "5432", "name": app, "user": app},
+			passwordVar:  ctrVar{handle + "_password", "requires.postgres." + handle + " → the postgres tenant role (lockstep pair).", "../" + providerDirs["postgres"] + "/secrets-" + app + ".sops.yaml", "stringData.password"},
 			secretOutput: "password",
 		}
 	case "valkey":
 		return providerBinding{
-			outputs:      map[string]string{"host": "valkey.valkey.svc.cluster.local", "port": "6379", "db": fmt.Sprint(db), "user": app},
-			passwordVar:  ctrVar{handle + "_password", "requires.valkey." + handle + " → the valkey-users ACL entry (lockstep pair).", "../valkey/secrets.sops.yaml", "stringData." + app},
+			outputs:      map[string]string{"host": "valkey." + fortsNamespace + ".svc.cluster.local", "port": "6379", "db": fmt.Sprint(db), "user": app},
+			passwordVar:  ctrVar{handle + "_password", "requires.valkey." + handle + " → the valkey-users ACL entry (lockstep pair).", "../" + providerDirs["valkey"] + "/secrets.sops.yaml", "stringData." + app},
 			secretOutput: "password",
 		}
 	case "s3":
@@ -253,8 +275,8 @@ func conventionalBinding(typ, handle, app string, db int) providerBinding {
 		// whose name is its access key; the secret half is the app's key
 		// in the instance's rustfs-users Secret (#326).
 		return providerBinding{
-			outputs:      map[string]string{"endpoint": "http://rustfs-svc.rustfs.svc.cluster.local:9000", "bucket": app, "accessKey": app},
-			passwordVar:  ctrVar{handle + "_secret_key", "requires.s3." + handle + " → the rustfs-users identity " + app + " (lockstep pair).", "../rustfs/users.sops.yaml", "stringData." + app},
+			outputs:      map[string]string{"endpoint": "http://rustfs-svc." + fortsNamespace + ".svc.cluster.local:9000", "bucket": app, "accessKey": app},
+			passwordVar:  ctrVar{handle + "_secret_key", "requires.s3." + handle + " → the rustfs-users identity " + app + " (lockstep pair).", "../" + providerDirs["s3"] + "/users.sops.yaml", "stringData." + app},
 			secretOutput: "secretKey",
 		}
 	}

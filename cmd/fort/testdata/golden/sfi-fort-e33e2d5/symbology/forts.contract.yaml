@@ -14,10 +14,10 @@
 # Cross-cluster sops refs are fine — the admin key decrypts the source,
 # the output encrypts to THIS fort's recipients.
 vars:
-  # requires.postgres.db → the sites-db tenant role (lockstep pair).
-  db_password: {sops: [../sites-db/secrets-symbology.sops.yaml, stringData.password]}
+  # requires.postgres.db → the postgres tenant role (lockstep pair).
+  db_password: {sops: [../forts/postgres/secrets-symbology.sops.yaml, stringData.password]}
   # requires.valkey.cache → the valkey-users ACL entry (lockstep pair).
-  cache_password: {sops: [../valkey/secrets.sops.yaml, stringData.symbology]}
+  cache_password: {sops: [../forts/valkey/secrets.sops.yaml, stringData.symbology]}
 secrets:
   secrets.sops.yaml:
     metadata:

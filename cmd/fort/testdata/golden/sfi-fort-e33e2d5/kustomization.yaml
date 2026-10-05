@@ -11,7 +11,6 @@ resources:
   # the tree below is what `fort add` is specified to render
   # (docs/fort-configuration-contracts.md, worked example), laid down by hand first so the
   # generator has a golden tree to reproduce.
-  - sites-db
+  - forts
   - gateway
-  - valkey
   - symbology

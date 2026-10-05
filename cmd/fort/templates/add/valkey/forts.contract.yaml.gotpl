@@ -8,7 +8,7 @@ secrets:
   secrets.sops.yaml:
     metadata:
       name: valkey-users
-      namespace: valkey
+      namespace: forts
     keys:
       default: {generate: hex24}
       {{ .App }}: {generate: hex24}

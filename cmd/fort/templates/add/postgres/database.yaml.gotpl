@@ -1,4 +1,4 @@
-# {{ .App }}'s database on the shared sites-db cluster — tenant registration
+# {{ .App }}'s database on the fort's postgres — tenant registration
 # by `fort add` (requires.postgres.{{ .Postgres.Handle }}): this CR keeps
 # owner + extensions reconciled; the role rides role-{{ .App }}.yaml and
 # its password secrets-{{ .App }}.sops.yaml (mirrored into the app's env —
@@ -7,12 +7,12 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: {{ .App }}
-  namespace: sites-db
+  namespace: forts
 spec:
   name: {{ .App }}
   owner: {{ .App }}
   cluster:
-    name: sites-db
+    name: postgres
 {{- if .Postgres.Extensions }}
   extensions:
 {{- range .Postgres.Extensions }}

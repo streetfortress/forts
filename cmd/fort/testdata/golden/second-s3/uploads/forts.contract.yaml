@@ -12,7 +12,7 @@
 # after seeding.
 vars:
   # requires.s3.files → the rustfs-users identity uploads (lockstep pair).
-  files_secret_key: {sops: [../rustfs/users.sops.yaml, stringData.uploads]}
+  files_secret_key: {sops: [../forts/rustfs/users.sops.yaml, stringData.uploads]}
 secrets:
   secrets.sops.yaml:
     metadata:

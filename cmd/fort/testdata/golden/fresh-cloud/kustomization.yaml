@@ -7,5 +7,5 @@ resources:
   # exists — the repo's established pre-merge guard.
   - sops-canary.yaml
   - gateway
-  - sites-db
+  - forts
   - sfi-website

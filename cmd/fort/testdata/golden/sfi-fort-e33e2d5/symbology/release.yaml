@@ -1,6 +1,6 @@
 # Symbology app workloads: UI + workers + the alembic pre-install/pre-upgrade
 # hook Job + the inference Service. The database is NOT in the chart: it
-# is a tenant of the shared sites-db CNPG cluster (../sites-db/, Database
+# is a tenant of the fort's postgres (../forts/postgres/, Database
 # CR database-symbology.yaml + managed role), reconciled in parallel.
 #
 # Values are what `fort add` renders from the chart's contract
@@ -30,10 +30,10 @@ spec:
       retries: -1
   values:
     existingSecret: symbology-env
-    # requires.postgres.db → the fort's shared sites-db, tenant `symbology`
+    # requires.postgres.db → the fort's postgres, tenant `symbology`
     # (contract wire: database.*). DATABASE_PASSWORD rides the Secret.
     database:
-      host: sites-db-rw.sites-db.svc.cluster.local
+      host: postgres-rw.forts.svc.cluster.local
       port: "5432"
       name: symbology
       user: symbology
@@ -41,7 +41,7 @@ spec:
     # `symbology`, db0 (contract wire: cache.*). CACHE_PASSWORD rides the
     # Secret, same value as valkey-users/symbology.
     cache:
-      host: valkey.valkey.svc.cluster.local
+      host: valkey.forts.svc.cluster.local
       port: "6379"
       db: "0"
       user: symbology

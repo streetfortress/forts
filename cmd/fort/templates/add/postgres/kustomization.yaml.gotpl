@@ -1,7 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
   - cluster.yaml
 {{- if .Archive }}
   - objectstore.yaml
@@ -20,12 +19,12 @@ resources:
   # secrets-backup: this fort's profile renders no archive (cluster.yaml).
 {{- end }}
   - secrets-{{ .App }}.sops.yaml
-{{ .SitesDBPatchesComment -}}
+{{ .PostgresPatchesComment -}}
 patches:
   - path: role-{{ .App }}.yaml
     target:
       group: postgresql.cnpg.io
       version: v1
       kind: Cluster
-      name: sites-db
-      namespace: sites-db
+      name: postgres
+      namespace: forts
