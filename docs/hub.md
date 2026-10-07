@@ -88,7 +88,7 @@ names must have a manifest in this estate.
 | role | the served estate renders | the hub opens on the link | `fort check` |
 |---|---|---|---|
 | `forge` | the forge's address pinned to its name (`sfi.lab-dns.giteaAddress`; forts#26 renders it from the role) | 30022, 443 | the issuer of every OCIRepository is this host (forts#26) |
-| `monitoring` | `flux/hub/<host>/<fort>.yaml`; `HUB_MESH_IP` in `cluster-vars.yaml` | 30990, 31100 | one file per fort, listed; one subscription per served estate |
+| `monitoring` | `flux/hub/<host>/<fort>.yaml`; `HUB_MESH_IP` in `cluster-vars.yaml`; `estate` beside `cluster` on every metric and log line (`ESTATE_NAME`, forts#50) | 30990, 31100 | one file per fort, listed; one subscription per served estate; `ESTATE_NAME` is the estate's name |
 | `ca` | the ClusterIssuer (forts#46) | the step-ca NodePort (forts#46) | the issuer's server is this host (forts#46) |
 
 `modules/links.nix` derives a link's `openTCPPorts` from its `roles`,

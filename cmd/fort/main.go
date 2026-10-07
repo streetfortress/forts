@@ -296,7 +296,8 @@ func usage() {
       and apps tree exist; flux/apps/<fort>, flux-system and the shared
       infrastructure layers kustomize-build (a listed-but-unseeded sops
       file fails it — the guard working); every ${VAR} they carry is a
-      cluster-vars key (flux's envsubst is strict). Contracts: every app
+      cluster-vars key (flux's envsubst is strict), and CLUSTER_NAME and
+      ESTATE_NAME are the fort's and the estate's names. Contracts: every app
       dir's committed Secret carries the keys its effective contract
       requires (plaintext key names, no decryption), every provider var
       resolves to a seeded file+key, every required provider is present

@@ -20,13 +20,17 @@ spec:
       rules:
         # absent(): when an edge stops remote-writing, its series go
         # stale and vanish — an expression over the missing data cannot
-        # fire, only absent() can.
+        # fire, only absent() can. It keys on cluster alone: absent()
+        # has no by clause, and the fort's name is the identity. The
+        # alert carries the estate's name as a label (forts#50) so the
+        # hub's Alertmanager can route or group a silent fort by estate.
         - alert: ClusterStreamSilent
           expr: absent(up{cluster="{{ .Hostname }}"})
           for: 10m
           labels:
             severity: critical
             cluster: {{ .Hostname }}
+            estate: {{ .Estate }}
           annotations:
             summary: "No data from {{ .Hostname }}'s edge Prometheus"
 {{- if .PV }}
@@ -42,6 +46,7 @@ spec:
           labels:
             severity: warning
             cluster: {{ .Hostname }}
+            estate: {{ .Estate }}
           annotations:
             summary: "{{ .Hostname }} declares [[backups.pv]] blocks ({{ range $i, $p := .PV }}{{ if $i }}, {{ end }}{{ $p.Store }}{{ end }}) but publishes no pv-backup metrics — sfi.pv-backup not enabled on the host?"
 {{- end }}
@@ -68,6 +73,7 @@ data:
             labels:
               severity: warning
               cluster: {{ .Hostname }}
+              estate: {{ .Estate }}
             annotations:
               summary: No container logs from {{ .Hostname }} for 15m — fluent-bit or Loki ingest broken
 ---

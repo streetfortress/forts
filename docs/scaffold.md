@@ -40,7 +40,7 @@ flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
 ● flux-system/kustomization.yaml
-● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the monitoring hub's address on this mesh]
+● cluster-vars.yaml                          CLUSTER_NAME <host>, ESTATE_NAME <estate>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the monitoring hub's address on this mesh]
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → flux/apps/<host>
 flux/apps/<host>/
@@ -132,7 +132,8 @@ written below the imports, and the framework names none of it.
 The hub file is the pull-shaped counterpart of a cluster's: with no edge
 Prometheus, the hub scrapes the fort over the mesh — node-exporter on 9100 —
 and arms `HostDown` on the target. `cluster` is the fort's name, as on
-every other fort. No edge Alertmanager datasource: a plain fort has none.
+every other fort, and `estate` is the estate's (below): a pulled target
+has no edge Prometheus to stamp it, so the hub does. No edge Alertmanager datasource: a plain fort has none.
 Anything else the estate runs on the fort is the estate's to scrape, in a
 file of its own beside this one.
 
@@ -172,10 +173,44 @@ no half of the credential. The prompt's host label
 (`sfi.shell.starshipSettings.hostname.style`, #582) stays a hand edit
 in the host file: the manifest has no key for it.
 
+## The two identity labels
+
+`cluster-vars.yaml` carries the two labels every metric and log line
+leaves the fort with: `CLUSTER_NAME`, the fort's name, and `ESTATE_NAME`,
+the estate's (`estate.toml` `name`; forts#50). The shared layer stamps
+both: the edge Prometheus as external labels on every series it
+remote-writes, fluent-bit on each of its three Loki streams. A hub that
+serves several estates (forts#38) receives one flat set of clusters
+otherwise, and "the staging estate's log rate" is a list of fort names
+that goes stale when staging raises or dismantles a fort. The hub-side
+file (above) carries `estate` too: on every alert it raises about the
+fort, and on the static labels of a plain fort's scrape target, which
+no edge stamps. The dead man's switch keys on `cluster` alone —
+`absent()` has no `by` clause, and the fort's name is the identity.
+
+The label is one value per estate, so Loki gains no streams. On
+metrics it is an external label, and an external label that changes on
+a running edge changes the identity of every series it remote-writes:
+the hub's old series end and new ones start at the rollout. A dashboard
+that queries by `cluster` alone shows no gap.
+
+`fort check` reads the values, not only the keys: a `CLUSTER_NAME` that
+is not the fort's name, or an `ESTATE_NAME` that is not this estate's,
+passes flux's strict substitution and mislabels the fort at the hub,
+which only the hub would notice. A cluster scaffolded before
+`ESTATE_NAME` existed fails the gate (the shared layer references a
+var its cluster-vars lacks) until `fort scaffold <host> --write` adds
+the line — the one key scaffold appends to an existing
+`cluster-vars.yaml`, below.
+
 ## Force-no semantics
 
 `--write` lays a file down only when it does not exist; an existing one is
-reported `○ exists — kept` and never touched. So:
+reported `○ exists — kept` and never touched. The one exception is the
+`ESTATE_NAME` line of an existing `cluster-vars.yaml`: a cluster-vars
+without it gains the line (a text-level append under `data:`, comments
+and order kept), and one that has it — whatever the value — is kept as it
+is. So:
 
 - the manifest seeds the host once; hand refinements live in the files and
   are never clobbered;

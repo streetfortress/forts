@@ -99,6 +99,14 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "url: http://${HUB_MESH_IP}:30990/api/v1/write") || !strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "  - fluent-bit\n") {
 		t.Error("with a hub: the layer must remote_write to HUB_MESH_IP and ship logs")
 	}
+	// The two identity labels (forts#50): estate beside cluster on every
+	// series the edge pushes and on each of the three log streams.
+	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "  externalLabels:\n    cluster: ${CLUSTER_NAME}\n    estate: ${ESTATE_NAME}\n") {
+		t.Errorf("prometheus-edge external labels:\n%s", m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"])
+	}
+	if fb := m["flux/infrastructure/controllers/fluent-bit/release.yaml"]; strings.Count(fb, "cluster=${CLUSTER_NAME}, estate=${ESTATE_NAME}, ") != 3 || strings.Count(fb, "[OUTPUT]") != 3 {
+		t.Errorf("fluent-bit: want estate beside cluster on each of the 3 outputs:\n%s", fb)
+	}
 	// hubs in another estate: the forge with its name, the monitoring
 	// hub; the commented examples give way to the real tables
 	v = testInitView

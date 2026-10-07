@@ -135,8 +135,13 @@ func TestRenderScaffold(t *testing.T) {
 		if !strings.Contains(cv, "HUB_MESH_IP: "+testHubIP) {
 			t.Errorf("%s cluster-vars lacks the hub's address:\n%s", name, cv)
 		}
-		if !strings.Contains(cv, "CLUSTER_NAME: "+name) {
+		if !strings.Contains(cv, "CLUSTER_NAME: "+name+"\n  ESTATE_NAME: deployments\n") {
 			t.Errorf("%s cluster-vars wrong:\n%s", name, cv)
+		}
+		// The estate's name rides every alert the hub raises about the
+		// fort (forts#50), beside the cluster label.
+		if mon := m[hubFilePath("luxor", name)]; strings.Count(mon, "estate: deployments") != 3 {
+			t.Errorf("%s hub file: want estate: deployments on each of the 3 rules (the switch, the pv leg, the log switch):\n%s", name, mon)
 		}
 		if !strings.Contains(m["flux/clusters/"+name+"/flux-system/flux-instance.yaml"], "path: flux/clusters/"+name) {
 			t.Errorf("%s flux-instance sync path wrong", name)
@@ -150,6 +155,34 @@ func TestRenderScaffold(t *testing.T) {
 	}
 	if !strings.Contains(cloud["flux/clusters/cloud-fort/cluster-vars.yaml"], "MESH_IP: 10.1.0.98") {
 		t.Errorf("cloud MESH_IP wrong")
+	}
+
+	// A cluster scaffolded before ESTATE_NAME existed (forts#50) gains
+	// the line: the one key scaffold appends to an existing cluster-vars.
+	// The rest of the file is the estate's — comments, order, a value
+	// already set (right or wrong: the gate judges values).
+	var cvEdit func(string) (string, error)
+	for _, f := range render(t, "cloud-fort", hosts["cloud-fort"]) {
+		if f.path == "flux/clusters/cloud-fort/cluster-vars.yaml" {
+			cvEdit = f.edit
+		}
+	}
+	if cvEdit == nil {
+		t.Fatal("cluster-vars.yaml has no edit for the ESTATE_NAME line")
+	}
+	old := "# the estate's comment\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cluster-vars\n  namespace: flux-system\ndata:\n  CLUSTER_NAME: cloud-fort\n  MESH_IP: 10.1.0.98\n  # hand-added\n  HUB_MESH_IP: 10.1.0.5\n"
+	got, err := cvEdit(old)
+	if err != nil || !strings.HasSuffix(got, "  HUB_MESH_IP: 10.1.0.5\n  ESTATE_NAME: deployments\n") || !strings.HasPrefix(got, "# the estate's comment\n") || strings.Count(got, "\n") != strings.Count(old, "\n")+1 {
+		t.Errorf("cluster-vars edit: %v\n%s", err, got)
+	}
+	if again, err := cvEdit(got); err != nil || again != got {
+		t.Errorf("cluster-vars edit is not idempotent: %v\n%s", err, again)
+	}
+	if kept, err := cvEdit("data:\n  CLUSTER_NAME: cloud-fort\n  ESTATE_NAME: other\n  MESH_IP: 10.1.0.98\n"); err != nil || strings.Count(kept, "ESTATE_NAME") != 1 {
+		t.Errorf("cluster-vars edit must leave a set ESTATE_NAME alone: %v\n%s", err, kept)
+	}
+	if _, err := cvEdit("apiVersion: v1\nkind: ConfigMap\n"); err == nil {
+		t.Error("cluster-vars edit with no data: block must fail, not invent one")
 	}
 
 	// a [libvirt] host is the lab shape (fort adopt, the libvirt backend)
@@ -358,7 +391,9 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	// One ScrapeConfig, node-exporter: the operator owns `job` (relabelled
 	// to jobName after the target labels), so the leg files under
 	// host-node-exporter — the Host Overview's job (#442).
-	for _, s := range []string{"kind: ScrapeConfig", "name: host-plain-fort-node", "jobName: host-node-exporter", `targets: ["10.1.0.96:9100"]`, "component: node", `cluster: plain-fort`, "alert: HostDown"} {
+	// `estate` is stamped here (forts#50): a pulled target has no edge
+	// Prometheus to add it as an external label.
+	for _, s := range []string{"kind: ScrapeConfig", "name: host-plain-fort-node", "jobName: host-node-exporter", `targets: ["10.1.0.96:9100"]`, "component: node", "        cluster: plain-fort\n        estate: deployments\n", "alert: HostDown", "            cluster: plain-fort\n            estate: deployments\n"} {
 		if !strings.Contains(mon, s) {
 			t.Errorf("plain hub file lacks %q", s)
 		}

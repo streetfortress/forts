@@ -144,3 +144,17 @@ func appendAfterLast(text, prefix, line string) (string, error) {
 	out = append(out, lines[at+1:]...)
 	return strings.Join(out, "\n"), nil
 }
+
+// ensureClusterVar adds `  <key>: <value>` to a cluster-vars ConfigMap's
+// data: map when no line sets <key>, and returns the text unchanged when
+// one does — whatever its value: the file is the estate's, and `fort
+// check` is what judges the value (fleet.go). The one case scaffold
+// edits an existing cluster-vars.yaml (forts#50).
+func ensureClusterVar(text, key, value string) (string, error) {
+	for _, l := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), key+":") && !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			return text, nil
+		}
+	}
+	return appendMapEntry(text, "data:", "  "+key+": "+value)
+}

@@ -66,8 +66,15 @@ spec:
           requests:
             storage: 10Gi
 
+  # The two identity labels every series leaves this fort with: the
+  # fort's name and its estate's (cluster-vars; forts#50). A hub that
+  # serves several estates groups by estate; the dead man's switch on
+  # the hub keys on cluster alone. Changing either on a running edge
+  # changes the identity of every series it remote-writes: the hub's
+  # old series end and new ones start at the rollout.
   externalLabels:
     cluster: ${CLUSTER_NAME}
+    estate: ${ESTATE_NAME}
 
   # Explicit, and the same as central's (#379): nobody is what the image
   # already runs as and what the TSDB on local-path is owned by, so this

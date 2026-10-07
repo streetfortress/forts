@@ -56,8 +56,37 @@ func TestFleetTree(t *testing.T) {
 
 	os.WriteFile(filepath.Join(root, "flux/clusters/a/cluster-vars.yaml"), []byte("apiVersion: v1\nkind: ConfigMap\ndata:\n  CLUSTER_NAME: a\n  MESH_IP: 10.1.0.1\n"), 0o644)
 	vars, err := clusterVars(root, "a")
-	if err != nil || len(vars) != 2 || !vars["MESH_IP"] {
+	if err != nil || len(vars) != 2 || vars["MESH_IP"] != "10.1.0.1" {
 		t.Errorf("clusterVars: %v %v", vars, err)
+	}
+}
+
+// The identity labels' values (forts#50): a key that is present with
+// the wrong value passes strict envsubst and mislabels the fort at the
+// hub, so the gate reads CLUSTER_NAME and ESTATE_NAME.
+func TestClusterVarFindings(t *testing.T) {
+	ok := map[string]string{"CLUSTER_NAME": "a", "ESTATE_NAME": "staging", "MESH_IP": "10.1.0.1"}
+	if got := clusterVarFindings("a", ok, "staging"); len(got) != 0 {
+		t.Errorf("right values: %+v", got)
+	}
+	// no ESTATE_NAME: the pre-forts#50 cluster, and the finding names
+	// the command that adds the line
+	got := clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "a", "MESH_IP": "10.1.0.1"}, "staging")
+	if len(got) != 1 || got[0].level != "error" || got[0].dir != "flux/clusters/a/cluster-vars.yaml" || !strings.Contains(got[0].msg, "fort scaffold a --write adds ESTATE_NAME: staging") {
+		t.Errorf("no ESTATE_NAME: %+v", got)
+	}
+	got = clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "a", "ESTATE_NAME": "production"}, "staging")
+	if len(got) != 1 || got[0].level != "error" || !strings.Contains(got[0].msg, `ESTATE_NAME is "production", not "staging"`) {
+		t.Errorf("wrong ESTATE_NAME: %+v", got)
+	}
+	got = clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "b", "ESTATE_NAME": "staging"}, "staging")
+	if len(got) != 1 || got[0].level != "error" || !strings.Contains(got[0].msg, `CLUSTER_NAME is "b", not "a"`) {
+		t.Errorf("wrong CLUSTER_NAME: %+v", got)
+	}
+	// no estate name to judge against (a tree with no estate.toml in a
+	// unit test): CLUSTER_NAME is still read, ESTATE_NAME is not
+	if got := clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "a"}, ""); len(got) != 0 {
+		t.Errorf("no estate name: %+v", got)
 	}
 }
 

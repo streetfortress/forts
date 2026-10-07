@@ -83,16 +83,19 @@ func check(args []string) error {
 		known[f] = true
 	}
 	shared := checkFleetShared(root, known, *all)
+	// The estate's name is what every cluster's ESTATE_NAME must say
+	// (forts#50): read once, judged per fort.
+	est, err := estate.Load(root)
+	if err != nil {
+		return err
+	}
+	shared.estate = est.Name
 	// Cross-fort providers are a fleet-wide invariant, not a per-fort
 	// one: the declaration lives in the hub's tree, so it can only be
 	// traced with every manifest in hand (--all). The hub relationship
 	// (forts#38) is checked from both ends: every fort's file for the
 	// monitoring hub, and every subscription the hub owes an estate.
 	if *all {
-		est, err := estate.Load(root)
-		if err != nil {
-			return err
-		}
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, est.LocalHub(estate.RoleMonitoring), parsed)...)
 		shared.findings = append(shared.findings, hubFileFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, hubBuildFindings(root, est)...)

@@ -1,7 +1,11 @@
 # Per-cluster identity for the shared flux/infrastructure layer (#99).
 # Applied by the flux-system root sync (this dir is the FluxInstance sync
 # path) and referenced via postBuild.substituteFrom on the infra-controllers,
-# infrastructure and apps Kustomizations. MESH_IP must stay in sync with
+# infrastructure and apps Kustomizations. CLUSTER_NAME and ESTATE_NAME are
+# the two identity labels every metric and log line leaves the fort with
+# (forts#50): the fort's name, and the name of the estate it belongs to
+# (estate.toml `name`), so a hub that serves several estates can group
+# what it receives by estate. MESH_IP must stay in sync with
 # mesh/peers.json. HUB_MESH_IP is where the edge Prometheus remote-writes
 # and fluent-bit ships logs: the monitoring hub's address on this mesh
 # (estate.toml [hubs.monitoring]; its manifest's mesh_ip when the hub is
@@ -15,6 +19,7 @@ metadata:
   namespace: flux-system
 data:
   CLUSTER_NAME: {{ .Hostname }}
+  ESTATE_NAME: {{ .Estate }}
   MESH_IP: {{ .MeshIP }}
 {{- if .HubMeshIP }}
   HUB_MESH_IP: {{ .HubMeshIP }}

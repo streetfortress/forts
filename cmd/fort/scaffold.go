@@ -64,6 +64,11 @@ type hostView struct {
 	// Zone: the estate's mesh zone (estate.toml `zone`, else <name>.mesh;
 	// forts#45): what every host on the mesh is named under.
 	Zone string
+	// Estate: the estate's name (estate.toml `name`): cluster-vars
+	// ESTATE_NAME, the identity label beside cluster on every metric and
+	// log line the fort emits, and the static label on what the hub
+	// pulls from a plain fort (forts#50).
+	Estate string
 	// HubMeshIP: where the edge stack pushes (cluster-vars HUB_MESH_IP):
 	// the monitoring hub's address on this mesh (hubMeshIP). "" with no
 	// monitoring hub, and the layer init rendered then carries no push
@@ -109,6 +114,9 @@ type scaffoldFile struct {
 	content []byte
 	note    string
 	edit    func(string) (string, error)
+	// editNote, when set, is what the report says when edit changed an
+	// existing file — what was added, not the fresh render's note.
+	editNote string
 }
 
 // scaffold renders a host's generated surface from its manifest:
@@ -171,7 +179,10 @@ func scaffold(args []string) error {
 			}
 			if out == string(raw) {
 				status = "exists — kept (already listed)"
-			} else if write {
+			} else if f.editNote != "" {
+				status = f.editNote
+			}
+			if out != string(raw) && write {
 				if err := os.WriteFile(filepath.Join(root, f.path), []byte(out), 0o644); err != nil {
 					return err
 				}
@@ -263,6 +274,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		RepoURL:       est.RepoGit(),
 		MeshInterface: est.InterfaceName(),
 		Zone:          est.ZoneName(),
+		Estate:        est.Name,
 		HubMeshIP:     hubIP,
 		HubHost:       hub.Fort,
 		HubLocal:      hasHub && hub.Local(est),
@@ -384,7 +396,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-operator.yaml"), "flux-operator.yaml.gotpl", ""},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/flux-instance.yaml"), "flux-instance.yaml.gotpl", "sync path flux/clusters/" + host},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "flux-system/kustomization.yaml"), "flux-system-kustomization.yaml.gotpl", ""},
-		struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", MESH_IP " + view.MeshIP},
+		struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", ESTATE_NAME " + view.Estate + ", MESH_IP " + view.MeshIP},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ flux/apps/" + host},
 		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
@@ -396,6 +408,18 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 			return nil, fmt.Errorf("%s: %w", p.tpl, err)
 		}
 		f := scaffoldFile{path: p.path, content: b, note: p.note}
+		if p.tpl == "cluster-vars.yaml.gotpl" {
+			// A cluster scaffolded before ESTATE_NAME existed (forts#50)
+			// gains the line: the shared layer references it, and flux's
+			// strict envsubst fails the whole layer without it. The one
+			// key scaffold adds to an existing cluster-vars; the rest of
+			// the file stays the estate's (HUB_MESH_IP is a hand edit,
+			// docs/init.md).
+			f.edit = func(s string) (string, error) {
+				return ensureClusterVar(s, "ESTATE_NAME", view.Estate)
+			}
+			f.editNote = "+ ESTATE_NAME " + view.Estate
+		}
 		if view.IsHub && p.tpl == "apps-kustomization.yaml.gotpl" {
 			// A hub's apps root lists serves/; a root that already
 			// exists (the hub scaffolded before it served anyone) gains

@@ -79,8 +79,10 @@ spec:
       # can't reach (production-test's fluent-bit shipped zero logs this
       # way). The mesh address is the one path every cluster provably has.
       #
-      # Label set per #54, identical on every cluster: cluster, namespace,
-      # pod, container, host. Everything else (traefik's JSON access-log
+      # Label set per #54, identical on every cluster: estate, cluster,
+      # namespace, pod, container, host — estate (forts#50) is the name
+      # of the estate the fort belongs to, one value per estate, so it
+      # adds no streams. Everything else (traefik's JSON access-log
       # fields, journald metadata) stays in the log line — Merge_Log has
       # already lifted JSON stdout into fields, so it's queryable without
       # burning label cardinality.
@@ -109,7 +111,7 @@ spec:
             Match kube.*
             Host ${HUB_MESH_IP}
             Port 31100
-            labels job=fluent-bit, cluster=${CLUSTER_NAME}, host=$kubernetes['host'], namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name']
+            labels job=fluent-bit, cluster=${CLUSTER_NAME}, estate=${ESTATE_NAME}, host=$kubernetes['host'], namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name']
             auto_kubernetes_labels off
             line_format json
             Retry_Limit False
@@ -119,7 +121,7 @@ spec:
             Match host.*
             Host ${HUB_MESH_IP}
             Port 31100
-            labels job=systemd, cluster=${CLUSTER_NAME}, host=$HOSTNAME
+            labels job=systemd, cluster=${CLUSTER_NAME}, estate=${ESTATE_NAME}, host=$HOSTNAME
             line_format json
             Retry_Limit False
 
@@ -130,7 +132,7 @@ spec:
             Match audit.*
             Host ${HUB_MESH_IP}
             Port 31100
-            labels job=kube-audit, cluster=${CLUSTER_NAME}, host=$${NODE_NAME}
+            labels job=kube-audit, cluster=${CLUSTER_NAME}, estate=${ESTATE_NAME}, host=$${NODE_NAME}
             line_format json
             Retry_Limit False
 

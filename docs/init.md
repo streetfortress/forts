@@ -81,7 +81,8 @@ them.
 
 Changing the monitoring hub after init is a hand edit: `flux/infrastructure`
 is the estate's once rendered (re-render it from a scratch `fort init`
-and diff), and `cluster-vars.yaml` is never overwritten by scaffold, so
+and diff), and `cluster-vars.yaml` is never overwritten by scaffold (it
+appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)), so
 each cluster gains or loses its `HUB_MESH_IP` line by hand.
 
 ## After init

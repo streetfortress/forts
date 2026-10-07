@@ -59,6 +59,9 @@ const substituteDisabled = "kustomize.toolkit.fluxcd.io/substitute"
 type fleetShared struct {
 	infra    map[string]string
 	findings []finding
+	// estate is the estate's name (estate.toml): what every cluster's
+	// ESTATE_NAME must say (forts#50).
+	estate string
 }
 
 func checkFleetShared(root string, hosts map[string]bool, orphans bool) fleetShared {
@@ -129,9 +132,14 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 	if len(out) > 0 {
 		return out
 	}
-	vars, err := clusterVars(root, fort)
+	values, err := clusterVars(root, fort)
 	if err != nil {
 		out = append(out, finding{"error", filepath.Join("flux/clusters", fort, "cluster-vars.yaml"), err.Error()})
+	}
+	out = append(out, clusterVarFindings(fort, values, shared.estate)...)
+	vars := map[string]bool{}
+	for k := range values {
+		vars[k] = true
 	}
 	layers := []string{filepath.Join("flux/apps", fort), filepath.Join("flux/clusters", fort, "flux-system")}
 	for _, layer := range layers {
@@ -157,9 +165,9 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 	return out
 }
 
-// clusterVars: the keys of flux/clusters/<fort>/cluster-vars.yaml's data —
-// what flux's envsubst will have.
-func clusterVars(root, fort string) (map[string]bool, error) {
+// clusterVars: flux/clusters/<fort>/cluster-vars.yaml's data — the keys
+// are what flux's envsubst will have, the values what it will write.
+func clusterVars(root, fort string) (map[string]string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "flux/clusters", fort, "cluster-vars.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("missing (fort scaffold renders it)")
@@ -170,11 +178,36 @@ func clusterVars(root, fort string) (map[string]bool, error) {
 	if err := yaml.Unmarshal(raw, &cm); err != nil {
 		return nil, err
 	}
-	vars := map[string]bool{}
-	for k := range cm.Data {
-		vars[k] = true
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
 	}
-	return vars, nil
+	return cm.Data, nil
+}
+
+// clusterVarFindings: the identity labels' VALUES (forts#50). A key the
+// shared layer references and cluster-vars lacks is envsubstFindings'
+// to report; a key that is there with the wrong value passes envsubst
+// and mislabels every series and log line the fort emits, which only
+// the hub would notice — so the gate reads the two names. ESTATE_NAME
+// is the estate's (estate.toml `name`); a cluster scaffolded before it
+// existed gains the line from `fort scaffold <fort> --write`.
+// CLUSTER_NAME is the fort's own.
+func clusterVarFindings(fort string, vars map[string]string, estateName string) []finding {
+	var out []finding
+	file := filepath.Join("flux/clusters", fort, "cluster-vars.yaml")
+	if v, ok := vars["CLUSTER_NAME"]; ok && v != fort {
+		out = append(out, finding{"error", file, fmt.Sprintf("CLUSTER_NAME is %q, not %q — the cluster label is the fort's name on every metric and log line it emits", v, fort)})
+	}
+	if estateName == "" {
+		return out
+	}
+	switch v, ok := vars["ESTATE_NAME"]; {
+	case !ok:
+		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line (forts#50); fort scaffold %s --write adds ESTATE_NAME: %s", fort, estateName)})
+	case v != estateName:
+		out = append(out, finding{"error", file, fmt.Sprintf("ESTATE_NAME is %q, not %q — the estate label is this estate's name (estate.toml) on every metric and log line the fort emits", v, estateName)})
+	}
+	return out
 }
 
 // kustomizeBuild runs `kustomize build <rel>` and returns the stream; on
