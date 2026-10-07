@@ -40,6 +40,18 @@
 # estate that names no interface (wg0, the default) is not checked: a
 # link cannot be called wg0 — that is this host's own mesh.
 #
+# One zone per mesh, the same way (forts#45): the other estate's names
+# are <host>.<zone> — its estate.toml's `zone`, else <estate>.mesh — on
+# every host on that mesh, this one included. A fort renders its own
+# mesh's zone at build time (mesh-dns.nix); a linked host learns the other
+# estate's peers at run time, so the reconciler renders that zone into a
+# zone file beside the cached peers.json, and a CoreDNS on this host
+# serves every link's zone from those files — on loopback for the host
+# (systemd-resolved routes `~<zone>` there, per link interface) and on
+# this host's own mesh address for its pods (the coredns-custom block
+# forwards the zone there). The zone is set here like the interface, and
+# the reconciler checks it against the fetched estate.toml the same way.
+#
 # Limits: an interface name is at most 15 characters from
 # [A-Za-z0-9_=+.-] (the kernel's); one UDP port per link, never 51820
 # (this host's own mesh port). Both are eval-time assertions here.
@@ -49,11 +61,27 @@ let
   cfg = config.sfi.links;
   names = lib.attrNames cfg;
   ifaces = map (n: cfg.${n}.interface) names;
+  zones = map (n: cfg.${n}.zone) names;
   # Every mesh interface on this host: its own (estate.toml's name, else
   # wg0 — estate.nix), and one per link.
   own = config.sfi.mesh.interface;
   meshIfaces = [ own ] ++ ifaces;
   pairs = lib.filter (p: p.a != p.b) (lib.cartesianProduct { a = meshIfaces; b = meshIfaces; });
+
+  # This host's address on its own mesh: where its pods reach the zone
+  # server below. Null on a host that is in no peers.json of its own.
+  peersData = builtins.fromJSON (builtins.readFile (config.sfi.estate.root + "/mesh/peers.json"));
+  ownIP = ((peersData.peers or { }).${config.networking.hostName} or { }).wg_vpn_ip or null;
+
+  # The zone file a link starts with, until the reconciler's first run
+  # writes the real one: a SOA and nothing else, so CoreDNS comes up.
+  emptyZone = n: pkgs.writeText "wg-link-${n}-zone.db" ''
+    $ORIGIN ${cfg.${n}.zone}.
+    $TTL 60
+    @ IN SOA ${config.networking.hostName}.${cfg.${n}.zone}. hostmaster.${cfg.${n}.zone}. 1 3600 600 86400 60
+    @ IN NS ${config.networking.hostName}.${cfg.${n}.zone}.
+  '';
+  zoneRE = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
 
   linkOpts = { name, ... }: {
     options = {
@@ -71,6 +99,11 @@ let
         type = lib.types.str;
         default = "wg-${name}";
         description = "The WireGuard interface for this link: the name the other estate's estate.toml gives its mesh (`interface`), which the reconciler checks. At most 15 characters; never this host's own mesh interface.";
+      };
+      zone = lib.mkOption {
+        type = lib.types.str;
+        default = "${name}.mesh";
+        description = "The DNS zone of the other estate's mesh: its estate.toml's `zone`, else <estate>.mesh, which the reconciler checks. Every peer and remote of that estate is <host>.<zone>, served on this host from the reconciler's zone file.";
       };
       port = lib.mkOption {
         type = lib.types.port;
@@ -122,8 +155,9 @@ in
 {
   imports = [
     ./estate.nix # sfi.mesh.interface: this host's own mesh interface
+    ./mesh-dns.nix # sfi.mesh.coredns: the linked zones in this host's cluster DNS
     ./textfile-metrics.nix # wg-link-<name>.prom
-    ./ops/systemd.nix # sfi-systemd-restart wg-quick-<iface>, wg-link-<name>
+    ./ops/systemd.nix # sfi-systemd-restart wg-quick-<iface>, wg-link-<name>, coredns
   ];
 
   options.sfi.links = lib.mkOption {
@@ -151,6 +185,14 @@ in
               message = "sfi.links.${n}.port = 51820 is this host's own mesh port (wireguard.nix); a link listens beside it";
             }
             {
+              assertion = builtins.match zoneRE l.zone != null;
+              message = "sfi.links.${n}.zone = \"${l.zone}\": want a DNS name of lowercase labels (second-estate.mesh)";
+            }
+            {
+              assertion = l.zone != config.sfi.mesh.zone;
+              message = "sfi.links.${n}.zone = \"${l.zone}\" is this host's own mesh zone (estate.toml); the other estate's names need a zone of their own";
+            }
+            {
               assertion = builtins.match "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$" l.address != null;
               message = "sfi.links.${n}.address = \"${l.address}\": want this host's IPv4 address on the other mesh";
             }
@@ -169,6 +211,10 @@ in
           assertion = lib.length (lib.unique (map (n: cfg.${n}.port) names)) == lib.length names;
           message = "sfi.links: two links share a listen port";
         }
+        {
+          assertion = lib.length (lib.unique zones) == lib.length zones;
+          message = "sfi.links: two links share a zone";
+        }
       ];
 
     sops.secrets = lib.listToAttrs (map
@@ -178,7 +224,13 @@ in
     networking.firewall.allowedUDPPorts = map (n: cfg.${n}.port) names;
     networking.firewall.interfaces = lib.listToAttrs (map
       (n: lib.nameValuePair cfg.${n}.interface { allowedTCPPorts = cfg.${n}.openTCPPorts; })
-      names);
+      names)
+    # The zone server, for this host's pods: they reach the host's own
+    # mesh address through cni0. Not open on any mesh interface — the
+    # forts of the other estate resolve their names themselves.
+    // lib.optionalAttrs (ownIP != null) {
+      cni0 = { allowedUDPPorts = [ 53 ]; allowedTCPPorts = [ 53 ]; };
+    };
 
     # A hub never bridges: no forwarding between any two mesh interfaces,
     # whatever else (k3s's ip_forward, flannel's ACCEPTs) is on the host.
@@ -199,14 +251,75 @@ in
           privateKeyFile = config.sops.secrets.${l.secret}.path;
           # No peers at build time: the reconciler owns the set.
           peers = [ ];
+          # The host's own resolution of the other estate's names: the
+          # zone, and only the zone, routes to the zone server on
+          # loopback — set explicitly, not through wg-quick's `dns`,
+          # whose exclusive mode would route every name of the host
+          # there (wireguard.nix). Nothing to route without resolved.
+          postUp = lib.mkIf config.services.resolved.enable
+            (lib.concatMapStringsSep "\n" (c: "${config.systemd.package}/bin/resolvectl ${c} || true") [
+              "dns ${l.interface} 127.0.0.1"
+              "domain ${l.interface} ~${l.zone}"
+              "default-route ${l.interface} false"
+            ]);
         })
       names);
 
+    # The zone server: one CoreDNS for every link's zone, from the zone
+    # file the reconciler keeps beside its cached peers.json (`file`
+    # reloads it on a serial change). On loopback for this host and on
+    # its own mesh address for its pods; the firewall opens it to the
+    # pods and nobody else. It binds that address, so it starts after
+    # this host's own mesh is up and retries until it is.
+    services.coredns = {
+      enable = true;
+      config = lib.concatMapStrings
+        (n: ''
+          ${cfg.${n}.zone}:53 {
+            bind 127.0.0.1${lib.optionalString (ownIP != null) " ${ownIP}"}
+            errors
+            file /var/lib/wg-link-${n}/zone.db {
+              reload 10s
+            }
+          }
+        '')
+        names;
+    };
+    systemd.tmpfiles.rules = lib.concatMap
+      (n: [
+        "d /var/lib/wg-link-${n} 0755 root root -"
+        "C /var/lib/wg-link-${n}/zone.db - - - - ${emptyZone n}"
+      ])
+      names;
+
+    # The same zones for this host's pods: the cluster DNS forwards each
+    # one to the zone server at the host's mesh address (mesh-dns.nix
+    # renders the ConfigMap; inert on a host without k3s).
+    sfi.mesh.coredns = lib.optionalAttrs (ownIP != null) (lib.listToAttrs (map
+      (n: lib.nameValuePair "${cfg.${n}.zone}.server" ''
+        ${cfg.${n}.zone}:53 {
+          errors
+          cache 30
+          forward . ${ownIP}
+        }
+      '')
+      names));
+
     sfi.ops.restartableUnits =
       (map (n: "wg-quick-${cfg.${n}.interface}") names)
-      ++ (map (n: "wg-link-${n}") names);
+      ++ (map (n: "wg-link-${n}") names)
+      ++ [ "coredns" ];
 
-    systemd.services = lib.mkMerge (map
+    systemd.services = lib.mkMerge ([{
+      # The zone server (above): after this host's own mesh, retried
+      # until its address is there to bind.
+      coredns = {
+        after = [ "wg-quick-${own}.service" ];
+        wants = [ "wg-quick-${own}.service" ];
+        unitConfig.StartLimitIntervalSec = 0;
+        serviceConfig.RestartSec = "5s";
+      };
+    }] ++ map
       (n:
         let
           l = cfg.${n};
@@ -224,7 +337,7 @@ in
             stopIfChanged = false;
           };
           "wg-link-${n}" = {
-            description = "Reconcile ${l.interface} with ${l.repo} (mesh/peers.json)";
+            description = "Reconcile ${l.interface} and the ${l.zone} zone with ${l.repo} (mesh/peers.json)";
             after = [ "network-online.target" "wg-quick-${l.interface}.service" ];
             wants = [ "network-online.target" ];
             requires = [ "wg-quick-${l.interface}.service" ];
@@ -232,6 +345,7 @@ in
             environment = {
               LINK_NAME = n;
               LINK_IFACE = l.interface;
+              LINK_ZONE = l.zone;
               LINK_REPO = l.repo;
               LINK_REF = l.ref;
               LINK_ADDRESS = l.address;

@@ -122,7 +122,7 @@ mac = "f8:ce:72:02:05:07"
 disk = "/dev/nvme0n1"
 `
 
-// A [baremetal] host is a lab host (LAN address, .lofi names, lab
+// A [baremetal] host is a lab host (LAN address, mesh-zone names, lab
 // issuer) that no backend realizes: the verbs that would apply refuse.
 func TestParseBaremetal(t *testing.T) {
 	h, err := Parse("metal", []byte(metal))

@@ -15,6 +15,13 @@ interface = "{{ .Interface }}"   # the WireGuard interface every host gives this
 # interface = "wg-second"    # the WireGuard interface every host on this mesh gives it: a fort's
                              # own, and a linked host's link interface. ≤ 15 characters. Absent: wg0.
 {{- end }}
+{{- if .Zone }}
+zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <host>.{{ .Zone }}
+{{- else }}
+# zone = "{{ .Name }}.mesh"    # the DNS zone of the mesh (docs/mesh.md): every peer and remote
+                             # of peers.json is <host>.<zone> at its mesh address, on every fort
+                             # and in its cluster DNS. Absent: <name>.mesh, i.e. {{ .Name }}.mesh.
+{{- end }}
 {{- if .Hub }}
 hub = "{{ .Hub }}"
 {{- else if .HubPush }}

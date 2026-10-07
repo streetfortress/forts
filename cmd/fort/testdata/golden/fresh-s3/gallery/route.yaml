@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-gallery
   hostnames:
-    - gallery.lab-fort.lofi
+    - gallery.lab-fort.deployments.mesh
   rules:
     - backendRefs:
         - name: gallery

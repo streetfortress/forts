@@ -5,7 +5,7 @@ as a flake input. Rendered by `fort init`. The CLI handbook is sfi/forts'
 `docs/`; this file is yours.
 
 ```
-estate.toml                  what this checkout is: its name, its git URL, its hub (if any)
+estate.toml                  what this checkout is: its name, its git URL, its mesh and zone, its hub (if any)
 forts/<host>.toml            the manifests: one file per fort, the declaration
 nixos/
   flake.nix                  the hosts, auto-discovered under hosts/; sfi/forts as inputs.forts

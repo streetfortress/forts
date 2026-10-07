@@ -1,0 +1,5 @@
+# The fixture estate the add and check tests replay against: the zone of
+# its mesh is the default, <name>.mesh (forts#45).
+name = "deployments"
+repo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
+hub = "luxor"

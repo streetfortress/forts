@@ -7,7 +7,7 @@ flux/apps/lab-fort/   (chart 0.1.0)
     ● policies/uploads.json      get/put/list/delete on bucket uploads, nothing else
     ◆ users.sops.yaml            + key uploads (seeder add-missing-keys; until then: sops set)
 ○ gateway/
-  ● certificate-uploads.yaml     step-ca, uploads.lab-fort.lofi
+  ● certificate-uploads.yaml     step-ca, uploads.lab-fort.deployments.mesh
   ○ kustomization.yaml           + certificate-uploads.yaml; patches: + listener-uploads.yaml
   ● listener-uploads.yaml        JSON6902 add /spec/listeners/- (https-uploads)
 ○ kustomization.yaml             + uploads
@@ -17,7 +17,7 @@ flux/apps/lab-fort/   (chart 0.1.0)
   ● namespace.yaml               
   ● release.yaml                 wire: s3.files; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/uploads, tag 0.1.0
-  ● route.yaml                   HTTPRoute uploads.lab-fort.lofi → uploads:8080
+  ● route.yaml                   HTTPRoute uploads.lab-fort.deployments.mesh → uploads:8080
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 

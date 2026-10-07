@@ -27,11 +27,11 @@ flux/apps/lab-fort/   (chart 0.2.0)
   ● namespace.yaml               
   ● release.yaml                 wire: postgres.db, s3.media; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/gallery, tag 0.2.0
-  ● route.yaml                   HTTPRoute gallery.lab-fort.lofi → gallery:3000
+  ● route.yaml                   HTTPRoute gallery.lab-fort.deployments.mesh → gallery:3000
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 ● gateway/
-  ● certificate-gallery.yaml     step-ca, gallery.lab-fort.lofi
+  ● certificate-gallery.yaml     step-ca, gallery.lab-fort.deployments.mesh
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
   ● gateway.yaml                 http listener only
   ● kustomization.yaml           patches: listener-gallery.yaml

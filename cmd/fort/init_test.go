@@ -51,6 +51,11 @@ func TestRenderInit(t *testing.T) {
 	if err != nil || est.Name != "test-estate" || est.HasHub() {
 		t.Errorf("estate.toml: %+v %v", est, err)
 	}
+	// no zone named: the default derives from the name, and the comment
+	// says which (forts#45)
+	if est.Zone != "" || est.ZoneName() != "test-estate.mesh" || !strings.Contains(m["estate.toml"], "# zone = \"test-estate.mesh\"") {
+		t.Errorf("estate.toml zone default:\n%s", m["estate.toml"])
+	}
 	// mint's anchors, exactly once each
 	if strings.Count(m["nixos/.sops.yaml"], "  - path_regex: secrets/.*\\.yaml$\n") != 1 || !strings.Contains(m["nixos/.sops.yaml"], "      - "+testInitView.Admins[0]) {
 		t.Errorf("nixos/.sops.yaml:\n%s", m["nixos/.sops.yaml"])
@@ -97,6 +102,17 @@ func TestRenderInit(t *testing.T) {
 	for _, f := range files {
 		if f.path == "estate.toml" && !strings.Contains(string(f.content), "\nhub_push = \"10.1.0.5\"") {
 			t.Errorf("estate.toml with hub_push:\n%s", f.content)
+		}
+	}
+	// a zone of its own: rendered as the key, and parsed back as the zone
+	v = testInitView
+	v.Zone = "lab.internal"
+	files, _ = renderInit(v)
+	for _, f := range files {
+		if f.path == "estate.toml" {
+			if est, err := estate.Parse(f.content); err != nil || est.ZoneName() != "lab.internal" || !strings.Contains(string(f.content), "\nzone = \"lab.internal\"") {
+				t.Errorf("estate.toml with zone: %+v %v\n%s", est, err, f.content)
+			}
 		}
 	}
 }

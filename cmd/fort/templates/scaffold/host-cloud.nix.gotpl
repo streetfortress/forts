@@ -77,14 +77,15 @@
   # root never logs in, Lish is the break-glass.
   services.openssh.settings.PermitRootLogin = lib.mkForce "no";
 
-  # Cloud host, no LAN — .lofi resolution follows the wiring web3 proved:
-  # split-DNS routes ~lofi over the tunnel to the lab dnsmasq's mesh
-  # listener on soundship; gitea.zen.lofi is pinned so containerd pulls
-  # and the flux-bootstrap clone survive the dnsmasq being down (single
-  # answer — the dual-A ambiguity bit fluent-bit in #119). The in-cluster
-  # half is coredns-custom. (Both come from modules/lab-dns.nix.)
+  # Cloud host, no LAN. The names this fort needs are the hosts of its
+  # mesh, <host>.{{ .Zone }} from mesh/peers.json, and the forge's pin
+  # (gitea.zen.lofi): both in /etc/hosts and in coredns-custom, rendered
+  # by modules/mesh-dns.nix and modules/lab-dns.nix (forts#45). No split
+  # DNS over the mesh: a
+  # cloud fort knows no other .lofi name, and public names never ride the
+  # tunnel (the wireguard module keeps {{ .MeshInterface }} off resolved's
+  # default route).
   services.resolved.enable = true;
-  networking.wg-quick.interfaces.{{ .MeshInterface }}.dns = [ "10.1.0.1" "~lofi" ];
 
   sfi.flux-bootstrap = {
     enable = true;

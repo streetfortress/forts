@@ -245,6 +245,38 @@ func TestMeshSubnetFindings(t *testing.T) {
 	}
 }
 
+// The zone (forts#45): one ok line naming it and counting the names
+// peers.json gives it; a host file that pins a .lofi name by hand, or
+// routes .lofi over the mesh, is a warning per line — and the forge URL
+// in auto-rebuild's repoUrl is not one.
+func TestZoneFindings(t *testing.T) {
+	root := testTree(t)
+	hosts := testHosts(t)
+	est := estate.Estate{Name: "deployments"}
+	fs := zoneFindings(root, est, hosts)
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "zone deployments.mesh — 7 name(s)") {
+		t.Errorf("clean tree: %+v", fs)
+	}
+	write := func(rel, content string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
+		os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644)
+	}
+	write("nixos/hosts/luxor/default.nix", "{ inputs, ... }:\n{\n  # gitea.zen.lofi is pinned by lab-dns.nix, not here\n  sfi.auto-rebuild.repoUrl = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments.git\";\n  networking.hosts.\"10.1.0.4\" = [ \"gitea.zen.lofi\" ]; # the old pin\n  networking.extraHosts = ''\n    10.1.0.1 soundship.lofi\n    10.1.0.5 luxor.lofi\n  '';\n  networking.hosts = {\n    \"10.1.0.61\" = [ \"dev.example.org\" ];\n  };\n}\n")
+	write("nixos/hosts/sfi-prod-1111111/default.nix", "{\n  services.resolved.enable = true;\n  networking.wg-quick.interfaces.wg0.dns = [ \"10.1.0.1\" \"~lofi\" ];\n}\n")
+	write("nixos/hosts/sfi-prod-2222222/default.nix", "{\n  sfi.lab-dns.giteaAddress = \"10.1.0.4\"; # the forge's address, not a .lofi line\n}\n")
+	fs = zoneFindings(root, est, hosts)
+	var lines []string
+	for _, f := range fs {
+		if f.level != "warning" {
+			t.Errorf("want warnings only, got %+v", f)
+		}
+		lines = append(lines, f.dir+":"+f.msg[:7])
+	}
+	if want := []string{"nixos/hosts/luxor/default.nix:line 5 ", "nixos/hosts/luxor/default.nix:line 7 ", "nixos/hosts/luxor/default.nix:line 8 ", "nixos/hosts/sfi-prod-1111111/default.nix:line 3 "}; strings.Join(lines, ",") != strings.Join(want, ",") {
+		t.Errorf("hand lines: got %v, want %v\n%+v", lines, want, fs)
+	}
+}
+
 func TestMeshFindings(t *testing.T) {
 	root := testTree(t)
 	hosts, problems, err := manifest.LoadAll(root)

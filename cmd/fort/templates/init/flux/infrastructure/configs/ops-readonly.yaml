@@ -25,7 +25,7 @@
 # boot, which is what the drill fort's flux deadlock needed and did not
 # have. Every object carries `kustomize.toolkit.fluxcd.io/prune: disabled`
 # so the fleet can stop listing the file without kustomize-controller
-# garbage-collecting the host's copy (lab-dns.nix's coredns override is
+# garbage-collecting the host's copy (mesh-dns.nix's coredns override is
 # the precedent). The fleet still lists it until every fort has
 # reconciled that annotation.
 apiVersion: v1

@@ -29,6 +29,9 @@ func TestParse(t *testing.T) {
 		"bad iface":   {"name = \"e\"\nrepo = \"ssh://x/y\"\ninterface = \"wg second\"\n", "interface"},
 		"bad mesh":    {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"10.2.0.4/24\"\n", "mesh"},
 		"mesh v6":     {"name = \"e\"\nrepo = \"ssh://x/y\"\nmesh = \"fd00::/64\"\n", "mesh"},
+		"bad zone":    {"name = \"e\"\nrepo = \"ssh://x/y\"\nzone = \"Staging.Mesh\"\n", "zone"},
+		"zone hyphen": {"name = \"e\"\nrepo = \"ssh://x/y\"\nzone = \"-staging.mesh\"\n", "zone"},
+		"zone dots":   {"name = \"e\"\nrepo = \"ssh://x/y\"\nzone = \"staging..mesh\"\n", "zone"},
 	} {
 		if _, err := Parse([]byte(tc.text)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: want %q, got %v", name, tc.want, err)
@@ -79,5 +82,19 @@ func TestMesh(t *testing.T) {
 	e, err = Parse([]byte("name = \"second-estate\"\nrepo = \"ssh://x/y\"\ninterface = \"wg-second\"\n"))
 	if err != nil || e.InterfaceName() != "wg-second" {
 		t.Fatalf("interface: %+v %v", e, err)
+	}
+}
+
+// The zone (forts#45): <name>.mesh unless estate.toml names one.
+func TestZone(t *testing.T) {
+	e, err := Parse([]byte("name = \"staging\"\nrepo = \"ssh://x/y\"\n"))
+	if err != nil || e.Zone != "" || e.ZoneName() != "staging.mesh" {
+		t.Fatalf("default zone: %+v %v", e, err)
+	}
+	for _, zone := range []string{"lab.internal", "mesh", "second-estate.mesh", "a1.b2"} {
+		e, err := Parse([]byte("name = \"staging\"\nrepo = \"ssh://x/y\"\nzone = \"" + zone + "\"\n"))
+		if err != nil || e.ZoneName() != zone {
+			t.Errorf("zone %s: %+v %v", zone, e, err)
+		}
 	}
 }

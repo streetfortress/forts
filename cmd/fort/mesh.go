@@ -390,9 +390,11 @@ func renderWGConf(m mesh, iface, member string) (string, error) {
 		// port must hold still.
 		fmt.Fprintf(&sb, "ListenPort = %d\n", wgPort)
 	}
-	sb.WriteString("# split DNS for .lofi over the mesh (soundship's dnsmasq); a machine on the\n")
-	sb.WriteString("# lab LAN already resolves it there and can leave this out\n")
-	sb.WriteString("# DNS = 10.1.0.1, lofi\n")
+	// No DNS line (forts#45): the names of the mesh are the forts' own
+	// (/etc/hosts from peers.json); a roaming client is not served them
+	// yet, and .lofi is the lab LAN's zone, resolved there.
+	sb.WriteString("# no DNS: the names of the mesh (<host>.<zone>, docs/mesh.md) are not served to\n")
+	sb.WriteString("# a roaming client yet; .lofi is the lab LAN's zone, resolved on the LAN\n")
 
 	for _, name := range sortedNames(m.Peers) {
 		if name == member {
@@ -484,6 +486,60 @@ func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifes
 	}
 	if len(out) == 0 {
 		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("mesh %s — %d address(es) inside it", est.Mesh, n)})
+	}
+	return out
+}
+
+// zoneFindings (forts#45): the zone of the mesh is mesh/peers.json —
+// mesh-dns.nix renders every peer and remote as <host>.<zone> on every
+// fort, into /etc/hosts and the cluster DNS — so a host file that sets
+// a .lofi name by hand is the old way: a networking.hosts or extraHosts
+// line, or the split DNS the cloud shape used to render (wg-quick's dns
+// with ~lofi, which routed the host's every query over the mesh). The
+// gate says so, per line. The forge's address is not a hand line: it is
+// sfi.lab-dns.giteaAddress (forts#26).
+func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
+	peersText, err := readOrEmpty(root, peersPath)
+	if err != nil {
+		return nil // meshFindings reports it
+	}
+	m, err := parseMesh(peersText)
+	if err != nil {
+		return nil
+	}
+	var out []finding
+	for _, h := range sortedNames(hosts) {
+		path := filepath.Join("nixos/hosts", h, "default.nix")
+		raw, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			continue // scaffold has not run; nix-eval is that finding
+		}
+		inHosts := false
+		for i, line := range strings.Split(string(raw), "\n") {
+			code := strings.TrimSpace(line)
+			if j := strings.Index(code, "#"); j >= 0 {
+				code = strings.TrimSpace(code[:j])
+			}
+			if code == "" {
+				continue
+			}
+			opened := strings.Contains(code, "networking.hosts") || strings.Contains(code, "extraHosts")
+			if opened {
+				inHosts = true
+			}
+			switch {
+			case inHosts && strings.Contains(code, "lofi"):
+				out = append(out, finding{"warning", path, fmt.Sprintf("line %d sets a .lofi address by hand — the zone renders every host of the mesh as <host>.%s (docs/mesh.md), and the forge's address is sfi.lab-dns.giteaAddress", i+1, est.ZoneName())})
+			case strings.Contains(code, "wg-quick") && strings.Contains(code, ".dns") && strings.Contains(code, "~lofi"):
+				out = append(out, finding{"warning", path, fmt.Sprintf("line %d routes .lofi over the mesh (wg-quick dns) — the old split DNS; the mesh names are in /etc/hosts, and a cloud fort knows no .lofi", i+1)})
+			}
+			if inHosts && ((opened && strings.HasSuffix(code, ";")) || code == "};" || code == "];" || code == "'';") {
+				inHosts = false
+			}
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("zone %s — %d name(s) from %s", est.ZoneName(), len(m.Peers)+len(m.Remotes), peersPath)})
 	}
 	return out
 }

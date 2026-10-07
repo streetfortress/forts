@@ -57,7 +57,7 @@ spec:
       # rolls pods); the Secret carries only the secret-typed keys.
       env:
         PUBLIC_ENVIRONMENT: staging
-        BETTER_AUTH_URL: https://symbology.sfi-fort-e33e2d5.lofi
+        BETTER_AUTH_URL: https://symbology.sfi-fort-e33e2d5.deployments.mesh
         RESEND_EMAIL_FROM: "Symbology <noreply@send.symbology.online>"
         RESEND_EMAIL_REPLY_TO: "Symbology Support <support@streetfortress.com>"
     worker:

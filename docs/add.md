@@ -24,7 +24,7 @@ that turns into on the cluster is [`docs/flux/workloads.md`](../flux/workloads.m
 |---|---|---|
 | app, namespace, release, dir | the chart's name | `--name` |
 | the Secret the chart consumes | `<app>-env` in namespace `<app>`, when the contract declares keys at all | the contract's `secret.values` names the values path |
-| hostname | `<app>.<fort>.<zone>` — zone = the manifest's `[dns] zone` on a cloud fort, `lofi` in the lab | `--hostname` |
+| hostname | `<app>.<fort>.<zone>` — zone = the manifest's `[dns] zone` on a cloud fort, the estate's mesh zone in the lab (`estate.toml` `zone`, else `<estate>.mesh`; [mesh.md](mesh.md)) | `--hostname` |
 | issuer | `letsencrypt` on a cloud fort, `step-ca` in the lab | — |
 | version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts; `--follow-main` follows main's | `--chart-dir` reads a local chart (tests, chart authors) |
 | optional providers | provisioned — the out-of-the-box result is the full topology | `--without valkey` drops an *optional* requirement; a required one is refused |
@@ -125,7 +125,7 @@ flux/apps/sfi-x/   (chart 0.1.0)
   ● namespace.yaml
   ● release.yaml                 wire: none; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.1.0
-  ● route.yaml                   HTTPRoute moment-tally-website.sfi-x.lofi → moment-tally-website:3000
+  ● route.yaml                   HTTPRoute moment-tally-website.sfi-x.deployments.mesh → moment-tally-website:3000
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 
 staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.

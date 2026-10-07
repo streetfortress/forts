@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-uploads
   hostnames:
-    - uploads.lab-fort.lofi
+    - uploads.lab-fort.deployments.mesh
   rules:
     - backendRefs:
         - name: uploads

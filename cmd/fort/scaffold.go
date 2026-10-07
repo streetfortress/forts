@@ -45,7 +45,7 @@ type hostView struct {
 	// not audit carries no block, as with an empty pv list above.
 	AuditLogging bool
 	// Cloud hosts (a cloud provider table): the linode-runtime shape —
-	// no LAN block, split DNS over the mesh, zram, Lish break-glass.
+	// no LAN block, zram, Lish break-glass.
 	Cloud        bool
 	Provider     string
 	Region       string
@@ -59,8 +59,11 @@ type hostView struct {
 	// source and auto-rebuild's pull.
 	RepoURL string
 	// MeshInterface: the estate's mesh interface (estate.toml `interface`,
-	// else wg0), the name the cloud shape's split DNS hangs off.
+	// else wg0).
 	MeshInterface string
+	// Zone: the estate's mesh zone (estate.toml `zone`, else <name>.mesh;
+	// forts#45): what every host on the mesh is named under.
+	Zone string
 	// HubMeshIP: where the edge stack pushes (cluster-vars HUB_MESH_IP):
 	// the hub fort's mesh address, or estate.toml's hub_push. "" with no
 	// hub, and the layer init rendered then carries no push targets.
@@ -222,6 +225,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 	view := hostView{
 		RepoURL:       est.RepoGit(),
 		MeshInterface: est.InterfaceName(),
+		Zone:          est.ZoneName(),
 		HubMeshIP:     hubIP,
 		Hostname:      host,
 		MeshIP:        entry.MeshIP,
@@ -289,7 +293,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		hostNote += ")"
 	}
 	if view.Cloud {
-		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, split DNS over the mesh, zram)"
+		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, no LAN, zram)"
 	}
 	if view.Plain {
 		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)"

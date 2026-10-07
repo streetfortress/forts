@@ -1,87 +1,85 @@
-# gitea.zen.lofi is one fact — the mesh address of the host serving gitea
-# — and the host owns it. This module renders that fact twice from a
-# single option:
+# Today's wiring of the homelab into a fort: the forge's name, and the
+# LAN's zone. Nothing in here is a property of the mesh — that is
+# mesh-dns.nix — and the file goes when the hub-estate model (forts#38)
+# and the forge's entry in peers.json (forts#26) make it redundant. Until
+# then it contributes two things through mesh-dns.nix's extension point:
 #
-#   1. /etc/hosts on the host (networking.hosts): the auto-rebuild flake
-#      fetch and flux-bootstrap's clone work with the lab DNS down;
-#   2. the cluster's coredns-custom ConfigMap, as a k3s add-on manifest
-#      (services.k3s.manifests → /var/lib/rancher/k3s/server/manifests):
-#      applied by k3s itself at start, i.e. before flux exists — the
-#      day-0 chicken-and-egg flux-bootstrap.nix used to solve with a sed
-#      over the fleet's copy. Pods resolve gitea via the pin and every
-#      other .lofi name over the mesh dnsmasq listener (10.1.0.1).
+# The forge is the one exception to <host>.<zone>: gitea.zen.lofi is an
+# identity, not a location — it is in every git remote, every OCI
+# reference, every flux source and the registry certificate, and one
+# gitea is on several meshes. So the forge keeps its one name on every
+# mesh, and this module pins that name to the forge's address on THIS
+# mesh (`giteaAddress`; forts#26 derives it from the forge host's
+# peers.json entry, and a rename is forts#1). Until then the default is
+# the sfi/deployments mesh address of sfi-fort-zenbook, and an estate on
+# another mesh sets it in the host file. The pin is in /etc/hosts and in
+# the cluster DNS, as a hosts line of the .lofi block: not a record of
+# the zone file, because the .lofi block also forwards on a lab fort and
+# the file plugin does not fall through.
 #
-# No per-cluster address, no LAN-vs-mesh variant. A host whose mesh path
-# to gitea is missing is fixed in the mesh (#183), not here. The
-# ConfigMap carries flux's prune-disabled annotation so the fleet can
-# stop managing its own copy without kustomize-controller
-# garbage-collecting this one.
-#
-# WHY A PIN AND NOT DNS (until #297): the lab dnsmasq answers every
-# .lofi name with BOTH its A records, LAN and mesh — `address=` records
-# are not localised (`localise-queries` only applies to hosts-file
-# records) — and a cloud fort that draws the LAN address waits out a
-# SYN timeout before falling back, or never falls back (#119). One
-# answer, the mesh one, is what git-over-ssh and containerd need. The
-# cost is that this address MOVES WITH GITEA and is rolled by nix:
-# when gitea changes host (#338/#350), the new default merges and is
-# rolled to every fort (`sudo sfi-nixos-rebuild`, or the ~6h loop)
-# BEFORE the old host goes down — a fort still pinned to a host that
-# is gone cannot fetch the config that would unpin it.
-#
-#   2026-09-13 → 10.1.0.6   zenbook (the laptop, pre-fort; retired)
-#   hop one    → 10.1.0.16  sfi-fort-d54d5b3, the interim
-#   hop two    → 10.1.0.4   sfi-fort-zenbook
+# .lofi is the homelab's LAN zone (llm.lofi, chat.lofi), not a fort
+# name. A lab fort forwards it to its LAN resolvers — the same ones its
+# static LAN block names — so a pod there still reaches the LAN; a cloud
+# fort has nowhere to send it and forwards nothing: it knows the forge
+# pin and no other .lofi name. The dnsmasq on soundship (10.1.0.1) gates
+# no fort any more.
 { config, lib, ... }:
 
 let
   cfg = config.sfi.lab-dns;
+  forgeName = "gitea.zen.lofi";
+
+  # The host's static LAN resolvers, as its systemd.network block names
+  # them ([libvirt] / [baremetal] lan_dns, rendered by fort scaffold).
+  # A cloud host has no such block, and the list is empty.
+  lanDNS = lib.unique (lib.concatMap (n: n.dns or [ ]) (lib.attrValues config.systemd.network.networks));
+
+  # The .lofi block: the forge pin, and the LAN forward where there is
+  # one. `hosts` without `fallthrough` is the end of the line: a cloud
+  # fort answers no other .lofi name.
+  lofiServer = lib.concatStringsSep "\n" ([
+    "lofi:53 {"
+    "  errors"
+    "  cache 30"
+    "  hosts {"
+    "    ${cfg.giteaAddress} ${forgeName}"
+  ] ++ lib.optionals (cfg.lofiForward != [ ]) [
+    "    fallthrough"
+    "  }"
+    "  forward . ${lib.concatStringsSep " " cfg.lofiForward} {"
+    "    policy sequential"
+  ] ++ [
+    "  }"
+    "}"
+  ]) + "\n";
 in
 {
+  imports = [ ./mesh-dns.nix ];
+
   options.sfi.lab-dns = {
     giteaAddress = lib.mkOption {
       type = lib.types.str;
-      # Hop two (#350): sfi-fort-zenbook. Merged and rolled while the
-      # interim still serves — see the header for why the order matters.
+      # Hop two (#350): sfi-fort-zenbook on the sfi/deployments mesh. An
+      # estate on another mesh sets the forge's address there (forts#26
+      # renders it from the forge host's peers.json entry).
       default = "10.1.0.4";
-      description = "gitea.zen.lofi's mesh address — one constant, not per cluster; moves with gitea.";
+      description = "The forge's (gitea.zen.lofi's) address on this mesh: the one name that is not <host>.<zone>, pinned in /etc/hosts and the cluster DNS.";
+    };
+    lofiForward = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = lanDNS;
+      defaultText = "the host's static LAN resolvers (systemd.network dns): a lab fort's lan_dns; empty on a cloud fort";
+      description = ''
+        Where the cluster DNS forwards the .lofi names that are not the
+        forge: the homelab's LAN zone, which only a lab fort can reach.
+        Tried in order. Empty: nothing is forwarded, and the cluster
+        answers no .lofi name but the forge's.
+      '';
     };
   };
 
   config = {
-    networking.hosts.${cfg.giteaAddress} = [ "gitea.zen.lofi" ];
-
-    services.k3s.manifests.coredns-custom.content = {
-      apiVersion = "v1";
-      kind = "ConfigMap";
-      metadata = {
-        name = "coredns-custom";
-        namespace = "kube-system";
-        annotations = {
-          # Rendered by the host (nixos/modules/lab-dns.nix), not the fleet.
-          "kustomize.toolkit.fluxcd.io/prune" = "disabled";
-        };
-      };
-      data = {
-        "zen-lofi.server" = ''
-          zen.lofi:53 {
-            errors
-            cache 30
-            hosts {
-              ${cfg.giteaAddress} gitea.zen.lofi
-              fallthrough
-            }
-            forward . 10.1.0.1
-          }
-        '';
-        "lofi.server" = ''
-          lofi:53 {
-            errors
-            cache 30
-            forward . 10.1.0.1
-          }
-        '';
-      };
-    };
+    networking.hosts.${cfg.giteaAddress} = [ forgeName ];
+    sfi.mesh.coredns."lofi.server" = lofiServer;
   };
 }

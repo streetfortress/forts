@@ -7,8 +7,9 @@
 // tree, and this file names only what a verb reads.
 //
 // `fort init` writes it. `fort scaffold` reads it for the flux source URL
-// and the hub; `fort check`, `fort dismantle` read the hub. A checkout
-// with no estate.toml is not an estate, and every verb says so.
+// and the hub; `fort add` reads the zone; `fort check`, `fort dismantle`
+// read the hub. A checkout with no estate.toml is not an estate, and
+// every verb says so.
 package estate
 
 import (
@@ -60,6 +61,14 @@ type Estate struct {
 	// At most 15 characters from [A-Za-z0-9_=+.-], the kernel's rule.
 	// Optional: an estate with no interface key is on wg0, as before.
 	Interface string `toml:"interface"`
+	// Zone is the DNS zone of this estate's mesh (forts#45): every host
+	// on the mesh — a peer or a remote in mesh/peers.json — is
+	// <host>.<zone> at its mesh address, on every fort of the estate and
+	// in every fort's cluster DNS, and <service>.<host>.<zone> answers
+	// the same address. Optional: the default is <name>.mesh, so the
+	// estate staging is the zone staging.mesh. .mesh is the fleet's one
+	// private TLD; a name under it says which mesh it is on.
+	Zone string `toml:"zone"`
 }
 
 // DefaultInterface is the mesh interface of an estate that names none.
@@ -73,6 +82,22 @@ func (e Estate) InterfaceName() string {
 		return DefaultInterface
 	}
 	return e.Interface
+}
+
+// DefaultZoneSuffix is what the estate's name gains to become its zone
+// when estate.toml names none: staging → staging.mesh.
+const DefaultZoneSuffix = ".mesh"
+
+// zoneRE: DNS labels of lowercase letters, digits and hyphens, joined by
+// dots — one label or more. A label neither starts nor ends in a hyphen.
+var zoneRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
+// ZoneName is the estate's mesh zone: the zone key, else <name>.mesh.
+func (e Estate) ZoneName() string {
+	if e.Zone == "" {
+		return e.Name + DefaultZoneSuffix
+	}
+	return e.Zone
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -125,6 +150,9 @@ func (e Estate) Validate() error {
 	}
 	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
 		return fmt.Errorf("interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Interface)
+	}
+	if e.Zone != "" && !zoneRE.MatchString(e.Zone) {
+		return fmt.Errorf("zone %q — want a DNS name of lowercase labels (staging.mesh); absent: <name>%s", e.Zone, DefaultZoneSuffix)
 	}
 	if e.Mesh != "" {
 		p, err := netip.ParsePrefix(e.Mesh)

@@ -34,6 +34,7 @@ func TestAddReproducesDrillFort(t *testing.T) {
 	// a forts/ that lists postgres alone (deployments#671).
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
+	copyEstate(t, tmp)
 	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, filepath.Join("testdata/trees", fort, "kustomization.yaml"), filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 	copyFile(t, filepath.Join(golden, "sops-canary.yaml"), filepath.Join(tmp, "flux/apps", fort, "sops-canary.yaml"))
@@ -224,6 +225,13 @@ func readFile(t *testing.T, p string) string {
 	return string(b)
 }
 
+// copyEstate copies the fixture estate.toml into a scratch root: add reads
+// the estate's zone from it (forts#45).
+func copyEstate(t *testing.T, dstRoot string) {
+	t.Helper()
+	copyFile(t, "testdata/estate.toml", filepath.Join(dstRoot, "estate.toml"))
+}
+
 // copyManifest copies one host's manifest from a repo/fixture root
 // (testdata, or the checkout) into a scratch root.
 func copyManifest(t *testing.T, srcRoot, dstRoot, host string) {
@@ -286,7 +294,8 @@ func TestAddFreshCloudFort(t *testing.T) {
 	testAddFresh(t, addFixture{fort: "cloud-fort", golden: "testdata/golden/fresh-cloud", chart: "sfi-website", version: "0.3.0"})
 }
 
-// The lab twin: libvirt, no db-physical block — step-ca, <app>.<fort>.lofi, and
+// The lab twin: libvirt, no db-physical block — step-ca, <app>.<fort>.<zone>
+// (the estate's mesh zone, deployments.mesh in the fixture; forts#45), and
 // a postgres rendered with NO archive (forts#5): no ObjectStore, no
 // ScheduledBackup, no secrets-backup, and cluster.yaml says why.
 func TestAddFreshLabFort(t *testing.T) {
@@ -386,6 +395,7 @@ func testAddFresh(t *testing.T, f addFixture) {
 	}
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
+	copyEstate(t, tmp)
 	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
 
@@ -497,6 +507,7 @@ func TestHTTPFlag(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, "lab-fort")
+	copyEstate(t, tmp)
 	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps/lab-fort/kustomization.yaml"))
 	_, err = planAdd(addOpts{
 		root: tmp, fort: "lab-fort",

@@ -2,9 +2,9 @@
 # runs after k3s on every boot and converges the cluster to "flux syncing this
 # repo" with zero manual kubectl/helm steps:
 #
-#   1. wait for the k3s API (the coredns .lofi forwarder that source-
-#      controller needs to resolve gitea.zen.lofi is a k3s add-on rendered
-#      by lab-dns.nix, applied by k3s itself before this runs)
+#   1. wait for the k3s API (the coredns zone that source-controller
+#      needs to resolve gitea.zen.lofi is a k3s add-on rendered by
+#      mesh-dns.nix and lab-dns.nix, applied by k3s itself before this runs)
 #   3. flux-system namespace
 #   4. `sops-age` secret from the host's flux-sops-age-key (sops-nix)
 #   5. `flux-system` git-auth secret from flux-git-deploy-key (identity.pub is

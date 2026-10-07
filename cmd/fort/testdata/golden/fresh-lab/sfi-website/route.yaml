@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-sfi-website
   hostnames:
-    - sfi-website.lab-fort.lofi
+    - sfi-website.lab-fort.deployments.mesh
   rules:
     - backendRefs:
         - name: sfi-website-ui

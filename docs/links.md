@@ -21,6 +21,7 @@ imports = [ inputs.forts.nixosModules.links ];
 sfi.links.second-estate = {
   repo = "https://gitea.zen.lofi/sfi/second-estate.git";  # public: no credential
   interface = "wg-second";   # the name sfi/second-estate's estate.toml gives its mesh (checked)
+  zone = "second-estate.mesh";  # its zone, <estate>.mesh unless its estate.toml says (checked); this is the default
   port = 51821;              # never 51820 (this host's own mesh port)
   address = "10.2.0.4";      # what sfi/second-estate's remotes entry says
   openTCPPorts = [ 30022 443 ];  # gitea; nothing else answers on this interface
@@ -53,7 +54,9 @@ runs `links/reconcile.sh`:
 2. One name per mesh: when that estate's `estate.toml` names its
    interface, this link must be called the same — exit 1 otherwise,
    apply nothing. (An estate on the default `wg0` names none and is not
-   checked; a link cannot be `wg0`, this host's own mesh.)
+   checked; a link cannot be `wg0`, this host's own mesh.) The same for
+   the zone: that estate's `zone`, else `<name>.mesh`, must be this
+   link's `zone`.
 3. Find this host's own key in that file's `remotes`. No entry: the
    other estate has not added the link yet — exit 1, apply nothing. An
    entry whose address or port differs from the link's — exit 1, apply
@@ -63,12 +66,48 @@ runs `links/reconcile.sh`:
    (endpoint and port, keepalive): exactly what a fort of that estate
    carries. Then remove every peer on the interface the file no longer
    names.
-5. Write `wg-link-<name>.prom` for node_exporter:
+5. Render the zone (below) into `/var/lib/wg-link-<name>/zone.db`: every
+   peer and remote of that estate as `<host>` and `*.<host>` at its
+   address on that mesh, the shape `mesh-dns.nix` gives a fort's own
+   zone. The serial is the run's time; an unchanged zone is not
+   rewritten.
+6. Write `wg-link-<name>.prom` for node_exporter:
    `sfi_link_fetch_success`, `sfi_link_last_run_seconds`,
    `sfi_link_peers`.
 
 `sudo sfi-systemd-restart wg-link-<name>` runs it now; `wg-quick-<interface>`
-is restartable the same way.
+and `coredns` are restartable the same way.
+
+## The zone of a linked estate
+
+A fort renders its own mesh's names at build time, from its own
+peers.json ([mesh.md](mesh.md), "The zone"). A linked host learns the
+other estate's peers at run time, so its names are served from the
+reconciler's zone file instead: the module runs one CoreDNS on the host
+(`services.coredns`) with a server block per link, `file
+/var/lib/wg-link-<name>/zone.db`, reloaded when the serial changes. It
+binds loopback and this host's own mesh address, after this host's own
+mesh is up. Until the first reconcile the file is a SOA alone, so the
+server starts.
+
+Two consumers, one zone each:
+
+- **the host**: `wg-quick-<interface>` routes the zone, and only the
+  zone, to the server on loopback — `resolvectl dns <interface>
+  127.0.0.1`, `domain <interface> ~<zone>`, `default-route <interface>
+  false` on post-up. Explicit, not wg-quick's `dns` setting, whose
+  exclusive mode would route the host's every query there. A host
+  without systemd-resolved routes nothing.
+- **the pods**: the host's `coredns-custom` ConfigMap gains a `<zone>:53`
+  block that forwards to the server at the host's own mesh address
+  (`sfi.mesh.coredns`, rendered by `mesh-dns.nix`); the firewall opens
+  53 on `cni0` and on no mesh interface — the other estate's forts
+  resolve their own names.
+
+`luxor.staging.mesh` therefore means the same address on a staging fort
+and on the hub that serves staging, and the hub's own names
+(`luxor.infra.mesh`) cannot collide with them. A link's zone cannot be
+this host's own, and two links cannot share one.
 
 ## A private estate
 
@@ -102,8 +141,9 @@ until both halves agree.
 ## Limits
 
 An interface name is at most 15 characters from `A-Za-z0-9_=+.-`, and a
-link's is the name the other estate gives its mesh. One UDP port per
-link. Two links cannot share either, and neither can be this host's own
-mesh interface or port. Every estate's mesh is a /24 that no other
+link's is the name the other estate gives its mesh; a link's zone is the
+one the other estate gives its mesh (`zone`, else `<name>.mesh`). One UDP
+port per link. Two links cannot share any of the three, and none can be
+this host's own mesh interface, port or zone. Every estate's mesh is a /24 that no other
 estate's overlaps ([mesh.md](mesh.md), the `mesh` key). All of it is an
 eval-time assertion, a `fort check` finding, or the reconciler's refusal.

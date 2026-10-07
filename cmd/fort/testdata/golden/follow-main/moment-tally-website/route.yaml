@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-moment-tally-website
   hostnames:
-    - moment-tally-website.lab-fort.lofi
+    - moment-tally-website.lab-fort.deployments.mesh
   rules:
     - backendRefs:
         - name: moment-tally-website

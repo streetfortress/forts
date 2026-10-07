@@ -13,7 +13,7 @@ spec:
       namespace: traefik
       sectionName: https-symbology
   hostnames:
-    - symbology.sfi-fort-e33e2d5.lofi
+    - symbology.sfi-fort-e33e2d5.deployments.mesh
   rules:
     - backendRefs:
         - name: symbology-ui

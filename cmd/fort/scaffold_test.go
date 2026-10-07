@@ -10,8 +10,8 @@ import (
 )
 
 // The two shapes from the fixture manifests: a lab VM (qcow runtime,
-// static LAN) and a cloud fort (linode runtime, split DNS over the mesh,
-// zram, no LAN block) — both get the fleet dirs (every fort is a flux cluster).
+// static LAN) and a cloud fort (linode runtime, zram, no LAN block) —
+// both get the fleet dirs (every fort is a flux cluster).
 func TestRenderScaffold(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
@@ -77,12 +77,14 @@ func TestRenderScaffold(t *testing.T) {
 	}
 
 	c := cloud["nixos/hosts/cloud-fort/default.nix"]
-	for _, s := range []string{"inputs.forts.nixosModules.linode-runtime", "services.resolved.enable = true", `"~lofi"`, "zramSwap", "PermitRootLogin = lib.mkForce", "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", `networking.hostName = "cloud-fort"`, "deployer@10.1.0.98", "linode VPS (us-sea"} {
+	for _, s := range []string{"inputs.forts.nixosModules.linode-runtime", "services.resolved.enable = true", "<host>.deployments.mesh", "zramSwap", "PermitRootLogin = lib.mkForce", "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", `networking.hostName = "cloud-fort"`, "deployer@10.1.0.98", "linode VPS (us-sea"} {
 		if !strings.Contains(c, s) {
 			t.Errorf("cloud default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"qcow-runtime", "systemd.network.networks", "qemu-guest", "modules/interactive.nix", "modules/dotfiles.nix"} {
+	// No split DNS over the mesh (forts#45): the mesh names are in
+	// /etc/hosts, and a cloud fort knows no other .lofi name.
+	for _, s := range []string{"qcow-runtime", "systemd.network.networks", "qemu-guest", "modules/interactive.nix", "modules/dotfiles.nix", `"~lofi"`, "10.1.0.1"} {
 		if strings.Contains(c, s) {
 			t.Errorf("cloud default.nix should not carry %q", s)
 		}

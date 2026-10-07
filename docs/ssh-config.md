@@ -109,7 +109,8 @@ the key, from peers.json:
 [Interface]
 Address = 10.1.0.7/24
 ListenPort = 51820
-# DNS = 10.1.0.1, lofi          (commented: split DNS for .lofi; a LAN machine has it already)
+# no DNS: the names of the mesh (<host>.<zone>, docs/mesh.md) are not served to
+# a roaming client yet; .lofi is the lab LAN's zone, resolved on the LAN
 
 [Peer]
 # luxor

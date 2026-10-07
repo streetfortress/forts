@@ -378,7 +378,7 @@ in
     #
     # `--from <ip>` is the hatch under the hatch: pull and switch from a
     # gitea reached BY ADDRESS, bypassing the name. The name is pinned in
-    # /etc/hosts (lab-dns.nix) and moves with gitea; a fort pinned to a
+    # /etc/hosts (lab-dns.nix, the forge pin) and moves with gitea; a fort pinned to a
     # host that is gone — the interim never came up, or the flip has to
     # be rolled back to the previous host — cannot fetch the config that would
     # re-pin it, and without this verb the only way forward is the

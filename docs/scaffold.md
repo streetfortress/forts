@@ -29,7 +29,7 @@ From `forts/<host>.toml`:
 nixos/hosts/<host>/
 ● default.nix        lab shape (qcow runtime, static LAN block) when the entry
                      has provider: libvirt or none; cloud shape (linode runtime,
-                     split DNS over the mesh, zram, Lish break-glass) when it
+                     no LAN block, zram, Lish break-glass) when it
                      names a cloud provider; every shape imports shell.nix and
                      ops/console.nix and enables both (the operator defaults,
                      below)

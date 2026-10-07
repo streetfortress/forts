@@ -184,8 +184,9 @@ var providers = map[string]func() Spec{
 const ProviderTables = "[libvirt] (lab VM), [baremetal] (lab hardware) or [linode]"
 
 // Cloud says whether a host is realized by a cloud backend — off the lab
-// LAN. Lab facts (step-ca issuer, .lofi hostnames, the static LAN block)
-// follow from !Cloud(); a physical machine on the LAN is a lab host too.
+// LAN. Lab facts (step-ca issuer, hostnames under the estate's mesh zone,
+// the static LAN block) follow from !Cloud(); a physical machine on the
+// LAN is a lab host too.
 func (h Host) Cloud() bool { return h.Provider == "linode" }
 
 // Realized says whether a backend in provisioning/pulumi raises and destroys

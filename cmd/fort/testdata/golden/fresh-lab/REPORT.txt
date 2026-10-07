@@ -10,7 +10,7 @@ flux/apps/lab-fort/   (chart 0.3.0)
     ● role-sfi-website.yaml      JSON6902 add /spec/managed/roles/-
     ◆ secrets-sfi-website.sops.yaml seeded
 ● gateway/
-  ● certificate-sfi-website.yaml step-ca, sfi-website.lab-fort.lofi
+  ● certificate-sfi-website.yaml step-ca, sfi-website.lab-fort.deployments.mesh
   ● cluster-issuer-step-ca.yaml  lab issuer (per-lab-cluster)
   ● gateway.yaml                 http listener only
   ● kustomization.yaml           patches: listener-sfi-website.yaml
@@ -23,7 +23,7 @@ flux/apps/lab-fort/   (chart 0.3.0)
   ● namespace.yaml               
   ● release.yaml                 wire: postgres.db; retry forever — refine replicas/env in place
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
-  ● route.yaml                   HTTPRoute sfi-website.lab-fort.lofi → sfi-website-ui:3000
+  ● route.yaml                   HTTPRoute sfi-website.lab-fort.deployments.mesh → sfi-website-ui:3000
   ◆ secrets.sops.yaml            seeded
   ● step-ca-root.pem             copy of flux/infrastructure/configs/step-ca-root.pem
 

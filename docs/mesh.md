@@ -43,6 +43,41 @@ carry it as the `interface` label. An estate that names none is on
 stops one unit and starts another on every fort, so it is a decision per
 estate, not a default.
 
+## The zone
+
+Every host on the mesh has a name, and the name says which mesh (forts#45):
+
+```toml
+zone = "second-estate.mesh"   # absent: <name>.mesh, the same thing here
+```
+
+Every `peers` entry and every `remotes` entry is `<host>.<zone>` at its
+`wg_vpn_ip`, on every fort of the estate — in `/etc/hosts`, so the
+rebuild's fetch and flux's clone work with every DNS down, and in the
+cluster DNS (the `coredns-custom` add-on), where `<service>.<host>.<zone>`
+answers the same address, the convention a provider's service hostnames
+assume. Both are rendered from peers.json by `mesh-dns.nix` at build time:
+a host that moves changes its entry, and every fort rebuilds. No resolver
+is on a fort's path. The default derives from the estate's name, so
+`luxor.staging.mesh` is luxor as sfi/staging reaches it and
+`luxor.infra.mesh` is luxor on its own mesh; `.mesh` is the fleet's one
+private TLD, and `fort init --zone <name>` overrides the default. A
+`clients` entry gets no name: a roaming device is dialed by nobody.
+
+`fort add` names a lab app `<app>.<fort>.<zone>` ([add.md](add.md)). A host
+of another estate that links here serves this zone on itself, from its
+cached copy of peers.json ([links.md](links.md)).
+
+Two names are not of the zone. The forge keeps its one name on every mesh
+(`gitea.zen.lofi`: it is in every git remote, every OCI reference and the
+registry certificate, and one gitea is on several meshes), pinned to its
+address on this mesh by `sfi.lab-dns.giteaAddress` (forts#26 derives it
+from the forge host's entry here). And `.lofi` is the homelab LAN's zone,
+not a fort name: a lab fort's cluster DNS forwards it to the LAN
+resolvers its static LAN block names; a cloud fort forwards nothing and
+knows no `.lofi` name but the forge's. A roaming client is not served the
+zone yet; that is a later `dns` role, and `fort wg-conf` says so.
+
 ## The three tables
 
 ```json
@@ -64,6 +99,9 @@ estate, not a default.
 | `peers` | the forts of this estate, and any hand-managed member | where it has `wg_endpoint_ip` | both ways | yes | `fort mint` / `fort dismantle`; a hand-managed member by hand |
 | `clients` | roaming devices (a laptop) | never | none | no | by hand, with the device's own key |
 | `remotes` | hosts of **other** estates that link to this mesh | always: `wg_endpoint_ip` is required | both ways | no | by hand, by PR, when the other estate's host links here |
+
+`peers` and `remotes` are named in the zone (`<host>.<zone>`, above);
+`clients` are not.
 
 Four fields, and no more: `wg_vpn_ip` (the address on this mesh),
 `wg_endpoint_ip` (where the others dial it: a LAN address for an
@@ -126,6 +164,8 @@ Every change rolls out by itself: the forts pull main and rebuild
 | finding | level |
 |---|---|
 | `estate.toml   mesh <cidr> — N address(es) inside it` | ok |
+| `estate.toml   zone <zone> — N name(s) from mesh/peers.json` | ok |
+| a host file that sets a `.lofi` name by hand (`networking.hosts`, `extraHosts`), or routes `~lofi` over the mesh (`wg-quick` `dns`) | warning, per line — the zone renders the names; the forge's address is `sfi.lab-dns.giteaAddress` |
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |
 | a `remotes` entry with no `wg_endpoint_ip` | error (the file does not parse) |
 | `ssh_config` / `known_hosts` stale or missing | error ([ssh-config.md](ssh-config.md#what-fort-check---all-says)) |

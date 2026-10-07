@@ -12,7 +12,7 @@
 # that needs rung 1. So this module hands the same file to k3s's own
 # add-on directory (services.k3s.manifests →
 # /var/lib/rancher/k3s/server/manifests), which k3s applies at start,
-# before flux exists. lab-dns.nix does this for the coredns override and
+# before flux exists. mesh-dns.nix does this for the coredns override and
 # flux-bootstrap.nix applies the fleet's own FluxInstance the same way:
 # the flake's source is the whole repo, so the host applies the very file
 # the fleet applies, and the two cannot drift.

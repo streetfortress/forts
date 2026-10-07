@@ -31,8 +31,8 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Hub, HubPush, Mesh, Interface, Forts, Registry string
-	Admins                                                              []string
+	Name, Repo, RepoGit, Hub, HubPush, Mesh, Interface, Zone, Forts, Registry string
+	Admins                                                                    []string
 	// Push: the edges have a hub to push to (a fort here or an address
 	// elsewhere), so the layer carries remote_write and fluent-bit.
 	Push bool
@@ -53,13 +53,14 @@ func initCmd(args []string) error {
 	hubPush := fl.String("hub-push", "", "a hub in another estate, by mesh address: the edges push to it (exclusive with --hub)")
 	meshNet := fl.String("mesh", "", "the estate's WireGuard subnet, CIDR (10.2.0.0/24); fort check keeps every mesh address inside it")
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
+	zone := fl.String("zone", "", "the DNS zone of the mesh: every host on it is <host>.<zone> (docs/mesh.md); default <name>"+estate.DefaultZoneSuffix)
 	forts := fl.String("forts", defaultForts, "the framework's flake URL, inputs.forts of the estate flake")
 	registry := fl.String("registry", "gitea.zen.lofi", "the chart registry the gate logs into")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
@@ -74,7 +75,7 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush, Mesh: *meshNet, Interface: *iface}
+	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush, Mesh: *meshNet, Interface: *iface, Zone: *zone}
 	if err := est.Validate(); err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Mesh: est.Mesh, Interface: est.Interface, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,7 @@ func initCmd(args []string) error {
 // a .gotpl rendered and the suffix dropped, anything else copied as is.
 func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
-		"estate.toml":                     "the estate: name, repo, mesh, interface, hub",
+		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, hub",
 		"README.md":                       "the estate's README: the layout, the first fort",
 		".gitignore":                      "",
 		".sops.yaml":                      "the flux rules: provisioning/, the shared infrastructure rule (+ fort-managed cluster recipients)",

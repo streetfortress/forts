@@ -15,6 +15,7 @@ import (
 	"text/template"
 
 	"gitea.zen.lofi/sfi/forts/internal/contract"
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
@@ -38,7 +39,7 @@ func add(args []string) error {
 	fs.StringVar(&o.followPR, "follow-pr", "", "follow a PR's per-commit preview charts instead of a tag")
 	fs.BoolVar(&o.followMain, "follow-main", false, "follow main's per-commit preview charts instead of a tag")
 	fs.StringVar(&o.name, "name", "", "app name (namespace, release, dir); default: chart name")
-	fs.StringVar(&o.hostname, "hostname", "", "public hostname; default <app>.<fort>.lofi (lab) / .<zone> (cloud)")
+	fs.StringVar(&o.hostname, "hostname", "", "public hostname; default <app>.<fort>.<zone> — the estate's mesh zone (estate.toml) in the lab, the manifest's [dns] zone in the cloud")
 	fs.StringVar(&o.http, "http", "", "the Service the fleet routes to, <service>:<port> — for a chart that ships no contract")
 	fs.StringVar(&o.chartDir, "chart-dir", "", "read the chart from a local dir instead of pulling (chart authors, tests)")
 	without := fs.String("without", "", "skip optional provider types (comma-separated)")
@@ -189,6 +190,11 @@ func planAdd(o addOpts) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The estate: its mesh zone is the lab hostname's zone (forts#45).
+	est, err := estate.Load(o.root)
+	if err != nil {
+		return nil, err
+	}
 
 	chartDir, resolved := o.chartDir, o.version
 	if chartDir == "" {
@@ -247,8 +253,11 @@ func planAdd(o addOpts) (*plan, error) {
 		ValkeyPatchesComment:   valkeyPatchesComment,
 		PostgresPatchesComment: postgresPatchesComment,
 	}
+	// The hostname's zone: in the lab the estate's mesh zone, where
+	// <app>.<fort>.<zone> is a name every host on the mesh resolves to
+	// the fort (mesh-dns.nix); in the cloud the manifest's public zone.
 	if v.Lab {
-		v.Issuer, v.Zone = "step-ca", "lofi"
+		v.Issuer, v.Zone = "step-ca", est.ZoneName()
 	} else {
 		v.Issuer, v.Zone = "letsencrypt", entry.DNS.Zone
 		if v.Zone == "" {

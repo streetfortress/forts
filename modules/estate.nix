@@ -23,16 +23,32 @@ in
     '';
   };
 
-  # The one estate fact a module reads from estate.toml itself: the name
-  # of the mesh interface (deployments#674). One name per mesh, on every
-  # host on it — this host's own (wireguard.nix) and a linked host's link
-  # interface (links.nix) — so `wg show <name>` means the same thing
-  # everywhere, and hardened.nix / production.nix open the admin ports on
-  # it by that name. An estate that names none is on wg0, as before.
+  # The two estate facts a module reads from estate.toml itself: the name
+  # of the mesh interface (deployments#674) and the zone of the mesh
+  # (forts#45). One name per mesh, on every host on it — this host's own
+  # (wireguard.nix) and a linked host's link interface (links.nix) — so
+  # `wg show <name>` means the same thing everywhere, and hardened.nix /
+  # production.nix open the admin ports on it by that name. An estate
+  # that names none is on wg0, as before.
   options.sfi.mesh.interface = lib.mkOption {
     type = lib.types.strMatching "^[A-Za-z0-9_=+.-]{1,15}$";
     default = estateToml.interface or "wg0";
     defaultText = "estate.toml's `interface`, else wg0";
     description = "The WireGuard interface of this estate's mesh on this host.";
+  };
+
+  # The zone: every host on the mesh is <host>.<zone> (mesh-dns.nix), and
+  # a host linked to this mesh from another estate names it the same
+  # (links.nix). The default derives from the estate's name — estate
+  # staging is the zone staging.mesh — so a mesh-local name says which
+  # mesh it is on. .mesh is the fleet's one private TLD.
+  options.sfi.mesh.zone = lib.mkOption {
+    type = lib.types.strMatching "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
+    default = estateToml.zone or (
+      if estateToml ? name then "${estateToml.name}.mesh"
+      else throw "sfi.mesh.zone: ${toString tomlPath} names no estate (`name`) — fort init renders estate.toml; or set the zone in the host file"
+    );
+    defaultText = "estate.toml's `zone`, else <name>.mesh";
+    description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
   };
 }

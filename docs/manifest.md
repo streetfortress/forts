@@ -150,7 +150,7 @@ pricing decision made in the PR, and catalogs don't align.
 **`[baremetal]` is the one table with no backend behind it** (#287,
 [baremetal.md](baremetal.md)). The machine exists; the image is written
 to its disk by a human. The loader treats it as a lab host (LAN address,
-`.lofi` names, the lab issuer — `Cloud()` is false) that nothing
+names under the mesh zone, the lab issuer — `Cloud()` is false) that nothing
 realizes (`Realized()` is false): `provision` refuses it by name,
 `preview --all` lists it as `SKIP`, `destroy --no-stack` revokes its
 identities without a stack. `mac` is the one field with no VM analogue

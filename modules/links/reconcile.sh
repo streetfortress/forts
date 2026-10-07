@@ -1,11 +1,13 @@
 # The reconciler of one link (modules/links.nix): keep the link
-# interface's peer set equal to the other estate's mesh/peers.json. Env:
-# LINK_NAME LINK_IFACE LINK_REPO LINK_REF LINK_ADDRESS LINK_PORT
+# interface's peer set equal to the other estate's mesh/peers.json, and
+# the link's zone file equal to its names (forts#45). Env:
+# LINK_NAME LINK_IFACE LINK_ZONE LINK_REPO LINK_REF LINK_ADDRESS LINK_PORT
 # LINK_SSH_KEY (may be empty) LINK_KNOWN_HOSTS (a file) STATE_DIRECTORY.
 set -euo pipefail
 
 state=/var/lib/wg-link-$LINK_NAME
 cache=$state/peers.json
+zonefile=$state/zone.db
 textfile=/var/lib/node-exporter-textfiles
 now=$(date +%s)
 fetched=0
@@ -34,10 +36,18 @@ fi
 if git clone -q --depth 1 --branch "$LINK_REF" "$LINK_REPO" "$work/repo" 2>"$work/clone.err" \
    && jq -e '.peers | type == "object"' "$work/repo/mesh/peers.json" >/dev/null 2>&1; then
   install -m 0644 "$work/repo/mesh/peers.json" "$cache"
-  # estate.toml's `interface`: the name every host gives that mesh. The
-  # one TOML key this script reads, so a line match is enough.
-  theirs=$(sed -nE 's/^[[:space:]]*interface[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$work/repo/estate.toml" 2>/dev/null | head -1 || true)
+  # estate.toml's `interface`, the name every host gives that mesh, and
+  # its zone — `zone`, else <name>.mesh (forts#45). Three top-level TOML
+  # keys, so a line match is enough.
+  toml_key() { sed -nE 's/^[[:space:]]*'"$1"'[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$work/repo/estate.toml" 2>/dev/null | head -1 || true; }
+  theirs=$(toml_key interface)
   echo "${theirs:-}" > "$state/interface"
+  theirzone=$(toml_key zone)
+  if [ -z "$theirzone" ]; then
+    theirname=$(toml_key name)
+    [ -n "$theirname" ] && theirzone="$theirname.mesh"
+  fi
+  echo "${theirzone:-}" > "$state/zone"
   fetched=1
 else
   echo "fetch of $LINK_REPO ($LINK_REF) failed: $(tr '\n' ' ' < "$work/clone.err" 2>/dev/null || true)" >&2
@@ -55,6 +65,15 @@ fi
 theirs=$(cat "$state/interface" 2>/dev/null || true)
 if [ -n "$theirs" ] && [ "$theirs" != "$LINK_IFACE" ]; then
   echo "estate.toml of $LINK_REPO names its mesh interface $theirs; this link is $LINK_IFACE — one name per mesh, fix one side, applying nothing" >&2
+  metrics 0
+  exit 1
+fi
+
+#    The same for the zone: the names of that mesh are <host>.<zone>
+#    on every host on it, this one included (links.nix serves them).
+theirzone=$(cat "$state/zone" 2>/dev/null || true)
+if [ -n "$theirzone" ] && [ "$theirzone" != "$LINK_ZONE" ]; then
+  echo "estate.toml of $LINK_REPO makes its zone $theirzone; this link is $LINK_ZONE — one zone per mesh, fix one side, applying nothing" >&2
   metrics 0
   exit 1
 fi
@@ -110,5 +129,26 @@ for pub in $(wg show "$LINK_IFACE" peers); do
   fi
 done
 
+# 6. The zone: every peer and remote of that estate as <host>.<zone> at
+#    its address on that mesh, <host> and *.<host> each, the shape
+#    mesh-dns.nix renders for a fort's own mesh. The local CoreDNS reads
+#    this file (links.nix) and reloads it when the serial changes; the
+#    serial is the fetch time, so a run that changes nothing changes
+#    nothing. Written whole and renamed into place.
+records=$(jq -r '((.peers // {}) + (.remotes // {})) | to_entries | sort_by(.key)[] | "\(.key) IN A \(.value.wg_vpn_ip)\n*.\(.key) IN A \(.value.wg_vpn_ip)"' "$cache")
+if [ ! -s "$zonefile" ] || [ "$(sed -n '5,$p' "$zonefile")" != "$records" ]; then
+  tmp=$(mktemp "$state/.zone.db.XXXXXX")
+  {
+    echo "\$ORIGIN $LINK_ZONE."
+    echo "\$TTL 60"
+    echo "@ IN SOA $myname.$LINK_ZONE. hostmaster.$LINK_ZONE. $now 3600 600 86400 60"
+    echo "@ IN NS $myname.$LINK_ZONE."
+    echo "$records"
+  } > "$tmp"
+  chmod 0644 "$tmp"
+  mv "$tmp" "$zonefile"
+fi
+hosts=$(jq -r '((.peers // {}) + (.remotes // {})) | length' "$cache")
+
 metrics "$n"
-echo "$LINK_IFACE: $n peer(s) from $LINK_REPO ($LINK_REF), fetched=$fetched, as remotes.$myname $myip:$myport"
+echo "$LINK_IFACE: $n peer(s) from $LINK_REPO ($LINK_REF), fetched=$fetched, as remotes.$myname $myip:$myport; $hosts name(s) in $LINK_ZONE"

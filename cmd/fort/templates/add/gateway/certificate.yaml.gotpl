@@ -1,8 +1,10 @@
 {{- if .Lab -}}
 # Serving cert for the https-{{ .App }} listener; issued by step-ca via the
 # ACME http01 gateway solver (challenge routes attach to the http listener).
-# Requires {{ .Hostname }} to resolve to this node in lab
-# DNS (dnsmasq on 10.0.0.2) — the ACME server dials the hostname back.
+# Every host on the mesh resolves {{ .Hostname }} to this fort already
+# (the zone, sfi/forts modules/mesh-dns.nix); the ACME server dials the
+# hostname back, so it must resolve where step-ca runs too — the LAN
+# resolver, by hand, until the CA is a hub role on the mesh (forts#46).
 # Until it does, cert-manager retries harmlessly and the listener serves
 # its self-signed placeholder.
 {{- else -}}
