@@ -79,6 +79,13 @@ says so. The `[[serves.<role>]]` tables of a hub's estate are a hand
 edit after init; `fort scaffold <fort>` renders the subscriptions from
 them.
 
+`[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
+one name on every mesh (`gitea.zen.lofi`) to the address `fort` has in
+`mesh/peers.json`, in `/etc/hosts` and in the cluster DNS, on every fort
+of the estate (forts#26; [mesh.md](mesh.md)). The address is written in
+that entry and nowhere else. An estate that names no forge host gets no
+pin, and `fort check --all` says so.
+
 Changing the monitoring hub after init is a hand edit: `flux/infrastructure`
 is the estate's once rendered (re-render it from a scratch `fort init`
 and diff), and `cluster-vars.yaml` is never overwritten by scaffold (it

@@ -42,8 +42,8 @@ in
     ./wireguard.nix
     # The node exporter and the textfile collectors (forts#38).
     ./metrics.nix
-    # Today's wiring of the homelab: the gitea.zen.lofi pin and the .lofi
-    # forward. Goes with the hub-estate model (forts#38).
+    # The forge's name pinned to its address on this mesh ([hubs.forge]
+    # + mesh/peers.json, forts#26), and the .lofi forward of a lab fort.
     ./lab-dns.nix
     # The API server's audit log, off until a host's manifest says
     # [cluster] audit_logging = true (#626).

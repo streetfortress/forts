@@ -87,9 +87,16 @@ names must have a manifest in this estate.
 
 | role | the served estate renders | the hub opens on the link | `fort check` |
 |---|---|---|---|
-| `forge` | the forge's address pinned to its name (`sfi.lab-dns.giteaAddress`; forts#26 renders it from the role) | 30022, 443 | the issuer of every OCIRepository is this host (forts#26) |
+| `forge` | the forge's address pinned to its name — `modules/lab-dns.nix` derives `sfi.lab-dns.giteaAddress` from `fort` and `mesh/peers.json` (forts#26) | 30022, 443 | the address derives; a host file that sets it by hand is a warning ([mesh.md](mesh.md#what-fort-check---all-says)) |
 | `monitoring` | `flux/hub/<host>/<fort>.yaml`; `HUB_MESH_IP` in `cluster-vars.yaml`; `estate` beside `cluster` on every metric and log line (`ESTATE_NAME`, forts#50) | 30990, 31100 | one file per fort, listed; one subscription per served estate; `ESTATE_NAME` is the estate's name |
 | `ca` | the ClusterIssuer (forts#46) | the step-ca NodePort (forts#46) | the issuer's server is this host (forts#46) |
+
+The forge is the one role with a `name`: `gitea.zen.lofi` is an identity,
+not a location — it is in every git remote, every OCI reference, every
+flux source and the registry certificate, and one gitea is on several
+meshes. So the forge keeps that name on every mesh, and each estate pins
+it to the address `fort` has here. The name itself is still a constant in
+`modules/lab-dns.nix`; forts#1 reads `name`.
 
 `modules/links.nix` derives a link's `openTCPPorts` from its `roles`,
 and a link named after a served estate (the URL's last label:

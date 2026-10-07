@@ -71,8 +71,13 @@ cached copy of peers.json ([links.md](links.md)).
 Two names are not of the zone. The forge keeps its one name on every mesh
 (`gitea.zen.lofi`: it is in every git remote, every OCI reference and the
 registry certificate, and one gitea is on several meshes), pinned to its
-address on this mesh by `sfi.lab-dns.giteaAddress` (forts#26 derives it
-from the forge host's entry here). And `.lofi` is the homelab LAN's zone,
+address on this mesh by `sfi.lab-dns.giteaAddress`. That address is
+derived, not written (forts#26): `estate.toml` names the forge host in
+`[hubs.forge]` ([hub.md](hub.md)), and this file gives that host's
+address — its `peers` entry when the forge is a fort of this estate, its
+`remotes` entry when it links here. An estate that names no forge host
+gets no pin, and each of its forts resolves the name by whatever other
+DNS it has. And `.lofi` is the homelab LAN's zone,
 not a fort name: a lab fort's cluster DNS forwards it to the LAN
 resolvers its static LAN block names; a cloud fort forwards nothing and
 knows no `.lofi` name but the forge's. A roaming client is not served the
@@ -172,7 +177,11 @@ Every change rolls out by itself: the forts pull main and rebuild
 |---|---|
 | `estate.toml   mesh <cidr> — N address(es) inside it` | ok |
 | `estate.toml   zone <zone> — N name(s) from mesh/peers.json` | ok |
-| a host file that sets a `.lofi` name by hand (`networking.hosts`, `extraHosts`), or routes `~lofi` over the mesh (`wg-quick` `dns`) | warning, per line — the zone renders the names; the forge's address is `sfi.lab-dns.giteaAddress` |
+| a host file that sets a `.lofi` name by hand (`networking.hosts`, `extraHosts`), or routes `~lofi` over the mesh (`wg-quick` `dns`) | warning, per line — the zone renders the names; the forge's address derives from `[hubs.forge]` |
+| `estate.toml   forge <host> at <ip> (<table>.<host> in mesh/peers.json)` | ok |
+| `estate.toml` names no `[hubs.forge]` | warning — no fort pins the forge's name |
+| `[hubs.forge]` names a host that neither `peers` nor `remotes` carries | error — `modules/lab-dns.nix` refuses to evaluate; the finding names the entry to add |
+| a host file that sets `sfi.lab-dns.giteaAddress` | warning, per line — the address derives, and a hand-set line does not follow the mesh |
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |
 | a `remotes` entry with no `wg_endpoint_ip` | error (the file does not parse) |
 | `ssh_config` / `known_hosts` stale or missing | error ([ssh-config.md](ssh-config.md#what-fort-check---all-says)) |

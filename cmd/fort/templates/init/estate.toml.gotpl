@@ -50,9 +50,9 @@ name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- if not .Forge }}
 
 # [hubs.forge]                 # the forge: the gitea every fort clones from, by its one
-# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # name on every mesh (forts#26 renders
-# fort = "sfi-fort-zenbook"    # its address from the fort's peers.json entry)
-# name = "gitea.zen.lofi"
+# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # name on every mesh. lab-dns.nix pins
+# fort = "sfi-fort-zenbook"    # that name to the address `fort` has in mesh/peers.json
+# name = "gitea.zen.lofi"      # (forts#26). No forge host, no pin.
 {{- end }}
 
 # The other half, declared by the hub's estate, by role: a fort of this

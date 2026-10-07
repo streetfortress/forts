@@ -1,5 +1,15 @@
-# The fixture estate (tests/estate/README.md): one plain fort, no hub.
+# The fixture estate (tests/estate/README.md): one plain fort, a forge
+# hub in another estate, no monitoring hub.
 name = "fixture"
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate"
 mesh = "10.1.0.0/24"
 interface = "wg-fixture"
+
+# The forge of this estate: a fort of sfi/other-estate, on this mesh
+# through a link, so its address here is remotes.forge of
+# mesh/peers.json — what modules/lab-dns.nix pins gitea.zen.lofi to
+# (forts#26).
+[hubs.forge]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/other-estate"
+fort = "forge"
+name = "gitea.zen.lofi"

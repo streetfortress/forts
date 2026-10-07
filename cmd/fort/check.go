@@ -94,7 +94,8 @@ func check(args []string) error {
 	// one: the declaration lives in the hub's tree, so it can only be
 	// traced with every manifest in hand (--all). The hub relationship
 	// (forts#38) is checked from both ends: every fort's file for the
-	// monitoring hub, and every subscription the hub owes an estate.
+	// monitoring hub, and every subscription the hub owes an estate. The
+	// forge's half is its address on this mesh (forts#26).
 	if *all {
 		shared.findings = append(shared.findings, rustfsIdentityFindings(root, est.LocalHub(estate.RoleMonitoring), parsed)...)
 		shared.findings = append(shared.findings, hubFileFindings(root, est, parsed)...)
@@ -103,6 +104,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 		shared.findings = append(shared.findings, meshSubnetFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, zoneFindings(root, est, parsed)...)
+		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)

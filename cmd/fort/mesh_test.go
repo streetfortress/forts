@@ -277,6 +277,72 @@ func TestZoneFindings(t *testing.T) {
 	}
 }
 
+// The forge's address (forts#26): derived from [hubs.forge] and
+// peers.json, so the gate reports what a fort will derive, the two ways
+// the derivation reads nothing, and a host file that sets the address by
+// hand.
+func TestForgeFindings(t *testing.T) {
+	root := testTree(t)
+	hosts := testHosts(t)
+	const ownRepo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
+	const otherRepo = "ssh://git@gitea.zen.lofi:30022/sfi/infra"
+	est := func(fort, hubEstate string) estate.Estate {
+		e := estate.Estate{Name: "deployments", Repo: ownRepo}
+		if fort != "" {
+			e.Hubs = map[string]estate.Hub{estate.RoleForge: {Estate: hubEstate, Fort: fort, Name: "gitea.zen.lofi"}}
+		}
+		return e
+	}
+	only := func(fs []finding) finding {
+		t.Helper()
+		if len(fs) != 1 {
+			t.Fatalf("want one finding, got %+v", fs)
+		}
+		return fs[0]
+	}
+
+	// No forge hub: a warning, and no address to derive.
+	if f := only(forgeFindings(root, est("", ""), hosts)); f.level != "warning" || f.dir != estate.Path || !strings.Contains(f.msg, "no [hubs.forge]") {
+		t.Errorf("no hub: %+v", f)
+	}
+	// A forge in another estate: its remotes entry is its address here.
+	if f := only(forgeFindings(root, est("forge", otherRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge forge at 10.1.0.4 (remotes.forge") {
+		t.Errorf("linked forge: %+v", f)
+	}
+	// A forge that is a fort of this estate: its peers entry.
+	if f := only(forgeFindings(root, est("luxor", ownRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge luxor at 10.1.0.5 (peers.luxor") {
+		t.Errorf("in-estate forge: %+v", f)
+	}
+	// Named and in neither table: the error names the entry to add, and
+	// says `remotes` because the forge is another estate's fort.
+	f := only(forgeFindings(root, est("zenbook", otherRepo), hosts))
+	if f.level != "error" || f.dir != peersPath || !strings.Contains(f.msg, "add remotes.zenbook") {
+		t.Errorf("unresolvable forge: %+v", f)
+	}
+	// A fort of this estate with no manifest: a hub is a fort, and the
+	// address still derives.
+	fs := forgeFindings(root, est("soundship", ownRepo), hosts)
+	if len(fs) != 2 || fs[0].level != "ok" || fs[1].level != "error" || !strings.Contains(fs[1].msg, "forts/soundship.toml does not exist") {
+		t.Errorf("hub without a manifest: %+v", fs)
+	}
+	// A host file that sets the address by hand: one warning per line,
+	// naming what the estate derives.
+	os.MkdirAll(filepath.Join(root, "nixos/hosts/luxor"), 0o755)
+	os.WriteFile(filepath.Join(root, "nixos/hosts/luxor/default.nix"),
+		[]byte("{\n  # sfi.lab-dns.giteaAddress is derived now\n  sfi.lab-dns.giteaAddress = \"10.1.0.9\";\n}\n"), 0o644)
+	fs = forgeFindings(root, est("forge", otherRepo), hosts)
+	if len(fs) != 2 || fs[1].level != "warning" || fs[1].dir != "nixos/hosts/luxor/default.nix" ||
+		!strings.Contains(fs[1].msg, "line 3 sets the forge's address by hand") ||
+		!strings.Contains(fs[1].msg, "the estate derives 10.1.0.4") {
+		t.Errorf("hand line: %+v", fs)
+	}
+	// The same line with no forge hub: the warning says to declare one.
+	fs = forgeFindings(root, est("", ""), hosts)
+	if len(fs) != 2 || !strings.Contains(fs[1].msg, "declare [hubs.forge]") {
+		t.Errorf("hand line, no hub: %+v", fs)
+	}
+}
+
 func TestMeshFindings(t *testing.T) {
 	root := testTree(t)
 	hosts, problems, err := manifest.LoadAll(root)

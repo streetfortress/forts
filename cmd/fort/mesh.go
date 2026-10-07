@@ -496,8 +496,9 @@ func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifes
 // a .lofi name by hand is the old way: a networking.hosts or extraHosts
 // line, or the split DNS the cloud shape used to render (wg-quick's dns
 // with ~lofi, which routed the host's every query over the mesh). The
-// gate says so, per line. The forge's address is not a hand line: it is
-// sfi.lab-dns.giteaAddress (forts#26).
+// gate says so, per line. The forge's address is not a hand line
+// either: it derives from [hubs.forge] and peers.json, and
+// forgeFindings judges it.
 func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
 	peersText, err := readOrEmpty(root, peersPath)
 	if err != nil {
@@ -529,7 +530,7 @@ func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 			}
 			switch {
 			case inHosts && strings.Contains(code, "lofi"):
-				out = append(out, finding{"warning", path, fmt.Sprintf("line %d sets a .lofi address by hand — the zone renders every host of the mesh as <host>.%s (docs/mesh.md), and the forge's address is sfi.lab-dns.giteaAddress", i+1, est.ZoneName())})
+				out = append(out, finding{"warning", path, fmt.Sprintf("line %d sets a .lofi address by hand — the zone renders every host of the mesh as <host>.%s (docs/mesh.md), and the forge's address derives from [hubs.forge]", i+1, est.ZoneName())})
 			case strings.Contains(code, "wg-quick") && strings.Contains(code, ".dns") && strings.Contains(code, "~lofi"):
 				out = append(out, finding{"warning", path, fmt.Sprintf("line %d routes .lofi over the mesh (wg-quick dns) — the old split DNS; the mesh names are in /etc/hosts, and a cloud fort knows no .lofi", i+1)})
 			}
@@ -540,6 +541,97 @@ func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 	}
 	if len(out) == 0 {
 		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("zone %s — %d name(s) from %s", est.ZoneName(), len(m.Peers)+len(m.Remotes), peersPath)})
+	}
+	return out
+}
+
+// forgeAddress is the forge's address on this mesh, derived the way
+// modules/lab-dns.nix derives it (forts#26): estate.toml's
+// [hubs.forge] names the host, and mesh/peers.json gives its address —
+// its `peers` entry when the forge is a fort of this estate, its
+// `remotes` entry when it links here from another estate. Returns the
+// host, the table it was found in and the address; the address is ""
+// when the estate names no forge host or no table carries it.
+func forgeAddress(m mesh, est estate.Estate) (host, table, ip string) {
+	h, ok := est.Hub(estate.RoleForge)
+	if !ok {
+		return "", "", ""
+	}
+	if p, ok := m.Peers[h.Fort]; ok {
+		return h.Fort, "peers", p.IP
+	}
+	if r, ok := m.Remotes[h.Fort]; ok {
+		return h.Fort, "remotes", r.IP
+	}
+	return h.Fort, "", ""
+}
+
+// forgeFindings (forts#26): the forge keeps one name on every mesh
+// (gitea.zen.lofi), and modules/lab-dns.nix pins that name to the
+// forge's address on THIS mesh, in /etc/hosts and in the cluster DNS.
+// The address is derived — [hubs.forge] names the host, peers.json
+// gives the address — so the gate says what every fort will derive, and
+// reports the two ways the derivation reads nothing:
+//
+//   - the estate names no forge host: no fort pins the name, and a fort
+//     that cannot resolve it cannot clone, rebuild or pull an image;
+//   - [hubs.forge] names a host that neither table carries: the module
+//     refuses to evaluate, and this names the entry to add.
+//
+// A host file that sets sfi.lab-dns.giteaAddress now overrides the
+// estate. The gate names it per line: a fort scaffolded before this
+// pins an address that no longer follows the mesh.
+func forgeFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
+	peersText, err := readOrEmpty(root, peersPath)
+	if err != nil {
+		return nil // meshFindings reports it
+	}
+	m, err := parseMesh(peersText)
+	if err != nil {
+		return nil
+	}
+	var out []finding
+	h, declared := est.Hub(estate.RoleForge)
+	host, table, ip := forgeAddress(m, est)
+	switch {
+	case !declared:
+		out = append(out, finding{"warning", estate.Path, "no [hubs.forge]: no fort of this estate pins the forge's name to an address, so each one resolves it by whatever other DNS it has (docs/hub.md)"})
+	case table == "":
+		want := "peers." + host
+		if !h.Local(est) {
+			want = "remotes." + host + " — the forge is a fort of " + h.Ref() + " and reaches this mesh through a link (docs/mesh.md, \"Linking\")"
+		}
+		out = append(out, finding{"error", peersPath, "[hubs.forge] names " + host + ", and no entry carries its address on this mesh; add " + want})
+	default:
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("forge %s at %s (%s.%s in %s) — pinned to the forge's name on every fort", host, ip, table, host, peersPath)})
+	}
+	if declared && h.Local(est) {
+		if _, ok := hosts[host]; !ok {
+			out = append(out, finding{"error", estate.Path, "[hubs.forge] names " + host + " as a fort of this estate, and " + manifest.Path(host) + " does not exist"})
+		}
+	}
+	// The host files: the derived address needs no line, and a line
+	// that is there is an override.
+	for _, name := range sortedNames(hosts) {
+		path := filepath.Join("nixos/hosts", name, "default.nix")
+		raw, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			continue // scaffold has not run; nix-eval is that finding
+		}
+		for i, line := range strings.Split(string(raw), "\n") {
+			code := strings.TrimSpace(line)
+			if j := strings.Index(code, "#"); j >= 0 {
+				code = strings.TrimSpace(code[:j])
+			}
+			if !strings.Contains(code, "sfi.lab-dns.giteaAddress") {
+				continue
+			}
+			why := "the estate derives no address: declare [hubs.forge] in " + estate.Path
+			if ip != "" {
+				why = "the estate derives " + ip + " from [hubs.forge]"
+			}
+			out = append(out, finding{"warning", path, fmt.Sprintf("line %d sets the forge's address by hand — %s, and a hand-set line does not follow the mesh; remove it unless this host must override the estate", i+1, why)})
+		}
 	}
 	return out
 }

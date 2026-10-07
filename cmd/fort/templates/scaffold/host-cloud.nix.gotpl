@@ -79,8 +79,10 @@
 
   # Cloud host, no LAN. The names this fort needs are the hosts of its
   # mesh, <host>.{{ .Zone }} from mesh/peers.json, and the forge's pin
-  # (gitea.zen.lofi): both in /etc/hosts and in coredns-custom, rendered
-  # by modules/mesh-dns.nix and modules/lab-dns.nix (forts#45). No split
+  # (gitea.zen.lofi, at the address estate.toml's [hubs.forge] host has
+  # in that same file — forts#26): both in /etc/hosts and in
+  # coredns-custom, rendered by modules/mesh-dns.nix and
+  # modules/lab-dns.nix (forts#45). No split
   # DNS over the mesh: a
   # cloud fort knows no other .lofi name, and public names never ride the
   # tunnel (the wireguard module keeps {{ .MeshInterface }} off resolved's
