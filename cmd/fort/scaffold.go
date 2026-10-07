@@ -497,7 +497,7 @@ func repoRoot() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("not inside the deployments repo")
+			return "", fmt.Errorf("not inside a git checkout — run fort from an estate (docs/init.md)")
 		}
 		dir = parent
 	}
