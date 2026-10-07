@@ -10,10 +10,11 @@
 #     serves exactly `sfi.hardened.publicTCPPorts` (+ 51820/udp, which IS
 #     the mesh transport, from wireguard.nix). Hardened hosts therefore
 #     MUST be mesh members — without wg0 there is no login path at all.
-#   - Exporters listen on the mesh: lab-host.nix's node exporter opens
+#   - Exporters listen on the mesh: metrics.nix's node exporter opens
 #     9100 on every interface; here that is switched off and re-opened on
-#     wg0 only. (The exporter's openFirewall injects an iptables rule
-#     outside allowedTCPPorts, so it must be disabled explicitly.)
+#     the mesh interface only. (The exporter's openFirewall injects an
+#     iptables rule outside allowedTCPPorts, so it must be disabled
+#     explicitly.)
 #   - Only root talks to the nix daemon by default. A profile whose
 #     accounts build (the dev role's agent accounts) appends them;
 #     deployer never builds.

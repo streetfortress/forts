@@ -180,7 +180,7 @@ func initCmd(args []string) error {
 	fmt.Printf("● %-44s forts, nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state\n", "(the directories the verbs write into)")
 	fmt.Println()
 	fmt.Println("yours to provide (init cannot write them):")
-	fmt.Printf("· %-44s the lab CA (lab-host.nix trusts it; cert-manager's issuer and fort add read the copy)\n", "nixos/certs/step-ca-root.pem")
+	fmt.Printf("· %-44s the lab CA (estate.nix trusts it where it exists; cert-manager's issuer and fort add read the copy)\n", "nixos/certs/step-ca-root.pem")
 	fmt.Printf("· %-44s the same file\n", "flux/infrastructure/configs/step-ca-root.pem")
 	fmt.Printf("· %-44s the edge Alertmanager's webhook, sops-encrypted under the shared rule\n", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml")
 	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")

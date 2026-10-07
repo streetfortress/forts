@@ -122,9 +122,10 @@ flux/hub/luxor/
 
 `default.nix` imports the baseline in place of `k3s-server.nix` +
 `production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`): `hardened.nix`,
-`lab-host.nix`, `ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with
-`wireguard.nix`, `auto-rebuild.nix`, and the LAN and zram blocks of the lab
-VM. Nothing under `flux/`: there is no cluster to sync and no canary to
+`ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with the four
+modules a role names — `estate.nix`, `wireguard.nix`, `metrics.nix`,
+`lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the LAN and zram
+blocks of the lab VM. Nothing under `flux/`: there is no cluster to sync and no canary to
 prove decryption. `secrets.nix` declares no `k3s-token`. The file is the
 estate's from then on: an account, a service, a role is plain NixOS
 written below the imports, and the framework names none of it.

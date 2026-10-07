@@ -29,13 +29,22 @@ let
   meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
 in
 {
-  # lab-host.nix: the lab CA, the gitea pin, node + directory metrics —
-  # everything a lab member has whether or not it runs k3s (#417).
+  # The import list of a role (forts#60): the estate, the mesh and its
+  # names, the metrics the hub scrapes, and today's homelab DNS. A role
+  # module names each one — it does not depend on a bundle.
   # ops/: the observe/nudge ladder — read-only kubeconfig, the sfi-* verb
   # framework, and the flux verbs every k3s host should carry.
   imports = [
+    # The estate's files under one root, and the CA root it carries.
     ./estate.nix
-    ./lab-host.nix
+    # The mesh, and with it the names of the mesh (mesh-dns.nix): a k3s
+    # fort reaches the forge, the hub and the CA by those names.
+    ./wireguard.nix
+    # The node exporter and the textfile collectors (forts#38).
+    ./metrics.nix
+    # Today's wiring of the homelab: the gitea.zen.lofi pin and the .lofi
+    # forward. Goes with the hub-estate model (forts#38).
+    ./lab-dns.nix
     # The API server's audit log, off until a host's manifest says
     # [cluster] audit_logging = true (#626).
     ./k3s-audit.nix

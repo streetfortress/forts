@@ -3,7 +3,7 @@
 # the manifest (mesh_ip) into flux/hub/{{ .HubHost }}/ of this estate
 # (forts#38), removed by `fort dismantle`; `fort check --all` requires
 # one per plain fort. One target over the mesh: node-exporter
-# (lab-host.nix). This file arms the switch on it. `cluster` = the fort's
+# (metrics.nix). This file arms the switch on it. `cluster` = the fort's
 # name — a cluster of none, but the label every fleet rule and dashboard
 # keys on. Anything else the estate runs on the fort is the estate's to
 # scrape, in its own file beside this one.

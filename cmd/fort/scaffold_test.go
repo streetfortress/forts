@@ -373,12 +373,12 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	d := m["nixos/hosts/plain-fort/default.nix"]
 	// The baseline and nothing else: the hardened profile, the mesh,
 	// deployer with the ops verbs (#647), the shell, the rebuild loop.
-	for _, s := range append([]string{"inputs.forts.nixosModules.qcow-runtime", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.lab-host", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
+	for _, s := range append([]string{"inputs.forts.nixosModules.qcow-runtime", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
 		if !strings.Contains(d, s) {
 			t.Errorf("plain default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "sfi.k3s", "interactive.nix", "dotfiles.nix", "dev-fort.nix"} {
+	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "pv-backup", "sfi.k3s", "interactive.nix", "dotfiles.nix", "dev-fort.nix", "lab-host"} {
 		if strings.Contains(d, s) {
 			t.Errorf("plain default.nix should not carry %q", s)
 		}

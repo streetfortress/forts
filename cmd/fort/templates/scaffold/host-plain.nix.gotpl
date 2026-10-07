@@ -29,12 +29,17 @@
     # Role modules — the host dir is self-describing so the flake stays uniform
     # and needs no per-host edit when a new host gets a manifest.
     ./secrets.nix
-    inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest)
-    # The baseline, which the cluster profile also builds
-    # on: the hardening every fort shares, lab membership (the CA, gitea
-    # over the mesh, node-exporter), the operator account and its verbs.
+    # A plain fort has no role module, so this list IS its role
+    # (sfi/forts#60): the estate, the mesh and the names on it, the
+    # metrics the hub scrapes, and today's homelab DNS. Each one is named
+    # here — a role depends on no bundle.
+    inputs.forts.nixosModules.estate       # sfi.estate.root (below) and the estate's CA root
+    inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest), and the names of the mesh
+    inputs.forts.nixosModules.metrics      # node-exporter on 9100 and the textfile collectors
+    inputs.forts.nixosModules.lab-dns      # the gitea.zen.lofi pin, and the .lofi forward on a lab fort
+    # The baseline, which the cluster profile also builds on: the
+    # hardening every fort shares, the operator account and its verbs.
     inputs.forts.nixosModules.hardened
-    inputs.forts.nixosModules.lab-host
     inputs.forts.nixosModules.ops-deployer
     inputs.forts.nixosModules.shell        # the prompt, keys and aliases at a pane (#557)
     # The console door (sfi/forts#24, #524): a password for `deployer` that

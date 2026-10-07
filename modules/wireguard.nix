@@ -82,6 +82,13 @@ in
 {
   imports = [
     ./estate.nix
+    # The names of the mesh (forts#45): every peer and remote of
+    # peers.json as <host>.<zone>, in /etc/hosts and in the cluster DNS.
+    # A host with a mesh interface gets the zone of that mesh — the names
+    # and the interface are one fact, so one import carries both
+    # (forts#60). The add-on half is a services.k3s.manifests entry,
+    # inert on a host where k3s is disabled.
+    ./mesh-dns.nix
     ./textfile-metrics.nix
     ./ops/systemd.nix # sfi-systemd-restart wg-quick-<iface> (#212)
   ];

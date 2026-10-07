@@ -51,4 +51,18 @@ in
     defaultText = "estate.toml's `zone`, else <name>.mesh";
     description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
   };
+
+  config = {
+    # The estate's CA root, trusted where the estate carries one
+    # (forts#60). An estate that runs a step-ca issues the TLS of its own
+    # services from it — the registry certificate the rebuild fetches
+    # over, cert-manager's ClusterIssuer, the *.lofi names of the lab —
+    # so every host of that estate must trust it. The file is the
+    # estate's to provide (`fort init` says so and cannot write it), and
+    # an estate with no CA has no file here and carries no extra trust.
+    # The ca role (forts#46) owns this trust after the roles land.
+    security.pki.certificateFiles =
+      let caRoot = config.sfi.estate.root + "/nixos/certs/step-ca-root.pem";
+      in lib.optional (builtins.pathExists caRoot) caRoot;
+  };
 }
