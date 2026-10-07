@@ -42,7 +42,7 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nhub = \"luxor\"\n")
+	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nfort = \"luxor\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[backups]\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
@@ -287,7 +287,7 @@ func TestMintPlainFort(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nhub = \"luxor\"\n")
+	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nfort = \"luxor\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[backups]\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}

@@ -24,12 +24,25 @@ sfi.links.second-estate = {
   zone = "second-estate.mesh";  # its zone, <estate>.mesh unless its estate.toml says (checked); this is the default
   port = 51821;              # never 51820 (this host's own mesh port)
   address = "10.2.0.4";      # what sfi/second-estate's remotes entry says
-  openTCPPorts = [ 30022 443 ];  # gitea; nothing else answers on this interface
+  roles = [ "forge" ];       # what this host serves that estate (hub.md): opens 30022 and 443, nothing else
 };
 ```
 
+A link is the network half of a hub relationship ([hub.md](hub.md)),
+and `roles` says which: `forge` opens 30022 and 443 (gitea), `monitoring`
+30990 and 31100 (the central Prometheus' remote_write, Loki's push), `ca`
+nothing yet (forts#46). `openTCPPorts` derives from the roles and can
+still be set by hand. When this estate's `estate.toml` has
+`[[serves.<role>]]` entries that name this host and an estate whose
+URL's last label is the link's name (`ssh://…/sfi/staging` for
+`sfi.links.staging`), `roles` defaults to those roles and `repo` to that
+URL, and
+the link needs only `port` and `address` — the two facts chosen on this
+side; `fort check --all` warns when a host that serves an estate a role
+has no link named after it.
+
 The module renders one WireGuard interface with its own key and **no
-peers**, opens the port, opens `openTCPPorts` on that interface and
+peers**, opens the port, opens the roles' ports on that interface and
 nothing else (no ssh: hardened.nix opens 22 on this host's own mesh
 interface only), and inserts a
 `DROP` in `FORWARD` for every pair of mesh interfaces, so a hub never

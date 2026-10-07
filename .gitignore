@@ -1,0 +1,4 @@
+# Build output: `go build ./cmd/fort` writes the binary here. Build with -o into a
+# scratch directory, or let this file catch it.
+/fort
+/fort-pulumi

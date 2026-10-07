@@ -17,7 +17,7 @@ import (
 
 // init is the verb that creates an estate (#385): the files a checkout
 // needs before its first `fort scaffold` — what every verb assumes is
-// there. estate.toml (the estate's name, git URL and hub), the estate
+// there. estate.toml (the estate's name, git URL and hubs), the estate
 // flake (sfi/forts as inputs.forts, hosts auto-discovered), the two sops
 // rule files with the admin recipients, the empty mesh, the Pulumi
 // project file, the shared flux infrastructure layer, the gate workflow,
@@ -31,11 +31,51 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Hub, HubPush, Mesh, Interface, Zone, Forts, Registry string
-	Admins                                                                    []string
-	// Push: the edges have a hub to push to (a fort here or an address
-	// elsewhere), so the layer carries remote_write and fluent-bit.
-	Push bool
+	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, Registry string
+	Admins                                                      []string
+	// Hubs: the roles another fort serves this estate ([hubs.<role>],
+	// forts#38), in role order.
+	Hubs []hubView
+	// Push: the edges have a monitoring hub to push to (a fort here or in
+	// another estate), so the layer carries remote_write and fluent-bit.
+	// Forge: a [hubs.forge] is declared (the template's example is
+	// omitted then).
+	Push, Forge bool
+}
+
+// hubView is one [hubs.<role>] table as the template renders it.
+type hubView struct {
+	Role, Estate, Fort, Name string
+}
+
+// hubsView orders an estate's hubs for the template: the roles in the
+// order estate.Roles lists them.
+func hubsView(e estate.Estate) []hubView {
+	var out []hubView
+	for _, role := range estate.Roles {
+		if h, ok := e.Hub(role); ok {
+			out = append(out, hubView{Role: role, Estate: h.Estate, Fort: h.Fort, Name: h.Name})
+		}
+	}
+	return out
+}
+
+// parseHubFlag reads one --hub value, <role>=<fort>@<estate git url>
+// (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra): the
+// role, the hub fort, and the hub's estate by its URL — the one
+// spelling of an estate estate.toml uses everywhere, this estate's own
+// for an in-estate hub. The fort comes first because the URL carries an
+// @ of its own. The forge's name is --forge-name.
+func parseHubFlag(v string) (role string, h estate.Hub, err error) {
+	role, rest, ok := strings.Cut(v, "=")
+	if !ok {
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+	}
+	fort, repo, ok := strings.Cut(rest, "@")
+	if !ok || fort == "" || repo == "" {
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+	}
+	return role, estate.Hub{Estate: repo, Fort: fort}, nil
 }
 
 type multiFlag []string
@@ -49,8 +89,9 @@ func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<gitea>:<port>/<owner>/<name>)")
-	hub := fl.String("hub", "", "the fort of this estate that is the hub: the others' monitoring files render into its tree, their backups register with its rustfs")
-	hubPush := fl.String("hub-push", "", "a hub in another estate, by mesh address: the edges push to it (exclusive with --hub)")
+	var hubs multiFlag
+	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra); repeat per role. The estate may be this one.")
+	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (gitea.zen.lofi), with --hub forge=…")
 	meshNet := fl.String("mesh", "", "the estate's WireGuard subnet, CIDR (10.2.0.0/24); fort check keeps every mesh address inside it")
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
 	zone := fl.String("zone", "", "the DNS zone of the mesh: every host on it is <host>.<zone> (docs/mesh.md); default <name>"+estate.DefaultZoneSuffix)
@@ -60,7 +101,7 @@ func initCmd(args []string) error {
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <host> | --hub-push <mesh ip>] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
@@ -75,7 +116,28 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Hub: *hub, HubPush: *hubPush, Mesh: *meshNet, Interface: *iface, Zone: *zone}
+	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone}
+	for _, v := range hubs {
+		role, h, err := parseHubFlag(v)
+		if err != nil {
+			return err
+		}
+		if est.Hubs == nil {
+			est.Hubs = map[string]estate.Hub{}
+		}
+		if _, dup := est.Hubs[role]; dup {
+			return fmt.Errorf("--hub %s: the role is given twice", role)
+		}
+		est.Hubs[role] = h
+	}
+	if *forgeName != "" {
+		h, ok := est.Hubs[estate.RoleForge]
+		if !ok {
+			return fmt.Errorf("--forge-name names the forge, and no --hub forge=… declares one")
+		}
+		h.Name = *forgeName
+		est.Hubs[estate.RoleForge] = h
+	}
 	if err := est.Validate(); err != nil {
 		return err
 	}
@@ -86,7 +148,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hub: est.Hub, HubPush: est.HubPush, Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forts: *forts, Registry: *registry, Admins: admins})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Registry: *registry, Admins: admins})
 	if err != nil {
 		return err
 	}
@@ -134,7 +196,7 @@ func initCmd(args []string) error {
 // a .gotpl rendered and the suffix dropped, anything else copied as is.
 func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
-		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, hub",
+		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, hubs",
 		"README.md":                       "the estate's README: the layout, the first fort",
 		".gitignore":                      "",
 		".sops.yaml":                      "the flux rules: provisioning/, the shared infrastructure rule (+ fort-managed cluster recipients)",

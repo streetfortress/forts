@@ -413,7 +413,7 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 	// destination. `fort check` traces it both ways, so the two halves
 	// cannot drift unnoticed, and dismantle withdraws it.
 	if p.rustfsSecret != "" {
-		rustfsUsers := rustfsUsersPath(p.est.Hub)
+		rustfsUsers := rustfsUsersPath(p.est.LocalHub(estate.RoleMonitoring))
 		full := filepath.Join(p.root, rustfsUsers)
 		if err := tool.SetWith(filepath.Join(p.root, ".sops.yaml"), full, `["stringData"]["`+p.rustfsUser+`"]`, p.rustfsSecret); err != nil {
 			return fmt.Errorf("declaring %s in %s: %w", p.rustfsUser, rustfsUsers, err)
@@ -614,7 +614,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		if p.rustfsSecret == "" {
 			verb = "already in"
 		}
-		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsersPath(p.est.Hub), p.host)
+		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsersPath(p.est.LocalHub(estate.RoleMonitoring)), p.host)
 	}
 	if p.entry.Backups.Backed() {
 		fmt.Fprintf(w, "· backups: %s\n", p.entry.Backups.Summary())

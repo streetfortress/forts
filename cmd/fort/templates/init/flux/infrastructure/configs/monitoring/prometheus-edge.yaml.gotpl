@@ -81,7 +81,8 @@ spec:
 
 {{- if .Push }}
   # The hub's central Prometheus, NodePort 30990 on its mesh address
-  # (HUB_MESH_IP from cluster-vars: estate.toml's hub or hub_push). The
+  # (HUB_MESH_IP from cluster-vars: the [hubs.monitoring] fort's address
+  # on this mesh, estate.toml; docs/hub.md). The
   # mesh IP, not a name: a dual A record only survives here because Go's
   # dialer retries every answer — the paging-critical path shouldn't
   # depend on client dialer behavior (the same ambiguity broke fluent-bit

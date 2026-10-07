@@ -1,5 +1,9 @@
 # The fixture estate the add and check tests replay against: the zone of
-# its mesh is the default, <name>.mesh (forts#45).
+# its mesh is the default, <name>.mesh (forts#45); luxor is its monitoring
+# hub, a fort of the estate itself (forts#38).
 name = "deployments"
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
-hub = "luxor"
+
+[hubs.monitoring]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
+fort = "luxor"

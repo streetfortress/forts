@@ -98,7 +98,7 @@ zone yet; that is a later `dns` role, and `fort wg-conf` says so.
 |---|---|---|---|---|---|
 | `peers` | the forts of this estate, and any hand-managed member | where it has `wg_endpoint_ip` | both ways | yes | `fort mint` / `fort dismantle`; a hand-managed member by hand |
 | `clients` | roaming devices (a laptop) | never | none | no | by hand, with the device's own key |
-| `remotes` | hosts of **other** estates that link to this mesh | always: `wg_endpoint_ip` is required | both ways | no | by hand, by PR, when the other estate's host links here |
+| `remotes` | hosts of **other** estates that link to this mesh — a hub this estate names in `[hubs.<role>]` ([hub.md](hub.md)) | always: `wg_endpoint_ip` is required | both ways | no | by hand, by PR, when the other estate's host links here |
 
 `peers` and `remotes` are named in the zone (`<host>.<zone>`, above);
 `clients` are not.
@@ -137,6 +137,13 @@ The two sides of a link:
 The endpoint port is the field a link needs: the linked host already
 listens on 51820 for its own mesh, so its link interface listens beside
 it (51821, 51822, …), and this estate's entry says which.
+
+A hub this estate names in `estate.toml` (`[hubs.monitoring]`,
+`[hubs.forge]`; [hub.md](hub.md)) and that is another estate's fort is
+a `remotes` entry here, and that entry is its address on this mesh:
+`fort scaffold` renders `HUB_MESH_IP` from `remotes.<host>.wg_vpn_ip`,
+and refuses by name when the entry is missing. The address is written
+once, in the PR that linked the host.
 
 ## Joining
 

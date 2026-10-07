@@ -122,17 +122,19 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 			p.removes = append(p.removes, rel)
 		}
 	}
-	// The cluster's monitoring on the hub (#288): scaffold's file and its
-	// line in the hub's kustomization — a retired cluster's dead man's
-	// switch would otherwise page forever.
+	// The cluster's monitoring for the hub (#288, forts#38): scaffold's
+	// file under flux/hub/<hub>/ and its line in that directory's
+	// kustomization — a retired cluster's dead man's switch would
+	// otherwise page forever. The hub's flux prunes the resources when
+	// the merge lands, whichever estate the hub is in.
 	est, err := estate.Load(root)
 	if err != nil {
 		return nil, err
 	}
-	if rel := clusterMonitoringPath(est.Hub, host); est.HasHub() && exists(root, rel) {
-		p.removes = append(p.removes, rel)
-		p.edits = append(p.edits, dEdit{clusterMonitoringKustomization(est.Hub), "- clusters/" + host + ".yaml", func(s string) (string, error) {
-			s, _ = removeLinesContaining(s, "clusters/"+host+".yaml")
+	if hub, ok := est.Hub(estate.RoleMonitoring); ok && exists(root, hubFilePath(hub.Fort, host)) {
+		p.removes = append(p.removes, hubFilePath(hub.Fort, host))
+		p.edits = append(p.edits, dEdit{hubKustomization(hub.Fort), "- " + host + ".yaml", func(s string) (string, error) {
+			s, _ = removeLinesContaining(s, "- "+host+".yaml")
 			return s, nil
 		}})
 	}
@@ -159,9 +161,9 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// Whatever the blocks minted is withdrawn — and whatever is there
 	// under the fort's name goes too, blocks or not: an identity the
 	// manifest no longer explains is the orphan `fort check` fails on.
-	if est.HasHub() && secretHasKey(root, rustfsUsersPath(est.Hub), rustfsPVUser(host)) {
+	if hub := est.LocalHub(estate.RoleMonitoring); hub != "" && secretHasKey(root, rustfsUsersPath(hub), rustfsPVUser(host)) {
 		p.rustfsUser = rustfsPVUser(host)
-		p.rustfsUsers = rustfsUsersPath(est.Hub)
+		p.rustfsUsers = rustfsUsersPath(hub)
 	}
 	// The console password (#524) is the one credential of this fort
 	// that lives outside nixos/secrets/<host>.yaml, because an OPERATOR
@@ -557,8 +559,10 @@ func residueTag(rel string) string {
 		return "   (CLI test fixture / golden — keep)"
 	case strings.HasSuffix(rel, ".md"):
 		return "   (doc)"
-	case strings.HasPrefix(rel, "flux/apps/luxor/monitoring/"):
-		return "   (central monitoring — clusters/<host>.yaml is dismantle's; anything else naming the host is hand-written and usually goes)"
+	case strings.HasPrefix(rel, "flux/hub/"):
+		return "   (the fort's file for the hub is dismantle's; anything else under flux/hub/ naming the host is hand-written and usually goes)"
+	case strings.Contains(rel, "/monitoring/"):
+		return "   (central monitoring — anything here naming the host is hand-written and usually goes)"
 	}
 	return ""
 }

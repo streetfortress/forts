@@ -22,13 +22,22 @@
 #     the link's address or port — fix one side, not silently.
 #
 # What the link does not do: open ssh (hardened.nix opens 22 on wg0
-# only; a link interface serves exactly `openTCPPorts`), forward between
-# meshes (a DROP rule in FORWARD for every pair of mesh interfaces: a hub
-# never bridges), or read anything but mesh/peers.json. For a private
-# estate the clone needs a read credential: a read-only deploy key on
-# that repo, registered by that estate's admin. The default is this
-# host's own flux deploy key, which gitea lets one register on several
-# repos. A public repo needs none.
+# only; a link interface serves exactly the ports of the roles this host
+# serves that estate — `roles`, forts#38: the forge's 30022 and 443, the
+# monitoring hub's 30990 and 31100; `openTCPPorts` derives from them and
+# is overridable), forward between meshes (a DROP rule in FORWARD for
+# every pair of mesh interfaces: a hub never bridges), or read anything
+# but mesh/peers.json. For a private estate the clone needs a read
+# credential: a read-only deploy key on that repo, registered by that
+# estate's admin. The default is this host's own flux deploy key, which
+# gitea lets one register on several repos. A public repo needs none.
+#
+# The link is the network half of the hub relationship this estate's
+# estate.toml declares in [[serves.<role>]] (forts#38): the entries that
+# name THIS host and an estate whose URL's last label is the link's name
+# supply `roles` and `repo` by default, so a link to an estate this host
+# serves needs only the port and the address — the two facts chosen on
+# this side.
 #
 # One name per mesh: the other estate's estate.toml names the interface
 # every host gives its mesh (`interface`, estate.nix), and a link to it
@@ -59,6 +68,9 @@
 
 let
   cfg = config.sfi.links;
+  # The host's config, by a name the link submodule (whose own `config`
+  # is the link) can still reach: its sops secrets, its auto-rebuild pin.
+  hostConfig = config;
   names = lib.attrNames cfg;
   ifaces = map (n: cfg.${n}.interface) names;
   zones = map (n: cfg.${n}.zone) names;
@@ -73,6 +85,34 @@ let
   peersData = builtins.fromJSON (builtins.readFile (config.sfi.estate.root + "/mesh/peers.json"));
   ownIP = ((peersData.peers or { }).${config.networking.hostName} or { }).wg_vpn_ip or null;
 
+  # The roles (forts#38): what a hub opens on a link to the estate it
+  # serves, per role. The forge is gitea's ssh and https; monitoring is
+  # the central Prometheus' remote_write and Loki's push, the NodePorts
+  # the edges dial; the ca role has no port yet (forts#46 chooses the
+  # step-ca NodePort).
+  rolePorts = {
+    forge = [ 30022 443 ];
+    monitoring = [ 30990 31100 ];
+    ca = [ ];
+  };
+  roleNames = lib.attrNames rolePorts;
+
+  # This estate's serves tables ([[serves.<role>]] fort, estates), read
+  # for THIS host: the roles whose entry names this host and lists an
+  # estate whose URL's last label is the link's name (ssh://…/sfi/staging
+  # → staging), and that estate's URL for the clone.
+  tomlPath = config.sfi.estate.root + "/estate.toml";
+  estateToml = if builtins.pathExists tomlPath then builtins.fromTOML (builtins.readFile tomlPath) else { };
+  lastLabel = url: lib.removeSuffix ".git" (lib.last (lib.splitString "/" (lib.removeSuffix "/" url)));
+  servesTables = estateToml.serves or { };
+  servedHere = name: role: lib.concatMap
+    (entry: lib.filter (url: lastLabel url == name) (entry.estates or [ ]))
+    (lib.filter (entry: (entry.fort or null) == config.networking.hostName) (servesTables.${role} or [ ]));
+  rolesFor = name: lib.filter (role: servedHere name role != [ ]) (lib.attrNames servesTables);
+  estateURLFor = name:
+    let urls = lib.unique (lib.concatMap (role: servedHere name role) (lib.attrNames servesTables));
+    in if urls == [ ] then null else lib.head urls;
+
   # The zone file a link starts with, until the reconciler's first run
   # writes the real one: a SOA and nothing else, so CoreDNS comes up.
   emptyZone = n: pkgs.writeText "wg-link-${n}-zone.db" ''
@@ -83,12 +123,25 @@ let
   '';
   zoneRE = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
 
-  linkOpts = { name, ... }: {
+  # `config` here is the link's own (openTCPPorts reads roles); the
+  # host's is hostConfig.
+  linkOpts = { name, config, ... }: {
     options = {
       repo = lib.mkOption {
         type = lib.types.str;
+        default =
+          if estateURLFor name != null then estateURLFor name
+          else throw "sfi.links.${name}.repo: no [[serves.<role>]] entry of estate.toml names this host the hub of an estate called ${name} — set repo in the host file, or declare the entry (forts#38)";
+        defaultText = "the URL of the estate named after this link, from the serves tables that name this host";
         example = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate.git";
-        description = "The other estate's git URL: the repo whose mesh/peers.json is the source of truth for this interface's peers. https:// for a public repo; ssh:// with `sshKeyFile` for a private one.";
+        description = "The other estate's git URL: the repo whose mesh/peers.json is the source of truth for this interface's peers. https:// for a public repo; ssh:// with `sshKeyFile` for a private one. Defaults to the [[serves]] entry of estate.toml whose estate's last label is this link's name.";
+      };
+      roles = lib.mkOption {
+        type = lib.types.listOf (lib.types.enum roleNames);
+        default = rolesFor name;
+        defaultText = "the roles whose [[serves.<role>]] entry names this host and the estate named after this link, else none";
+        example = [ "forge" "monitoring" ];
+        description = "The roles this host serves the other estate (forts#38): what `openTCPPorts` derives from — forge: 30022 and 443; monitoring: 30990 and 31100; ca: nothing yet (forts#46). Defaults to the roles whose [[serves.<role>]] entry in estate.toml names this host and that estate.";
       };
       ref = lib.mkOption {
         type = lib.types.str;
@@ -121,9 +174,10 @@ let
       };
       openTCPPorts = lib.mkOption {
         type = lib.types.listOf lib.types.port;
-        default = [ ];
+        default = lib.unique (lib.concatMap (r: rolePorts.${r}) config.roles);
+        defaultText = "the ports of `roles`";
         example = [ 30022 443 ];
-        description = "TCP ports the other estate's forts may reach on this interface. Nothing else answers there — not ssh, not the exporters.";
+        description = "TCP ports the other estate's forts may reach on this interface: the ports of the roles this host serves it, by default. Nothing else answers there — not ssh, not the exporters.";
       };
       secret = lib.mkOption {
         type = lib.types.str;
@@ -132,13 +186,13 @@ let
       };
       sshKeyFile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = if config.sops.secrets ? flux-git-deploy-key then config.sops.secrets.flux-git-deploy-key.path else null;
+        default = if hostConfig.sops.secrets ? flux-git-deploy-key then hostConfig.sops.secrets.flux-git-deploy-key.path else null;
         defaultText = "this host's flux deploy key, when it has one";
         description = "The private key the clone uses for an ssh:// repo. Null for a public https:// repo.";
       };
       knownHosts = lib.mkOption {
         type = lib.types.lines;
-        default = if config.sfi ? auto-rebuild then config.sfi.auto-rebuild.gitKnownHosts else "";
+        default = if hostConfig.sfi ? auto-rebuild then hostConfig.sfi.auto-rebuild.gitKnownHosts else "";
         defaultText = "sfi.auto-rebuild.gitKnownHosts";
         description = "known_hosts line(s) for the other estate's git host.";
       };

@@ -3,8 +3,11 @@
 # path) and referenced via postBuild.substituteFrom on the infra-controllers,
 # infrastructure and apps Kustomizations. MESH_IP must stay in sync with
 # mesh/peers.json. HUB_MESH_IP is where the edge Prometheus remote-writes
-# and fluent-bit ships logs (estate.toml: the hub fort's mesh address, or
-# hub_push); an estate with no hub has no such line and no such targets.
+# and fluent-bit ships logs: the monitoring hub's address on this mesh
+# (estate.toml [hubs.monitoring]; its manifest's mesh_ip when the hub is
+# a fort of this estate, its remotes entry in mesh/peers.json when it is
+# another estate's); an estate with no monitoring hub has no such line
+# and no such targets.
 apiVersion: v1
 kind: ConfigMap
 metadata:

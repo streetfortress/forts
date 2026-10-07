@@ -1,0 +1,101 @@
+# {{ .Hub }} serves {{ .Estate }} the monitoring role (forts#38): this is the
+# subscription. {{ .Estate }} renders what it asks of this hub — one file
+# per fort: the dead man's switch, the Loki rule, the edge Alertmanager
+# as a Grafana datasource, a plain fort's scrape target — into
+# flux/hub/{{ .Hub }}/ of ITS OWN tree, and this Kustomization applies that
+# directory here. Flux is the reconciler: a fort that estate dismantles
+# leaves monitoring-central by prune, and no hand writes across repos.
+#
+# Rendered by `fort scaffold {{ .Hub }}` from estate.toml ({{ if .Local }}this estate's
+# own [hubs.monitoring]{{ else }}the [[serves.monitoring]] entry for {{ .Estate }}{{ end }}); `fort check
+# --all` requires one per entry. Scaffolding never overwrites this file.
+{{- if not .Local }}
+#
+# The source: {{ .Estate }}'s repo, read with this cluster's own flux deploy
+# key (the flux-system secret) — the same read-only key the link to that
+# estate's mesh already uses (modules/links.nix). That estate's admin
+# registers the key on the repo; a public repo needs nothing. Not the
+# served estate's main alone: the ref is what their gate protects.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: hub-{{ .Name }}
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: {{ .Repo }}
+  ref:
+    branch: main
+  secretRef:
+    name: flux-system
+  ignore: |
+    # the hub reads one directory of the served estate and nothing else
+    /*
+    !/flux/hub/{{ .Hub }}/
+---
+{{- end }}
+# The tenant: a service account that can write what a fort's file
+# carries — PrometheusRule, ScrapeConfig, ConfigMap — in monitoring-central
+# and nothing else (flux multi-tenancy). A file that names another
+# namespace or another kind fails to apply, which is the guard: the
+# served estate's branch rules keep flux/hub/ honest on their side, this
+# role keeps it bounded on ours.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hub-{{ .Name }}
+  namespace: monitoring-central
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hub-{{ .Name }}
+  namespace: monitoring-central
+rules:
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["prometheusrules", "scrapeconfigs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hub-{{ .Name }}
+  namespace: monitoring-central
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hub-{{ .Name }}
+subjects:
+  - kind: ServiceAccount
+    name: hub-{{ .Name }}
+    namespace: monitoring-central
+---
+# The subscription: flux/hub/{{ .Hub }}/ of {{ .Estate }}, applied as the
+# tenant above. No decryption: a secret the hub must hold for a served
+# fort (a rustfs identity) is not rendered there yet (forts#38 keeps the
+# door open: encrypted to this cluster's age recipient, a public key).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: hub-{{ .Name }}
+  namespace: monitoring-central
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  serviceAccountName: hub-{{ .Name }}
+  sourceRef:
+    kind: GitRepository
+{{- if .Local }}
+    # this estate's own source: the FluxInstance's GitRepository
+    name: flux-system
+{{- else }}
+    name: hub-{{ .Name }}
+{{- end }}
+    namespace: flux-system
+  path: ./flux/hub/{{ .Hub }}
+  prune: true
+  wait: false

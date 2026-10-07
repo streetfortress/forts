@@ -40,32 +40,52 @@ flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
 ● flux-system/kustomization.yaml
-● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the hub's address, from estate.toml]
+● cluster-vars.yaml                          CLUSTER_NAME <host>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the monitoring hub's address on this mesh]
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → flux/apps/<host>
 flux/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
-flux/apps/luxor/monitoring/
-● clusters/<host>.yaml                       dead man's switch (metrics, logs), edge Alertmanager datasource[, PVBackupNotConfigured]
-○ kustomization.yaml                         + clusters/<host>.yaml
+flux/hub/<hub host>/
+● <host>.yaml                                dead man's switch (metrics, logs), edge Alertmanager datasource[, PVBackupNotConfigured]
+○ kustomization.yaml                         + <host>.yaml   (● on the estate's first fort)
 ```
 
-The last two are the one place scaffold reaches outside the host's own
-paths, and they are why nothing about a cluster lives outside a
-`<host>`-keyed file (#288): the central layer has to know each cluster
-by name — `absent(up{cluster="<host>"})` is the only expression that
-can fire when a cluster goes silent, its log analog the same, and its
-edge Alertmanager has to be a Grafana datasource for silences to be
+The last two are the fort's file for its monitoring hub
+([hub.md](hub.md)), and they are why nothing about a cluster lives
+outside a `<host>`-keyed file (#288): the central layer has to know each
+cluster by name — `absent(up{cluster="<host>"})` is the only expression
+that can fire when a cluster goes silent, its log analog the same, and
+its edge Alertmanager has to be a Grafana datasource for silences to be
 managed from one pane. Those used to be hand-edited hunks in shared
 files, and forts joined without them (the production fort had no dead
-man's switch until 2026-09-20). Now they are one file per cluster on the
-hub, rendered here, removed by [`dismantle`](dismantle.md), and required
-by `fort check --all` — a flux cluster with no file, or a file with no
-manifest, is an error. The kustomization line is a text-level append,
-idempotent, so a re-run reports `○ exists — kept (already listed)`.
-`PVBackupNotConfigured` is rendered only where a `[[backups.pv]]` block
-promises the leg — no pv block, no rule, so a fort whose backups are the
-db layers alone has nothing to be silent about.
+man's switch until 2026-09-20); then one file per cluster written into
+the hub's tree, which broke when the hub moved to another estate. Now
+they are one file per fort under `flux/hub/<hub host>/` of the fort's
+OWN estate — the hub host's name whichever estate holds it — rendered
+here, removed by [`dismantle`](dismantle.md), required by `fort check
+--all` (a flux cluster with no file, or a file with no manifest, is an
+error), and applied by the hub's flux subscription to that path
+(forts#38). The kustomization line is a text-level append, idempotent,
+so a re-run reports `○ exists — kept (already listed)`; the estate's
+first fort creates the file. `PVBackupNotConfigured` is rendered only
+where a `[[backups.pv]]` block promises the leg — no pv block, no rule,
+so a fort whose backups are the db layers alone has nothing to be silent
+about. `HUB_MESH_IP` is the hub's address on this mesh: its manifest's
+`mesh_ip` when the hub is a fort of this estate, its `remotes` entry in
+`mesh/peers.json` when it is another estate's — and a missing entry is
+refused by name, not rendered empty.
+
+On a hub fort (this estate's `[hubs.monitoring]` fort, or one a
+`[[serves.monitoring]]` entry names), scaffold also renders the
+subscriptions its tree carries:
+
+```
+flux/apps/<hub>/
+○ kustomization.yaml                         + serves
+● serves/<this estate>.yaml                  subscription: flux/hub/<hub>/ of this estate (through the flux-system source) — on the [hubs.monitoring] fort
+● serves/<served estate>.yaml                subscription: flux/hub/<hub>/ of <url>, with this cluster's deploy key — one per estate the fort's [[serves.monitoring]] entry lists
+● serves/kustomization.yaml                  the subscriptions, one line per estate
+```
 
 Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
@@ -95,9 +115,9 @@ file on the hub:
 ```
 ● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
-flux/apps/luxor/monitoring/
-● clusters/sfi-lab-x.yaml             mesh scrape target (node-exporter), HostDown
-○ kustomization.yaml                  + clusters/sfi-lab-x.yaml
+flux/hub/luxor/
+● sfi-lab-x.yaml                      mesh scrape target (node-exporter), HostDown
+○ kustomization.yaml                  + sfi-lab-x.yaml
 ```
 
 `default.nix` imports the baseline in place of `k3s-server.nix` +
@@ -110,7 +130,7 @@ estate's from then on: an account, a service, a role is plain NixOS
 written below the imports, and the framework names none of it.
 
 The hub file is the pull-shaped counterpart of a cluster's: with no edge
-Prometheus, luxor scrapes the fort over the mesh — node-exporter on 9100 —
+Prometheus, the hub scrapes the fort over the mesh — node-exporter on 9100 —
 and arms `HostDown` on the target. `cluster` is the fort's name, as on
 every other fort. No edge Alertmanager datasource: a plain fort has none.
 Anything else the estate runs on the fort is the estate's to scrape, in a

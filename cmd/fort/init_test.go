@@ -48,7 +48,7 @@ func TestRenderInit(t *testing.T) {
 		t.Error("a .gotpl suffix survived the render")
 	}
 	est, err := estate.Parse([]byte(m["estate.toml"]))
-	if err != nil || est.Name != "test-estate" || est.HasHub() {
+	if err != nil || est.Name != "test-estate" || est.Pushes() || len(est.Hubs) != 0 {
 		t.Errorf("estate.toml: %+v %v", est, err)
 	}
 	// no zone named: the default derives from the name, and the comment
@@ -81,27 +81,49 @@ func TestRenderInit(t *testing.T) {
 			t.Errorf("%s references HUB_MESH_IP in a layer with no hub", p)
 		}
 	}
-	// with a hub, estate.toml names it and the layer pushes to it
+	// with an in-estate monitoring hub, estate.toml names it as a role
+	// (forts#38) and the layer pushes to it
 	v := testInitView
-	v.Hub, v.Push = "luxor", true
+	v.Hubs, v.Push = []hubView{{Role: "monitoring", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate", Fort: "luxor"}}, true
 	files, _ = renderInit(v)
 	m = map[string]string{}
 	for _, f := range files {
 		m[f.path] = string(f.content)
 	}
-	if !strings.Contains(m["estate.toml"], "\nhub = \"luxor\"\n") {
+	if !strings.Contains(m["estate.toml"], "\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/test-estate\"\nfort = \"luxor\"\n") {
 		t.Errorf("estate.toml with hub:\n%s", m["estate.toml"])
+	}
+	if est, err := estate.Parse([]byte(m["estate.toml"])); err != nil || est.LocalHub(estate.RoleMonitoring) != "luxor" {
+		t.Errorf("estate.toml with hub parses back: %+v %v", est, err)
 	}
 	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "url: http://${HUB_MESH_IP}:30990/api/v1/write") || !strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "  - fluent-bit\n") {
 		t.Error("with a hub: the layer must remote_write to HUB_MESH_IP and ship logs")
 	}
-	// a hub by address
+	// hubs in another estate: the forge with its name, the monitoring
+	// hub; the commented examples give way to the real tables
 	v = testInitView
-	v.HubPush, v.Push = "10.1.0.5", true
+	v.Hubs, v.Push, v.Forge = []hubView{{Role: "forge", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "sfi-fort-zenbook", Name: "gitea.zen.lofi"}, {Role: "monitoring", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "luxor"}}, true, true
 	files, _ = renderInit(v)
 	for _, f := range files {
-		if f.path == "estate.toml" && !strings.Contains(string(f.content), "\nhub_push = \"10.1.0.5\"") {
-			t.Errorf("estate.toml with hub_push:\n%s", f.content)
+		if f.path != "estate.toml" {
+			continue
+		}
+		got := string(f.content)
+		if !strings.Contains(got, "\n[hubs.forge]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/infra\"\nfort = \"sfi-fort-zenbook\"\nname = \"gitea.zen.lofi\"") || !strings.Contains(got, "\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/infra\"\nfort = \"luxor\"\n") || strings.Contains(got, "# [hubs.forge]") || strings.Contains(got, "# [hubs.monitoring]") {
+			t.Errorf("estate.toml with hubs in another estate:\n%s", got)
+		}
+		est, err := estate.Parse(f.content)
+		if err != nil || !est.Pushes() || est.LocalHub(estate.RoleMonitoring) != "" {
+			t.Errorf("parses back: %+v %v", est, err)
+		}
+	}
+	// --hub's spelling: the host first, because the URL has an @ of its own
+	if role, h, err := parseHubFlag("monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra"); err != nil || role != "monitoring" || h.Estate != "ssh://git@gitea.zen.lofi:30022/sfi/infra" || h.Fort != "luxor" || h.Name != "" {
+		t.Errorf("parseHubFlag: %s %+v %v", role, h, err)
+	}
+	for _, bad := range []string{"luxor", "monitoring=luxor", "monitoring=ssh://x/sfi/infra", "monitoring=@ssh://x/sfi/infra"} {
+		if _, _, err := parseHubFlag(bad); err == nil {
+			t.Errorf("parseHubFlag(%q): want an error", bad)
 		}
 	}
 	// a zone of its own: rendered as the key, and parsed back as the zone

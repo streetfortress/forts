@@ -5,7 +5,7 @@ as a flake input. Rendered by `fort init`. The CLI handbook is sfi/forts'
 `docs/`; this file is yours.
 
 ```
-estate.toml                  what this checkout is: its name, its git URL, its mesh and zone, its hub (if any)
+estate.toml                  what this checkout is: its name, its git URL, its mesh and zone, its hubs by role (if any)
 forts/<host>.toml            the manifests: one file per fort, the declaration
 nixos/
   flake.nix                  the hosts, auto-discovered under hosts/; sfi/forts as inputs.forts
@@ -16,6 +16,7 @@ nixos/
 flux/
   clusters/<host>/           the FluxInstance and the cluster's Kustomizations
   apps/<host>/               the apps root; fort add renders into it
+  hub/<hub host>/            what this estate asks of its monitoring hub, one file per fort
   infrastructure/            the shared layer every cluster applies
 mesh/
   peers.json                 who is on the mesh and where; mint adds, dismantle removes

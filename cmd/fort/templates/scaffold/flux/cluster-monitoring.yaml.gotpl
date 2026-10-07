@@ -1,8 +1,10 @@
-# {{ .Hostname }}'s per-cluster monitoring on the hub (#288) — rendered by
-# `fort scaffold` from the manifest (mesh_ip, [[backups.pv]]), removed
-# by `fort dismantle`; `fort check --all` requires one per flux cluster.
-# Everything the central layer has to know about ONE cluster lives here,
-# so no fort is configured outside its own -keyed paths: the dead man's
+# {{ .Hostname }}'s per-cluster monitoring for the hub (#288, forts#38) —
+# rendered by `fort scaffold` from the manifest (mesh_ip, [[backups.pv]])
+# into flux/hub/{{ .HubHost }}/ of this estate, removed by `fort dismantle`;
+# `fort check --all` requires one per flux cluster. The hub subscribes
+# to the directory with flux. Everything the central layer has to know
+# about ONE cluster lives here, so no fort is configured outside its own
+# -keyed paths and nothing is written into the hub's tree: the dead man's
 # switch for its metrics stream, the log analog, the backup leg its
 # pv blocks promise, and its edge Alertmanager as a Grafana datasource.
 apiVersion: monitoring.coreos.com/v1
@@ -77,7 +79,8 @@ data:
 {{- if .Hub }}
 # The hub's own edge, via cluster DNS.
 {{- else }}
-# Over the mesh: the #137 NodePort; grafana's pod egress rides luxor's wg0.
+# Over the mesh: the #137 NodePort; grafana's pod egress rides the hub's
+# mesh interface (its own, or its link to this estate).
 {{- end }}
 apiVersion: v1
 kind: ConfigMap

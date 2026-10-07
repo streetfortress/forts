@@ -1,7 +1,7 @@
 # fort init — create an estate
 
 ```
-fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <host>] [--forts <flake url>] [--write]
+fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -13,7 +13,7 @@ every file that exists.
 ## What it renders
 
 ```
-● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), hub (if any)
+● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), the hubs by role (if any)
 ● README.md                       the layout and the first fort
 ● .sops.yaml                      the flux rules: provisioning/, the shared infrastructure rule,
                                   the `# fort-managed` marker fort mint appends cluster recipients under
@@ -45,30 +45,44 @@ repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, aut
 mesh = "10.2.0.0/24"   # the WireGuard subnet; fort check keeps every mesh address in it (mesh.md)
 interface = "wg-second"   # the mesh interface's name on every host; absent: wg0
 zone = "second-estate.mesh"   # every host on the mesh is <host>.<zone> (mesh.md); absent: <name>.mesh
-# hub = "luxor"          # the hub is a fort of this estate
-# hub_push = "10.1.0.5"  # or a hub in another estate, by mesh address
+
+[hubs.forge]                  # the roles another fort serves this estate (hub.md)
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # the estate that holds the hub, by its git URL
+fort = "sfi-fort-zenbook"
+name = "gitea.zen.lofi"       # the forge's one name on every mesh
+
+[hubs.monitoring]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # this estate's own repo URL for an in-estate hub
+fort = "luxor"
 ```
 
 `scaffold` renders the FluxInstance source and `sfi.auto-rebuild.repoUrl`
-from `repo`. The hub takes one of three shapes, and `init` renders the
-shared layer for the one it is told (`--hub`, `--hub-push`, neither):
+from `repo`. The hubs are roles ([hub.md](hub.md)): `--hub
+<role>=<fort>@<estate git url>` once per role (`--hub
+monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra`; the fort
+comes first because the URL carries an `@` of its own, and the forge's
+name is `--forge-name gitea.zen.lofi`), and `init` renders the shared
+layer for a monitoring hub or none:
 
-| estate.toml | the hub's tree | the edges push | backups register |
+| estate.toml | the fort's file for the hub | the edges push | backups register |
 |---|---|---|---|
-| `hub = "<host>"` | a fort here: scaffold renders every other fort's file into `flux/apps/<hub>/monitoring/clusters/` | `HUB_MESH_IP` = the hub's `mesh_ip` | a `[[backups.pv]]` block on `rustfs-central` registers with `flux/apps/<hub>/rustfs-central`; a block on `b2` needs nothing |
-| `hub_push = "<mesh ip>"` | in another estate: nothing renders here, that estate decides what it scrapes | `HUB_MESH_IP` = the address | a block on `rustfs-central` is refused (nothing here to register with); `b2` blocks are fine |
-| neither | none | the layer carries no `remote_write` and no fluent-bit | the same: `b2` only |
+| `[hubs.monitoring]` with `estate` = this estate | scaffold renders every fort's file into `flux/hub/<host>/`, and the hub's own `serves/` subscribes to it through the flux-system source | `HUB_MESH_IP` = the hub's `mesh_ip` | a `[[backups.pv]]` block on `rustfs-central` registers with `flux/apps/<hub>/rustfs-central`; a block on `b2` needs nothing |
+| `[hubs.monitoring]` with `estate` = another | the same `flux/hub/<host>/`; that estate's `[[serves.monitoring]]` entry subscribes to it | `HUB_MESH_IP` = the hub's `remotes` entry in `mesh/peers.json` | a block on `rustfs-central` is refused (nothing here to register with); `b2` blocks are fine |
+| no `[hubs.monitoring]` | none | the layer carries no `remote_write` and no fluent-bit | the same: `b2` only |
 
 `scaffold` writes `HUB_MESH_IP` into a cluster's `cluster-vars.yaml` when
 there is somewhere to push; the layer's edge Prometheus `remote_write` and
-fluent-bit's Loki outputs read it. `check` and `dismantle` read the hub
-too. An estate with no hub has nobody to notice a silent fort: the edge
-Alertmanager is its only alerting, and `fort check --all` says so.
+fluent-bit's Loki outputs read it. `check` and `dismantle` read the hubs
+too. An estate with no monitoring hub has nobody to notice a silent
+fort: the edge Alertmanager is its only alerting, and `fort check --all`
+says so. The `[[serves.<role>]]` tables of a hub's estate are a hand
+edit after init; `fort scaffold <fort>` renders the subscriptions from
+them.
 
-Changing the hub after init is a hand edit: `flux/infrastructure` is the
-estate's once rendered (re-render it from a scratch `fort init` and diff),
-and `cluster-vars.yaml` is never overwritten by scaffold, so each cluster
-gains or loses its `HUB_MESH_IP` line by hand.
+Changing the monitoring hub after init is a hand edit: `flux/infrastructure`
+is the estate's once rendered (re-render it from a scratch `fort init`
+and diff), and `cluster-vars.yaml` is never overwritten by scaffold, so
+each cluster gains or loses its `HUB_MESH_IP` line by hand.
 
 ## After init
 

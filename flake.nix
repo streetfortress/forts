@@ -131,9 +131,11 @@
       };
 
       # The same fort linked to a second estate (modules/links.nix,
-      # deployments#674): the fixture host plus one link. CI evaluates it
-      # so the module's assertions, the interface, the firewall rules and
-      # the reconciler unit compose with a hardened host.
+      # deployments#674): the fixture host plus one link, as the forge of
+      # that estate (forts#38: the roles say what the link opens). CI
+      # evaluates it so the module's assertions, the interface, the
+      # firewall rules and the reconciler unit compose with a hardened
+      # host.
       nixosConfigurations.linked-fort = lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
@@ -148,7 +150,7 @@
               interface = "wg-other";
               port = 51821;
               address = "10.3.0.96";
-              openTCPPorts = [ 30022 443 ];
+              roles = [ "forge" ];
             };
           }
         ];

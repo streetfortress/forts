@@ -135,11 +135,12 @@ func (p *mintPlan) planBackups(take func(string) (string, bool)) error {
 			p.resticRustfs = v
 			p.rustfsUser = envKeyID(v)
 		} else {
-			if !p.est.HasHub() {
-				return fmt.Errorf("[[backups.pv]] store = %q needs a hub that hosts rustfs-central, and %s names none (a hub_push in another estate cannot take a registration yet; a block on %q needs no hub)", manifest.StoreRustfsCentral, estate.Path, manifest.StoreB2)
+			hub := p.est.LocalHub(estate.RoleMonitoring)
+			if hub == "" {
+				return fmt.Errorf("[[backups.pv]] store = %q needs a monitoring hub in THIS estate that hosts rustfs-central, and %s [hubs.monitoring] names none (a hub in another estate cannot take a registration yet, forts#38; a block on %q needs no hub)", manifest.StoreRustfsCentral, estate.Path, manifest.StoreB2)
 			}
-			if users := rustfsUsersPath(p.est.Hub); !exists(p.root, users) {
-				return fmt.Errorf("%s does not exist — seed the hub's rustfs provider first: fort seed %s flux/apps/%s/rustfs-central --write", users, p.est.Hub, p.est.Hub)
+			if users := rustfsUsersPath(hub); !exists(p.root, users) {
+				return fmt.Errorf("%s does not exist — seed the hub's rustfs provider first: fort seed %s flux/apps/%s/rustfs-central --write", users, hub, hub)
 			}
 			sec, err := newToken()
 			if err != nil {
@@ -457,7 +458,7 @@ func rustfsIdentityFindings(root, hub string, hosts map[string]manifest.Host) []
 	if hub == "" {
 		for host, h := range hosts {
 			if onRustfs(h) {
-				return []finding{{"error", estate.Path, host + " declares a [[backups.pv]] block on " + manifest.StoreRustfsCentral + " but the estate names no hub — nothing hosts rustfs-central for it to register with (a block on b2 needs no hub)"}}
+				return []finding{{"error", estate.Path, host + " declares a [[backups.pv]] block on " + manifest.StoreRustfsCentral + " but the estate names no hub of its own — [hubs.monitoring] names no fort of this estate, so nothing here hosts rustfs-central for it to register with (a block on b2 needs no hub)"}}
 			}
 		}
 		return nil

@@ -98,10 +98,11 @@ func usage() {
   apply   provision, adopt, destroy
   read    check, preview, wg-conf
 
-  init --name <estate> --repo <git url> --admin <age1…> [--hub <host>] [--write]
+  init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--write]
       create an estate: render into the root of a git checkout the files
-      every other verb assumes — estate.toml, the estate flake (sfi/forts
-      as inputs.forts), the two sops rule files with the admin
+      every other verb assumes — estate.toml (its hubs by role: the forge,
+      the monitoring hub, in this estate or another; docs/hub.md), the
+      estate flake (sfi/forts as inputs.forts), the two sops rule files with the admin
       recipients, the empty mesh, the Pulumi project file, the shared
       flux infrastructure layer, the gate workflow, the directories. A
       pure render: no secrets, no network, nothing overwritten. Names
@@ -112,8 +113,10 @@ func usage() {
       render the host's generated surface from its manifest,
       forts/<host>.toml: nixos/hosts/<host>/{default.nix,
       secrets.nix} in the lab shape (qcow runtime, static LAN) or, with a
-      cloud provider table ([linode]), the cloud shape (linode runtime, split DNS over the mesh, zram); also flux/clusters/<host>/ (6 files) and the apps root
-      kustomization. Prints the marked tree; --write lays it down, never
+      cloud provider table ([linode]), the cloud shape (linode runtime, zram); also flux/clusters/<host>/ (6 files), the apps root
+      kustomization, and the fort's file for its monitoring hub under
+      flux/hub/<hub host>/ (docs/hub.md); on the hub host itself, the
+      subscriptions under flux/apps/<host>/serves/. Prints the marked tree; --write lays it down, never
       overwriting a file that exists (a re-run fills gaps) — the manifest
       seeds the host, you refine it in place. Then fort mint.
 

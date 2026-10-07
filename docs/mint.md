@@ -90,9 +90,10 @@ destroy`.
 - `restic-s3-env-rustfs` is the fort's own identity on the hub's
   rustfs-central, declared in the hub's tree
   (`flux/apps/<hub>/rustfs-central/users.sops.yaml`) — so a pv block on
-  `rustfs-central` needs a hub in this estate, and a `hub_push` estate
-  cannot take one. A fort on `b2` alone registers nothing and needs no
-  hub.
+  `rustfs-central` needs a monitoring hub in this estate
+  (`[hubs.monitoring]` with `estate` = this estate; [hub.md](hub.md)),
+  and an estate whose hub is another's cannot take one yet. A fort on
+  `b2` alone registers nothing and needs no hub.
 - `restic-s3-env-b2` is **minted against the B2 API**, and the credential
   that mints it is an **operational input**: from the password
   manager, for the moment of a raise — `fort mint --write` prompts for

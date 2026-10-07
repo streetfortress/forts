@@ -22,16 +22,48 @@ zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <h
                              # of peers.json is <host>.<zone> at its mesh address, on every fort
                              # and in its cluster DNS. Absent: <name>.mesh, i.e. {{ .Name }}.mesh.
 {{- end }}
-{{- if .Hub }}
-hub = "{{ .Hub }}"
-{{- else if .HubPush }}
-hub_push = "{{ .HubPush }}"   # a hub in another estate: the edges push to it
-{{- else }}
-# hub = "<host>"             # the fort of this estate whose monitoring tree carries
-                             # every other fort's file (its dead man's switch, its
-                             # scrape) and whose rustfs the backups register with
-# hub_push = "<mesh ip>"     # or a hub in another estate: the edges push to it
-                             # Neither: edge-only, and nobody notices a silent fort.
-                             # Changing this later means re-rendering flux/infrastructure
-                             # and HUB_MESH_IP in every cluster-vars by hand.
+
+# The hubs (docs/hub.md): the roles another fort serves this estate — the
+# forge every fort clones from, the monitoring hub the edges push to and
+# that notices a silent fort, the CA a lab issuer reaches. Each names the
+# estate that holds the hub by its git URL (this estate's own `repo` for
+# an in-estate hub) and the fort that is it. The hub's address on this
+# mesh is that fort's entry in mesh/peers.json: its manifest when the
+# estate is this one, its `remotes` entry when it is another's (the link,
+# docs/links.md).
+{{- range .Hubs }}
+
+[hubs.{{ .Role }}]
+estate = "{{ .Estate }}"
+fort = "{{ .Fort }}"
+{{- if .Name }}
+name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- end }}
+{{- end }}
+{{- if not .Push }}
+
+# [hubs.monitoring]            # no monitoring hub: edge-only, and nobody notices a
+# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # silent fort. Adding one later means
+# fort = "luxor"               # re-rendering flux/infrastructure and HUB_MESH_IP in
+                               # every cluster-vars by hand (docs/init.md).
+{{- end }}
+{{- if not .Forge }}
+
+# [hubs.forge]                 # the forge: the gitea every fort clones from, by its one
+# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # name on every mesh (forts#26 renders
+# fort = "sfi-fort-zenbook"    # its address from the fort's peers.json entry)
+# name = "gitea.zen.lofi"
+{{- end }}
+
+# The other half, declared by the hub's estate, by role: a fort of this
+# estate and the estates it serves that role. fort scaffold <fort>
+# renders the flux subscription for each estate a monitoring entry names
+# it the hub of; the served estate renders what it asks into
+# flux/hub/<fort>/ of its own tree. Two entries under one role are two
+# hubs; an estate appears once per role.
+# [[serves.forge]]
+# fort = "sfi-fort-zenbook"
+# estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]
+# [[serves.monitoring]]
+# fort = "luxor"
+# estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]

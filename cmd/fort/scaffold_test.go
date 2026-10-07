@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestRenderScaffold(t *testing.T) {
 	cloud := byPath(render(t, "cloud-fort", hosts["cloud-fort"]))
 	lab := byPath(render(t, "lab-fort", hosts["lab-fort"]))
 	// nix host dir (2) + flux/clusters (fleet) + the apps root + the
-	// cluster's monitoring on the hub and the hub kustomization append.
+	// cluster's monitoring for the hub and the hub kustomization append.
 	for _, m := range []map[string]string{cloud, lab} {
 		if len(m) != 2+len(fleet)+1+2 {
 			t.Errorf("want %d files, got %d: %v", 2+len(fleet)+1+2, len(m), keys(m))
@@ -40,18 +41,24 @@ func TestRenderScaffold(t *testing.T) {
 	// backup leg wherever a pv block promises one, and the edge
 	// Alertmanager over the mesh (the hub's own is cluster DNS).
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
-		got := m[clusterMonitoringPath("luxor", name)]
-		for _, s := range []string{`absent(up{cluster="` + name + `"})`, `absent_over_time({job="fluent-bit", cluster="` + name + `"}[15m])`, "uid: am-edge-" + name, "loki_rule:", "grafana_datasource:"} {
+		got := m[hubFilePath("luxor", name)]
+		for _, s := range []string{`absent(up{cluster="` + name + `"})`, `absent_over_time({job="fluent-bit", cluster="` + name + `"}[15m])`, "uid: am-edge-" + name, "loki_rule:", "grafana_datasource:", "flux/hub/luxor/"} {
 			if !strings.Contains(got, s) {
 				t.Errorf("%s monitoring lacks %q:\n%s", name, s, got)
 			}
 		}
-		if _, ok := m[clusterMonitoringKustomization("luxor")]; !ok {
-			t.Errorf("%s: no hub kustomization append", name)
+		if k, ok := m[hubKustomization("luxor")]; !ok || !strings.Contains(k, "  - "+name+".yaml\n") {
+			t.Errorf("%s: no hub kustomization (or no line in a fresh one):\n%s", name, k)
+		}
+		// nothing renders into the hub's own tree (forts#38)
+		for p := range m {
+			if strings.HasPrefix(p, "flux/apps/luxor/") {
+				t.Errorf("%s renders %s into the hub's tree", name, p)
+			}
 		}
 	}
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
-		if !strings.Contains(m[clusterMonitoringPath("luxor", name)], "PVBackupNotConfigured") {
+		if !strings.Contains(m[hubFilePath("luxor", name)], "PVBackupNotConfigured") {
 			t.Errorf("%s: a pv block must render PVBackupNotConfigured", name)
 		}
 	}
@@ -59,11 +66,15 @@ func TestRenderScaffold(t *testing.T) {
 	// B2, nothing restic could be silent about.
 	dbOnly := hosts["cloud-fort"]
 	dbOnly.Backups.PV = nil
-	if got := byPath(render(t, "cloud-fort", dbOnly))[clusterMonitoringPath("luxor", "cloud-fort")]; strings.Contains(got, "PVBackupNotConfigured") {
+	if got := byPath(render(t, "cloud-fort", dbOnly))[hubFilePath("luxor", "cloud-fort")]; strings.Contains(got, "PVBackupNotConfigured") {
 		t.Errorf("no pv block must render no PVBackupNotConfigured:\n%s", got)
 	}
-	if !strings.Contains(cloud[clusterMonitoringPath("luxor", "cloud-fort")], "url: http://10.1.0.98:30993") {
+	if !strings.Contains(cloud[hubFilePath("luxor", "cloud-fort")], "url: http://10.1.0.98:30993") {
 		t.Errorf("a fort's edge Alertmanager is reached over the mesh")
+	}
+	// the apps root of a fort that is not the hub lists no serves/
+	if strings.Contains(cloud["flux/apps/cloud-fort/kustomization.yaml"], "serves") {
+		t.Errorf("a fort that is not the hub carries no subscriptions:\n%s", cloud["flux/apps/cloud-fort/kustomization.yaml"])
 	}
 	for _, f := range want {
 		if _, ok := cloud[filepath.Join("nixos/hosts/cloud-fort", f)]; !ok {
@@ -258,12 +269,12 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	}
 	for name, h := range hosts {
 		for _, f := range render(t, name, h) {
-			// The cluster's monitoring on the hub is rendered for every
+			// The cluster's monitoring for the hub is rendered for every
 			// flux cluster, luxor's own included; flux/clusters/luxor
 			// was bootstrapped by hand and carries a bespoke apps layer
 			// (databasus-configs) and pre-module comments — the exception
 			// its manifest's header records, not a template drift.
-			isMon := strings.HasPrefix(f.path, clusterMonitoringDir("luxor")+"/")
+			isMon := strings.HasPrefix(f.path, hubDir("luxor")+"/")
 			if !isMon && (name == "luxor" || !strings.HasPrefix(f.path, "flux/clusters/")) {
 				continue
 			}
@@ -274,9 +285,10 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 	}
 }
 
-// testEstate is the estate the render tests assume: luxor as the hub,
-// the deployments repo as the source — the shape the golden trees carry.
-var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git", Hub: "luxor"}
+// testEstate is the estate the render tests assume: luxor as the
+// in-estate monitoring hub, the deployments repo as the source — the
+// shape the golden trees carry.
+var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git", Hubs: map[string]estate.Hub{estate.RoleMonitoring: {Estate: "ssh://git@gitea.zen.lofi:30022/sfi/deployments", Fort: "luxor"}}}
 
 // testHubIP is luxor's mesh address, as its manifest has it.
 const testHubIP = "10.1.0.5"
@@ -342,7 +354,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	if !strings.Contains(sec, "secrets/plain-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
 		t.Errorf("plain secrets.nix wrong:\n%s", sec)
 	}
-	mon := m[clusterMonitoringPath("luxor", "plain-fort")]
+	mon := m[hubFilePath("luxor", "plain-fort")]
 	// One ScrapeConfig, node-exporter: the operator owns `job` (relabelled
 	// to jobName after the target labels), so the leg files under
 	// host-node-exporter — the Host Overview's job (#442).
@@ -364,16 +376,210 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	}
 	var hasEdit bool
 	for _, f := range files {
-		if f.path == clusterMonitoringKustomization("luxor") && f.edit != nil {
+		if f.path == hubKustomization("luxor") && f.edit != nil {
 			hasEdit = true
-			out, err := f.edit("resources:\n  - clusters/luxor.yaml\n")
-			if err != nil || !strings.Contains(out, "  - clusters/plain-fort.yaml\n") {
+			out, err := f.edit("resources:\n  - luxor.yaml\n")
+			if err != nil || !strings.Contains(out, "  - plain-fort.yaml\n") {
 				t.Errorf("kustomization edit: %v\n%s", err, out)
+			}
+			// idempotent: a line already there is kept, never doubled
+			if again, err := f.edit(out); err != nil || again != out {
+				t.Errorf("kustomization edit is not idempotent: %v\n%s", err, again)
+			}
+			// and the first fort of the estate creates the file whole
+			if !strings.Contains(string(f.content), "  - plain-fort.yaml\n") || !strings.Contains(string(f.content), "kind: Kustomization") {
+				t.Errorf("a fresh hub kustomization must carry the line:\n%s", f.content)
 			}
 		}
 	}
 	if !hasEdit {
-		t.Error("a plain fort's file on the hub needs its kustomization line")
+		t.Error("a plain fort's file for the hub needs its kustomization line")
+	}
+}
+
+// The hub in another estate (forts#38): the served estate renders the
+// same files into flux/hub/<hub host>/ of its own tree — the path is the
+// hub HOST's name, whichever estate holds it — and HUB_MESH_IP is the
+// hub's remotes entry in peers.json, the address the link gave it here.
+func TestRenderScaffoldRemoteHub(t *testing.T) {
+	hosts, problems, err := manifest.LoadAll("testdata")
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
+	}
+	served := estate.Estate{Name: "staging", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/staging", Hubs: map[string]estate.Hub{
+		estate.RoleForge:      {Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "sfi-fort-zenbook", Name: "gitea.zen.lofi"},
+		estate.RoleMonitoring: {Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "luxor"},
+	}}
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "mesh"), 0o755)
+	os.WriteFile(filepath.Join(root, peersPath), []byte(`{"peers": {}, "clients": {}, "remotes": {"luxor": {"wg_vpn_ip": "10.3.0.5", "wg_endpoint_ip": "10.0.0.5", "wg_endpoint_port": 51822, "public_key": "k"}}}`), 0o644)
+	ip, err := hubMeshIP(root, served)
+	if err != nil || ip != "10.3.0.5" {
+		t.Fatalf("hubMeshIP from the remotes entry: %q %v", ip, err)
+	}
+	// no remotes entry yet: the link's half is missing, and scaffold
+	// says which entry, rather than rendering an empty HUB_MESH_IP
+	os.WriteFile(filepath.Join(root, peersPath), []byte(`{"peers": {}, "clients": {}}`), 0o644)
+	if _, err := hubMeshIP(root, served); err == nil || !strings.Contains(err.Error(), "remotes.luxor") {
+		t.Errorf("no remotes entry: want the error naming it, got %v", err)
+	}
+	// no monitoring hub at all: nothing to push to, no error
+	if ip, err := hubMeshIP(root, estate.Estate{Name: "e", Repo: "ssh://x/sfi/e"}); err != nil || ip != "" {
+		t.Errorf("no hub: %q %v", ip, err)
+	}
+
+	files, err := renderScaffold("cloud-fort", hosts["cloud-fort"], served, "10.3.0.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]string{}
+	for _, f := range files {
+		m[f.path] = string(f.content)
+	}
+	if !strings.Contains(m["flux/clusters/cloud-fort/cluster-vars.yaml"], "HUB_MESH_IP: 10.3.0.5") {
+		t.Errorf("cluster-vars lacks the hub's address on this mesh:\n%s", m["flux/clusters/cloud-fort/cluster-vars.yaml"])
+	}
+	got := m[hubFilePath("luxor", "cloud-fort")]
+	if got == "" || !strings.Contains(got, `absent(up{cluster="cloud-fort"})`) || !strings.Contains(got, "url: http://10.1.0.98:30993") {
+		t.Errorf("the fort's file for a hub in another estate renders at the same path:\n%s", got)
+	}
+	if k := m[hubKustomization("luxor")]; !strings.Contains(k, "  - cloud-fort.yaml\n") {
+		t.Errorf("hub kustomization:\n%s", k)
+	}
+	for p := range m {
+		if strings.HasPrefix(p, "flux/apps/luxor/") || strings.Contains(p, "/serves/") {
+			t.Errorf("a served estate renders no subscription: %s", p)
+		}
+	}
+}
+
+// The hub host's own render (forts#38): the fort's file for itself (its
+// edge Alertmanager by cluster DNS), and the subscriptions its tree
+// carries — its own estate's through the flux-system source, and one per
+// [[serves]] entry with the monitoring role, each with its GitRepository,
+// a service account scoped to monitoring-central and the Kustomization on
+// flux/hub/<hub>/ of that estate; the apps root lists serves/.
+func TestRenderScaffoldHubHost(t *testing.T) {
+	hubEstate := estate.Estate{Name: "infra", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Hubs: map[string]estate.Hub{
+		estate.RoleForge:      {Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "sfi-fort-zenbook", Name: "gitea.zen.lofi"},
+		estate.RoleMonitoring: {Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "luxor"},
+	}, Serves: map[string][]estate.ServeEntry{
+		estate.RoleMonitoring: {{Fort: "luxor", Estates: []string{"ssh://git@gitea.zen.lofi:30022/sfi/staging"}}, {Fort: "luxor-b", Estates: []string{"ssh://git@gitea.zen.lofi:30022/sfi/staging-b"}}},
+		estate.RoleForge:      {{Fort: "sfi-fort-zenbook", Estates: []string{"ssh://git@gitea.zen.lofi:30022/sfi/staging", "ssh://git@gitea.zen.lofi:30022/sfi/production"}}},
+	}}
+	if err := hubEstate.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	luxor := manifest.Host{MeshIP: "10.1.0.5", Cluster: &manifest.ClusterSpec{}, Backups: manifest.Backups{Declared: true}, Provider: "libvirt", Spec: &manifest.LibvirtSpec{IP: "10.0.0.5"}}
+	files, err := renderScaffold("luxor", luxor, hubEstate, "10.1.0.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]scaffoldFile{}
+	for _, f := range files {
+		m[f.path] = f
+	}
+	// its own file: the hub's edge Alertmanager by cluster DNS
+	own := string(m[hubFilePath("luxor", "luxor")].content)
+	if !strings.Contains(own, "alertmanager-operated.monitoring.svc.cluster.local:9093") || strings.Contains(own, "10.1.0.5:30993") {
+		t.Errorf("the hub's own file reaches its Alertmanager by cluster DNS:\n%s", own)
+	}
+	// the subscriptions: its own estate and staging; production is served
+	// the forge only and gets none
+	if _, ok := m[servesPath("luxor", "sfi/production")]; ok {
+		t.Errorf("production is served the forge alone: no subscription")
+	}
+	if _, ok := m[servesPath("luxor", "sfi/staging-b")]; ok {
+		t.Errorf("staging-b is served by luxor-b, not luxor")
+	}
+	local := string(m[servesPath("luxor", "sfi/infra")].content)
+	for _, s := range []string{"kind: Kustomization", "name: hub-infra", "serviceAccountName: hub-infra", "path: ./flux/hub/luxor", "name: flux-system", "namespace: monitoring-central", "prune: true", "kind: ServiceAccount", "kind: Role", "kind: RoleBinding", `resources: ["prometheusrules", "scrapeconfigs"]`, `resources: ["configmaps"]`} {
+		if !strings.Contains(local, s) {
+			t.Errorf("own subscription lacks %q:\n%s", s, local)
+		}
+	}
+	if strings.Contains(local, "apiVersion: source.toolkit.fluxcd.io") {
+		t.Errorf("own subscription reads the flux-system source, not a GitRepository of its own:\n%s", local)
+	}
+	remote := string(m[servesPath("luxor", "sfi/staging")].content)
+	for _, s := range []string{"kind: GitRepository", "name: hub-staging", "url: ssh://git@gitea.zen.lofi:30022/sfi/staging.git", "secretRef:\n    name: flux-system", "!/flux/hub/luxor/", "serviceAccountName: hub-staging", "path: ./flux/hub/luxor", "prune: true"} {
+		if !strings.Contains(remote, s) {
+			t.Errorf("staging subscription lacks %q:\n%s", s, remote)
+		}
+	}
+	if strings.Contains(remote, "name: flux-system\n    namespace: flux-system\n  path") {
+		t.Errorf("staging subscription must source its own GitRepository:\n%s", remote)
+	}
+	// every subscription's Kustomization carries no decryption: no
+	// secret rides flux/hub/ yet
+	for _, c := range []string{local, remote} {
+		if strings.Contains(c, "\n  decryption:") {
+			t.Errorf("a subscription decrypts nothing:\n%s", c)
+		}
+	}
+	// the kustomization lists both, and a re-run appends a new one
+	sk := m[servesKustomization("luxor")]
+	if !strings.Contains(string(sk.content), "  - infra.yaml\n  - staging.yaml\n") {
+		t.Errorf("serves kustomization:\n%s", sk.content)
+	}
+	if out, err := sk.edit("resources:\n  - infra.yaml\n"); err != nil || !strings.Contains(out, "  - infra.yaml\n  - staging.yaml\n") || strings.Count(out, "infra.yaml") != 1 {
+		t.Errorf("serves kustomization edit: %v\n%s", err, out)
+	}
+	// the apps root lists serves/, fresh and as an append
+	apps := m["flux/apps/luxor/kustomization.yaml"]
+	if !strings.Contains(string(apps.content), "  - sops-canary.yaml\n") || !strings.Contains(string(apps.content), "  - serves\n") {
+		t.Errorf("hub apps root:\n%s", apps.content)
+	}
+	if apps.edit == nil {
+		t.Fatal("hub apps root needs the append for a tree that exists")
+	}
+	if out, err := apps.edit("resources:\n  - sops-canary.yaml\n  - monitoring\n"); err != nil || !strings.HasSuffix(out, "  - monitoring\n  - serves\n") {
+		t.Errorf("apps root append: %v\n%s", err, out)
+	}
+	if out, _ := apps.edit("resources:\n  - sops-canary.yaml\n  - serves\n"); strings.Count(out, "- serves") != 1 {
+		t.Errorf("apps root append doubled the line:\n%s", out)
+	}
+	// a hub with no [[serves]] subscribes to its own estate alone
+	alone := hubEstate
+	alone.Serves = nil
+	files, err = renderScaffold("luxor", luxor, alone, "10.1.0.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, f := range files {
+		if strings.HasPrefix(f.path, servesDir("luxor")+"/") {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("a hub serving nobody else: want its own subscription and the kustomization (2 files), got %d", n)
+	}
+	// a second monitoring hub (luxor-b) that is not this estate's own:
+	// its tree carries staging-b's subscription and no own-estate one,
+	// the apps root lists serves/, and its own file for THIS estate's
+	// hub (luxor) reaches its Alertmanager over the mesh like any fort
+	luxorB := luxor
+	luxorB.MeshIP = "10.1.0.6"
+	files, err = renderScaffold("luxor-b", luxorB, hubEstate, "10.1.0.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mb := map[string]scaffoldFile{}
+	for _, f := range files {
+		mb[f.path] = f
+	}
+	if _, ok := mb[servesPath("luxor-b", "sfi/infra")]; ok {
+		t.Errorf("luxor-b is not this estate's hub: no own-estate subscription")
+	}
+	if sb := string(mb[servesPath("luxor-b", "sfi/staging-b")].content); !strings.Contains(sb, "path: ./flux/hub/luxor-b") || !strings.Contains(sb, "url: ssh://git@gitea.zen.lofi:30022/sfi/staging-b.git") {
+		t.Errorf("luxor-b's subscription to staging-b:\n%s", sb)
+	}
+	if !strings.Contains(string(mb["flux/apps/luxor-b/kustomization.yaml"].content), "  - serves\n") {
+		t.Errorf("luxor-b's apps root lists serves/")
+	}
+	if own := string(mb[hubFilePath("luxor", "luxor-b")].content); !strings.Contains(own, "http://10.1.0.6:30993") {
+		t.Errorf("luxor-b's own file for luxor:\n%s", own)
 	}
 }
 

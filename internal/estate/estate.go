@@ -1,25 +1,26 @@
 // Package estate reads the estate manifest: estate.toml at the root of an
 // estate checkout. It is the one file that says what the checkout IS —
-// its name, its git URL (flux's source and auto-rebuild's pull) and, when
-// it has one, the fort that is its monitoring hub. Per-host facts are the
-// host manifests (internal/manifest); per-estate facts are here, and
-// there are few of them on purpose: an estate is plain NixOS and a flux
-// tree, and this file names only what a verb reads.
+// its name, its git URL (flux's source and auto-rebuild's pull), its mesh,
+// and its hubs: the forts, in this estate or another, that serve it a
+// role (the forge, the monitoring hub, the CA; forts#38). Per-host facts
+// are the host manifests (internal/manifest); per-estate facts are here,
+// and there are few of them on purpose: an estate is plain NixOS and a
+// flux tree, and this file names only what a verb reads.
 //
 // `fort init` writes it. `fort scaffold` reads it for the flux source URL
-// and the hub; `fort add` reads the zone; `fort check`, `fort dismantle`
-// read the hub. A checkout with no estate.toml is not an estate, and
+// and the hubs; `fort add` reads the zone; `fort check`, `fort dismantle`
+// read the hubs. A checkout with no estate.toml is not an estate, and
 // every verb says so.
 package estate
 
 import (
 	"fmt"
-	"net"
 	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -37,17 +38,29 @@ type Estate struct {
 	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
 	// Both clone it with the deploy key fort mint registers.
 	Repo string `toml:"repo"`
-	// Hub is the fort of THIS estate whose monitoring tree carries every
-	// other fort's file (the dead man's switch, the edge Alertmanager
-	// datasource, a plain fort's scrape), and whose rustfs-central the
-	// forts with a backups profile register with. Optional: an estate
-	// with no hub has no one to notice a silent fort, and says so by
-	// leaving this out.
-	Hub string `toml:"hub"`
-	// HubPush is a hub in ANOTHER estate, by mesh address: the edges push
-	// metrics and logs to it, and that estate decides what it scrapes.
-	// Exclusive with Hub. No files render for it here.
-	HubPush string `toml:"hub_push"`
+	// Hubs is the set of roles another fort serves this estate, by role
+	// ([hubs.forge], [hubs.monitoring], [hubs.ca]; forts#38). Each names
+	// the estate that holds the hub and the fort that is it. The hub's
+	// address on this mesh is that fort's entry in mesh/peers.json: its
+	// manifest's mesh_ip when the estate is this one, its remotes entry
+	// when it is another (the link that puts it on this mesh). Optional,
+	// role by role: an estate with no monitoring hub has no one to notice
+	// a silent fort, and says so by leaving the role out.
+	Hubs map[string]Hub `toml:"hubs"`
+	// Serves is the other half of the same relationship, declared by the
+	// hub's estate, by role ([[serves.monitoring]]): a fort of this
+	// estate and the estates it serves that role. The key is the role
+	// on both ends — [hubs.monitoring] fort = "luxor" in the served
+	// estate, [[serves.monitoring]] fort = "luxor" here — so the pair
+	// reads as one sentence from either side. Two entries under one role
+	// are two hubs (a monitoring hub per team estate); an estate appears
+	// at most once per role, which is the one invariant: the served
+	// estate names one fort per role. A served estate renders what it
+	// asks of its hub into flux/hub/<hub fort>/ of its own tree; the hub
+	// subscribes to that path with flux, and fort scaffold <fort> renders
+	// the subscription for every monitoring entry that names the fort.
+	// What this estate consumes itself is its own [hubs.*], never here.
+	Serves map[string][]ServeEntry `toml:"serves"`
 	// Mesh is the estate's WireGuard subnet, CIDR (10.2.0.0/24). Every
 	// address in mesh/peers.json and every manifest's mesh_ip lies in
 	// it; fort check says so. Two estates link only when their meshes
@@ -131,7 +144,7 @@ func Parse(raw []byte) (Estate, error) {
 }
 
 // Validate: a name that is a repo name, a repo URL a clone understands,
-// a hub that is a host name if present.
+// the hubs and the served estates well-formed (validateHubs).
 func (e Estate) Validate() error {
 	if !nameRE.MatchString(e.Name) {
 		return fmt.Errorf("name %q — want a repo name (%s)", e.Name, nameRE)
@@ -139,14 +152,8 @@ func (e Estate) Validate() error {
 	if !strings.HasPrefix(e.Repo, "ssh://") && !strings.HasPrefix(e.Repo, "https://") {
 		return fmt.Errorf("repo %q — want the estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", e.Repo)
 	}
-	if e.Hub != "" && !nameRE.MatchString(e.Hub) {
-		return fmt.Errorf("hub %q — want the hub fort's host name (%s), or no hub", e.Hub, nameRE)
-	}
-	if e.HubPush != "" && net.ParseIP(e.HubPush) == nil {
-		return fmt.Errorf("hub_push %q — want the mesh address of a hub in another estate", e.HubPush)
-	}
-	if e.Hub != "" && e.HubPush != "" {
-		return fmt.Errorf("hub and hub_push together — a hub is either a fort of this estate or an address in another, not both")
+	if err := e.validateHubs(); err != nil {
+		return err
 	}
 	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
 		return fmt.Errorf("interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Interface)
@@ -182,21 +189,12 @@ func (e Estate) Contains(ip string) bool {
 
 // RepoGit is the URL with its .git suffix, the form the FluxInstance
 // carries; auto-rebuild clones the same.
-func (e Estate) RepoGit() string {
-	if strings.HasSuffix(e.Repo, ".git") {
-		return e.Repo
-	}
-	return e.Repo + ".git"
-}
+func (e Estate) RepoGit() string { return WithGit(e.Repo) }
 
-// HasHub says whether a fort of this estate is the hub: files render
-// into its tree.
-func (e Estate) HasHub() bool { return e.Hub != "" }
-
-// Pushes says whether the edges have somewhere to push: a hub here or an
-// address elsewhere. The shared layer carries remote_write and the log
-// shipper only then.
-func (e Estate) Pushes() bool { return e.Hub != "" || e.HubPush != "" }
+// Pushes says whether the edges have somewhere to push: a monitoring
+// hub, in this estate or another. The shared layer carries remote_write
+// and the log shipper only then.
+func (e Estate) Pushes() bool { _, ok := e.Hub(RoleMonitoring); return ok }
 
 // Forge is where the estate's repo lives, read off Repo: the forge host
 // (no port — the ssh port in the URL is git's, the API answers on https),
@@ -208,14 +206,21 @@ func (e Estate) Pushes() bool { return e.Hub != "" || e.HubPush != "" }
 // constant naming sfi/deployments, and a second estate's key landed on
 // the first estate's repo).
 func (e Estate) Forge() (host, owner, name string, err error) {
-	u, err := url.Parse(e.Repo)
+	return parseRepo(e.Repo)
+}
+
+// parseRepo reads a repo URL into the forge host, the owner and the
+// name, the .git suffix dropped: the shape every estate URL in
+// estate.toml has — this estate's, a hub's, a served estate's.
+func parseRepo(repo string) (host, owner, name string, err error) {
+	u, err := url.Parse(repo)
 	if err != nil {
-		return "", "", "", fmt.Errorf("repo %q: %w", e.Repo, err)
+		return "", "", "", fmt.Errorf("repo %q: %w", repo, err)
 	}
 	host = u.Hostname()
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if host == "" || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name>", e.Repo)
+		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name>", repo)
 	}
 	return host, parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
@@ -237,4 +242,259 @@ func (e Estate) RepoAPI() (string, error) {
 		return "", err
 	}
 	return "https://" + host + "/api/v1/repos/" + owner + "/" + name, nil
+}
+
+// --- hubs and serves (forts#38)
+
+// The roles a hub serves. A role is a small contract: what the served
+// estate renders for it, what the hub opens on the link, what fort check
+// says. The forge is the gitea every estate clones from, monitoring the
+// Prometheus and Loki the edges push to and the tree that watches them,
+// ca the step-ca a lab estate's issuer reaches (forts#46).
+const (
+	RoleForge      = "forge"
+	RoleMonitoring = "monitoring"
+	RoleCA         = "ca"
+)
+
+// Roles is every role, in the order the docs list them.
+var Roles = []string{RoleForge, RoleMonitoring, RoleCA}
+
+// Hub is one [hubs.<role>] table: the estate that holds the hub and the
+// fort that is it. Name is the forge's: the one name it keeps on every
+// mesh (gitea.zen.lofi), which is not <host>.<zone>; no other role has
+// one.
+type Hub struct {
+	// Estate is the hub's estate by its git URL, as its own estate.toml
+	// has it (ssh://git@gitea.zen.lofi:30022/sfi/infra): one spelling
+	// of an estate everywhere, and the owner and name derive from it.
+	// This estate's own URL is the in-estate case: a hub is declared the
+	// same way wherever it is.
+	Estate string `toml:"estate"`
+	// Fort is the hub fort's name.
+	Fort string `toml:"fort"`
+	// Name is the forge's DNS name; forge only.
+	Name string `toml:"name"`
+}
+
+// ServeEntry is one [[serves.<role>]] table: a fort of this estate and
+// the estates it serves the role, by their git URLs — what the hub's
+// flux clones to read flux/hub/<fort>/, with the read-only deploy key
+// the link already uses.
+type ServeEntry struct {
+	Fort    string   `toml:"fort"`
+	Estates []string `toml:"estates"`
+}
+
+// Serving is one (role, fort, estate) of the serves tables, flattened.
+type Serving struct {
+	Role, Fort, Estate string
+}
+
+// Ref is the served estate as <owner>/<name>; Name its last label, what
+// the subscription file and the link are named after.
+func (s Serving) Ref() string  { return Ref(s.Estate) }
+func (s Serving) Name() string { return ShortName(s.Estate) }
+
+// Ref is an estate URL reduced to <owner>/<name> (sfi/infra): how a
+// served estate is named in a report, a finding, a subscription's name.
+// "" for a URL that does not parse; Validate has refused it first.
+func Ref(repo string) string {
+	_, owner, name, err := parseRepo(repo)
+	if err != nil {
+		return ""
+	}
+	return owner + "/" + name
+}
+
+// Ref is this estate's own <owner>/<name>, read off Repo.
+func (e Estate) Ref() string { return Ref(e.Repo) }
+
+// ShortName is the last label of an estate URL or <owner>/<name> ref
+// (staging): what a link is named after by convention (sfi.links.<name>,
+// modules/links.nix) and what the subscription file is named after.
+func ShortName(ref string) string {
+	ref = strings.TrimSuffix(strings.TrimRight(ref, "/"), ".git")
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		return ref[i+1:]
+	}
+	return ref
+}
+
+// WithGit is a repo URL with its .git suffix, the form a flux
+// GitRepository and a clone carry; RepoGit is the same for this estate.
+func WithGit(repo string) string {
+	if strings.HasSuffix(repo, ".git") {
+		return repo
+	}
+	return repo + ".git"
+}
+
+// sameRepo says whether two URLs name one repo: the same forge host,
+// owner and name, whatever the scheme, the port and the .git suffix.
+func sameRepo(a, b string) bool {
+	ah, ao, an, err := parseRepo(a)
+	if err != nil {
+		return false
+	}
+	bh, bo, bn, err := parseRepo(b)
+	if err != nil {
+		return false
+	}
+	return ah == bh && ao == bo && an == bn
+}
+
+func validRepoURL(s string) bool {
+	if !strings.HasPrefix(s, "ssh://") && !strings.HasPrefix(s, "https://") {
+		return false
+	}
+	_, _, _, err := parseRepo(s)
+	return err == nil
+}
+
+func knownRole(role string) bool {
+	for _, r := range Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+func (e Estate) validateHubs() error {
+	for _, role := range sortedKeys(e.Hubs) {
+		h := e.Hubs[role]
+		if !knownRole(role) {
+			return fmt.Errorf("[hubs.%s] — want one of %s", role, strings.Join(Roles, ", "))
+		}
+		if !validRepoURL(h.Estate) {
+			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Repo)
+		}
+		if !nameRE.MatchString(h.Fort) {
+			return fmt.Errorf("[hubs.%s] fort %q — want the hub fort's name (%s)", role, h.Fort, nameRE)
+		}
+		switch {
+		case h.Name != "" && role != RoleForge:
+			return fmt.Errorf("[hubs.%s] name — only the forge has a name of its own; every other hub is <host>.<zone>", role)
+		case h.Name != "" && !zoneRE.MatchString(h.Name):
+			return fmt.Errorf("[hubs.%s] name %q — want a DNS name of lowercase labels (gitea.zen.lofi)", role, h.Name)
+		}
+	}
+	roles := make([]string, 0, len(e.Serves))
+	for role := range e.Serves {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	for _, role := range roles {
+		if !knownRole(role) {
+			return fmt.Errorf("[[serves.%s]] — want one of %s", role, strings.Join(Roles, ", "))
+		}
+		var seen []string
+		for i, s := range e.Serves[role] {
+			at := fmt.Sprintf("[[serves.%s]] #%d", role, i+1)
+			if !nameRE.MatchString(s.Fort) {
+				return fmt.Errorf("%s fort %q — want the name of a fort of this estate (%s)", at, s.Fort, nameRE)
+			}
+			if len(s.Estates) == 0 {
+				return fmt.Errorf("%s estates — want the served estates by their git URLs, at least one", at)
+			}
+			for _, url := range s.Estates {
+				if !validRepoURL(url) {
+					return fmt.Errorf("%s estates: %q — want a served estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", at, url)
+				}
+				if sameRepo(url, e.Repo) {
+					return fmt.Errorf("%s estates: %q is this estate — an estate serves itself through its own [hubs.*] tables, not a serves entry", at, url)
+				}
+				for _, prev := range seen {
+					if sameRepo(prev, url) {
+						return fmt.Errorf("%s estates: %q is served the role %s twice — a served estate names one fort per role", at, url, role)
+					}
+				}
+				seen = append(seen, url)
+			}
+		}
+	}
+	return nil
+}
+
+func sortedKeys(m map[string]Hub) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Hub is the hub of one role, if the estate declares one.
+func (e Estate) Hub(role string) (Hub, bool) {
+	h, ok := e.Hubs[role]
+	return h, ok
+}
+
+// Local says whether the hub is a fort of this estate: the in-estate
+// case, where its address is its manifest's mesh_ip and the files a
+// served fort renders for it are applied by this estate's own flux. The
+// URLs are compared as repos (host, owner, name), so a .git suffix or a
+// scheme does not make two spellings of one estate two estates.
+func (h Hub) Local(e Estate) bool { return sameRepo(h.Estate, e.Repo) }
+
+// Ref is the hub's estate as <owner>/<name>.
+func (h Hub) Ref() string { return Ref(h.Estate) }
+
+// LocalHub is the host that serves a role from inside this estate, ""
+// when the role is unserved or served from another estate. What mint
+// and dismantle need: a registration in the hub's tree (the rustfs
+// identity) is possible only when that tree is this one.
+func (e Estate) LocalHub(role string) string {
+	h, ok := e.Hubs[role]
+	if !ok || !h.Local(e) {
+		return ""
+	}
+	return h.Fort
+}
+
+// Servings flattens the serves tables: every (role, fort, estate), in
+// role order, then the order written.
+func (e Estate) Servings() []Serving {
+	roles := make([]string, 0, len(e.Serves))
+	for role := range e.Serves {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	var out []Serving
+	for _, role := range roles {
+		for _, s := range e.Serves[role] {
+			for _, url := range s.Estates {
+				out = append(out, Serving{Role: role, Fort: s.Fort, Estate: url})
+			}
+		}
+	}
+	return out
+}
+
+// ServedBy is what one fort serves, for one role: the estates it is the
+// hub of. Nil when the fort serves nobody that role.
+func (e Estate) ServedBy(fort, role string) []Serving {
+	var out []Serving
+	for _, s := range e.Servings() {
+		if s.Fort == fort && s.Role == role {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ServingForts is every fort the serves tables name, sorted.
+func (e Estate) ServingForts() []string {
+	set := map[string]bool{}
+	for _, s := range e.Servings() {
+		set[s.Fort] = true
+	}
+	out := make([]string, 0, len(set))
+	for f := range set {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
 }

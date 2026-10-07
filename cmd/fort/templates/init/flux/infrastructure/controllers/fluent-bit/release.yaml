@@ -72,7 +72,7 @@ spec:
             K8S-Logging.Parser On
             K8S-Logging.Exclude On
 
-      # Loki push goes to the hub's MESH IP (HUB_MESH_IP from
+      # Loki push goes to the monitoring hub's MESH IP (HUB_MESH_IP from
       # cluster-vars), not a name: a dual A record and fluent-bit's
       # resolver takes one answer per attempt — a client that can't retry
       # across records fails whenever the cache hands it a path its network

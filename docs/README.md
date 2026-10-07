@@ -196,7 +196,8 @@ put the manifest on main is the confirmation. Without a TTY and without
 - [init](init.md) — create an estate: the files every other verb assumes
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
-- [links](links.md) — a host on another estate's mesh: `sfi.links`, the reconciler, the `remotes` entry
+- [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]`, `flux/hub/<hub fort>/`, the flux subscription
+- [links](links.md) — a host on another estate's mesh: `sfi.links`, the reconciler, the `remotes` entry; the roles it opens
 - [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
@@ -221,7 +222,8 @@ nixos/
   .sops.yaml                     the per-host rules, a marker block per fort
 flux/
   clusters/<host>/               the FluxInstance and the cluster's Kustomizations
-  apps/<host>/                   the apps root; fort add renders into it
+  apps/<host>/                   the apps root; fort add renders into it; a hub's serves/ (hub.md)
+  hub/<hub host>/                what this estate asks of its monitoring hub, one file per fort (hub.md)
   infrastructure/                the shared layer every cluster applies
 mesh/
   peers.json                     who is on the mesh and where (mesh.md): mint adds, dismantle removes; remotes by hand

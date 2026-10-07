@@ -1,7 +1,8 @@
-# {{ .Hostname }}'s monitoring on the hub — a PLAIN fort (no [cluster]):
+# {{ .Hostname }}'s monitoring for the hub — a PLAIN fort (no [cluster]):
 # no edge Prometheus, so the hub PULLS. Rendered by `fort scaffold` from
-# the manifest (mesh_ip), removed by `fort dismantle`; `fort check --all`
-# requires one per plain fort. One target over the mesh: node-exporter
+# the manifest (mesh_ip) into flux/hub/{{ .HubHost }}/ of this estate
+# (forts#38), removed by `fort dismantle`; `fort check --all` requires
+# one per plain fort. One target over the mesh: node-exporter
 # (lab-host.nix). This file arms the switch on it. `cluster` = the fort's
 # name — a cluster of none, but the label every fleet rule and dashboard
 # keys on. Anything else the estate runs on the fort is the estate's to

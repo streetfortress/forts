@@ -216,10 +216,11 @@ fort is how they drift. `b2` takes every layer. `rustfs-central` — the
 hub's rustfs — takes `pv` alone in this cut (`db-physical` never: CNPG
 has one `archive_command`, and it points offsite; `db-logical` is #4's
 open question). The store decides what the block needs of the estate:
-**a block on `rustfs-central` requires a hub in this estate** (the fort
-registers an identity in the hub's tree), **a block on `b2` requires
-nothing** — which is what lets an estate whose hub is another estate's
-(`hub_push`, sfi/production) declare backups at all.
+**a block on `rustfs-central` requires a monitoring hub in this estate**
+(`[hubs.monitoring]` with `estate` = this estate; the fort registers an
+identity in the hub's tree), **a block on `b2` requires nothing** —
+which is what lets an estate whose hub is another estate's
+(sfi/production; [hub.md](hub.md)) declare backups at all.
 
 **The table is required and its blocks are not**, and that is the point:
 a production fort silently inheriting lab-only backups is the failure
@@ -237,7 +238,8 @@ target per block in the host file, `{ store; every }` word for word
 phase per store), the credentials `fort mint` seeds for the stores named
 (`restic-password` for any; the rustfs identity on the hub for
 `rustfs-central`; the B2 key `sfi-pv-<host>` for `b2`), and the
-`PVBackupNotConfigured` rule in the cluster's file on the hub — no pv
+`PVBackupNotConfigured` rule in the cluster's file for the hub
+(`flux/hub/<hub host>/<host>.yaml`) — no pv
 block, no unit, no credential, no rule. `[backups.db-physical]` → the
 `ObjectStore` and the `ScheduledBackup` (at `hour`) that `fort add`
 renders beside the fort's postgres; no block, no archive, said so in
@@ -282,7 +284,7 @@ table to put the key in.
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[[backups.pv]]` → the host's `sfi.pv-backup.targets` (and the `PVBackupNotConfigured` rule on the hub), `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
+| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[[backups.pv]]` → the host's `sfi.pv-backup.targets` (and the `PVBackupNotConfigured` rule in the fort's file for the hub), `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
 | `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore` and `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token); `[[backups.pv]]` — the restic password for any block, the rustfs identity it declares on the hub for a block on `rustfs-central`, the B2 application key it mints for a block on `b2` |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort); `add` reads `[backups.db-physical]` for the postgres archive (the `ObjectStore`, the `ScheduledBackup` at `hour`); `check` traces every `rustfs-central` pv block to an identity on the hub and back |
