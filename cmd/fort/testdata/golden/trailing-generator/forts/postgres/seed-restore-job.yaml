@@ -1,0 +1,25 @@
+# The seed loader, suspended until the cluster is recreated empty
+# (deployments#455). It mounts the configMapGenerator below, which is
+# why this provider kustomization has a list after patches:.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-restore
+  namespace: forts
+spec:
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:17
+          command: [/scripts/seed-restore.sh]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: seed-restore-scripts
+            defaultMode: 0755

@@ -152,6 +152,13 @@ func TestAppendHelpers(t *testing.T) {
 	if strings.Count(out2, "patches:") != 1 || !strings.Contains(out2, "  - path: q.yaml\n") {
 		t.Errorf("appendPatch (existing block):\n%s", out2)
 	}
+	// A list after patches: — the entry belongs to the patches: list, not
+	// to the generator (#91, deployments#696).
+	trailing := "patches:\n  - path: p.yaml\n    target:\n      kind: K\n\n# the seed scripts\nconfigMapGenerator:\n  - name: g\n    files:\n      - s.sh\n"
+	out3 := appendPatch(trailing, "# why\n", "q.yaml", "g", "v1", "K", "n", "ns")
+	if want := "patches:\n  - path: p.yaml\n    target:\n      kind: K\n  - path: q.yaml\n    target:\n      group: g\n      version: v1\n      kind: K\n      name: n\n      namespace: ns\n\n# the seed scripts\nconfigMapGenerator:\n  - name: g\n    files:\n      - s.sh\n"; out3 != want {
+		t.Errorf("appendPatch (list after patches:):\n%s", out3)
+	}
 	out, err = appendMapEntry("secrets:\n  f:\n    keys:\n      a: {generate: hex24}\n", "    keys:", "      b: {generate: hex24}")
 	if err != nil || out != "secrets:\n  f:\n    keys:\n      a: {generate: hex24}\n      b: {generate: hex24}\n" {
 		t.Errorf("appendMapEntry: %v\n%s", err, out)
@@ -373,6 +380,21 @@ func TestAddSecondS3Tenant(t *testing.T) {
 	})
 }
 
+// A postgres tenant registered in a provider kustomization that carries
+// a configMapGenerator after patches: (#91, deployments#696). The role
+// patch must land as the last item of patches:, not at the end of the
+// file: kustomize reads a trailing entry as a field of the generator and
+// fails the whole apps layer with `unknown field "path"`. The fixture is
+// the staging sites-db shape — the seed-restore scripts of
+// deployments#455 after the tenant patches.
+func TestAddTenantUnderTrailingGenerator(t *testing.T) {
+	testAddFresh(t, addFixture{
+		fort: "lab-fort", golden: "testdata/golden/trailing-generator",
+		tree:  "trailing-generator",
+		chart: "sfi-website", version: "0.3.0",
+	})
+}
+
 // addFixture is one replay of `fort add` on a fresh fort: the manifest
 // fixture, the golden tree, the chart (its OCI ref and its pin), and
 // the flags the operator typed.
@@ -381,6 +403,10 @@ type addFixture struct {
 	chartDir                     string // default: testdata/charts/<chart>
 	http                         string // --http <service>:<port>
 	followMain                   bool   // --follow-main
+	// tree: a fixture tree under testdata/trees copied over
+	// flux/apps/<fort> before the add — the fort is not fresh, and the
+	// add registers against what is already there.
+	tree string
 	// then: a second add on the same tree, whose report the golden
 	// records (the tenant-on-existing-instance path).
 	then *addFixture
@@ -398,6 +424,9 @@ func testAddFresh(t *testing.T, f addFixture) {
 	copyEstate(t, tmp)
 	copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, "flux/infrastructure/configs/step-ca-root.pem"))
 	copyFile(t, "testdata/trees/fresh-cloud/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
+	if f.tree != "" {
+		copyTree(t, filepath.Join("testdata/trees", f.tree), filepath.Join(tmp, "flux/apps", fort))
+	}
 
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,

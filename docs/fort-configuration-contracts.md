@@ -215,6 +215,11 @@ secret:
 Pure generator: reads the chart's contract, the fort's manifest,
 and the existing fort tree; writes **new files** and **appends lines to
 kustomization resource/patch lists**; never rewrites an existing file.
+An appended entry lands as the last item **of its own list**, not at the
+end of the file: a provider kustomization can carry a
+`configMapGenerator:` after `patches:` (the staging sites-db seed-restore
+scripts), and a patch entry under that generator makes `kustomize build`
+fail the whole apps layer with `unknown field "path"` (#91).
 Refuses if `flux/apps/<fort>/<app>/` exists (scaffold's force-no
 semantics). Everything is staged for a PR; nothing is applied. Optional
 requirements are provisioned by default (`--without valkey` skips one),

@@ -11,10 +11,12 @@ import (
 // keeps every comment and the author's formatting byte-for-byte; the
 // files are ours, so the shapes assumed here are the shapes we render.
 
-// appendListItem inserts `  - <item>` as the last entry of the top-level
-// block sequence under <key> (e.g. resources:). The block runs from the
-// key line through every following indented or comment line.
-func appendListItem(text, key, item string) (string, error) {
+// insertIntoBlock inserts <entry> — one line, or several already
+// indented — as the last item of the top-level block under <key> (e.g.
+// resources:, patches:). The block runs from the key line through every
+// following indented or comment line, so the entry lands inside the
+// block even when another top-level block follows it.
+func insertIntoBlock(text, key, entry string) (string, error) {
 	lines := strings.Split(text, "\n")
 	start := -1
 	for i, l := range lines {
@@ -26,6 +28,9 @@ func appendListItem(text, key, item string) (string, error) {
 	if start < 0 {
 		return "", fmt.Errorf("no top-level %s: block", key)
 	}
+	// end: the last line the block owns. A blank line or a top-level
+	// comment between two blocks belongs to neither, so the scan passes
+	// over it and the entry lands against the block's own last item.
 	end := start
 	for i := start + 1; i < len(lines); i++ {
 		l := lines[i]
@@ -37,11 +42,16 @@ func appendListItem(text, key, item string) (string, error) {
 		}
 		break
 	}
-	entry := "  - " + item
 	out := append([]string{}, lines[:end+1]...)
-	out = append(out, entry)
+	out = append(out, strings.Split(strings.TrimRight(entry, "\n"), "\n")...)
 	out = append(out, lines[end+1:]...)
 	return strings.Join(out, "\n"), nil
+}
+
+// appendListItem inserts `  - <item>` as the last entry of the top-level
+// block sequence under <key> (e.g. resources:).
+func appendListItem(text, key, item string) (string, error) {
+	return insertIntoBlock(text, key, "  - "+item)
 }
 
 // appendBlock adds a top-level block at the end of the document (a new
@@ -63,9 +73,15 @@ func appendPatch(text, comment, path, group, version, kind, name, namespace stri
       name: %s
       namespace: %s
 `, path, group, version, kind, name, namespace)
-	if strings.Contains("\n"+text, "\npatches:\n") {
-		return appendBlock(text, entry)
+	// The entry goes inside the existing patches: list. appendBlock would
+	// put it at the end of the file, under whatever block follows —
+	// `kustomize build` then reads `path` as a field of a trailing
+	// configMapGenerator and fails the whole apps layer with
+	// `unknown field "path"` (deployments#696, the staging sites-db).
+	if out, err := insertIntoBlock(text, "patches", entry); err == nil {
+		return out
 	}
+	// No patches: block — create one at the end of the file.
 	return appendBlock(text, comment+"patches:\n"+entry)
 }
 

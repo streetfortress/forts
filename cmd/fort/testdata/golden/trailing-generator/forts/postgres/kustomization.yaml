@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cluster.yaml
+  # The seed loader, suspended until the cluster is recreated empty.
+  - seed-restore-job.yaml
+  - database-umami.yaml
+  # Seeded from forts.contract.yaml (secrets-<app>: each tenant's role
+  # password); listed-but-absent = the pre-merge kustomize guard. No
+  # secrets-backup: this fort declares no [backups.db-physical] block, so
+  # there is no archive (cluster.yaml).
+  - secrets-umami.sops.yaml
+  - database-sfi-website.yaml
+  - secrets-sfi-website.sops.yaml
+# Tenant registration: one JSON6902 patch per tenant appends its login
+# role to managed.roles (cluster.yaml carries the instance). fort add
+# adds a file + an entry here.
+patches:
+  - path: role-umami.yaml
+    target:
+      group: postgresql.cnpg.io
+      version: v1
+      kind: Cluster
+      name: postgres
+      namespace: forts
+  - path: role-sfi-website.yaml
+    target:
+      group: postgresql.cnpg.io
+      version: v1
+      kind: Cluster
+      name: postgres
+      namespace: forts
+
+# A list AFTER patches: — the shape that made `fort add` write the next
+# patch entry at the end of the file, under this generator
+# (deployments#696). The namespace is NOT inherited by a generator.
+configMapGenerator:
+  - name: seed-restore-scripts
+    namespace: forts
+    options:
+      annotations:
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+    files:
+      - seed-restore.sh

@@ -1,0 +1,34 @@
+# sfi-website — HelmRelease rendered by `fort add` from the chart's contract:
+# the `wire:` values paths are filled from the fort's providers by
+# convention (postgres → the fort's postgres, tenant `sfi-website`); password-class
+# keys ride the sfi-website-env Secret. Retry forever: the first install
+# races its providers (and a preview pin races the images) — never park
+# on a failed release waiting for an ops nudge. Refine in place after
+# add: replicas for the node shape, non-secret env as values (never in
+# the Secret — a values change rolls pods), app-specific knobs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: sfi-website
+  namespace: sfi-website
+spec:
+  interval: 1h
+  releaseName: sfi-website
+  chartRef:
+    kind: OCIRepository
+    name: sfi-website
+    namespace: flux-system
+  install:
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1
+  values:
+    existingSecret: sfi-website-env
+    ui:
+      env:
+        POSTGRES_DB: sfi-website
+        POSTGRES_HOST: postgres-rw.forts.svc.cluster.local
+        POSTGRES_PORT: "5432"
+        POSTGRES_USER: sfi-website
