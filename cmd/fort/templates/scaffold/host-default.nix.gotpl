@@ -98,7 +98,8 @@
     cluster = "{{ .Hostname }}";
   };
 
-  # Watch main; a changed host config lands within ~6h — or now, via
+  # Watch main (minutely gate, rebuild only when the closure inputs
+  # changed); a changed host config lands within minutes — or now, via
   # `sudo sfi-nixos-rebuild` (#93).
   sfi.auto-rebuild.enable = true;
   sfi.auto-rebuild.repoUrl = "{{ .RepoURL }}"; # the estate (estate.toml): what the gate watches and the rebuild clones
