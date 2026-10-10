@@ -9,8 +9,9 @@ is the one tool that moves a fort through its life. There is no playbook,
 no console step, no host shell in the happy path.
 
 ```
-just <verb> …          # wrappers for the common ones (scaffold, preview, provision, iac-drift)
-go run ./cmd/fort <verb> …     # every verb
+fort <verb> …                  # every verb, on an operator machine (nix profile install <estate>/nixos#fort)
+go run ./cmd/fort <verb> …     # every verb, from a checkout of this repo
+just <verb> …                  # the estate's own verbs, which are not the CLI: fetch-kubeconfig, updatekeys (init.md)
 ```
 
 Two shapes, one table apart: a fort with a `[cluster]` table is a flux
@@ -106,9 +107,8 @@ the host side.
 - **A provider-side edit** (firewall rule, DNS record, a resize): change
   the program or the manifest, `fort preview <host>` to read the diff, PR,
   merge, `fort provision <host>` to apply, commit the state.
-- **Drift:** `just iac-drift` = `fort preview --all --refresh
-  --expect-no-changes`, one `OK` / `DRIFT` / `FAILED` / `PENDING` line per
-  stack. `PENDING` means state without a manifest: a dismantle merged and
+- **Drift:** `fort preview --all --refresh --expect-no-changes`, one
+  `OK` / `DRIFT` / `FAILED` / `PENDING` line per stack. `PENDING` means state without a manifest: a dismantle merged and
   `fort destroy` has not run. The `--refresh` block above the program diff
   compares the provider with the *checkpoint*, not the program — provision-time
   outputs (status, disks, firewall devices) look stale there until a

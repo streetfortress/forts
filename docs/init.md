@@ -15,6 +15,8 @@ every file that exists.
 ```
 ● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), the hubs by role (if any)
 ● README.md                       the layout and the first fort
+● justfile                        the estate's own verbs, which are not the CLI: fetch-kubeconfig (one fort's
+                                  read-only ops kubeconfig) and updatekeys (re-encrypt every sops file)
 ● .sops.yaml                      the flux rules: provisioning/, the shared infrastructure rule,
                                   the `# fort-managed` marker fort mint appends cluster recipients under
 ● nixos/.sops.yaml                the per-host rules: the catch-all with the admins; mint adds a block per fort above it

@@ -198,6 +198,7 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
 		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, hubs",
 		"README.md":                       "the estate's README: the layout, the first fort",
+		"justfile":                        "the estate's own verbs, which are not the CLI: fetch-kubeconfig, updatekeys",
 		".gitignore":                      "",
 		".sops.yaml":                      "the flux rules: provisioning/, the shared infrastructure rule (+ fort-managed cluster recipients)",
 		"nixos/.sops.yaml":                "the per-host rules: the catch-all; fort mint adds a block per fort",

@@ -26,7 +26,7 @@ func TestRenderInit(t *testing.T) {
 	for _, f := range files {
 		m[f.path] = string(f.content)
 	}
-	for _, p := range []string{"estate.toml", "README.md", ".gitignore", ".sops.yaml", "nixos/.sops.yaml", "nixos/flake.nix", "nixos/certs/README.md",
+	for _, p := range []string{"estate.toml", "README.md", "justfile", ".gitignore", ".sops.yaml", "nixos/.sops.yaml", "nixos/flake.nix", "nixos/certs/README.md",
 		"forts/.gitkeep", "nixos/hosts/.gitkeep", "nixos/secrets/.gitkeep", "mesh/peers.json", "provisioning/README.md", "provisioning/pulumi/Pulumi.yaml", "provisioning/pulumi/state/.gitkeep",
 		"flux/apps/.gitkeep", "flux/clusters/.gitkeep", "flux/infrastructure/controllers/kustomization.yaml", "flux/infrastructure/configs/kustomization.yaml", ".gitea/workflows/checks.yaml"} {
 		if _, ok := m[p]; !ok {
@@ -71,6 +71,20 @@ func TestRenderInit(t *testing.T) {
 	}
 	if !strings.Contains(m["provisioning/pulumi/Pulumi.yaml"], "binary: fort-pulumi") {
 		t.Errorf("Pulumi.yaml:\n%s", m["provisioning/pulumi/Pulumi.yaml"])
+	}
+	// The justfile holds the estate's own verbs and no wrapper for the
+	// CLI: a fresh estate does not vendor this source, so a `go run
+	// ./cmd/fort` recipe would name a path that is not there (forts#86).
+	// fetch-kubeconfig reads the rendered client config, not the manifest
+	// path an older estate used.
+	if !strings.Contains(m["justfile"], "\nfetch-kubeconfig host:\n") || !strings.Contains(m["justfile"], "\nupdatekeys:\n") {
+		t.Errorf("justfile recipes:\n%s", m["justfile"])
+	}
+	if strings.Contains(m["justfile"], "go run ./cmd/fort") || strings.Contains(m["justfile"], "provisioning/forts/") {
+		t.Errorf("justfile:\n%s", m["justfile"])
+	}
+	if !strings.Contains(m["justfile"], "-F mesh/ssh_config") {
+		t.Errorf("fetch-kubeconfig must read mesh/ssh_config:\n%s", m["justfile"])
 	}
 	// no hub: the layer has no push targets and no log shipper
 	if strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "remoteWrite") || strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "fluent-bit") {
