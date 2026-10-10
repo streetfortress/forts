@@ -16,6 +16,22 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # The closure of the framework pin comes from the runner's own cache
+    # server, not from cache.nixos.org on every push (forts#75). act_runner
+    # starts a fresh job container per run, so nothing in /nix survives a
+    # run. What survives is one actions/cache entry that holds a Nix
+    # *binary cache* directory — narinfo and nar files, which are ordinary
+    # files a tar can carry. The store itself is never in the tar: nix
+    # reads the restored directory as a substituter and imports only the
+    # paths this run asks for, so no restore has to reproduce
+    # /nix/store's ownership or its read-only paths.
+    env:
+      # priority 10 wins against cache.nixos.org's 40, so a path the cache
+      # holds never goes over the WAN. trusted=true accepts the unsigned
+      # narinfo that `nix copy` writes when no signing key exists; the
+      # entry is private to this repository, and only its own runs write it.
+      NIX_CONFIG: |
+        extra-substituters = file:///nix-closure-cache?trusted=true&priority=10
     steps:
       - uses: actions/checkout@v6
 
@@ -24,6 +40,20 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: v4.1.3
+
+      - name: Restore the closure of the framework pin
+        id: closure
+        uses: actions/cache@v4
+        with:
+          path: /nix-closure-cache
+          key: nix-closure-v2-${{ "{{" }} hashFiles('nixos/flake.lock') {{ "}}" }}
+          # A moved pin restores the previous cache and fetches the delta.
+          restore-keys: nix-closure-v2-
+
+      - name: The cache directory exists before nix reads it
+        # nix refuses a file:// substituter whose directory is absent, and
+        # a full miss restores nothing.
+        run: mkdir -p /nix-closure-cache
 
       - name: The gate (fort check --all)
         env:
@@ -58,3 +88,21 @@ jobs:
             echo
           done
           exit "$fail"
+
+      - name: Refill the cache with what this run used
+        # An exact hit refills nothing: the bulk is nixpkgs, and nixpkgs
+        # moves only when nixos/flake.lock moves. A moved lock, or no
+        # cache, writes the directory again from the store, so the cache
+        # holds this closure and no path of an older one.
+        if: steps.closure.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf /nix-closure-cache
+          mkdir -p /nix-closure-cache
+          # Every eval writes .drv files, and nix substitutes none of them:
+          # they were 4526 of the 5428 paths in the first entry, for 9MB of
+          # its 625MB. The gain is the file count, not the bytes — the copy,
+          # the tar and the restore each handle 902 paths instead of 5428.
+          nix path-info --all | grep -v '\.drv$' \
+            | xargs nix copy --to "file:///nix-closure-cache?compression=zstd"
+          du -sh /nix-closure-cache

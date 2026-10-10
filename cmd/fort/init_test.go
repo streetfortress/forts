@@ -69,6 +69,12 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "${{ gitea.actor }}") || !strings.Contains(m[".gitea/workflows/checks.yaml"], "helm registry login gitea.zen.lofi") {
 		t.Errorf("workflow:\n%s", m[".gitea/workflows/checks.yaml"])
 	}
+	// The cache key is a live workflow expression, not the escaping that
+	// renders it: the gate restores the closure of the pin it reads from
+	// nixos/flake.lock (forts#75).
+	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "key: nix-closure-v2-${{ hashFiles('nixos/flake.lock') }}") {
+		t.Errorf("workflow cache key:\n%s", m[".gitea/workflows/checks.yaml"])
+	}
 	if !strings.Contains(m["provisioning/pulumi/Pulumi.yaml"], "binary: fort-pulumi") {
 		t.Errorf("Pulumi.yaml:\n%s", m["provisioning/pulumi/Pulumi.yaml"])
 	}
