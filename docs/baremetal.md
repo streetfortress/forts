@@ -133,8 +133,9 @@ interim has served through the name.
    and the host does not need it again. With a provider this is `fort
    provision`'s release step.
 7. **Verify** from a mesh member: `ssh deployer@<mesh_ip>`, `sudo
-   sfi-kubectl get nodes` if the host carries ops/kubectl.nix, `kubectl
-   get gitrepository -n flux-system` through the ops-ro kubeconfig.
+   sfi-admin-kubectl get nodes` if the host carries
+   ops/admin-kubectl.nix, `kubectl get gitrepository -n flux-system`
+   through the ops-ro kubeconfig.
 
 Nothing is registered anywhere: no stack, no `Pulumi.<host>.yaml`, no
 state PR. `git log` on the manifest is the provenance of the provision.

@@ -1,8 +1,8 @@
-# sfi-kubectl: the ADMIN rung as a verb, for hosts that opt in.
+# sfi-admin-kubectl: the ADMIN rung as a verb, for hosts that opt in.
 #
-#   sudo sfi-kubectl delete cluster -n forts postgres
-#   sudo sfi-kubectl get pvc -A
-#   sudo sfi-kubectl edit helmrelease symbology -n symbology
+#   sudo sfi-admin-kubectl delete cluster -n forts postgres
+#   sudo sfi-admin-kubectl get pvc -A
+#   sudo sfi-admin-kubectl edit helmrelease symbology -n symbology
 #
 # The verb carries its own editor. `kubectl edit` runs KUBE_EDITOR, else
 # EDITOR, else `vi`, and a fort has none of the three: hardened.nix
@@ -26,26 +26,26 @@
 # the audit — there is no allowlist here and none is claimed.
 { config, lib, pkgs, ... }:
 let
-  cfg = config.sfi.ops.kubectl;
+  cfg = config.sfi.ops.admin-kubectl;
 in
 {
   imports = [ ./ops-commands.nix ];
 
-  options.sfi.ops.kubectl.enable = lib.mkOption {
+  options.sfi.ops.admin-kubectl.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "Expose the admin kubeconfig as `sudo sfi-kubectl <args…>` — the ADMIN rung as a verb. Disposable forts only.";
+    description = "Expose the admin kubeconfig as `sudo sfi-admin-kubectl <args…>` — the ADMIN rung as a verb. Disposable forts only.";
   };
 
   config = lib.mkIf cfg.enable {
-    sfi.ops.commands.kubectl = {
+    sfi.ops.commands.admin-kubectl = {
       description = "ADMIN RUNG: kubectl with root's kubeconfig, arguments passed through unchanged — this host is disposable";
       runtimeInputs = [ pkgs.kubectl ];
       script = ''
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
         export KUBE_EDITOR=${lib.getExe' pkgs.vim "vi"}
         if [ "$#" -eq 0 ]; then
-          echo "usage: sudo sfi-kubectl <kubectl arguments>   (admin kubeconfig; this host is disposable)" >&2
+          echo "usage: sudo sfi-admin-kubectl <kubectl arguments>   (admin kubeconfig; this host is disposable)" >&2
           echo "       'edit' opens vi; flux reverts an edit of an object it owns (#554)" >&2
           exit 64
         fi

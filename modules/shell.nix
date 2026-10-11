@@ -21,10 +21,10 @@
 # tick and the vi mode showed no indicator (#576).
 #
 # The bash branch stays, reduced, for the contexts that are still bash:
-# `sudo sfi-root` execs `bash -l` (ops/root.nix), and a person runs `bash`
-# at a zsh prompt. Its prompt, keys, fzf and aliases work; the tick and the
-# mode indicator cannot, for reasons that belong to the shell and not to
-# this module (the bash block below says which).
+# `sudo sfi-admin-shell` execs `bash -l` (ops/admin-shell.nix), and a
+# person runs `bash` at a zsh prompt. Its prompt, keys, fzf and aliases
+# work; the tick and the mode indicator cannot, for reasons that belong
+# to the shell and not to this module (the bash block below says which).
 #
 # Why nix and not a runtime checkout (#557, sfi/.fortfiles#4): a cluster
 # fort has no Home Manager user and clones nothing, so nix content is the
@@ -41,8 +41,8 @@
 # (zvm_after_init_commands), then the Ctrl-R widget that starts with an
 # empty query.
 #
-# The guard is the import, like modules/ops/root.nix: a host gets this
-# only by naming the module and setting enable. The estate's dev role
+# The guard is the import, like modules/ops/admin-shell.nix: a host gets
+# this only by naming the module and setting enable. The estate's dev role
 # enables it for every dev fort; a cluster fort's own default.nix opts in (staging
 # does). sfi-prod-439bf72 imports it too: #558 weighed the cost against the
 # posture of production.nix, settled the zsh question above, and a person
@@ -319,10 +319,10 @@ in
     programs.zsh.enable = true;
     users.defaultUserShell = pkgs.zsh;
 
-    # root keeps bash, deliberately: `sudo sfi-root` execs `bash -l`
-    # (ops/root.nix), and a fort's break-glass shell must not depend on the
-    # ergonomics module. nixpkgs sets root's shell with mkDefault, so this
-    # assignment wins.
+    # root keeps bash, deliberately: `sudo sfi-admin-shell` execs
+    # `bash -l` (ops/admin-shell.nix), and a fort's break-glass shell
+    # must not depend on the ergonomics module. nixpkgs sets root's shell
+    # with mkDefault, so this assignment wins.
     users.users.root.shell = pkgs.bashInteractive;
 
     # zsh: the prompt of the person at a pane. The order is the point, and
@@ -332,7 +332,7 @@ in
         source ${aliases}
       '';
 
-    # bash: the reduced prompt, for a bash context — `sudo sfi-root`'s
+    # bash: the reduced prompt, for a bash context — `sudo sfi-admin-shell`'s
     # `bash -l`, a `bash` run at a zsh prompt, an account that pins bash.
     # The prompt, the vi keys, fzf and the aliases all work. Two facts of
     # the zsh prompt cannot follow them here (#576 measured both):

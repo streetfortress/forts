@@ -1,8 +1,8 @@
-# sfi-root: a root shell for deployer, for hosts that opt in — rung 3
-# through the front door, on the HOST rather than the cluster
-# (ops/kubectl.nix is the same rung for the cluster).
+# sfi-admin-shell: a root shell for deployer, for hosts that opt in —
+# rung 3 through the front door, on the HOST rather than the cluster
+# (ops/admin-kubectl.nix is the same rung for the cluster).
 #
-#   sudo sfi-root            # root login shell, listed in `sfi-ops`
+#   sudo sfi-admin-shell     # root login shell, listed in `sfi-ops`
 #   sudo <anything>          # the rule is ALL, NOPASSWD
 #
 # The framework's rule (ops-commands.nix) is that verbs nudge machinery
@@ -25,15 +25,15 @@
 # be a lockout on every other fort, not a control.
 { config, lib, pkgs, ... }:
 let
-  cfg = config.sfi.ops.root;
+  cfg = config.sfi.ops.admin-shell;
 in
 {
   imports = [ ./ops-commands.nix ];
 
-  options.sfi.ops.root.enable = lib.mkOption {
+  options.sfi.ops.admin-shell.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "Grant deployer unrestricted NOPASSWD sudo and a `sudo sfi-root` shell — the ADMIN rung on the host. For a declared window only.";
+    description = "Grant deployer unrestricted NOPASSWD sudo and a `sudo sfi-admin-shell` shell — the ADMIN rung on the host. For a declared window only.";
   };
 
   config = lib.mkIf cfg.enable {
@@ -42,7 +42,7 @@ in
       commands = [{ command = "ALL"; options = [ "NOPASSWD" ]; }];
     }];
 
-    sfi.ops.commands.root = {
+    sfi.ops.commands.admin-shell = {
       description = "ADMIN RUNG: a root login shell — this host is in a declared break-glass window (sudo is ALL for deployer)";
       script = ''
         echo "root shell on $(${pkgs.nettools}/bin/hostname) — every command here is outside git; sudo has logged this invocation" >&2

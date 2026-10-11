@@ -54,15 +54,15 @@
 # that exercises them, `sudo sfi-challenge` — it runs the ceremony,
 # prints success or fail, and changes nothing. Gating a real verb is a
 # separate decision per verb, and #256 keeps the first two candidates:
-#   - sfi-kubectl — arbitrary kubectl on the admin kubeconfig, with no
-#     allowlist. The strongest candidate.
+#   - sfi-admin-kubectl — arbitrary kubectl on the admin kubeconfig,
+#     with no allowlist. The strongest candidate.
 #   - sfi-nixos-rebuild --ref <branch> — a branch is an unvetted closure
 #     and every dev fort can push one. That argument path only: --from
 #     <ip> with main is the path a stranded fort walks, and a gate there
 #     would lock the recovery behind the thing to recover.
 # Two verbs that look like candidates and are not:
-#   - sfi-root — the module that declares it also hands deployer ALL
-#     NOPASSWD, so a person the gate stops types `sudo bash`. A gate
+#   - sfi-admin-shell — the module that declares it also hands deployer
+#     ALL NOPASSWD, so a person the gate stops types `sudo bash`. A gate
 #     there would read as a control and be none.
 #   - sfi-nixos-rollback — its own header already answers #256: it
 #     narrows a menu of states git produced, it does not widen reach.

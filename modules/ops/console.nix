@@ -31,11 +31,11 @@
 #     rung 2 (the pinned NOPASSWD sfi-* verbs, ops/ops-commands.nix).
 #     sfi-nixos-rollback chooses among generations git already produced;
 #     it never makes a new state.
-#   - root keeps no password. The ALL-sudo window is still ops/root.nix,
-#     opt-in for a declared window.
+#   - root keeps no password. The ALL-sudo window is still
+#     ops/admin-shell.nix, opt-in for a declared window.
 #
-# The guard is the import, as in ops/root.nix: a host gets this only by
-# naming the module in its own hosts/<host>/default.nix and setting
+# The guard is the import, as in ops/admin-shell.nix: a host gets this
+# only by naming the module in its own hosts/<host>/default.nix and setting
 # enable. EVERY fort does, by default: the host shapes `fort scaffold`
 # renders import and enable it (sfi/forts#24), and a host that wants no
 # door takes the two lines out. The account is ops/deployer.nix's, which
