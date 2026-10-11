@@ -18,9 +18,11 @@
 #
 # THIS GRANTS NO NEW REACH. It gives the rungs that already exist a
 # second door:
-#   - sshd refuses the password. common.nix sets
-#     PasswordAuthentication = false and PermitRootLogin = "no", so the
-#     credential works at a getty and nowhere else.
+#   - sshd refuses the password on both of its paths. common.nix sets
+#     PasswordAuthentication = false, KbdInteractiveAuthentication =
+#     false and PermitRootLogin = "no", so the credential works at a
+#     getty and nowhere else. The second setting is the PAM path, which
+#     reads the same hash and which NixOS leaves on by default (#78).
 #   - The console is already behind one authentication: Lish needs the
 #     Linode account, `virsh console` needs SSH to soundship. This is the
 #     second factor of a path that has one, not a new front door.

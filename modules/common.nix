@@ -31,11 +31,19 @@
 
 
   # OpenSSH: key-only auth, no root login.
+  #
+  # A password reaches sshd by two paths, and both must say no. The
+  # second one is why KbdInteractiveAuthentication is here (#78):
+  # NixOS defaults it to true and defaults UsePAM to true, and PAM's
+  # keyboard-interactive path reads the same /etc/shadow hash that
+  # ops/console.nix installs for `deployer`. PasswordAuthentication
+  # alone therefore left the console password good over the mesh.
   services.openssh = {
     enable = true;
     settings = {
       PermitRootLogin = "no";
       PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
     };
   };
 

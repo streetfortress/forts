@@ -70,6 +70,20 @@ jobs:
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
+      - name: sshd refuses a password on both of its paths
+        # The rendered config, not the option. NixOS defaults
+        # KbdInteractiveAuthentication to yes and UsePAM to yes, and PAM
+        # reads the same /etc/shadow hash that ops/console.nix installs for
+        # `deployer` (forts#78). A regression makes the console password
+        # good over the mesh, so CI reads the file sshd gets.
+        run: |
+          set -euo pipefail
+          conf=$(nix build --no-link --print-out-paths \
+            '.#nixosConfigurations.plain-fort.config.environment.etc."ssh/sshd_config".source')
+          grep -qx 'PasswordAuthentication no' "$conf"
+          grep -qx 'KbdInteractiveAuthentication no' "$conf"
+          grep -qx 'PermitRootLogin no' "$conf"
+
       - name: An estate that fort init created evaluates against this checkout
         run: tests/init-estate.sh
 
