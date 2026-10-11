@@ -19,6 +19,31 @@ spec:
         kind: HelmRepository
         name: traefik
         namespace: flux-system
+  # The traefik chart ships its 25 CRDs in the chart's crds/ directory, which
+  # helm installs once and never touches again. Flux makes that worse by
+  # default: spec.install.crds defaults to Create and spec.upgrade.crds
+  # defaults to Skip, so an upgrade neither replaces an existing CRD nor
+  # installs a new one — a fort keeps the schema of the chart version that
+  # built it, and the chart version in this file stops describing the cluster
+  # after the first bump (sfi/forts#116). CreateReplace on both actions gives
+  # the chart version its meaning back: flux applies all 25 CRDs on every
+  # upgrade. CreateReplace never deletes, so a CRD that the chart drops stays
+  # in the cluster.
+  #
+  # Traefik is the only chart this tree pins that ships a crds/ directory.
+  # Every other chart here renders its CRDs as templates (cert-manager,
+  # cloudnative-pg, plugin-barman-cloud, flux-operator), or takes them from a
+  # CRD-only release (prometheus-operator-crds, with crds.enabled=false on
+  # the stack chart), or ships none. The Gateway API CRDs have no upstream
+  # chart, so ../gateway-api keeps the vendored bundle. The test is two
+  # commands: `helm template <r> <chart> --version <v>` against the same
+  # command with --include-crds; a larger second count means the chart needs
+  # these two keys. sfi/knowledge config-management/crd-schema-ownership.md
+  # says why.
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
   values:
     providers:
       kubernetesGateway:
