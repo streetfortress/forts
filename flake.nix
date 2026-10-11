@@ -99,6 +99,14 @@
               makeWrapper ${fort-unwrapped}/bin/$b $out/bin/$b \
                 --prefix PATH : ${lib.makeBinPath (toolset pkgs)}
             done
+            # The completion scripts (forts#113), in the two directories
+            # the shells already read: compinit walks share/zsh/site-
+            # functions of every profile, bash-completion loads
+            # share/bash-completion/completions/<command> on demand. Both
+            # call `fort __complete`, so they ride with the binary and
+            # cannot be a version apart from it.
+            install -Dm444 ${./completions/_fort} $out/share/zsh/site-functions/_fort
+            install -Dm444 ${./completions/fort.bash} $out/share/bash-completion/completions/fort
           '';
         default = fort;
       });

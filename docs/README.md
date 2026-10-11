@@ -185,6 +185,32 @@ verbs: it is pulumi's own `--yes --non-interactive`, and the merge that
 put the manifest on main is the confirmation. Without a TTY and without
 `--yes` the verb refuses up front, before it stages anything.
 
+## Completion
+
+The `fort` package carries a completion script for zsh
+(`share/zsh/site-functions/_fort`, which `compinit` reads) and one for
+bash (`share/bash-completion/completions/fort`, loaded on demand).
+Install the package and press `<TAB>`; from a checkout, `source
+completions/fort.bash`, or put `completions/` on `$fpath` before
+`compinit`.
+
+Neither script knows anything: both call `fort __complete`, a hidden
+verb that prints the candidates for the word under the cursor
+(`cmd/fort/complete.go`). The candidate set is **per verb**, because the
+verbs do not want the same list — `destroy` wants a stack whose manifest
+is gone, `wg-conf` wants a mesh member, which `macmini` is and never has
+a manifest, `add` and `seed` want a fort with a `[cluster]` table, and
+`b2-key pv` wants a host whose PV key is not `fort mint`'s to create. The
+completion reads the tree only: it never `git fetch`es, so `destroy`'s
+candidates are right except between the merge of a dismantle PR and the
+pull.
+
+Three copies of the verb list now exist — the dispatch switch, `usage()`
+and the completion table — so `cmd/fort/complete_test.go` asserts that
+the table equals the switch, and that each verb's flags equal the ones
+its `flag.FlagSet` registers. A verb or a flag added to one and not the
+other fails `go test`.
+
 ## Pages
 
 - [manifest](manifest.md) — the fort's declaration: neutral intent + one provider table

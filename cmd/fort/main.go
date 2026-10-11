@@ -72,6 +72,10 @@ func main() {
 		err = dismantle(os.Args[2:])
 	case "destroy":
 		err = destroy(os.Args[2:])
+	case completeVerb:
+		// The shell's callback, not an operator's verb: hidden from
+		// usage(), and it answers nothing when it cannot (complete.go).
+		err = complete(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)

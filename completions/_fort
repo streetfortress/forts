@@ -1,0 +1,41 @@
+#compdef fort
+# _fort — zsh completion for the fort CLI (forts#113).
+#
+# The script holds no knowledge of its own. It sends the words after
+# `fort` and the position of the cursor to `fort __complete`, which prints
+# one candidate per line and a last line that starts with ':' — the
+# directive. A new verb, a new flag or a new candidate set is a change in
+# cmd/fort/complete.go alone; this file never learns it.
+#
+# Install: the fort package puts this in share/zsh/site-functions, which
+# compinit reads. By hand: put the file on $fpath before compinit runs.
+
+_fort() {
+  local -a lines
+  local directive=plain
+
+  # zsh counts words from 1 and words[1] is `fort`, so the index
+  # __complete wants — 0-based, over the words after the command — is
+  # CURRENT-2. The current word is included and is empty on a fresh one.
+  lines=( ${(f)"$(fort __complete $(( CURRENT - 2 )) "${(@)words[2,CURRENT]}" 2>/dev/null)"} )
+
+  if [[ ${lines[-1]-} == :* ]]; then
+    directive=${lines[-1]#:}
+    lines=( ${(@)lines[1,-2]} )
+  fi
+
+  case $directive in
+    files) _files; return;;
+    dirs)  _files -/; return;;
+  esac
+  (( $#lines )) || return 1
+  # nospace: the candidate is a prefix the operator finishes (--hub
+  # monitoring=), so the cursor stays on it.
+  if [[ $directive == nospace ]]; then
+    compadd -S '' -- "${(@)lines}"
+  else
+    compadd -- "${(@)lines}"
+  fi
+}
+
+_fort "$@"
