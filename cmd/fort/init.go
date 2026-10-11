@@ -207,7 +207,7 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 		"mesh/peers.json":                 "empty; fort mint adds the first peer",
 		"provisioning/README.md":          "what secrets.yaml holds",
 		"provisioning/pulumi/Pulumi.yaml": "the project file: the program is fort-pulumi, beside fort",
-		".gitea/workflows/checks.yaml":    "the gate: fort check --all + nix eval of every host",
+		".gitea/workflows/checks.yaml":    "the gate: fort check --all, fort crd-diff, nix eval of every host",
 	}
 	var out []scaffoldFile
 	err := fs.WalkDir(initTemplates, "templates/init", func(path string, d fs.DirEntry, err error) error {

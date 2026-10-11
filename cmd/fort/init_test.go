@@ -76,6 +76,15 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "key: nix-closure-v2-${{ hashFiles('nixos/flake.lock') }}") {
 		t.Errorf("workflow cache key:\n%s", m[".gitea/workflows/checks.yaml"])
 	}
+	// The chart-bump detector (forts#117) is the third thing the gate
+	// does, and it reads one commit of the base branch. The fetch and
+	// the verb travel together: the verb reports every release as new
+	// without it.
+	for _, want := range []string{"git fetch --no-tags --depth=1 origin main", "nix run ./nixos#fort -- crd-diff"} {
+		if !strings.Contains(m[".gitea/workflows/checks.yaml"], want) {
+			t.Errorf("the workflow does not carry %q:\n%s", want, m[".gitea/workflows/checks.yaml"])
+		}
+	}
 	if !strings.Contains(m["provisioning/pulumi/Pulumi.yaml"], "binary: fort-pulumi") {
 		t.Errorf("Pulumi.yaml:\n%s", m["provisioning/pulumi/Pulumi.yaml"])
 	}

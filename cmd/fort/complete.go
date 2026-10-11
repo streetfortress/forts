@@ -149,10 +149,14 @@ var completions = map[string]verbSpec{
 	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
 	"b2-buckets":       {flags: []flagSpec{writeFlag}},
 	"check":            {flags: []flagSpec{{name: "all"}, chartDirFl}, args: []candidates{manifests}, repeat: true},
-	"ssh-config":       {flags: []flagSpec{writeFlag}},
-	"wg-conf":          {args: []candidates{meshMembers}},
-	"dismantle":        {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
-	"destroy":          {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
+	// crd-diff takes no positional: it reads every HelmRelease of the
+	// tree, and --base is a git revision, which this file will not go
+	// to git for (the callback runs per <TAB>).
+	"crd-diff":   {flags: []flagSpec{{name: "base", kind: opaque}, {name: "chart-cache", kind: dirsOnly}}},
+	"ssh-config": {flags: []flagSpec{writeFlag}},
+	"wg-conf":    {args: []candidates{meshMembers}},
+	"dismantle":  {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
+	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
 }
 
 // complete answers one <TAB>:

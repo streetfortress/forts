@@ -29,7 +29,7 @@ changes hands ([manifest.md](manifest.md)).
 |---|---|---|
 | **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
 | **apply** | [`provision`](provision.md), [`adopt`](provision.md#adopt), [`destroy`](destroy.md) | the provider (Linode, or soundship's libvirt), through pulumi with inherited stdio: you read the preview and confirm. |
-| **read** | `check`, [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
+| **read** | `check`, [`crd-diff`](crd-diff.md), [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `crd-diff` compares the `crds/` directory of both chart versions on a bump (CI runs it too); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
 
 Author verbs never overwrite: scaffold keeps a file that exists, add only
 creates files and appends list entries, seed adds missing keys and never
@@ -115,7 +115,9 @@ the host side.
   `pulumi refresh` is committed; only the program diff counts.
 - **A new workload:** `fort add` → `fort seed` → `fort check` → PR, as at
   the first provision. Replacing a chart version is an edit to `repository.yaml`
-  (renovate proposes it; the gate checks the new contract).
+  (renovate proposes it; the gate checks the new contract, and
+  [`crd-diff`](crd-diff.md) compares the chart's `crds/` directory across
+  the bump).
 - **OS updates** are pull-based on the host (`auto-rebuild`): a merge to
   main is the deploy. The CLI is not involved.
 
@@ -228,6 +230,7 @@ other fails `go test`.
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
+- [crd-diff](crd-diff.md) — the chart-bump detector: the `crds/` directory of both chart versions, and who owns it
 - [destroy](destroy.md) — the side-effects half, gated on the merge
 - [fort configuration contracts](fort-configuration-contracts.md) — the
   contract schema, overlays, the gate, chart-author guidelines (the #144

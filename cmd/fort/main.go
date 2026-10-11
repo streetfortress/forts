@@ -64,6 +64,8 @@ func main() {
 		err = b2BucketsCmd(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
+	case "crd-diff":
+		err = crdDiff(os.Args[2:])
 	case "ssh-config":
 		err = sshConfigCmd(os.Args[2:])
 	case "wg-conf":
@@ -100,7 +102,7 @@ func usage() {
   keys    b2-key (the B2 credentials no other verb creates),
           console-password (the fort's getty password)
   apply   provision, adopt, destroy
-  read    check, preview, wg-conf
+  read    check, crd-diff, preview, wg-conf
 
   init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--write]
       create an estate: render into the root of a git checkout the files
@@ -316,6 +318,26 @@ func usage() {
       claims. Strict on
       every fort; exits nonzero on any error; annotates for CI when
       GITEA_ACTIONS is set.
+
+  crd-diff [--base <rev>] [--chart-cache <dir>]
+      the chart-bump detector (#117). For every HelmRelease in the tree
+      whose chart.spec.version differs from the one --base holds
+      (origin/main by default), pull both chart versions and compare the
+      chart's own crds/ directory: every file that differs, every file
+      the new version adds, every file it removes, and the diff of all
+      of them. Helm never touches crds/ after the install, and the
+      helm-controller defaults spec.upgrade.crds to Skip, so a bump can
+      move the schema of every custom object in the cluster and say so
+      nowhere but one line of the upstream release notes. The verdict
+      reads the release's own two keys (#116): CreateReplace is a
+      warning the reviewer must read, anything else is an error,
+      because the cluster keeps the old schema. A bump that leaves an
+      install-only crds/ unchanged moves no schema, and warns anyway
+      while the policy is not CreateReplace: the next bump that does
+      move one lands nothing. A release with no crds/ directory on
+      either version is reported and passes. CI runs it on every push,
+      after a depth-1 fetch of the base branch; annotates when
+      GITEA_ACTIONS is set. Writes nothing.
 
   ssh-config [--write]
       render the client side of the mesh from the tree (#434):
