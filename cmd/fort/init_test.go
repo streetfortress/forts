@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -197,5 +198,44 @@ func TestInitCmd(t *testing.T) {
 	}
 	if err := initCmd([]string{"--name", "x"}); err == nil {
 		t.Error("init without --repo and --admin must refuse")
+	}
+}
+
+// The vendored Gateway API bundle carries its version twice: the marker
+// in the kustomization.yaml header, which renovate.json's customManager
+// moves, and the gateway.networking.k8s.io/bundle-version stamp on every
+// object of crds.yaml, which only a re-curl of standard-install.yaml
+// moves (forts#118). Renovate moves the marker alone, so this test is
+// what asks for the curl — the alternative is a documented manual step
+// whose failure mode is a person forgetting.
+func TestGatewayAPIBundlePin(t *testing.T) {
+	files, err := renderInit(testInitView)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]string{}
+	for _, f := range files {
+		m[f.path] = string(f.content)
+	}
+	const dir = "flux/infrastructure/controllers/gateway-api/"
+	marker := regexp.MustCompile(`(?m)^# Current version: (v\S+)$`).FindStringSubmatch(m[dir+"kustomization.yaml"])
+	if marker == nil {
+		t.Fatalf("%skustomization.yaml carries no `# Current version: vX.Y.Z` line, which is the one marker renovate.json reads:\n%s",
+			dir, m[dir+"kustomization.yaml"])
+	}
+	want := marker[1]
+	// Every object of the standard channel is stamped: the 10 CRDs, and
+	// the ValidatingAdmissionPolicy with its binding. The floor catches a
+	// crds.yaml that is truncated or from the experimental channel.
+	stamps := regexp.MustCompile(`(?m)^\s+gateway\.networking\.k8s\.io/bundle-version: (v\S+)$`).FindAllStringSubmatch(m[dir+"crds.yaml"], -1)
+	if len(stamps) < 10 {
+		t.Fatalf("%scrds.yaml holds %d bundle-version stamps; the standard channel stamps at least 10", dir, len(stamps))
+	}
+	for _, s := range stamps {
+		if s[1] != want {
+			t.Fatalf("%skustomization.yaml pins %s and crds.yaml is stamped %s. Fetch the bundle the marker names:\n"+
+				"  curl -sL -o cmd/fort/templates/init/%scrds.yaml https://github.com/kubernetes-sigs/gateway-api/releases/download/%s/standard-install.yaml",
+				dir, want, s[1], dir, want)
+		}
 	}
 }

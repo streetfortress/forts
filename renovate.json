@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>sfi/renovate-config"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The vendored Gateway API bundle (forts#118). No manager reads a raw CRD file, so the pin ages with no signal; the marker in the kustomization.yaml header is the one place the version is written as text. Renovate moves the marker. It does not download standard-install.yaml — a person runs the curl in the header, in the same PR, and TestGatewayAPIBundlePin keeps the PR red until that happens.",
+      "managerFilePatterns": ["/^cmd/fort/templates/init/flux/infrastructure/controllers/gateway-api/kustomization\\.yaml$/"],
+      "matchStrings": ["# Current version: (?<currentValue>v\\S+)"],
+      "depNameTemplate": "kubernetes-sigs/gateway-api",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Stable Gateway API releases only: upstream also publishes monthly-* and -rc.* refs, and the fleet must take neither.",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["kubernetes-sigs/gateway-api"],
+      "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+$/"
+    }
+  ]
+}
