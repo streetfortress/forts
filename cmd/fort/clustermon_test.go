@@ -102,14 +102,18 @@ func TestServesFindings(t *testing.T) {
 	if err := est.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	hosts := map[string]manifest.Host{"luxor": {MeshIP: "10.1.0.5", Cluster: &manifest.ClusterSpec{}}, "zenbook": {MeshIP: "10.1.0.4", Cluster: &manifest.ClusterSpec{}}}
+	link := func(name, repo, address string, port int) manifest.Link {
+		return manifest.Link{Name: name, Estate: repo, Address: address, Port: port, PublicKey: testWGPub}
+	}
+	// both hub hosts declare their links ([links.<name>], forts#55)
+	hosts := map[string]manifest.Host{
+		"luxor":   {MeshIP: "10.1.0.5", Cluster: &manifest.ClusterSpec{}, Links: map[string]manifest.Link{"staging": link("staging", "ssh://x/sfi/staging", "10.3.0.5", 51821)}},
+		"zenbook": {MeshIP: "10.1.0.4", Cluster: &manifest.ClusterSpec{}, Links: map[string]manifest.Link{"staging": link("staging", "ssh://x/sfi/staging", "10.3.0.4", 51821), "production": link("production", "ssh://x/sfi/production", "10.4.0.4", 51822)}},
+	}
 	root := t.TempDir()
-	// the hub's tree exists, with the links declared on both hub hosts;
-	// no subscription yet
+	// the hub's tree exists; no subscription yet
 	writeTree(t, root, map[string]string{
 		"flux/apps/luxor/kustomization.yaml": "resources:\n  - sops-canary.yaml\n",
-		"nixos/hosts/luxor/default.nix":      "{ sfi.links.staging = { port = 51821; address = \"10.3.0.5\"; }; }\n",
-		"nixos/hosts/zenbook/default.nix":    "{ sfi.links.staging = { port = 51821; address = \"10.3.0.4\"; };\n  sfi.links.production = { port = 51822; address = \"10.4.0.4\"; }; }\n",
 	})
 	fs := servesFindings(root, est, hosts)
 	if levelsOf(fs) != "error,error" || fs[0].dir != servesPath("luxor", "sfi/infra") || fs[1].dir != servesPath("luxor", "sfi/staging") || !strings.Contains(fs[1].msg, "fort scaffold luxor") {
@@ -143,11 +147,15 @@ func TestServesFindings(t *testing.T) {
 	os.Remove(filepath.Join(root, servesPath("luxor", "sfi/production")))
 	// the network half: zenbook serves production the forge and has no
 	// link to it; luxor serves staging and has one
-	writeTree(t, root, map[string]string{"nixos/hosts/zenbook/default.nix": "{ sfi.links.staging = { port = 51821; address = \"10.3.0.4\"; }; }\n"})
+	zb := hosts["zenbook"]
+	zb.Links = map[string]manifest.Link{"staging": link("staging", "ssh://x/sfi/staging", "10.3.0.4", 51821)}
+	hosts["zenbook"] = zb
 	fs = servesFindings(root, est, hosts)
-	if levelsOf(fs) != "ok,ok,warning" || fs[2].dir != "nixos/hosts/zenbook/default.nix" || !strings.Contains(fs[2].msg, "sfi.links.production") || !strings.Contains(fs[2].msg, "the role forge") {
+	if levelsOf(fs) != "ok,ok,warning" || fs[2].dir != manifest.Path("zenbook") || !strings.Contains(fs[2].msg, "no [links.production]") || !strings.Contains(fs[2].msg, "the role forge") || !strings.Contains(fs[2].msg, "fort link add zenbook ssh://x/sfi/production") {
 		t.Errorf("no link: %v", fs)
 	}
+	zb.Links["production"] = link("production", "ssh://x/sfi/production", "10.4.0.4", 51822)
+	hosts["zenbook"] = zb
 	// the hub named in [hubs.monitoring] and in the serves table has no
 	// manifest: one error from each side
 	delete(hosts, "luxor")
@@ -155,11 +163,11 @@ func TestServesFindings(t *testing.T) {
 	if len(fs) < 2 || fs[0].level != "error" || !strings.Contains(fs[0].msg, manifest.Path("luxor")) || fs[1].level != "error" || !strings.Contains(fs[1].msg, "a serves table names luxor") {
 		t.Errorf("hub without a manifest: %v", fs)
 	}
-	hosts["luxor"] = manifest.Host{MeshIP: "10.1.0.5", Cluster: &manifest.ClusterSpec{}}
+	hosts["luxor"] = manifest.Host{MeshIP: "10.1.0.5", Cluster: &manifest.ClusterSpec{}, Links: map[string]manifest.Link{"staging": link("staging", "ssh://x/sfi/staging", "10.3.0.5", 51821)}}
 	// a second monitoring hub for a second estate: its own serves/ tree
 	two := est
 	two.Serves = map[string][]estate.ServeEntry{estate.RoleMonitoring: {{Fort: "luxor", Estates: []string{"ssh://x/sfi/staging"}}, {Fort: "luxor-b", Estates: []string{"ssh://x/sfi/staging-b"}}}}
-	hosts["luxor-b"] = manifest.Host{MeshIP: "10.1.0.6", Cluster: &manifest.ClusterSpec{}}
+	hosts["luxor-b"] = manifest.Host{MeshIP: "10.1.0.6", Cluster: &manifest.ClusterSpec{}, Links: map[string]manifest.Link{"staging-b": link("staging-b", "ssh://x/sfi/staging-b", "10.5.0.6", 51821)}}
 	fs = servesFindings(root, two, hosts)
 	if levelsOf(fs) != "ok,ok,error" || fs[2].dir != servesPath("luxor-b", "sfi/staging-b") || !strings.Contains(fs[2].msg, "fort scaffold luxor-b") {
 		t.Errorf("second hub: %v", fs)

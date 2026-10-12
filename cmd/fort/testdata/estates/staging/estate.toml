@@ -1,0 +1,11 @@
+# The fixture for the estate a hub links TO (fort link add fetches it):
+# a mesh, an interface of its own, a forge in another estate.
+name = "staging"
+repo = "ssh://git@gitea.zen.lofi:30022/sfi/staging"
+mesh = "10.2.0.0/24"
+interface = "wg-staging"
+
+[hubs.forge]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"
+fort = "forge"
+name = "gitea.zen.lofi"

@@ -112,6 +112,7 @@ var completions = map[string]verbSpec{
 		{name: "forts", kind: opaque},
 		{name: "registry", kind: opaque},
 		{name: "admin", kind: opaque},
+		{name: "operator-key", kind: opaque},
 		writeFlag,
 	}},
 	"scaffold": {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
@@ -157,6 +158,19 @@ var completions = map[string]verbSpec{
 	"wg-conf":    {args: []candidates{meshMembers}},
 	"dismantle":  {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
 	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
+	// The link verbs (#55): a sub-verb word first, then the fort, then
+	// the other estate's git URL, which nothing in the tree can offer.
+	"link": {flags: []flagSpec{
+		{name: "address", kind: opaque},
+		{name: "port", kind: opaque},
+		writeFlag,
+	}, args: []candidates{words("add"), manifests, nil}},
+	"estate": {flags: []flagSpec{writeFlag}, args: []candidates{words("link"), nil}},
+}
+
+// words is a closed positional: the sub-verb words a verb takes.
+func words(w ...string) candidates {
+	return func(*completeCx) []string { return w }
 }
 
 // complete answers one <TAB>:

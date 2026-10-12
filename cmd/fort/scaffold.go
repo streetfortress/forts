@@ -93,6 +93,79 @@ type hostView struct {
 	// (hardened, the mesh, deployer + the ops verbs, the shell; no
 	// k3s/flux/backups) and no fleet surface at all.
 	Plain bool
+	// Links is the manifest's [links.<name>] tables (forts#55): one
+	// sfi.links.<name> block per estate this host is on the mesh of,
+	// and the links module imported. Empty on a host that links
+	// nowhere, which renders nothing — most forts.
+	Links []linkView
+}
+
+// linkView is one [links.<name>] table as links.nix.gotpl renders it:
+// the four facts the module needs at build time (repo, interface, zone,
+// port, address) and the names a comment reads. roles and the secret's
+// name default in modules/links.nix.
+type linkView struct {
+	Name, Ref, Repo, Interface, Zone, Address string
+	Port                                      int
+}
+
+// linkViews is the manifest's links in name order, for the templates.
+func linkViews(entry manifest.Host) []linkView {
+	var out []linkView
+	for _, name := range entry.LinkNames() {
+		l := entry.Links[name]
+		out = append(out, linkView{Name: name, Ref: l.Ref(), Repo: estate.WithGit(l.Estate), Interface: l.InterfaceName(), Zone: l.ZoneName(), Address: l.Address, Port: l.Port})
+	}
+	return out
+}
+
+// linksImport is the import line a host with links carries, as the
+// host templates spell it (nixEnsureImport matches on the module alone).
+const linksImport = "inputs.forts.nixosModules.links       # on the mesh of another estate ([links.<name>] in the manifest)"
+
+// renderLinksBlock is the sfi.links.<name> block(s) for the host's
+// links, as the host templates render them — what `fort link add`
+// appends to a host file that exists, and scaffold's re-run too
+// (ensureLinks), so a fresh host and a hub that gained a link later
+// carry the same text.
+func renderLinksBlock(entry manifest.Host) (string, error) {
+	tpl, err := template.ParseFS(scaffoldTemplates, "templates/scaffold/links.nix.gotpl")
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	if err := tpl.ExecuteTemplate(&b, "links.nix.gotpl", hostView{Links: linkViews(entry)}); err != nil {
+		return "", err
+	}
+	return strings.Trim(b.String(), "\n"), nil
+}
+
+// ensureLinks is the text edit that brings an existing host file up to
+// its manifest's links: the module imported, and one block per link
+// the file does not set yet. Each block is rendered alone, so a hub
+// with one link in the file and a new one in the manifest gains only
+// the new one, under the one marker the mirror test looks for
+// (sfi.links.<name>).
+func ensureLinks(text string, entry manifest.Host) (string, error) {
+	if len(entry.Links) == 0 {
+		return text, nil
+	}
+	out, err := nixEnsureImport(text, linksImport)
+	if err != nil {
+		return "", err
+	}
+	for _, name := range entry.LinkNames() {
+		one := entry
+		one.Links = map[string]manifest.Link{name: entry.Links[name]}
+		block, err := renderLinksBlock(one)
+		if err != nil {
+			return "", err
+		}
+		if out, err = nixEnsureBlock(out, "sfi.links."+name, block); err != nil {
+			return "", err
+		}
+	}
+	return out, nil
 }
 
 // serveView is one subscription the hub fort's tree carries (serve.yaml
@@ -290,6 +363,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		Hub:           hasHub && hub.Local(est) && host == hub.Fort,
 		Plain:         !entry.IsCluster(),
 		AuditLogging:  entry.AuditLogging(),
+		Links:         linkViews(entry),
 	}
 	// The subscriptions this fort's tree carries: its own estate's forts
 	// when it is this estate's monitoring hub, then every estate a
@@ -376,7 +450,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", p.tpl, err)
 			}
-			out = append(out, scaffoldFile{path: p.path, content: b, note: p.note})
+			out = append(out, withLinksEdit(scaffoldFile{path: p.path, content: b, note: p.note}, p.tpl, entry))
 		}
 		if !hasHub {
 			return out, nil
@@ -407,7 +481,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p.tpl, err)
 		}
-		f := scaffoldFile{path: p.path, content: b, note: p.note}
+		f := withLinksEdit(scaffoldFile{path: p.path, content: b, note: p.note}, p.tpl, entry)
 		if p.tpl == "cluster-vars.yaml.gotpl" {
 			// A cluster scaffolded before ESTATE_NAME existed (forts#50)
 			// gains the line: the shared layer references it, and flux's
@@ -490,6 +564,20 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		note += ", PVBackupNotConfigured"
 	}
 	return append(out, hubFiles(hub.Fort, host, b, note, k)...), nil
+}
+
+// withLinksEdit: a host file whose manifest declares links is appended
+// to when it exists (the links module imported, one block per link not
+// yet set) — a hub is an existing host when it gains a link, and
+// scaffold never overwrites a host file. A fresh render carries the
+// blocks already (links.nix.gotpl); a host with no links is untouched.
+func withLinksEdit(f scaffoldFile, tpl string, entry manifest.Host) scaffoldFile {
+	if !strings.HasPrefix(tpl, "host-") || len(entry.Links) == 0 {
+		return f
+	}
+	f.edit = func(s string) (string, error) { return ensureLinks(s, entry) }
+	f.editNote = "+ sfi.links." + strings.Join(entry.LinkNames(), ", sfi.links.") + " (from [links] in the manifest)"
+	return f
 }
 
 // hubFiles is a fort's file for the hub plus the line that makes the

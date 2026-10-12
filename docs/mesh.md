@@ -103,7 +103,7 @@ zone yet; that is a later `dns` role, and `fort wg-conf` says so.
 |---|---|---|---|---|---|
 | `peers` | the forts of this estate, and any hand-managed member | where it has `wg_endpoint_ip` | both ways | yes | `fort mint` / `fort dismantle`; a hand-managed member by hand |
 | `clients` | roaming devices (a laptop) | never | none | no | by hand, with the device's own key |
-| `remotes` | hosts of **other** estates that link to this mesh — a hub this estate names in `[hubs.<role>]` ([hub.md](hub.md)) | always: `wg_endpoint_ip` is required | both ways | no | by hand, by PR, when the other estate's host links here |
+| `remotes` | hosts of **other** estates that link to this mesh — a hub this estate names in `[hubs.<role>]` ([hub.md](hub.md)) | always: `wg_endpoint_ip` is required | both ways | no | `fort estate link <that estate's url>`, from the `[links.<name>]` table in that host's manifest, after it verifies the claimed address here ([links.md](links.md)) |
 
 `peers` and `remotes` are named in the zone (`<host>.<zone>`, above);
 `clients` are not.
@@ -129,15 +129,19 @@ The two sides of a link:
 
 - **In the estate being linked to**, the host is a `remotes` entry:
   its address on this mesh, its endpoint, the port its link interface
-  listens on, the public key of that interface. Every fort here dials
-  it on its next rebuild; `fort wg-conf` renders it for a client. It is
-  not a fort of this estate: no manifest, no ssh block, no known_hosts
-  line, and `fort check` does not expect one.
-- **On the linked host**, the link is a declaration in its own estate's
-  host file — the other estate's repo, the interface, the port, the
-  address — and a reconciler that reads the other estate's peers.json
-  and keeps the interface's peer set equal to it. That half is the
-  `links` module; its page follows when it lands.
+  listens on, the public key of that interface. `fort estate link`
+  writes it from the other estate's manifests, after it has verified
+  that nothing here holds the address. Every fort here dials it on its
+  next rebuild; `fort wg-conf` renders it for a client. It is not a
+  fort of this estate: no manifest, no ssh block, no known_hosts line,
+  and `fort check` does not expect one.
+- **On the linked host**, the link is a `[links.<name>]` table in its
+  own estate's manifest — the other estate's repo, the address it
+  claims, the port, the interface and zone, the public key — written by
+  `fort link add`, rendered into the host file by `fort scaffold`, and
+  a reconciler that reads the other estate's peers.json and keeps the
+  interface's peer set equal to it. That half is the `links` module
+  ([links.md](links.md)).
 
 The endpoint port is the field a link needs: the linked host already
 listens on 51820 for its own mesh, so its link interface listens beside
@@ -184,4 +188,7 @@ Every change rolls out by itself: the forts pull main and rebuild
 | a host file that sets `sfi.lab-dns.giteaAddress` | warning, per line — the address derives, and a hand-set line does not follow the mesh |
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |
 | a `remotes` entry with no `wg_endpoint_ip` | error (the file does not parse) |
+| `forts   N link(s) — tables and host files agree, public keys match the sops secrets` (or `not verified (no age key here)`) | ok ([links.md](links.md)) |
+| a `[links.<name>]` whose estate is this one, or whose interface or zone is this mesh's; a host file with no `sfi.links.<name>` for a table; a `public_key` the sops secret does not derive, or a secret that is gone | error |
+| a fort that serves an estate a role with no `[links.<estate>]` in its manifest | warning ([hub.md](hub.md)) |
 | `ssh_config` / `known_hosts` stale or missing | error ([ssh-config.md](ssh-config.md#what-fort-check---all-says)) |

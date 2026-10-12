@@ -70,6 +70,10 @@ func main() {
 		err = sshConfigCmd(os.Args[2:])
 	case "wg-conf":
 		err = wgConf(os.Args[2:])
+	case "link":
+		err = linkCmd(os.Args[2:])
+	case "estate":
+		err = estateCmd(os.Args[2:])
 	case "dismantle":
 		err = dismantle(os.Args[2:])
 	case "destroy":
@@ -98,7 +102,8 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  init, scaffold, mint, image, add, seed, dismantle, ssh-config
+  author  init, scaffold, mint, image, add, seed, dismantle, ssh-config,
+          link add, estate link
   keys    b2-key (the B2 credentials no other verb creates),
           console-password (the fort's getty password)
   apply   provision, adopt, destroy
@@ -142,6 +147,39 @@ func usage() {
       the inverse. Mint knows no account but the fort's own: an identity
       for a user the estate adds to a fort is the estate's to mint, into
       the same secrets file, and mint leaves keys it does not own alone.
+
+  link add <fort> <estate url> [--address <ip>] [--port <udp>] [--write]
+      put <fort> on another estate's mesh (docs/links.md): the local half
+      of a link. Fetches that estate's repo and reads its estate.toml
+      (the mesh, the interface, the zone), mesh/peers.json and manifests
+      (the addresses taken); picks the highest free address, from .254
+      down, and the lowest free port beside 51820 (--address, --port
+      override; both are checked); mints the WireGuard key. Writes, in
+      THIS estate: the private half into nixos/secrets/<fort>.yaml as
+      wireguard-private-key-<name> (sops set), the [links.<name>] table
+      into forts/<fort>.toml with the public half plaintext, and the
+      sfi.links.<name> block into the host file (the one fort scaffold
+      renders). The address is a claim; the other estate's peers.json
+      is the record, and its 'fort estate link' verifies the claim. A
+      re-run restores the key from the secrets file, keeps an address
+      that is still free and picks one again when it is taken. Prints
+      the plan; --write writes and stages. Then PR → merge → the other
+      estate runs estate link.
+
+  estate link <estate url> [--write]
+      record the hosts of another estate that link to this one: the
+      other half. Fetches that estate's repo, reads every forts/*.toml
+      for a [links.<name>] table that names THIS estate, and verifies
+      each claim against mesh/peers.json here — inside the mesh, held by
+      no peer, client, remote or manifest, the interface and zone this
+      estate's — before it writes the remotes entry (address, the host's
+      endpoint, port, public key). A collision refuses and names the
+      holder; the fix is 'fort link add' again on the other side. An
+      entry already there with the same facts is current; one with the
+      same host and other facts follows the manifest. Prints the plan;
+      --write writes and stages; every fort of this estate peers with
+      the host on its next rebuild, and the host's reconciler fills its
+      own peer set on its next run.
 
   b2-key <minting|pruning|audit|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
       mint a B2 credential no verb may create for itself, because these

@@ -158,6 +158,10 @@ func TestParseRefuses(t *testing.T) {
 		{"unknown table", "[hetzner]\nx = 1\n", "unknown key hetzner"},
 		{"no mesh", "[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip is required"},
 		{"bad mesh ip", "mesh_ip = \"lol\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip"},
+		// mesh_endpoint is rendered onto a WireGuard Endpoint line, of
+		// every peer of every estate this host links to, unescaped (#99).
+		{"endpoint injects a section", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"10.0.0.1\\n[Interface]\\nPostUp = id\"\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
+		{"endpoint with a port", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"hub.lan:51820\"\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
 		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
 		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
 		// The variant the manifest exists to make un-forgettable: silence
@@ -214,20 +218,28 @@ func TestLoadAll(t *testing.T) {
 	os.WriteFile(filepath.Join(root, Path("a")), []byte(lab), 0o644)
 	os.WriteFile(filepath.Join(root, Path("b")), []byte(cloud), 0o644)
 	os.WriteFile(filepath.Join(root, Path("bad")), []byte("nope = true\n"), 0o644)
+	// A file whose name is not a host name is a problem, whatever it
+	// holds: the name is a DNS label everywhere it lands (#100).
+	os.WriteFile(filepath.Join(root, Path("Not_A_Host")), []byte(lab), 0o644)
 	os.WriteFile(filepath.Join(root, Dir, "README.md"), []byte("not a manifest"), 0o644)
 	hosts, problems, err := LoadAll(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hosts) != 2 || len(problems) != 1 || problems["bad"] == nil {
+	if len(hosts) != 2 || len(problems) != 2 || problems["bad"] == nil || problems["Not_A_Host"] == nil || !strings.Contains(problems["Not_A_Host"].Error(), "not a host name") {
 		t.Errorf("hosts %v problems %v", hosts, problems)
 	}
 	names, _ := Names(root)
-	if strings.Join(names, ",") != "a,b,bad" {
+	if strings.Join(names, ",") != "Not_A_Host,a,b,bad" {
 		t.Errorf("names: %v", names)
 	}
 	if _, err := Load(root, "missing"); err == nil || !strings.Contains(err.Error(), "has no manifest") {
 		t.Errorf("missing: %v", err)
+	}
+	for name, want := range map[string]bool{"a": true, "sfi-prod-439bf72": true, "h0st": true, "-a": false, "a-": false, "A": false, "a_b": false, "a.b": false, "": false, strings.Repeat("a", 64): false} {
+		if got := ValidHostName(name); got != want {
+			t.Errorf("ValidHostName(%q) = %v", name, got)
+		}
 	}
 }
 
@@ -244,5 +256,57 @@ func TestPlainFort(t *testing.T) {
 	cluster, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
 	if err != nil || !cluster.IsCluster() {
 		t.Errorf("a fort with [cluster] is a cluster: %v", err)
+	}
+}
+
+// [links.<name>] (forts#55): a hub on another estate's mesh. Named by
+// the estate's last label, every fact well-formed, nothing shared
+// between two links, and the public key is a real one.
+func TestLinks(t *testing.T) {
+	const pub = "9n6EdeMmYeyeiDQRIotqWqwDkNUgqMyBZIkHQj1cMUI="
+	link := "\n[links.staging]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/staging\"\naddress = \"10.2.0.254\"\nport = 51821\ninterface = \"wg-staging\"\nzone = \"staging.mesh\"\npublic_key = \"" + pub + "\"\n"
+	h, err := Parse("hub", []byte(lab+link))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, ok := h.LinkTo("https://gitea.zen.lofi/sfi/staging.git")
+	if !ok || l.Name != "staging" || l.Address != "10.2.0.254" || l.Port != 51821 || l.PublicKey != pub || l.Ref() != "sfi/staging" {
+		t.Errorf("link: %+v %v", l, ok)
+	}
+	if _, ok := h.LinkTo("ssh://git@gitea.zen.lofi:30022/sfi/production"); ok {
+		t.Error("LinkTo found a link that is not there")
+	}
+	if names := h.LinkNames(); len(names) != 1 || names[0] != "staging" {
+		t.Errorf("names: %v", names)
+	}
+	// The defaults modules/links.nix gives: wg-<name>, <name>.mesh.
+	bare := "\n[links.staging]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/staging\"\naddress = \"10.2.0.254\"\nport = 51821\npublic_key = \"" + pub + "\"\n"
+	if h, err := Parse("hub", []byte(lab+bare)); err != nil || h.Links["staging"].InterfaceName() != "wg-staging" || h.Links["staging"].ZoneName() != "staging.mesh" {
+		t.Errorf("defaults: %v %+v", err, h.Links["staging"])
+	}
+	second := "\n[links.production]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/production\"\naddress = \"10.3.0.254\"\nport = 51822\npublic_key = \"" + pub + "\"\n"
+	if _, err := Parse("hub", []byte(lab+link+second)); err != nil {
+		t.Errorf("two links: %v", err)
+	}
+	for name, tc := range map[string]struct{ text, want string }{
+		"wrong name":   {strings.Replace(link, "[links.staging]", "[links.stage]", 1), "last label is staging"},
+		"bad estate":   {strings.Replace(link, "ssh://git@gitea.zen.lofi:30022/sfi/staging", "staging", 1), "estate"},
+		"bad address":  {strings.Replace(link, "10.2.0.254", "nope", 1), "address"},
+		"mesh port":    {strings.Replace(link, "51821", "51820", 1), "own mesh port"},
+		"bad port":     {strings.Replace(link, "51821", "70000", 1), "port"},
+		"bad iface":    {strings.Replace(link, "wg-staging", "wg staging", 1), "interface"},
+		"long iface":   {strings.Replace(link, "wg-staging", "wg-staging-estate-x", 1), "interface"},
+		"bad zone":     {strings.Replace(link, "staging.mesh", "Staging.Mesh", 1), "zone"},
+		"bad key":      {strings.Replace(link, pub, "not-a-key", 1), "public_key"},
+		"short key":    {strings.Replace(link, pub, "c3RhZ2luZw==", 1), "public_key"},
+		"no key":       {strings.Replace(link, "public_key = \""+pub+"\"\n", "", 1), "public_key"},
+		"shared port":  {link + strings.Replace(second, "51822", "51821", 1), "also [links.production]'s"},
+		"shared iface": {link + strings.Replace(second, "port = 51822", "port = 51822\ninterface = \"wg-staging\"", 1), "also [links.production]'s"},
+		"shared zone":  {link + strings.Replace(second, "port = 51822", "port = 51822\nzone = \"staging.mesh\"", 1), "also [links.production]'s"},
+		"unknown key":  {strings.Replace(link, "port = 51821", "port = 51821\nroles = [\"forge\"]", 1), "unknown key"},
+	} {
+		if _, err := Parse("hub", []byte(lab+tc.text)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: want %q, got %v", name, tc.want, err)
+		}
 	}
 }

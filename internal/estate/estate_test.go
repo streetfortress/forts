@@ -78,8 +78,8 @@ estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging", "https://gitea.zen.lofi
 		t.Errorf("ServingForts: %v", forts)
 	}
 	// one estate, two spellings: the same repo
-	if !sameRepo("ssh://git@gitea.zen.lofi:30022/sfi/infra", "https://gitea.zen.lofi/sfi/infra.git") || sameRepo("ssh://x/sfi/a", "ssh://x/sfi/b") || sameRepo("ssh://x/sfi/a", "ssh://y/sfi/a") {
-		t.Errorf("sameRepo")
+	if !SameRepo("ssh://git@gitea.zen.lofi:30022/sfi/infra", "https://gitea.zen.lofi/sfi/infra.git") || SameRepo("ssh://x/sfi/a", "ssh://x/sfi/b") || SameRepo("ssh://x/sfi/a", "ssh://y/sfi/a") {
+		t.Errorf("SameRepo")
 	}
 	if ShortName("ssh://git@gitea.zen.lofi:30022/sfi/staging.git") != "staging" || ShortName("sfi/staging") != "staging" || WithGit("ssh://x/sfi/a") != "ssh://x/sfi/a.git" || WithGit("ssh://x/sfi/a.git") != "ssh://x/sfi/a.git" {
 		t.Errorf("ShortName / WithGit")

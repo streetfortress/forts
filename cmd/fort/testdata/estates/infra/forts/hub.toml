@@ -1,0 +1,15 @@
+# The hub: a plain fort of infra that links to staging.
+mesh_ip = "10.1.0.5"
+
+[backups]
+
+[libvirt]
+ip = "10.0.0.5"
+
+[links.staging]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/staging"
+address = "10.2.0.252"
+port = 51821
+interface = "wg-staging"
+zone = "staging.mesh"
+public_key = "9n6EdeMmYeyeiDQRIotqWqwDkNUgqMyBZIkHQj1cMUI="

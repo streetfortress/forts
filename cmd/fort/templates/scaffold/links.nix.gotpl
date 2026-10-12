@@ -1,0 +1,18 @@
+{{ range .Links }}
+  # [links.{{ .Name }}] in this fort's manifest (forts#55, docs/links.md): this
+  # host on the mesh of {{ .Ref }}. Rendered from the manifest — change the
+  # table, not this block. The interface comes up with no peers; the
+  # reconciler (wg-link-{{ .Name }}.timer) reads that estate's mesh/peers.json
+  # and keeps the peer set equal to it. The key is the sops secret
+  # wireguard-private-key-{{ .Name }}; its public half is in the manifest, and
+  # `fort estate link` in {{ .Ref }} writes it into that estate's remotes
+  # entry for this host. roles (the ports this interface opens) default
+  # from the [[serves.*]] entries of estate.toml that name this host.
+  sfi.links.{{ .Name }} = {
+    repo = "{{ .Repo }}";
+    interface = "{{ .Interface }}";
+    zone = "{{ .Zone }}";
+    port = {{ .Port }};
+    address = "{{ .Address }}";
+  };
+{{ end -}}

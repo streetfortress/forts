@@ -74,6 +74,15 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"b2-key", "restore", ""}, want: []string{"cloud-fort", "lab-fort", "macmini", "metal-fort", "plain-fort", "sfi-fort-e33e2d5", "steven-mac"}},
 		{line: []string{"b2-key", "minting", ""}}, // takes no host
 
+		// The link verbs (#55): the sub-verb word, the fort, and a URL
+		// nothing in the tree can offer.
+		{line: []string{"link", ""}, want: []string{"add"}},
+		{line: []string{"link", "add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"link", "add", "lab-fort", ""}},
+		{line: []string{"link", "add", "lab-fort", "ssh://x/y/z", "--"}, want: []string{"--address", "--port", "--write"}},
+		{line: []string{"estate", ""}, want: []string{"link"}},
+		{line: []string{"estate", "link", ""}},
+
 		// Flag names, and the values that are closed.
 		{line: []string{"seed", "--"}, want: []string{"--chart-dir", "--set", "--write"}},
 		{line: []string{"destroy", "gone-fort", "-"}, want: []string{"--no-stack", "--yes"}},

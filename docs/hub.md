@@ -100,8 +100,10 @@ it to the address `fort` has here. The name itself is still a constant in
 
 `modules/links.nix` derives a link's `openTCPPorts` from its `roles`,
 and a link named after a served estate (the URL's last label:
-`sfi.links.staging`) takes `roles` and `repo` from the serves entries
-that name its host and that estate ([links.md](links.md)).
+`sfi.links.staging`) takes `roles` from the serves entries that name its
+host and that estate ([links.md](links.md)). The link itself is
+`fort link add <fort> <estate url>` in the hub's estate and
+`fort estate link <hub's estate url>` in the served one.
 
 ## What scaffold renders
 
@@ -157,7 +159,7 @@ The served estate's branch rules keep `flux/hub/` protected where
 | no `[hubs.monitoring]`: no file, no dead man's switch; the edge Alertmanager is the only alerting | ok, said once |
 | hub's estate: `serves/<estate>.yaml` in each fort's tree for its own estate (the `[hubs.monitoring]` fort) and for every estate a `[[serves.monitoring]]` entry names it for, listed in `serves/kustomization.yaml`, `serves/` listed in the apps root | ok per estate; missing or unlisted: error |
 | hub's estate: a `serves/` file no entry declares | error |
-| hub's estate: a fort that serves an estate a role has no `sfi.links.<estate>` in its host file | warning — the network half is nix, and the link's reconciler refuses on its own when the two sides disagree |
+| hub's estate: a fort that serves an estate a role has no `[links.<estate>]` in its manifest | warning, naming `fort link add` — the network half is its own verb ([links.md](links.md)), and the link's reconciler refuses on its own when the two sides disagree |
 | `[hubs.monitoring]` or a serves table names a fort that has no manifest here | error |
 | a `[[backups.pv]]` block on `rustfs-central` with no in-estate monitoring hub | error ([mint.md](mint.md)) |
 

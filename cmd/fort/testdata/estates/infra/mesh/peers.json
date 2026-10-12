@@ -1,0 +1,6 @@
+{
+  "peers": {
+    "hub": {"wg_vpn_ip": "10.1.0.5", "wg_endpoint_ip": "10.0.0.5", "public_key": "aHViLWZpeHR1cmUtcHVibGljLWtleT09PT09PT09PT09PT0="}
+  },
+  "clients": {}
+}

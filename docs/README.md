@@ -226,7 +226,7 @@ other fails `go test`.
 - [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
 - [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]`, `flux/hub/<hub fort>/`, the flux subscription
-- [links](links.md) — a host on another estate's mesh: `sfi.links`, the reconciler, the `remotes` entry; the roles it opens
+- [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens
 - [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a

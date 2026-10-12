@@ -73,6 +73,7 @@
 {{ if .PV }}    # restic PV backups (docs/infra/backups.md). CNPG owns the database
     # layer and databasus the logical one; this is every other volume.
     inputs.forts.nixosModules.pv-backup
+{{ end }}{{ if .Links }}    inputs.forts.nixosModules.links       # on the mesh of another estate ([links.<name>] in the manifest)
 {{ end }}  ];
 
   networking.hostName = "{{ .Hostname }}";
@@ -182,7 +183,7 @@
     # …and don't readahead swap pages (no seek penalty on zram).
     "vm.page-cluster" = 0;
   };
-
+{{ template "links.nix.gotpl" . }}
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host key
   # (age.sshKeyPaths){{ if eq .Provider "libvirt" }}, which the initrd places from the NoCloud cidata

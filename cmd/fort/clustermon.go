@@ -130,9 +130,9 @@ func hubFileFindings(root string, est estate.Estate, hosts map[string]manifest.H
 // holds its own estate's subscription the same way. A subscription with
 // no entry is an error, because prune on a Kustomization nobody declared
 // is a hub applying an estate nobody asked it to. For every (role, fort,
-// estate), the fort's host file names a link to that estate
-// (sfi.links.<name>, docs/links.md) — a text-level look, so a warning:
-// the network half of the relationship is nix, and the link's
+// estate), the fort's manifest declares a link to that estate
+// ([links.<name>], docs/links.md) — a warning: the network half of the
+// relationship is its own verb (fort link add), and the link's
 // reconciler refuses on its own when the two sides disagree.
 func servesFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
 	var out []finding
@@ -200,13 +200,12 @@ func servesFindings(root string, est estate.Estate, hosts map[string]manifest.Ho
 			continue
 		}
 		linked[key] = true
-		path := filepath.Join("nixos/hosts", s.Fort, "default.nix")
-		raw, err := os.ReadFile(filepath.Join(root, path))
-		if err != nil {
-			continue // scaffold has not run; nix-eval is that finding
+		h, ok := hosts[s.Fort]
+		if !ok {
+			continue // no manifest: the error above
 		}
-		if !strings.Contains(string(raw), "sfi.links."+s.Name()) && !strings.Contains(string(raw), "sfi.links.\""+s.Name()+"\"") {
-			out = append(out, finding{"warning", path, fmt.Sprintf("no sfi.links.%s — %s serves %s the role %s, and a hub reaches the forts it serves over a link to their mesh (docs/links.md)", s.Name(), s.Fort, s.Ref(), s.Role)})
+		if _, ok := h.LinkTo(s.Estate); !ok {
+			out = append(out, finding{"warning", manifest.Path(s.Fort), fmt.Sprintf("no [links.%s] — %s serves %s the role %s, and a hub reaches the forts it serves over a link to their mesh: `fort link add %s %s --write` (docs/links.md)", s.Name(), s.Fort, s.Ref(), s.Role, s.Fort, s.Estate)})
 		}
 	}
 	return out

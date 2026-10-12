@@ -10,21 +10,34 @@ sfi/deployments#674.
 
 ## The two halves
 
-**On the linked host**, `sfi.links.<name>` in its host file
-(`modules/links.nix`): the other estate's repo, the interface, the
-listen port, the address that estate allocated, and the TCP ports its
-forts may reach here.
+**On the linked host**, the link is a `[links.<name>]` table in its
+manifest, `forts/<host>.toml` ([manifest.md](manifest.md)) — named after
+the other estate (the last label of its URL), one table per estate:
+
+```toml
+[links.staging]
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/staging"
+address = "10.2.0.254"           # this host's address on staging's mesh — a claim, until staging records it
+port = 51821                     # the link's UDP listen port; never 51820 (this host's own mesh)
+interface = "wg-staging"         # what staging's estate.toml names its mesh (checked by the reconciler)
+zone = "staging.mesh"            # its zone (checked the same way)
+public_key = "…"                 # the public half of the sops secret wireguard-private-key-staging
+```
+
+`fort link add` writes it ([below](#establishing-a-link)); `fort scaffold`
+renders `sfi.links.<name>` in the host file from it (`modules/links.nix`),
+and appends the block to a host file that exists — nobody writes the
+block by hand, and a mirror test keeps the two equal:
 
 ```nix
 imports = [ inputs.forts.nixosModules.links ];
 
-sfi.links.second-estate = {
-  repo = "https://gitea.zen.lofi/sfi/second-estate.git";  # public: no credential
-  interface = "wg-second";   # the name sfi/second-estate's estate.toml gives its mesh (checked)
-  zone = "second-estate.mesh";  # its zone, <estate>.mesh unless its estate.toml says (checked); this is the default
-  port = 51821;              # never 51820 (this host's own mesh port)
-  address = "10.2.0.4";      # what sfi/second-estate's remotes entry says
-  roles = [ "forge" ];       # what this host serves that estate (hub.md): opens 30022 and 443, nothing else
+sfi.links.staging = {
+  repo = "ssh://git@gitea.zen.lofi:30022/sfi/staging.git";
+  interface = "wg-staging";
+  zone = "staging.mesh";
+  port = 51821;
+  address = "10.2.0.254";
 };
 ```
 
@@ -32,14 +45,14 @@ A link is the network half of a hub relationship ([hub.md](hub.md)),
 and `roles` says which: `forge` opens 30022 and 443 (gitea), `monitoring`
 30990 and 31100 (the central Prometheus' remote_write, Loki's push), `ca`
 nothing yet (forts#46). `openTCPPorts` derives from the roles and can
-still be set by hand. When this estate's `estate.toml` has
-`[[serves.<role>]]` entries that name this host and an estate whose
-URL's last label is the link's name (`ssh://…/sfi/staging` for
-`sfi.links.staging`), `roles` defaults to those roles and `repo` to that
-URL, and
-the link needs only `port` and `address` — the two facts chosen on this
-side; `fort check --all` warns when a host that serves an estate a role
-has no link named after it.
+still be set by hand. `roles` is not in the manifest and not in the
+rendered block: it defaults to the roles whose `[[serves.<role>]]`
+entries in this estate's `estate.toml` name this host and an estate
+whose URL's last label is the link's name (`ssh://…/sfi/staging` for
+`sfi.links.staging`), and `repo` would default the same way. `fort link
+add` says which roles the link gets, and warns when none does;
+`fort check --all` warns when a host that serves an estate a role has no
+link to it.
 
 The module renders one WireGuard interface with its own key and **no
 peers**, opens the port, opens the roles' ports on that interface and
@@ -48,12 +61,14 @@ interface only), and inserts a
 `DROP` in `FORWARD` for every pair of mesh interfaces, so a hub never
 bridges two meshes whatever k3s does to `ip_forward`. The key is the
 sops secret `wireguard-private-key-<name>` in the host's secrets file,
-set by hand (below).
+minted by `fort link add`.
 
 **In the estate being linked to**, the host is a `remotes` entry in
 `mesh/peers.json`: its address there, its endpoint, the link's port, the
-public half of the link's key. Written by PR. Every fort of that estate
-dials it on its next rebuild.
+public half of the link's key. `fort estate link` writes it from a fetch
+of the linking estate's manifests ([below](#establishing-a-link)), after
+it has verified the claimed address against this file. Every fort of
+that estate dials it on its next rebuild.
 
 ## The reconciler
 
@@ -131,25 +146,92 @@ own flux deploy key (`flux-git-deploy-key`): give its public half to the
 other estate's admin, who registers it, and set `repo` to the ssh URL.
 `knownHosts` defaults to the auto-rebuild module's pin of the forge.
 
-## Minting the link's key
+## Establishing a link
 
-`fort mint` mints a fort's own identity and nothing for a link; the
-link's key is the estate's, set by hand into the host's secrets file:
+Two verbs, one per estate, one PR each (forts#55). The link's facts live
+in the linking estate's manifest, where the other estate can read them
+from a fetch without this estate's age key and without evaluating its
+Nix; the address written there is a **claim**, and the other estate's
+`mesh/peers.json` is the **record**.
+
+**1. In the linking estate** — the hub's, where the admin age key is:
 
 ```sh
-# on a machine with the admin age key, in the linked host's estate
-cd nixos
-PRIV=$(wg genkey)
-sops --config .sops.yaml set secrets/<host>.yaml '["wireguard-private-key-<name>"]' "\"$PRIV\""
-echo "$PRIV" | wg pubkey        # → the other estate's remotes entry
-unset PRIV
+fort link add luxor ssh://git@gitea.zen.lofi:30022/sfi/staging --write
 ```
 
-Then the host file (above), PR, merge; the host rebuilds and the
-interface comes up with no peers. Then the other estate's PR with the
-`remotes` entry; the reconciler's next run finds its own key there and
+The verb fetches staging's repo (a shallow clone with the operator's own
+git access) and reads its `estate.toml` — the mesh, the interface, the
+zone — and its `mesh/peers.json` and manifests for the addresses taken:
+every peer, client and remote, every fort's `mesh_ip` whether minted
+yet or not, and every other host of this estate that already claims an
+address there. It picks the **highest free address, from .254 down**
+(forts choose `mesh_ip` by hand and those numbers run low, so the two
+allocators do not meet) and the lowest free UDP port beside 51820
+(`--address` and `--port` override, and are checked the same way),
+mints the WireGuard key, and writes — all in this estate:
+
+```
+○ nixos/secrets/luxor.yaml       + wireguard-private-key-staging   (sops set; the private half)
+○ forts/luxor.toml               + [links.staging]                 (the public half, plaintext)
+○ nixos/hosts/luxor/default.nix  + sfi.links.staging               (the block scaffold renders; the module imported)
+```
+
+Then PR, merge; the host rebuilds and the interface comes up with no
+peers. The verb is re-runnable: the key is restored from the secrets
+file when it is there (rotation is a deliberate act, as in `fort mint`),
+an address that is still free is kept, and one that something has taken
+since is picked again — the report says whose it is now. A table a
+hand spelled is left as it is: only a key whose value moved is
+rewritten, in place, and the edited file is parsed before it is
+written. A hand-written `sfi.links.<name>` block is kept, and the
+report says when it is not the block the table renders. The report
+also says what staging's `remotes` entry for the host says, if anything.
+
+**2. In the estate being linked to** — staging, after that merge:
+
+```sh
+fort estate link ssh://git@gitea.zen.lofi:30022/sfi/infra --write
+```
+
+The verb fetches infra's repo and reads every `forts/*.toml` for a
+`[links.<name>]` table whose `estate` is this one — matched as a repo
+(forge host, owner, name), so `https://` and `ssh://` spellings agree —
+and builds the `remotes` entry from each: the claimed address, the host's
+endpoint (its manifest's default: `mesh_endpoint`, else the lab address,
+else the `[dns]` name), the link's port, the public key. **It verifies
+the claim before it writes**: the address lies in this mesh; no peer,
+client, other remote or not-yet-minted manifest holds it; two hosts of
+infra did not pick the same one; the link's interface and zone are this
+mesh's names. What crosses the boundary is content for root-level
+config, so its shape is checked too (forts#99, #100): the endpoint is
+one IP address or one DNS name, and a manifest's file name is a host
+name — one DNS label — or the manifest is reported as not parsing
+there and never claimed. One refusal refuses the run and names the
+holder — the fix is `fort link add` again on the other side, which
+picks another address.
+An entry already there with the same facts is current; the same host
+with other facts follows the manifest, and the report says what moved (a
+changed key is a hub that re-minted, said loudly). Then:
+
+```
+○ mesh/peers.json                remotes.luxor
+```
+
+PR, merge; every fort of staging dials luxor on its next rebuild, and
+luxor's reconciler finds its own key in the file on its next run and
 fills the peer set. Order matters only in that the reconciler refuses
-until both halves agree.
+until both halves agree. Nothing here removes an entry: a host that
+stopped linking is a hand edit, and the report names the candidates
+(a `remotes` entry named like a fort of infra that no longer links here).
+
+**The gate.** `fort check --all` in the linking estate judges every
+table: the link's estate is not this one and its interface and zone are
+not this mesh's; the host file sets `sfi.links.<name>`; and `public_key`
+is what the sops secret derives — where the secrets file decrypts. CI
+holds no age key, so there the key is reported as not verified, a skip,
+never a failure. In the estate linked to, the subnet check covers the
+`remotes` entry like any address ([mesh.md](mesh.md)).
 
 ## Limits
 

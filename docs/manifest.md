@@ -281,12 +281,45 @@ says `true` must set the option, and a host that sets the option must say
 so in its manifest. A plain fort has no API server and no `[cluster]`
 table to put the key in.
 
+**`[links.<name>]` is a hub on another estate's mesh** (forts#55,
+[links.md](links.md)). A fort is on one mesh, its estate's; a host that
+serves another estate a role — the forge, the monitoring hub — links to
+that estate, and the link's facts live here, one table per estate:
+
+```toml
+[links.staging]                  # the name: the last label of the estate URL, and sfi.links.<name>
+estate = "ssh://git@gitea.zen.lofi:30022/sfi/staging"
+address = "10.2.0.254"           # this host's address on that mesh — a claim, until staging records it
+port = 51821                     # the link's UDP listen port; never 51820, this host's own mesh
+interface = "wg-staging"         # what staging's estate.toml names its mesh (default wg-<name>)
+zone = "staging.mesh"            # its zone (default <name>.mesh)
+public_key = "…"                 # the public half of the sops secret wireguard-private-key-staging
+```
+
+**The public key is plaintext here on purpose.** The private half is
+sops-encrypted in `nixos/secrets/<host>.yaml`, as a fort's own key is,
+and the public half sits where the other estate can read it without
+this estate's age key — the split `mesh/peers.json` already makes for a
+fort's own key. `fort link add <host> <estate url>` fetches that estate's
+`estate.toml` and `mesh/peers.json`, picks the address and the port,
+mints the key and writes the table; `fort scaffold` renders
+`sfi.links.<name>` from it (and `fort link add` appends the block to a
+host file that exists). The other estate's `fort estate link <this
+estate's url>` reads the table from a fetch of this repo and writes the
+`remotes` entry — the manifest is the file every cross-repo read reads,
+and no verb evaluates another estate's Nix. `address` is this side's
+claim; that estate's `peers.json` is the record, and its verb verifies
+the claim before it writes. `fort check --all` compares `public_key`
+with what the sops secret derives, where the age key is at hand.
+
 ## Who reads it
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[[backups.pv]]` → the host's `sfi.pv-backup.targets` (and the `PVBackupNotConfigured` rule in the fort's file for the hub), `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line |
-| `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore` and `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
+| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[[backups.pv]]` → the host's `sfi.pv-backup.targets` (and the `PVBackupNotConfigured` rule in the fort's file for the hub), `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line, `[links.<name>]` → the host's `sfi.links.<name>` block |
+| `link add` | writes `[links.<name>]`: the estate, the address and port it picked, the interface and zone the other estate names, the public half of the key it minted |
+| `estate link` (run in the *other* estate) | every `[links.<name>]` of a fetch of this repo that names that estate, plus the host's endpoint → its `remotes` entry there |
+| `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore`, `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` and `[links.<name>]` ↔ `sfi.links.<name>` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token); `[[backups.pv]]` — the restic password for any block, the rustfs identity it declares on the hub for a block on `rustfs-central`, the B2 application key it mints for a block on `b2` |
 | `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort); `add` reads `[backups.db-physical]` for the postgres archive (the `ObjectStore`, the `ScheduledBackup` at `hour`); `check` traces every `rustfs-central` pv block to an identity on the hub and back |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |

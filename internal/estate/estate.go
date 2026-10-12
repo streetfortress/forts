@@ -405,9 +405,9 @@ func WithGit(repo string) string {
 	return repo + ".git"
 }
 
-// sameRepo says whether two URLs name one repo: the same forge host,
+// SameRepo says whether two URLs name one repo: the same forge host,
 // owner and name, whatever the scheme, the port and the .git suffix.
-func sameRepo(a, b string) bool {
+func SameRepo(a, b string) bool {
 	ah, ao, an, err := parseRepo(a)
 	if err != nil {
 		return false
@@ -419,13 +419,22 @@ func sameRepo(a, b string) bool {
 	return ah == bh && ao == bo && an == bn
 }
 
-func validRepoURL(s string) bool {
+// ValidRepoURL says whether s is an estate's git URL as estate.toml
+// spells one: ssh:// or https://, a forge host, an owner and a name.
+func ValidRepoURL(s string) bool {
 	if !strings.HasPrefix(s, "ssh://") && !strings.HasPrefix(s, "https://") {
 		return false
 	}
 	_, _, _, err := parseRepo(s)
 	return err == nil
 }
+
+// ValidInterface says whether s is a WireGuard interface name the kernel
+// takes: at most 15 characters from [A-Za-z0-9_=+.-].
+func ValidInterface(s string) bool { return interfaceRE.MatchString(s) }
+
+// ValidZone says whether s is a DNS name of lowercase labels (staging.mesh).
+func ValidZone(s string) bool { return zoneRE.MatchString(s) }
 
 func knownRole(role string) bool {
 	for _, r := range Roles {
@@ -442,7 +451,7 @@ func (e Estate) validateHubs() error {
 		if !knownRole(role) {
 			return fmt.Errorf("[hubs.%s] — want one of %s", role, strings.Join(Roles, ", "))
 		}
-		if !validRepoURL(h.Estate) {
+		if !ValidRepoURL(h.Estate) {
 			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Repo)
 		}
 		if !nameRE.MatchString(h.Fort) {
@@ -474,14 +483,14 @@ func (e Estate) validateHubs() error {
 				return fmt.Errorf("%s estates — want the served estates by their git URLs, at least one", at)
 			}
 			for _, url := range s.Estates {
-				if !validRepoURL(url) {
+				if !ValidRepoURL(url) {
 					return fmt.Errorf("%s estates: %q — want a served estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", at, url)
 				}
-				if sameRepo(url, e.Repo) {
+				if SameRepo(url, e.Repo) {
 					return fmt.Errorf("%s estates: %q is this estate — an estate serves itself through its own [hubs.*] tables, not a serves entry", at, url)
 				}
 				for _, prev := range seen {
-					if sameRepo(prev, url) {
+					if SameRepo(prev, url) {
 						return fmt.Errorf("%s estates: %q is served the role %s twice — a served estate names one fort per role", at, url, role)
 					}
 				}
@@ -512,7 +521,7 @@ func (e Estate) Hub(role string) (Hub, bool) {
 // served fort renders for it are applied by this estate's own flux. The
 // URLs are compared as repos (host, owner, name), so a .git suffix or a
 // scheme does not make two spellings of one estate two estates.
-func (h Hub) Local(e Estate) bool { return sameRepo(h.Estate, e.Repo) }
+func (h Hub) Local(e Estate) bool { return SameRepo(h.Estate, e.Repo) }
 
 // Ref is the hub's estate as <owner>/<name>.
 func (h Hub) Ref() string { return Ref(h.Estate) }

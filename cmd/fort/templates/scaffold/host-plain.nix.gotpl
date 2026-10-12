@@ -50,6 +50,9 @@
     # file and the passphrase into provisioning/console-passwords.yaml.
     inputs.forts.nixosModules.ops-console
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
+{{- if .Links }}
+    inputs.forts.nixosModules.links       # on the mesh of another estate ([links.<name>] in the manifest)
+{{- end }}
   ];
 
   networking.hostName = "{{ .Hostname }}";
@@ -102,7 +105,7 @@
     # …and don't readahead swap pages (no seek penalty on zram).
     "vm.page-cluster" = 0;
   };
-
+{{ template "links.nix.gotpl" . }}
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host key
   # (age.sshKeyPaths), which the initrd places from the NoCloud cidata

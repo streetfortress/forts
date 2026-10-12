@@ -1,0 +1,8 @@
+# A fort of staging whose mint has not run: its mesh_ip is in no
+# peers.json yet, and the allocator must still count it as taken.
+mesh_ip = "10.2.0.253"
+
+[backups]
+
+[libvirt]
+ip = "10.0.0.11"

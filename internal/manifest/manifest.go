@@ -32,6 +32,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -69,6 +70,10 @@ type Host struct {
 	// per-fort-identical standard (#626). Absent for a plain fort; the
 	// table can be empty (every key has a default).
 	Cluster *ClusterSpec `toml:"cluster"`
+	// Links is the [links.<name>] tables (links.go, forts#55): the
+	// other estates this host is on the mesh of, by the link's name.
+	// Absent on most forts; a hub carries one per estate it serves.
+	Links map[string]Link `toml:"links"`
 
 	// Provider is the one provider table present; Spec its decoded form.
 	Provider string `toml:"-"`
@@ -229,8 +234,35 @@ func (h Host) Endpoint() string {
 	}
 }
 
+// hostRE is a host name as every consumer of it needs it: one DNS label
+// (mesh-dns renders <host>.<estate>.<mesh>; peers.json keys on it; the
+// remotes table of another estate is keyed by it after a fetch, #100).
+var hostRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// ValidHostName says whether name is a host name: lowercase letters,
+// digits and hyphens, at most 63 characters, no hyphen at either end.
+func ValidHostName(name string) bool { return hostRE.MatchString(name) }
+
+// endpointRE is a DNS name an Endpoint can be: labels of letters,
+// digits and hyphens, dotted.
+var endpointRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$`)
+
+// ValidEndpoint says whether s is one IP address or one DNS name — what
+// an `Endpoint =` line of a WireGuard config takes, and the only shape
+// a mesh_endpoint may have, since that line is rendered from it with no
+// escaping and a stray newline would open a new section (#99).
+func ValidEndpoint(s string) bool {
+	if _, err := netip.ParseAddr(s); err == nil {
+		return true
+	}
+	return len(s) <= 253 && endpointRE.MatchString(s)
+}
+
 // Load reads and validates one host's manifest under root.
 func Load(root, host string) (Host, error) {
+	if !ValidHostName(host) {
+		return Host{}, fmt.Errorf("%q is not a host name — want one DNS label: lowercase letters, digits and hyphens", host)
+	}
 	raw, err := os.ReadFile(filepath.Join(root, Path(host)))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -315,6 +347,10 @@ func Parse(host string, raw []byte) (Host, error) {
 	// zero value, and they mean opposite things (backups.go): record
 	// which one the file said.
 	h.Backups.Declared = md.IsDefined("backups")
+	for name, l := range h.Links {
+		l.Name = name
+		h.Links[name] = l
+	}
 
 	// The provider table, decoded by its own type; strict the same way.
 	var prims map[string]toml.Primitive
@@ -357,6 +393,9 @@ func (h Host) Validate(host string) error {
 	if a, err := netip.ParseAddr(h.MeshIP); err != nil || !a.Is4() {
 		return fail("mesh_ip %q: want an IPv4 address", h.MeshIP)
 	}
+	if h.MeshEndpoint != "" && !ValidEndpoint(h.MeshEndpoint) {
+		return fail("mesh_endpoint %q: want one IP address or one DNS name — it is the Endpoint line of every peer's WireGuard config", h.MeshEndpoint)
+	}
 	if (h.DNS.Zone == "") != (h.DNS.Name == "") {
 		return fail("[dns] needs both zone and name — an apex record must be asked for explicitly")
 	}
@@ -369,6 +408,9 @@ func (h Host) Validate(host string) error {
 		return fail("[shape] vcpus/memory: want positive")
 	}
 	if err := h.Backups.Validate(); err != nil {
+		return fail("%v", err)
+	}
+	if err := h.ValidateLinks(); err != nil {
 		return fail("%v", err)
 	}
 	// The shape (#426): [cluster] makes a flux cluster, and its keys are
