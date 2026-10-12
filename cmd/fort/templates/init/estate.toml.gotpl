@@ -23,6 +23,26 @@ zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <h
                              # and in its cluster DNS. Absent: <name>.mesh, i.e. {{ .Name }}.mesh.
 {{- end }}
 
+# The operators (docs/init.md): the devices that hold `deployer`, the
+# operator account of every fort of this estate (ops/deployer.nix). The
+# framework ships no key, so this list is the one place an operator key
+# enters: a fort accepts these keys and no others, and a fort you hand
+# to another team is that team's estate with that team's keys. One line
+# per device, in authorized_keys form, with the device as the comment —
+# vetting trims the list by device. A fort of an estate that names none
+# does not evaluate.
+{{- if .OperatorKeys }}
+operator_keys = [
+{{- range .OperatorKeys }}
+  "{{ . }}",
+{{- end }}
+]
+{{- else }}
+# operator_keys = [
+#   "ssh-ed25519 AAAAC3Nza… macbook-air",
+# ]
+{{- end }}
+
 # The hubs (docs/hub.md): the roles another fort serves this estate — the
 # forge every fort clones from, the monitoring hub the edges push to and
 # that notices a silent fort, the CA a lab issuer reaches. Each names the

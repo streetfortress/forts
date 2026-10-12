@@ -33,6 +33,11 @@ var initTemplates embed.FS
 type initView struct {
 	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, Registry string
 	Admins                                                      []string
+	// OperatorKeys: the devices that hold `deployer` on every fort of
+	// the estate (estate.toml operator_keys, forts#81). Empty renders
+	// the commented example, and no fort of the estate evaluates until
+	// the estate names one — the framework ships no operator key.
+	OperatorKeys []string
 	// Hubs: the roles another fort serves this estate ([hubs.<role>],
 	// forts#38), in role order.
 	Hubs []hubView
@@ -99,9 +104,11 @@ func initCmd(args []string) error {
 	registry := fl.String("registry", "gitea.zen.lofi", "the chart registry the gate logs into")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
+	var operatorKeys multiFlag
+	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `deployer`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
@@ -116,7 +123,7 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone}
+	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone, OperatorKeys: operatorKeys}
 	for _, v := range hubs {
 		role, h, err := parseHubFlag(v)
 		if err != nil {
@@ -148,7 +155,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Registry: *registry, Admins: admins})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Registry: *registry, Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -184,6 +191,13 @@ func initCmd(args []string) error {
 	fmt.Printf("· %-44s the same file\n", "flux/infrastructure/configs/step-ca-root.pem")
 	fmt.Printf("· %-44s the edge Alertmanager's webhook, sops-encrypted under the shared rule\n", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml")
 	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")
+	if len(est.OperatorKeys) == 0 {
+		// The framework ships no operator key (forts#81), so an estate
+		// that names none has a `deployer` nobody can reach: the host
+		// asserts it at evaluation, and so does `fort check --all`.
+		fmt.Printf("· %-44s operator_keys — the devices that hold `deployer` on every fort of this estate. No\n", estate.Path)
+		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
+	}
 	if !*write {
 		fmt.Println("\ndry run — nothing written (init --write).")
 		return nil
@@ -196,7 +210,7 @@ func initCmd(args []string) error {
 // a .gotpl rendered and the suffix dropped, anything else copied as is.
 func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
-		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, hubs",
+		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, the operator keys, hubs",
 		"README.md":                       "the estate's README: the layout, the first fort",
 		"justfile":                        "the estate's own verbs, which are not the CLI: fetch-kubeconfig, updatekeys",
 		".gitignore":                      "",

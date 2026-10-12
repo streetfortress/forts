@@ -39,6 +39,9 @@
     inputs.forts.nixosModules.lab-dns      # the gitea.zen.lofi pin ([hubs.forge] + mesh/peers.json), and the .lofi forward on a lab fort
     # The baseline, which the cluster profile also builds on: the
     # hardening every fort shares, the operator account and its verbs.
+    # The keys of `deployer` are the estate's, not the framework's:
+    # estate.toml's operator_keys (sfi/forts#81). This host carries that
+    # list unless it sets sfi.ops.deployer.authorizedKeys itself.
     inputs.forts.nixosModules.hardened
     inputs.forts.nixosModules.ops-deployer
     inputs.forts.nixosModules.shell        # the prompt, keys and aliases at a pane (#557)

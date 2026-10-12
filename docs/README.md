@@ -46,6 +46,7 @@ Every fort change follows the same beat, and the reasons are the rules.
    hostnames, the odd hand edit — and commit.
 2. **PR, review, merge.** Generated code is reviewed like any other. CI
    runs `fort check --all` (every manifest valid, the tree matches them,
+   the estate names the devices that hold `deployer` ([init.md](init.md#the-operators)),
    every flux layer kustomize-builds — a listed-but-unseeded Secret fails
    it, that red X is the guard working — strict envsubst satisfiable, no
    ConfigMap or Secret above the API server's 1 MiB limit, secrets match

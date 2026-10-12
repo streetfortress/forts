@@ -34,7 +34,8 @@
     inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest)
     # Hardened slim profile (#86): `deployer` account, mesh-only SSH, no
     # home stack. Replaces interactive.nix + dotfiles.nix — steven does not
-    # exist on a production node.
+    # exist on a production node. The keys of `deployer` are the estate's,
+    # not the framework's: estate.toml's operator_keys (sfi/forts#81).
     inputs.forts.nixosModules.production
     # Day-0 flux: fort scaffold rendered
     # flux/clusters/{{ .Hostname }}/ and the identity pre-seed put

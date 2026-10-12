@@ -1,7 +1,7 @@
 # fort init — create an estate
 
 ```
-fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]
+fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -13,7 +13,8 @@ every file that exists.
 ## What it renders
 
 ```
-● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), the hubs by role (if any)
+● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), the operator keys
+                                  (if given), the hubs by role (if any)
 ● README.md                       the layout and the first fort
 ● justfile                        the estate's own verbs, which are not the CLI: fetch-kubeconfig (one fort's
                                   read-only ops kubeconfig) and updatekeys (re-encrypt every sops file)
@@ -47,6 +48,10 @@ repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, aut
 mesh = "10.2.0.0/24"   # the WireGuard subnet; fort check keeps every mesh address in it (mesh.md)
 interface = "wg-second"   # the mesh interface's name on every host; absent: wg0
 zone = "second-estate.mesh"   # every host on the mesh is <host>.<zone> (mesh.md); absent: <name>.mesh
+
+operator_keys = [            # the devices that hold `deployer` on every fort of this estate
+  "ssh-ed25519 AAAAC3Nza… macbook-air",
+]
 
 [hubs.forge]                  # the roles another fort serves this estate (hub.md)
 estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # the estate that holds the hub, by its git URL
@@ -93,6 +98,43 @@ is the estate's once rendered (re-render it from a scratch `fort init`
 and diff), and `cluster-vars.yaml` is never overwritten by scaffold (it
 appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)), so
 each cluster gains or loses its `HUB_MESH_IP` line by hand.
+
+## The operators
+
+`deployer` is the operator account of every fort: the `sfi-*` ops verbs
+are pinned to it, and `ops/console.nix` opens the console door for it.
+**The framework ships no operator key** (forts#81). `operator_keys` is
+the one place a key enters an estate — one line per device, in
+`authorized_keys` form, with the device as the key's comment — and
+`modules/estate.nix` reads the list into
+`sfi.ops.deployer.authorizedKeys`, which `modules/ops/deployer.nix`
+puts in the account's `authorized_keys` and nothing else adds to.
+
+The list was the framework's until forts#81, and that was a defect: a
+NixOS list option merges across modules, so an estate that named its own
+devices *added* them to SFI's seven. SFI held the operator account of
+every fort this framework built, an estate for another team included,
+unless that estate wrote `lib.mkForce` — and nothing asked it to. The
+list is the estate's now, and the estate that holds a fort is the team
+that operates it.
+
+- `fort init --operator-key "ssh-ed25519 AAAA… macbook-air"`, once per
+  device, writes the list; a later device is a hand edit of this file.
+- A key with no comment names no device. `fort check --all` warns:
+  vetting trims the list by device.
+- **An estate that names none has forts that do not evaluate.** The
+  assertion in `ops/deployer.nix` refuses a host whose operator account
+  no device can reach — the `sfi-*` verbs would be present and
+  unreachable. `fort check --all` reports the same gap against
+  `estate.toml`, before the eval.
+- One fort that must carry a different set sets
+  `sfi.ops.deployer.authorizedKeys` in its own host file, which
+  *replaces* the estate's list for that host. `check` names the line: a
+  device added to the estate does not reach that fort.
+
+Who may OPERATE is this list. Who may DISPATCH — the agent accounts of a
+dev fort — is the estate's dev role, with a list of its own: two
+questions, two lists.
 
 ## After init
 

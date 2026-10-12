@@ -33,7 +33,9 @@ Host sfi-dev sfi-dev-831c637
 
 **The account is the fort's, not a field.** Every fort answers as
 `deployer`, the operator account the framework gives each host
-(`ops/deployer.nix`, #647), and a peer with no manifest is a hand-managed
+(`ops/deployer.nix`, #647) and the estate fills with keys (`estate.toml`
+`operator_keys`, [init.md](init.md#the-operators)), and a peer with no
+manifest is a hand-managed
 interactive host — `steven`'s: the ubuntu holdout soundship (no NixOS host
 carries an interactive profile any more). That answers the open question
 of how the interactive hosts get an entry: being in peers.json without a

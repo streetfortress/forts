@@ -5,6 +5,15 @@ repo = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate"
 mesh = "10.1.0.0/24"
 interface = "wg-fixture"
 
+# The operators (forts#81): the devices that hold `deployer` on every
+# fort of this estate. The framework ships none, so this list is what
+# modules/ops/deployer.nix puts in the account's authorized_keys, and a
+# fort of an estate that names none does not evaluate. The key below is
+# a throwaway pair, like everything else here.
+operator_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL fixture-operator",
+]
+
 # The forge of this estate: a fort of sfi/other-estate, on this mesh
 # through a link, so its address here is remotes.forge of
 # mesh/peers.json — what modules/lab-dns.nix pins gitea.zen.lofi to

@@ -1,8 +1,10 @@
 // Package estate reads the estate manifest: estate.toml at the root of an
 // estate checkout. It is the one file that says what the checkout IS —
 // its name, its git URL (flux's source and auto-rebuild's pull), its mesh,
-// and its hubs: the forts, in this estate or another, that serve it a
-// role (the forge, the monitoring hub, the CA; forts#38). Per-host facts
+// its operator keys (the devices that hold `deployer` on every fort of
+// the estate; forts#81), and its hubs: the forts, in this estate or
+// another, that serve it a role (the forge, the monitoring hub, the CA;
+// forts#38). Per-host facts
 // are the host manifests (internal/manifest); per-estate facts are here,
 // and there are few of them on purpose: an estate is plain NixOS and a
 // flux tree, and this file names only what a verb reads.
@@ -24,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"golang.org/x/crypto/ssh"
 )
 
 // Path is the manifest's place: the estate root.
@@ -38,6 +41,19 @@ type Estate struct {
 	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
 	// Both clone it with the deploy key fort mint registers.
 	Repo string `toml:"repo"`
+	// OperatorKeys are the SSH public keys that hold `deployer`, the
+	// operator account of every fort of this estate
+	// (modules/ops/deployer.nix): one line per operator device, in
+	// authorized_keys form, with the device's name as the key's comment
+	// (forts#81). The framework ships none, so this list is the one
+	// place an operator key enters an estate: a fort of this estate
+	// accepts exactly these keys, and a fort handed to another team is
+	// that team's estate with that team's keys. Optional here — an
+	// estate writes it before its first fort, and `fort check --all`
+	// says so — because the refusal belongs to the host that would
+	// carry an operator account nobody can reach (the assertion in
+	// modules/ops/deployer.nix).
+	OperatorKeys []string `toml:"operator_keys"`
 	// Hubs is the set of roles another fort serves this estate, by role
 	// ([hubs.forge], [hubs.monitoring], [hubs.ca]; forts#38). Each names
 	// the estate that holds the hub and the fort that is it. The hub's
@@ -144,7 +160,8 @@ func Parse(raw []byte) (Estate, error) {
 }
 
 // Validate: a name that is a repo name, a repo URL a clone understands,
-// the hubs and the served estates well-formed (validateHubs).
+// the hubs and the served estates well-formed (validateHubs), the
+// operator keys readable as authorized_keys lines (validateOperatorKeys).
 func (e Estate) Validate() error {
 	if !nameRE.MatchString(e.Name) {
 		return fmt.Errorf("name %q — want a repo name (%s)", e.Name, nameRE)
@@ -153,6 +170,9 @@ func (e Estate) Validate() error {
 		return fmt.Errorf("repo %q — want the estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", e.Repo)
 	}
 	if err := e.validateHubs(); err != nil {
+		return err
+	}
+	if err := e.validateOperatorKeys(); err != nil {
 		return err
 	}
 	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
@@ -242,6 +262,61 @@ func (e Estate) RepoAPI() (string, error) {
 		return "", err
 	}
 	return "https://" + host + "/api/v1/repos/" + owner + "/" + name, nil
+}
+
+// --- the operators (forts#81)
+
+// Operator is one entry of operator_keys, read: the key line as a fort's
+// authorized_keys carries it, and the device the key is on — the key's
+// comment, the one place a person says which device holds an operator
+// key. Vetting (#415) trims the list by device, so a key with no
+// comment is a key nobody can attribute, and `fort check --all` says so.
+type Operator struct {
+	Key, Name string
+}
+
+// Operators reads operator_keys into (key, device) pairs, in the order
+// estate.toml lists them. Validate has refused a line that does not
+// parse, so every line here is one key.
+func (e Estate) Operators() []Operator {
+	out := make([]Operator, 0, len(e.OperatorKeys))
+	for _, line := range e.OperatorKeys {
+		_, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+		if err != nil {
+			continue
+		}
+		out = append(out, Operator{Key: strings.TrimSpace(line), Name: comment})
+	}
+	return out
+}
+
+// validateOperatorKeys: every line is exactly one SSH public key that
+// sshd can read. A typo here is a key that no fort accepts and nothing
+// reports — the account is reached over the mesh and nowhere else — so
+// the manifest refuses the line instead. Options (a command= prefix)
+// are refused too: the operator's key carries no restriction of its
+// own, the sudoers rules of ops-commands.nix are the restriction.
+func (e Estate) validateOperatorKeys() error {
+	seen := map[string]int{}
+	for i, line := range e.OperatorKeys {
+		at := fmt.Sprintf("operator_keys #%d", i+1)
+		pub, _, options, rest, err := ssh.ParseAuthorizedKey([]byte(line))
+		if err != nil {
+			return fmt.Errorf("%s %q — want one SSH public key in authorized_keys form (ssh-ed25519 AAAA… <device>): %v", at, line, err)
+		}
+		if len(options) > 0 {
+			return fmt.Errorf("%s — want the key alone, with no authorized_keys options (%s)", at, strings.Join(options, ","))
+		}
+		if len(strings.TrimSpace(string(rest))) > 0 {
+			return fmt.Errorf("%s — want one key per entry; this entry carries more than one line", at)
+		}
+		fp := ssh.FingerprintSHA256(pub)
+		if j, dup := seen[fp]; dup {
+			return fmt.Errorf("%s is the same key as #%d (%s)", at, j+1, fp)
+		}
+		seen[fp] = i
+	}
+	return nil
 }
 
 // --- hubs and serves (forts#38)

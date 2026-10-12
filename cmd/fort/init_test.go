@@ -14,6 +14,9 @@ import (
 var testInitView = initView{Name: "test-estate", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate", RepoGit: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate.git",
 	Forts: defaultForts, Registry: "gitea.zen.lofi", Admins: []string{"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"}}
 
+// testOperatorKey is a throwaway operator key, the device in its comment.
+const testOperatorKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL macbook-air"
+
 // The render: every file an estate needs before its first scaffold, in
 // the shape the other verbs read — mint's anchors in the two sops rule
 // files, the estate manifest that parses back, the flake that names the
@@ -164,6 +167,30 @@ func TestRenderInit(t *testing.T) {
 			t.Errorf("parseHubFlag(%q): want an error", bad)
 		}
 	}
+	// The operators (forts#81): no --operator-key renders the commented
+	// example, and the estate names no key — the framework ships none,
+	// so until the estate writes one no fort of it evaluates.
+	for _, f := range files {
+		if f.path == "estate.toml" {
+			if est, err := estate.Parse(f.content); err != nil || len(est.Operators()) != 0 || !strings.Contains(string(f.content), "# operator_keys = [") {
+				t.Errorf("estate.toml with no operator key: %+v %v\n%s", est, err, f.content)
+			}
+		}
+	}
+	// --operator-key: one line per device, with the device as the comment
+	v = testInitView
+	v.OperatorKeys = []string{testOperatorKey, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBL2o6nnz49u8AXHFIojZiJWJkOFgzH3hplflKDiVz/i macmini"}
+	files, _ = renderInit(v)
+	for _, f := range files {
+		if f.path != "estate.toml" {
+			continue
+		}
+		est, err := estate.Parse(f.content)
+		ops := est.Operators()
+		if err != nil || len(ops) != 2 || ops[0].Name != "macbook-air" || ops[1].Name != "macmini" || strings.Contains(string(f.content), "# operator_keys") {
+			t.Errorf("estate.toml with operator keys: %+v %v\n%s", ops, err, f.content)
+		}
+	}
 	// a zone of its own: rendered as the key, and parsed back as the zone
 	v = testInitView
 	v.Zone = "lab.internal"
@@ -184,9 +211,15 @@ func TestInitCmd(t *testing.T) {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	t.Chdir(dir)
-	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--admin", testInitView.Admins[0]}
+	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--admin", testInitView.Admins[0], "--operator-key", testOperatorKey}
 	if err := initCmd(args); err != nil {
 		t.Fatalf("dry run: %v", err)
+	}
+	// A key sshd cannot read is refused before anything is rendered: the
+	// account is reached over the mesh and nowhere else, so a typo would
+	// be a key no fort accepts and nobody reports.
+	if err := initCmd(append(args, "--operator-key", "macbook-air")); err == nil {
+		t.Error("--operator-key with no key: want a refusal")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "estate.toml")); err == nil {
 		t.Fatal("a dry run wrote estate.toml")
@@ -194,8 +227,12 @@ func TestInitCmd(t *testing.T) {
 	if err := initCmd(append(args, "--write")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := estate.Load(dir); err != nil {
+	est, err := estate.Load(dir)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if ops := est.Operators(); len(ops) != 1 || ops[0].Name != "macbook-air" {
+		t.Errorf("--operator-key reaches estate.toml: %+v", ops)
 	}
 	for _, p := range []string{"nixos/flake.nix", "mesh/peers.json", "flux/infrastructure/configs/kustomization.yaml", "nixos/hosts/.gitkeep", ".gitea/workflows/checks.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {

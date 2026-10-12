@@ -23,9 +23,10 @@ in
     '';
   };
 
-  # The two estate facts a module reads from estate.toml itself: the name
-  # of the mesh interface (deployments#674) and the zone of the mesh
-  # (forts#45). One name per mesh, on every host on it — this host's own
+  # The three estate facts a module reads from estate.toml itself: the
+  # name of the mesh interface (deployments#674), the zone of the mesh
+  # (forts#45) and the operator keys (forts#81). One name per mesh, on
+  # every host on it — this host's own
   # (wireguard.nix) and a linked host's link interface (links.nix) — so
   # `wg show <name>` means the same thing everywhere, and hardened.nix /
   # production.nix open the admin ports on it by that name. An estate
@@ -50,6 +51,37 @@ in
     );
     defaultText = "estate.toml's `zone`, else <name>.mesh";
     description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
+  };
+
+  # The operator keys: the devices that hold `deployer`, the operator
+  # account of every fort (ops/deployer.nix). The framework ships none
+  # (forts#81). It used to carry the list itself, and a NixOS list
+  # option MERGES across modules: an estate that named its own operator
+  # devices ADDED them to ours, so our seven devices held the operator
+  # account of every fort of every estate — a fort handed to another
+  # team included — unless that estate wrote lib.mkForce, which nothing
+  # asked it to. The list is the estate's now, and the framework defines
+  # it nowhere: a fort accepts the keys its own estate names, and
+  # nothing merges in from here.
+  #
+  # estate.toml is where they live, as `operator_keys`: one estate, one
+  # list, every fort of it. A host file that sets this option REPLACES
+  # that list for that host — the way a fort of a shared estate carries
+  # one team's keys alone. Who may DISPATCH and who may OPERATE stay two
+  # questions: the agent accounts of a dev fort are the estate's dev
+  # role, with a list of its own.
+  options.sfi.ops.deployer.authorizedKeys = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = estateToml.operator_keys or [ ];
+    defaultText = "estate.toml's `operator_keys`, else no key at all";
+    example = [ "ssh-ed25519 AAAAC3Nza… macbook-air" ];
+    description = ''
+      The SSH public keys that hold the operator account `deployer` on
+      this host, one line per device in authorized_keys form. An empty
+      list is refused (ops/deployer.nix): the sfi-* verbs are pinned to
+      this account, so a fort no operator device can reach carries
+      verbs nobody can run.
+    '';
   };
 
   config = {

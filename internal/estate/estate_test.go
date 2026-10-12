@@ -182,3 +182,47 @@ func TestZone(t *testing.T) {
 		}
 	}
 }
+
+// The operator keys (forts#81): the devices that hold `deployer` on
+// every fort of the estate. The framework ships none, so a line that
+// sshd cannot read is a key no fort accepts and nobody reports — the
+// manifest refuses it here instead.
+func TestOperatorKeys(t *testing.T) {
+	const (
+		laptop  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL laptop"
+		desktop = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBL2o6nnz49u8AXHFIojZiJWJkOFgzH3hplflKDiVz/i desktop"
+		bare    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICWmh8mR2QTmPWICoSPeEK2Ktki99Y04pJAaJZhiKtXW"
+	)
+	head := "name = \"staging\"\nrepo = \"ssh://x/y\"\n"
+	e, err := Parse([]byte(head + "operator_keys = [\n  \"" + laptop + "\",\n  \"" + desktop + "\",\n]\n"))
+	if err != nil || len(e.OperatorKeys) != 2 {
+		t.Fatalf("two operators: %+v %v", e, err)
+	}
+	ops := e.Operators()
+	if len(ops) != 2 || ops[0].Name != "laptop" || ops[1].Name != "desktop" || ops[0].Key != laptop {
+		t.Errorf("Operators: %+v", ops)
+	}
+	// A key with no comment parses: it names no device, and the gate
+	// (fort check --all) is what says so.
+	if e, err := Parse([]byte(head + "operator_keys = [\"" + bare + "\"]\n")); err != nil || e.Operators()[0].Name != "" {
+		t.Errorf("a key with no comment: %+v %v", e, err)
+	}
+	// An estate with no operator_keys parses: the key list is optional
+	// in the manifest, and the host's assertion is the refusal.
+	if e, err := Parse([]byte(head)); err != nil || len(e.Operators()) != 0 {
+		t.Errorf("no operators: %+v %v", e, err)
+	}
+	for _, tc := range []struct{ keys, want string }{
+		{"[\"ssh-ed25519 not-base64 laptop\"]", "want one SSH public key"},
+		{"[\"laptop\"]", "want one SSH public key"},
+		{"[\"\"]", "want one SSH public key"},
+		{"[\"command=\\\"true\\\" " + laptop + "\"]", "no authorized_keys options"},
+		{"[\"" + laptop + "\\n" + desktop + "\"]", "one key per entry"},
+		{"[\"" + laptop + "\", \"" + laptop + "\"]", "the same key as #1"},
+	} {
+		_, err := Parse([]byte(head + "operator_keys = " + tc.keys + "\n"))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("operator_keys = %s: want %q, got %v", tc.keys, tc.want, err)
+		}
+	}
+}

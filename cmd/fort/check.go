@@ -105,6 +105,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, meshSubnetFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, zoneFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
+		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
@@ -149,6 +150,62 @@ func manifestFindings(problems map[string]error) []finding {
 		out = append(out, finding{"error", manifest.Path(name), strings.TrimPrefix(err.Error(), manifest.Path(name)+": ")})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].dir < out[j].dir })
+	return out
+}
+
+// operatorFindings (forts#81): who holds `deployer`, the operator
+// account of every fort. The framework ships no operator key — the key
+// list it carried MERGED with the estate's, so SFI's devices reached
+// every estate's forts — so estate.toml's operator_keys is what
+// modules/ops/deployer.nix puts in the account's authorized_keys. An
+// estate that names none has a fort that does not evaluate (the
+// assertion in that module), and the gate says so here, where a reader
+// is already looking.
+//
+// A host file that sets sfi.ops.deployer.authorizedKeys REPLACES the
+// estate's list for that one fort, which is how a fort of a shared
+// estate carries one team's keys alone. That is a positive declaration,
+// so the gate names it per host: a device added to the estate does not
+// reach that fort.
+func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
+	var out []finding
+	overrides := map[string]bool{}
+	for _, name := range sortedNames(hosts) {
+		path := filepath.Join("nixos/hosts", name, "default.nix")
+		raw, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			continue // scaffold has not run; nix-eval is that finding
+		}
+		for i, line := range strings.Split(string(raw), "\n") {
+			code := strings.TrimSpace(line)
+			if j := strings.Index(code, "#"); j >= 0 {
+				code = strings.TrimSpace(code[:j])
+			}
+			if !strings.Contains(code, "sfi.ops.deployer.authorizedKeys") {
+				continue
+			}
+			overrides[name] = true
+			out = append(out, finding{"warning", path, fmt.Sprintf("line %d sets the operator keys of this fort alone — it replaces the estate's list, so a device added to %s does not reach this host", i+1, estate.Path)})
+		}
+	}
+	ops := est.Operators()
+	var devices []string
+	for i, op := range ops {
+		if op.Name == "" {
+			out = append(out, finding{"warning", estate.Path, fmt.Sprintf("operator_keys #%d carries no comment — nothing says which device holds it, and vetting trims the list by device (#415)", i+1)})
+			devices = append(devices, fmt.Sprintf("#%d (no device named)", i+1))
+			continue
+		}
+		devices = append(devices, op.Name)
+	}
+	switch {
+	case len(ops) > 0:
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("%d operator device(s) hold `deployer` on every fort of this estate: %s", len(ops), strings.Join(devices, ", "))})
+	case len(hosts) > 0 && len(overrides) == len(hosts):
+		out = append(out, finding{"warning", estate.Path, "no operator_keys, and every host file names its own operator keys — the next fort of this estate carries no operator key, and does not evaluate until a host file or this file names one"})
+	default:
+		out = append(out, finding{"error", estate.Path, "no operator_keys: the framework ships no operator key, so `deployer` holds none and no fort of this estate evaluates (the assertion in modules/ops/deployer.nix). Add one line per operator device, the device as the key's comment: operator_keys = [ \"ssh-ed25519 AAAAC3Nza… macbook-air\" ]"})
+	}
 	return out
 }
 

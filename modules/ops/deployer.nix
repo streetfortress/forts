@@ -40,26 +40,59 @@
 # reach the operator's verbs — the kernel keeps the two roles apart, as
 # it keeps the agent accounts apart from each other (#532).
 #
-# The key set is the operator's devices; trim it when vetting (#415)
-# settles which devices hold an operator key. The estate's dev role carries
-# the same list for the agent accounts today and says so — who may DISPATCH
-# and who may OPERATE are two questions, kept as two lists.
-{ ... }:
+# WHO HOLDS IT is the estate's, not the framework's (forts#81). The key
+# list lived here, and a NixOS list option merges across modules: an
+# estate that named its own operator devices added them to ours, so
+# SFI's seven devices held the operator account of every fort built on
+# this framework — a fort handed to another team included — unless that
+# estate wrote lib.mkForce, which nothing asked it to. The framework
+# ships no key now. The estate names its devices in estate.toml
+# (`operator_keys`, read by modules/estate.nix into
+# sfi.ops.deployer.authorizedKeys), one list for every fort of that
+# estate, and a host file replaces the list for one host by setting the
+# option. Vetting (#415) trims a list that is now the estate's to trim.
+# The estate's dev role carries a list of its own for the agent accounts
+# and says so — who may DISPATCH and who may OPERATE are two questions,
+# kept as two lists.
+{ config, ... }:
 
 {
+  # estate.nix declares the option and reads estate.toml: whatever a
+  # module takes from the estate, it takes through that one reader.
+  imports = [ ../estate.nix ];
+
+  # An operator account no device can reach is the state #647 refused
+  # for dev forts in the other direction: the sfi-* verbs each module
+  # declares through ops-commands.nix are present and unreachable, and
+  # ops/console.nix opens a door for a login that holds no key. The
+  # assertion is the estate's reminder, at evaluation, before an image
+  # is built from a host nobody can operate.
+  assertions = [
+    {
+      assertion = config.sfi.ops.deployer.authorizedKeys != [ ];
+      message = ''
+        sfi.ops.deployer.authorizedKeys is empty: no device holds `deployer`, the
+        operator account of this fort, so the sfi-* verbs are unreachable. The
+        framework ships no operator key (forts#81). Name the estate's operator
+        devices in estate.toml:
+
+          operator_keys = [
+            "ssh-ed25519 AAAAC3Nza… macbook-air",
+          ]
+
+        `fort check --all` reports the same gap. One host that must carry a
+        different set sets sfi.ops.deployer.authorizedKeys in its own file.
+      '';
+    }
+  ];
+
   users.users.deployer = {
     isNormalUser = true;
     # No colon — the GECOS field is colon-separated.
     description = "SFI fort operator — the sfi-* ops verbs and the console door";
     extraGroups = [ "systemd-journal" ];
-    openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFSTKL7m9ViSstGGhgg1TBnrWEGkNptCCysU17Oxgfl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG0sCtYCOvdb/J7yluSSX9yixiG3pvhZo+OtVQWefjVj"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBuuLb9A36fWGYZexMb2soTxpHFB0HVQTHqR8vihvFMD"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqO0N5rBif1+bFwnluWEmrkaoTAtqTrP/vONG6/fQKl"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBhrjrcm0Mb4gSMGM/GiWXvkZj3a2ej7/MOcw0Qujx+M"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFSfukFhjws+MpZu+qMqgVCoIitc43jGeqEnGMcF4ydQ"
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEdgJK6LiKUZ+fQQZX28B1v82hCl1z4RxomJLn5pHiPH"
-    ];
+    # The estate's keys, verbatim: this is the one definition of the
+    # list, so nothing merges a key in that the estate did not name.
+    openssh.authorizedKeys.keys = config.sfi.ops.deployer.authorizedKeys;
   };
 }
