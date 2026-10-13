@@ -8,7 +8,7 @@
 //
 // The candidate set is per verb, and two of them are the INVERSE of the
 // manifest list: `destroy` wants a stack whose manifest is gone, and
-// `wg-conf` wants a mesh member, which macmini is and never has a
+// `wg-conf` wants a mesh member, which a hand-managed peer is and never has a
 // manifest. A completion that offered every manifest everywhere would be
 // worse than useful for those two, so every verb names its own set
 // below.
@@ -108,6 +108,8 @@ var completions = map[string]verbSpec{
 		{name: "interface", kind: opaque},
 		{name: "zone", kind: opaque},
 		{name: "forts", kind: opaque},
+		{name: "known-hosts", kind: opaque},
+		{name: "acme-email", kind: opaque},
 		{name: "admin", kind: opaque},
 		{name: "operator-key", kind: opaque},
 		writeFlag,

@@ -92,7 +92,7 @@ in
       # merges every file on KUBECONFIG by key name (first file wins), so an
       # unsuffixed ops-ro in each fort's file sends one fort's token to every
       # other fort — "Unauthorized" the moment a second fort is fetched
-      # (sfi-prod-439bf72 vs the drill fort, 2026-09-12).
+      # (the production fort vs the drill fort, 2026-09-12).
       users:
         - name: ops-ro@${config.networking.hostName}
           user:

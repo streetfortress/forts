@@ -17,8 +17,8 @@
 # kubectl merges each file on KUBECONFIG by key name, and the first file
 # wins, so one fort's token must never answer for another.
 #
-#   just fetch-kubeconfig sfi-main-preview
-#   KUBECONFIG=~/.kube/sfi-main-preview.config kubectl get nodes
+#   just fetch-kubeconfig <fort>
+#   KUBECONFIG=~/.kube/<fort>.config kubectl get nodes
 #
 # Pull one fort's read-only ops kubeconfig to ~/.kube/<host>.config.
 fetch-kubeconfig host:

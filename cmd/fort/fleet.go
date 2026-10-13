@@ -26,7 +26,7 @@ import (
 // — a warning, so a dismantle in flight does not go red on its residue).
 
 // orphanAllowlist: host dirs allowed to exist without a manifest. Empty
-// since zenbook — the hand-managed gitea laptop that predated the
+// since the hand-managed forge laptop that predated the
 // manifests — was re-provisioned as a fort (#338); every host has a manifest.
 var orphanAllowlist = map[string]bool{}
 
@@ -42,7 +42,7 @@ var infraLayers = []string{"flux/infrastructure/controllers", "flux/infrastructu
 // ${user#fort-}, ${host%-pv} — is still a ${VAR} reference to envsubst,
 // and strict mode fails the whole layer on the unset name. Requiring `}`
 // immediately after the name made the gate blind to exactly that, and a
-// CronJob shipped through it and stopped luxor's apps layer (2026-09-16).
+// CronJob shipped through it and stopped a hub's apps layer (2026-09-16).
 var varRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}`)
 
 // escapedRE matches what flux's envsubst leaves alone: `$$` is one
@@ -251,7 +251,7 @@ var clusterScoped = map[string]bool{
 // resources — a configMapGenerator entry without `namespace:` emits a
 // bare ConfigMap, the apply fails with "namespace not specified: the
 // server could not find the requested resource", and flux stops the
-// WHOLE layer on it. That took luxor's apps kustomization down (and
+// WHOLE layer on it. That took a hub's apps kustomization down (and
 // databasus-configs with it, as a dependency) the day rustfs-central
 // landed, which is the same blast radius as the envsubst trap below and
 // deserves the same gate.

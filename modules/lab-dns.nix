@@ -2,7 +2,7 @@
 # the mesh — that is mesh-dns.nix — and the file contributes two things
 # through mesh-dns.nix's extension point:
 #
-# The forge is the one exception to <host>.<zone>: gitea.zen.lofi is an
+# The forge is the one exception to <host>.<zone>: its name is an
 # identity, not a location — it is in every git remote, every OCI
 # reference, every flux source and the registry certificate, and one
 # gitea is on several meshes. So the forge keeps its one name on every
@@ -28,13 +28,12 @@
 # name. A lab fort forwards it to its LAN resolvers — the same ones its
 # static LAN block names — so a pod there still reaches the LAN; a cloud
 # fort has nowhere to send it and forwards nothing: it knows the forge
-# pin and no other .lofi name. The dnsmasq on soundship (10.1.0.1) gates
-# no fort any more.
+# pin and no other name under the forge's TLD. A LAN resolver gates no
+# fort.
 { config, lib, ... }:
 
 let
   cfg = config.sfi.lab-dns;
-  forgeName = "gitea.zen.lofi";
 
   # The forge host: estate.toml's [hubs.forge] fort. Read here the way
   # estate.nix reads `interface` and `zone` and links.nix reads the
@@ -43,6 +42,10 @@ let
   tomlPath = config.sfi.estate.root + "/estate.toml";
   estateToml = if builtins.pathExists tomlPath then builtins.fromTOML (builtins.readFile tomlPath) else { };
   forgeHost = ((estateToml.hubs or { }).forge or { }).fort or null;
+  # Its name: [hubs.forge] name, the one name the forge keeps on every
+  # mesh (forts#1). The block below serves that name's TLD.
+  forgeName = ((estateToml.hubs or { }).forge or { }).name or null;
+  forgeTLD = if forgeName == null then null else lib.last (lib.splitString "." forgeName);
 
   # Its address on this mesh: the peers and remotes of mesh/peers.json,
   # the same two tables that are the zone (mesh-dns.nix). A forge named
@@ -61,7 +64,7 @@ let
   # A cloud host has no such block, and the list is empty.
   lanDNS = lib.unique (lib.concatMap (n: n.dns or [ ]) (lib.attrValues config.systemd.network.networks));
 
-  pinned = cfg.giteaAddress != null;
+  pinned = cfg.giteaAddress != null && forgeName != null;
   forwards = cfg.lofiForward != [ ];
 
   # The .lofi block: the forge pin, and the LAN forward where there is
@@ -69,7 +72,7 @@ let
   # fort answers no other .lofi name. With neither half there is no
   # block at all (config, below).
   lofiServer = lib.concatStringsSep "\n" ([
-    "lofi:53 {"
+    "${forgeTLD}:53 {"
     "  errors"
     "  cache 30"
   ] ++ lib.optionals pinned ([
@@ -96,7 +99,7 @@ in
       default = forgeAddress;
       defaultText = "the [hubs.forge] host's address in mesh/peers.json (its peers entry, else its remotes entry); null where estate.toml names no forge host";
       description = ''
-        The forge's (gitea.zen.lofi's) address on this mesh: the one name
+        The forge's address on this mesh ([hubs.forge] name): the one name
         that is not <host>.<zone>, pinned in /etc/hosts and the cluster
         DNS. An estate fact — estate.toml's [hubs.forge] names the host
         and mesh/peers.json gives its address — so a host file sets this
@@ -121,8 +124,8 @@ in
     (lib.mkIf pinned {
       networking.hosts.${cfg.giteaAddress} = [ forgeName ];
     })
-    (lib.mkIf (pinned || forwards) {
-      sfi.mesh.coredns."lofi.server" = lofiServer;
+    (lib.mkIf (pinned || (forwards && forgeTLD != null)) {
+      sfi.mesh.coredns."${forgeTLD}.server" = lofiServer;
     })
   ];
 }

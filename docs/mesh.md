@@ -115,6 +115,10 @@ behind NAT), `wg_endpoint_port` (only when it is not 51820), and
 `public_key`. Private keys are never here: a fort's is in
 `nixos/secrets/<host>.yaml`, a client's in its app.
 
+A hand-managed peer (no manifest) can carry `ssh_user`: the account
+`mesh/ssh_config` reaches it on ([ssh-config.md](ssh-config.md)). A fort
+carries none and answers as `deployer`.
+
 ## Linking: a host on another estate's mesh (deployments#674)
 
 A fort is on one mesh, its estate's. Some hosts serve more than one

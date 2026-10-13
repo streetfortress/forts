@@ -25,7 +25,7 @@ type secretsTool interface {
 	EncryptWith(config, path string) error
 	SetWith(config, path, jsonPath, value string) error
 	// UnsetWith removes one key — the inverse of SetWith, and the only
-	// way a cross-fort declaration (a fort's rustfs identity in luxor's
+	// way a cross-fort declaration (a fort's identity in a hub's
 	// provider contract) can be withdrawn by `fort dismantle`.
 	UnsetWith(config, path, jsonPath string) error
 }

@@ -1,6 +1,6 @@
 # {{ .Name }}
 
-An estate: the forts declared here, built on [sfi/forts](https://gitea.zen.lofi/sfi/forts)
+An estate: the forts declared here, built on sfi/forts
 as a flake input. Rendered by `fort init`. The CLI handbook is sfi/forts'
 `docs/`; this file is yours.
 

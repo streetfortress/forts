@@ -1,7 +1,7 @@
 # fort init — create an estate
 
 ```
-fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]
+fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -49,6 +49,9 @@ mesh = "10.2.0.0/24"   # the WireGuard subnet; fort check keeps every mesh addre
 interface = "wg-second"   # the mesh interface's name on every host; absent: wg0
 zone = "second-estate.mesh"   # every host on the mesh is <host>.<zone> (mesh.md); absent: <name>.mesh
 
+known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
+acme_email = "ops@example"   # set, the shared layer carries a Let's Encrypt ClusterIssuer; absent, no public issuer
+
 operator_keys = [            # the devices that hold `deployer` on every fort of this estate
   "ssh-ed25519 AAAAC3Nza… macbook-air",
 ]
@@ -72,6 +75,14 @@ renders for. Any other role is a name a layer or the estate serves: the
 core writes the table and nothing else, and the layer's init renders
 what the role asks of each fort ([layers](layers.md)). The
 `[[serves.<role>]]` tables of a hub's estate are a hand edit after init.
+
+`--forts` is required: the framework's flake URL the estate pins, at a
+release tag. `--known-hosts` is the forge's SSH host key as one
+known_hosts line (`ssh-keyscan -p <port> <forge>` prints it); the
+framework ships none (forts#139), so a fort of an estate that names none
+does not evaluate, and `fort check --all` says so. `--acme-email` makes
+the shared layer carry a Let's Encrypt ClusterIssuer for the estate's
+public names; without it, no public issuer is rendered.
 
 `[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
 one name on every mesh (`gitea.zen.lofi`) to the address `fort` has in

@@ -1,5 +1,5 @@
 # Shared base configuration for every SFI NixOS host — cluster forts,
-# dev forts and luxor alike — so only genuinely user-agnostic settings
+# dev forts and hubs alike — so only genuinely user-agnostic settings
 # belong here. Accounts are the profile's: `deployer` from
 # modules/production.nix, `agent` from the estate's dev role.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.

@@ -15,6 +15,19 @@ interface = "{{ .Interface }}"   # the WireGuard interface every host gives this
 # interface = "wg-second"    # the WireGuard interface every host on this mesh gives it: a fort's
                              # own, and a linked host's link interface. ≤ 15 characters. Absent: wg0.
 {{- end }}
+{{- if .KnownHosts }}
+known_hosts = "{{ .KnownHosts }}"   # the forge's SSH host key: every clone a fort makes pins it
+{{- else }}
+# known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key, one known_hosts line
+                             # (ssh-keyscan -p <port> <forge>): flux's clone and the rebuild loop pin
+                             # it, and no fort evaluates until the estate names it.
+{{- end }}
+{{- if .ACMEEmail }}
+acme_email = "{{ .ACMEEmail }}"   # the public ACME account's contact: the shared layer carries a Let's Encrypt issuer
+{{- else }}
+# acme_email = "ops@example"  # set, and the shared layer carries a Let's Encrypt ClusterIssuer
+                             # for the estate's public names; absent, no public issuer.
+{{- end }}
 {{- if .Zone }}
 zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <host>.{{ .Zone }}
 {{- else }}
@@ -66,9 +79,9 @@ name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- if not .Forge }}
 
 # [hubs.forge]                 # the forge: the gitea every fort clones from, by its one
-# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # name on every mesh. lab-dns.nix pins
-# fort = "sfi-fort-zenbook"    # that name to the address `fort` has in mesh/peers.json
-# name = "gitea.zen.lofi"      # (forts#26). No forge host, no pin.
+# estate = "ssh://git@forge.example:22/acme/hub"   # name on every mesh. lab-dns.nix pins
+# fort = "forge"               # that name to the address `fort` has in mesh/peers.json
+# name = "forge.example"       # (forts#26). No forge host, no pin.
 {{- end }}
 
 # The other half, declared by the hub's estate, by role: a fort of this
@@ -78,9 +91,9 @@ name = "{{ .Name }}"           # the forge's one name on every mesh
 # render on the served side is a layer's (docs/layers.md): the layer's
 # files say what the hub runs and what each served fort renders.
 # [[serves.forge]]
-# fort = "sfi-fort-zenbook"
-# estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]
+# fort = "forge"
+# estates = ["ssh://git@forge.example:22/acme/staging"]
 # [[serves.monitoring]]
 # fort = "central"
-# estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]
+# estates = ["ssh://git@forge.example:22/acme/staging"]
 # ports = [30990, 31100]

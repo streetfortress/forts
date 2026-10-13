@@ -24,11 +24,11 @@ One `Host` block per mesh peer, in name order. Roaming clients (the
 `clients` table) are not ssh targets and are left out.
 
 ```
-# plain fort, libvirt — the sfi-dev role
-Host sfi-dev sfi-dev-831c637
+# plain fort, libvirt — the dev role
+Host dev dev-831c637
   Hostname 10.1.0.61
   User deployer
-  HostKeyAlias sfi-dev-831c637
+  HostKeyAlias dev-831c637
 ```
 
 **The account is the fort's, not a field.** Every fort answers as
@@ -36,7 +36,8 @@ Host sfi-dev sfi-dev-831c637
 (`ops/deployer.nix`, #647) and the estate fills with keys (`estate.toml`
 `operator_keys`, [init.md](init.md#the-operators)), and a peer with no
 manifest is a hand-managed
-interactive host — `steven`'s: the ubuntu holdout soundship (no NixOS host
+interactive host — on the account its peers.json entry names (`ssh_user`;
+no line when it names none): a hand-managed machine (no NixOS host
 carries an interactive profile any more). That answers the open question
 of how the interactive hosts get an entry: being in peers.json without a
 manifest *is* the declaration. peers.json stays three fields per peer, plus
@@ -50,8 +51,8 @@ the fort's `known_hosts` line carries.
 
 **Role aliases** follow the naming convention (2026-09-12): a fort named
 `<role>-<7-hex sha>` has the stem as its role, and the alias exists while
-exactly one fort carries that stem — `sfi-dev` → the current dev fort,
-`sfi-prod`, `sfi-stage`. So `ssh sfi-dev pickup …` survives the dev fort
+exactly one fort carries that stem — `dev` → the current dev fort,
+`prod`, `stage`. So `ssh dev …` survives the dev fort
 being replaced, which it is by design; and a replacement raised before
 the old one is dismantled suspends the alias rather than pointing it at
 either. `sfi-fort-zenbook` and `luxor` are outside the convention and get
@@ -141,7 +142,7 @@ The join, for an always-on Mac on the lab LAN (macmini):
    with the next free lab address, `wg_endpoint_ip` = its LAN address (an
    always-on LAN host is a peer the others can dial, not a roaming
    client), and the app's public key. `fort ssh-config --write` in the
-   same change gives it a `Host macmini` block as `steven`.
+   same change gives it a `Host <peer>` block on its `ssh_user`.
 3. `fort wg-conf macmini` → paste everything below the app's `PrivateKey`
    line into the tunnel. Save, activate.
 4. PR, merge. The forts pick the peer up on their next auto-rebuild; the

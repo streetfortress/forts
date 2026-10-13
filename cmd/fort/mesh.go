@@ -21,7 +21,7 @@ import (
 //
 //   - mesh/ssh_config   one Host block per peer — the fort name, a
 //                            stable role alias where one fort holds the
-//                            role (sfi-dev, sfi-prod, sfi-stage), the mesh
+//                            role (dev, prod, stage), the mesh
 //                            address, the account (deployer). Committed;
 //                            consumers Include it. mint and dismantle
 //                            re-render it, fort check --all fails when it
@@ -42,7 +42,7 @@ import (
 // The account comes from the manifest, never from peers.json: a fort
 // answers as deployer, the operator account the framework gives every
 // host (ops/deployer.nix), and a peer with no manifest is a hand-managed
-// interactive host — steven's (the ubuntu holdouts; no NixOS interactive
+// interactive host — on its own account (a hand-managed machine; no NixOS interactive
 // profile exists). peers.json stays three fields per peer, plus the
 // endpoint port where it is not the default; nothing is added to it
 // here. An account the estate adds to a fort is reached from
@@ -55,8 +55,7 @@ const (
 	knownHostsPath = "mesh/known_hosts"
 	peersPath      = "mesh/peers.json"
 
-	userDeployer    = "deployer"
-	userInteractive = "steven"
+	userDeployer = "deployer"
 
 	wgPort = 51820
 )
@@ -71,6 +70,10 @@ type meshPeer struct {
 	Endpoint  string `json:"wg_endpoint_ip,omitempty"`
 	Port      int    `json:"wg_endpoint_port,omitempty"`
 	PublicKey string `json:"public_key"`
+	// User is the account a hand-managed peer (no manifest) answers on,
+	// for mesh/ssh_config (forts#139). A fort answers as deployer and
+	// carries none; a peer that names none gets no User line.
+	User string `json:"ssh_user,omitempty"`
 }
 
 // endpointPort is the port the others dial: the entry's own, else the
@@ -138,19 +141,20 @@ func sortedNames[T any](m map[string]T) []string {
 
 // sshUser is the account that answers on a peer's 22 under the peer's own
 // name (the header of this file has the why): deployer on every fort, the
-// operator account the framework gives each host; an interactive user on
-// a hand-managed peer. An estate that adds accounts to a fort reaches them
+// operator account the framework gives each host; whatever account its
+// peers.json entry names (ssh_user) on a hand-managed peer, and no line
+// when it names none. An estate that adds accounts to a fort reaches them
 // by its own ssh config, above the Include.
-func sshUser(entry *manifest.Host) string {
+func sshUser(entry *manifest.Host, p meshPeer) string {
 	if entry == nil {
-		return userInteractive
+		return p.User
 	}
 	return userDeployer
 }
 
-// roleStemRE: a fort named by the convention <role>-<7-hex sha> (2026-09-12:
-// sfi-prod-439bf72, sfi-stage-d95cc36, sfi-dev-831c637). The stem is the
-// role; sfi-fort-zenbook has none and gets no alias.
+// roleStemRE: a fort named by the convention <role>-<7-hex sha>
+// (prod-439bf72, dev-831c637). The stem is the role; a fort named
+// otherwise has none and gets no alias.
 var roleStemRE = regexp.MustCompile(`^(.+)-[0-9a-f]{7}$`)
 
 func roleStem(host string) string {
@@ -191,12 +195,12 @@ const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-
 # where a client's own overrides go (an off-mesh machine's ProxyJump, a
 # LAN address for a host it reaches without the tunnel):
 #
-#   Include ~/deployments/mesh/ssh_config
-#   UserKnownHostsFile ~/.ssh/known_hosts ~/deployments/mesh/known_hosts
+#   Include ~/<estate>/mesh/ssh_config
+#   UserKnownHostsFile ~/.ssh/known_hosts ~/<estate>/mesh/known_hosts
 #
 # Every fort answers as deployer, the operator account the framework
-# gives each host; a peer with no manifest is a hand-managed interactive
-# host (steven). A role alias (sfi-dev, sfi-prod, …) exists while exactly
+# gives each host; a peer with no manifest is a hand-managed host, on the
+# account its peers.json entry names. A role alias (dev, prod, …) exists while exactly
 # one fort claims the stem. Other accounts on a fort are the estate's:
 # reach them from the client's own config, above the Include.
 `
@@ -228,7 +232,7 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 			fmt.Fprintf(&sb, "# %s\n", kind)
 			fmt.Fprintf(&sb, "Host %s\n", patterns)
 			fmt.Fprintf(&sb, "  Hostname %s\n", p.IP)
-			fmt.Fprintf(&sb, "  User %s\n", sshUser(&entry))
+			fmt.Fprintf(&sb, "  User %s\n", sshUser(&entry, p))
 			// The host key is looked up by the fort's name whichever
 			// alias or address was typed: the name carries the sha, so a
 			// successor at a reused mesh address is a new key under a new
@@ -239,20 +243,21 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 		sb.WriteString("# hand-managed peer (no manifest)\n")
 		fmt.Fprintf(&sb, "Host %s\n", patterns)
 		fmt.Fprintf(&sb, "  Hostname %s\n", p.IP)
-		fmt.Fprintf(&sb, "  User %s\n", sshUser(nil))
+		if u := sshUser(nil, p); u != "" {
+			fmt.Fprintf(&sb, "  User %s\n", u)
+		}
 	}
 	return sb.String()
 }
 
 // sshConfigLine is the one-line summary a report prints for a fort's
-// block ("Host sfi-dev sfi-dev-831c637 → deployer@10.1.0.61").
+// block ("Host dev dev-831c637 → deployer@10.1.0.61").
 func sshConfigLine(host string, hosts map[string]manifest.Host, ip string) string {
-	entry := hosts[host]
 	patterns := host
 	if a := roleAliases(hosts)[host]; a != "" {
 		patterns = a + " " + host
 	}
-	return fmt.Sprintf("Host %s → %s@%s", patterns, sshUser(&entry), ip)
+	return fmt.Sprintf("Host %s → %s@%s", patterns, userDeployer, ip)
 }
 
 // renderSSHConfigFrom renders from the tree: peers.json as given (a
@@ -415,9 +420,9 @@ func renderWGConf(m mesh, iface, member string) (string, error) {
 		default:
 			// A roaming client and a NAT'd peer have no path to each
 			// other unless one is given by hand — the router's DDNS →
-			// soundship forward is that path, and it is not in peers.json.
+			// router forward is that path, and it is not in peers.json.
 			sb.WriteString("# no fixed endpoint in peers.json: a roaming client reaches it only through\n")
-			sb.WriteString("# a hand-set Endpoint (the router's DDNS forward, for soundship)\n")
+			sb.WriteString("# a hand-set Endpoint (the router's DDNS forward)\n")
 		}
 		// Both shapes keep the NAT mapping pinned: a peer so the others
 		// can reach it, a roaming client because nothing else will.
@@ -567,7 +572,7 @@ func forgeAddress(m mesh, est estate.Estate) (host, table, ip string) {
 }
 
 // forgeFindings (forts#26): the forge keeps one name on every mesh
-// (gitea.zen.lofi), and modules/lab-dns.nix pins that name to the
+// (forge.example), and modules/lab-dns.nix pins that name to the
 // forge's address on THIS mesh, in /etc/hosts and in the cluster DNS.
 // The address is derived — [hubs.forge] names the host, peers.json
 // gives the address — so the gate says what every fort will derive, and

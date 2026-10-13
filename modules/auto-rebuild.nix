@@ -5,8 +5,8 @@
 # sudo carve-out comes from the ops framework, ops/ops-commands.nix) and
 # the no-SSH end-state stays viable.
 #
-# Motivating incident: luxor's running WireGuard peer set silently drifted
-# from mesh/peers.json (production-test added, luxor never rebuilt),
+# Motivating incident: a hub's running WireGuard peer set silently drifted
+# from mesh/peers.json (a fort added, the hub never rebuilt),
 # which broke the mesh path to a new cluster while every LAN path kept
 # working. Config drift on hosts nobody rebuilds is invisible until
 # something depends on the stale part.
@@ -29,7 +29,7 @@
 #     an eval — "applied" is the rev the host has caught up to, not the
 #     rev it was built from; that is "effective" (below), which only a
 #     real switch advances. Only a closure-relevant commit buys the flake eval (~2.5s /
-#     0.8 GB on devbox; tens of seconds on the VMs) and a switch — the
+#     0.8 GB on a lab machine; tens of seconds on the VMs) and a switch — the
 #     cost that used to justify an hours-long cadence. Merging a config
 #     change is the rollout; sfi-nixos-rebuild remains the "now" lever
 #     and the retry for a failed attempt.
@@ -62,7 +62,7 @@
 #     255; nix would otherwise rebuild the cached clone and report
 #     success); the failure is visible in journald → Loki
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
-#     NixosUpgradeFailed rule in flux/apps/luxor/monitoring/loki-rules.yaml
+#     NixosUpgradeFailed rule of a monitoring hub
 #     alerts on it.
 { config, lib, pkgs, ... }:
 
@@ -84,8 +84,8 @@ let
   # fetcher only warns ("could not update local clone …; continuing with
   # the most recent version") and rebuilds the cached clone, so a host
   # that cannot reach gitea would otherwise report a green "Finished NixOS
-  # Upgrade" forever while silently frozen — luxor did exactly that for
-  # 12h+ on 2026-09-13 (resolver stuck, gitea.zen.lofi NXDOMAIN). Exit 255
+  # Upgrade" forever while silently frozen — a hub did exactly that for
+  # 12h+ on 2026-09-13 (resolver stuck, the forge's name NXDOMAIN). Exit 255
   # trips NixosUpgradeFailed (loki-rules) the same as a failed switch.
   #
   # Path granularity: the trees below are everything the host closure
@@ -274,7 +274,7 @@ in
 
     repoUrl = lib.mkOption {
       type = lib.types.str;
-      example = "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git";
+      example = "ssh://git@forge.example:22/acme/estate.git";
       description = ''
         The estate's git URL: what the gate reads main's tip from and
         what the rebuild clones, with the deploy key fort mint
@@ -284,8 +284,8 @@ in
     };
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
-      # Same pin as flux-bootstrap.nix gitKnownHosts.
-      default = "[gitea.zen.lofi]:30022 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClPt06+mIzU3p5SGeGELvfWqoxgLAtvnG4yAbLz/jvReNLyj44aoKC3ciIKQc+yH1UZIaghznzZ+k8ChdoVX6vnV1qQWa9270/tGcpFT9UcYsgIdfkGfWyy9Kh8SGw56qldK+wcX3tWzbZU1ZyzS5d0RJjDu62MqkomVJ4nbnMuZIdw6v3qiOm7q1VdorqtVgn/0QbcLmT8kHiGopqR/BUoCG4+b7utmgrxTuHoYvpfLNIJcYKu8DLEPbLAjSlt38Z+qK25usWxuS4ZHIE7+q4yGZfSYfyG768594OE7OKlcUrlH5nArvI9eCi0U2L+/sWSAKkSE5P8UEmlXiaVl6+XLQVI036w/t6VJO4+Z4gM2FaukH5+XMhZcngdoMY5h46rUC1zV6fepd/MpyaEh5JO9Kntfkbx7Q+mvqvJBMh5+2hLQx5Umm6dmv+y9oXll/PATzxVFxe5+D3O03u0R0cAqp010ddSqHPRS3FNhuyLfiW53L0t9kGKWJQJoMKLSZuCEBt+F+iTe3bVeaIbSu4RBClFA/cHC1+CAWb3OsScdkP7vNObB5dDjMqfd/BaAw8CEJp0wwbR/gXjK4RHQ0WzSFi7++09zbaEZ4cYJwsNuePrhTrFpOMWVM1RdO70eCihMH7aqgTsa95LxD8dCdifiECQuz877gCZ3uEk8ekbQ==";
+      default = config.sfi.estate.knownHosts;
+      defaultText = "estate.toml's `known_hosts` (sfi.estate.knownHosts)";
       description = "SSH known_hosts line(s) for the git host.";
     };
   };

@@ -18,7 +18,8 @@ git init -q -b main
 # names none does not evaluate, which is what the eval below would show.
 "$fort" init --name test-estate --repo ssh://git@gitea.zen.lofi:30022/sfi/test-estate \
   --admin age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m \
-  --operator-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL test-operator" --write
+  --operator-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL test-operator" \
+  --forts git+https://example.invalid/forts --known-hosts "[gitea.zen.lofi]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL" --write
 # The estate's own files init names: the lab CA. And what mint would
 # write for the fort: its peer, its secrets file (names, no values).
 cp "$repo/tests/estate/forts/plain-fort.toml" forts/

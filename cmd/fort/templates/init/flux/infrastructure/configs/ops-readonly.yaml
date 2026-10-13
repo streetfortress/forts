@@ -5,7 +5,7 @@
 # Scope: the built-in `view` ClusterRole carries pods/log and the CRDs
 # whose charts ship aggregate-to-view roles — flux, flux-operator,
 # cert-manager. The ones that DON'T are granted read explicitly below
-# (verified with `kubectl auth can-i` on sfi-fort-e33e2d5, 2026-09-13):
+# (verified with `kubectl auth can-i`, 2026-09-13):
 # Gateway API (vendored CRDs, no roles at all), cnpg (the chart's
 # aggregation is off by default), traefik Middlewares, and the
 # prometheus-operator kinds. What it deliberately lacks: Secrets (helm

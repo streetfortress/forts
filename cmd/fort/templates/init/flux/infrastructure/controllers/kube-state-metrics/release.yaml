@@ -1,6 +1,6 @@
 # Cluster-state metrics exporter. Lives in the shared controllers layer:
 # cluster-agnostic, no per-cluster values. Scraping wiring is Phase 8; the
-# NodePort mirrors the pre-fort zenbook layout so an external Prometheus
+# NodePort kept from the pre-fort layout so an external Prometheus
 # can reach it the same way on every cluster.
 # Chart defaults: https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-state-metrics/values.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2

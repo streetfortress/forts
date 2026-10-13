@@ -3,7 +3,7 @@
 # repo" with zero manual kubectl/helm steps:
 #
 #   1. wait for the k3s API (the coredns zone that source-controller
-#      needs to resolve gitea.zen.lofi is a k3s add-on rendered by
+#      needs to resolve the forge's name is a k3s add-on rendered by
 #      mesh-dns.nix and lab-dns.nix, applied by k3s itself before this runs)
 #   3. flux-system namespace
 #   4. `sops-age` secret from the host's flux-sops-age-key (sops-nix)
@@ -32,7 +32,7 @@
 #
 #   sfi.flux-bootstrap = {
 #     enable = true;
-#     cluster = "luxor";   # → flux/clusters/luxor
+#     cluster = "hub";     # → flux/clusters/hub
 #   };
 { config, lib, pkgs, ... }:
 
@@ -68,7 +68,8 @@ in
 
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
-      default = "[gitea.zen.lofi]:30022 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClPt06+mIzU3p5SGeGELvfWqoxgLAtvnG4yAbLz/jvReNLyj44aoKC3ciIKQc+yH1UZIaghznzZ+k8ChdoVX6vnV1qQWa9270/tGcpFT9UcYsgIdfkGfWyy9Kh8SGw56qldK+wcX3tWzbZU1ZyzS5d0RJjDu62MqkomVJ4nbnMuZIdw6v3qiOm7q1VdorqtVgn/0QbcLmT8kHiGopqR/BUoCG4+b7utmgrxTuHoYvpfLNIJcYKu8DLEPbLAjSlt38Z+qK25usWxuS4ZHIE7+q4yGZfSYfyG768594OE7OKlcUrlH5nArvI9eCi0U2L+/sWSAKkSE5P8UEmlXiaVl6+XLQVI036w/t6VJO4+Z4gM2FaukH5+XMhZcngdoMY5h46rUC1zV6fepd/MpyaEh5JO9Kntfkbx7Q+mvqvJBMh5+2hLQx5Umm6dmv+y9oXll/PATzxVFxe5+D3O03u0R0cAqp010ddSqHPRS3FNhuyLfiW53L0t9kGKWJQJoMKLSZuCEBt+F+iTe3bVeaIbSu4RBClFA/cHC1+CAWb3OsScdkP7vNObB5dDjMqfd/BaAw8CEJp0wwbR/gXjK4RHQ0WzSFi7++09zbaEZ4cYJwsNuePrhTrFpOMWVM1RdO70eCihMH7aqgTsa95LxD8dCdifiECQuz877gCZ3uEk8ekbQ==";
+      default = config.sfi.estate.knownHosts;
+      defaultText = "estate.toml's `known_hosts` (sfi.estate.knownHosts)";
       description = "SSH known_hosts line(s) for the git host, baked into the flux-system git-auth secret.";
     };
   };

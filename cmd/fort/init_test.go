@@ -12,7 +12,7 @@ import (
 )
 
 var testInitView = initView{Name: "test-estate", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate", RepoGit: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate.git",
-	Forts: defaultForts, Admins: []string{"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"}}
+	Forts: "git+https://example.invalid/forts", Admins: []string{"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"}}
 
 // testOperatorKey is a throwaway operator key, the device in its comment.
 const testOperatorKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL macbook-air"
@@ -67,7 +67,7 @@ func TestRenderInit(t *testing.T) {
 	if strings.Count(m[".sops.yaml"], "  - path_regex: flux/infrastructure/") != 1 || strings.Count(m[".sops.yaml"], "# fort-managed: one recipient per cluster") != 1 {
 		t.Errorf(".sops.yaml:\n%s", m[".sops.yaml"])
 	}
-	if !strings.Contains(m["nixos/flake.nix"], `forts.url = "`+defaultForts+`";`) || !strings.Contains(m["nixos/flake.nix"], "forts.nixosModules.common") {
+	if !strings.Contains(m["nixos/flake.nix"], `forts.url = "git+https://example.invalid/forts";`) || !strings.Contains(m["nixos/flake.nix"], "forts.nixosModules.common") {
 		t.Errorf("flake:\n%s", m["nixos/flake.nix"])
 	}
 	// The gate is the core's two steps and no layer's: a layer's step is
@@ -186,7 +186,7 @@ func TestInitCmd(t *testing.T) {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	t.Chdir(dir)
-	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--admin", testInitView.Admins[0], "--operator-key", testOperatorKey}
+	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--forts", testInitView.Forts, "--admin", testInitView.Admins[0], "--operator-key", testOperatorKey}
 	if err := initCmd(args); err != nil {
 		t.Fatalf("dry run: %v", err)
 	}

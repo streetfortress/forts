@@ -18,7 +18,7 @@
 //	fort dismantle web3 --write         # retire: repo half → PR (merge)
 //	fort destroy web3                   # then the side-effects half
 //
-// The create-nixos / delete playbooks that raised lab VMs on soundship
+// The create-nixos / delete playbooks that raised lab VMs on the hypervisor
 // are gone: scaffold + mint cover their Phase A and cluster-init, the
 // libvirt backend their VM half, destroy their delete. Every manifest
 // names exactly one provider table (fort check --all validates them).
@@ -263,8 +263,9 @@ func usage() {
       render the client side of the mesh from the tree (#434):
       mesh/ssh_config — one Host block per peer in peers.json, the
       fort name plus a role alias where one fort holds the role (sfi-dev,
-      sfi-prod, sfi-stage), its mesh address, and the account its shape
-      answers on (a fort deployer, a peer with no manifest steven) —
+      prod, stage), its mesh address, and the account its shape answers
+      on (a fort deployer, a hand-managed peer the ssh_user its peers.json
+      entry names) —
       and mesh/known_hosts, one line per
       fort with its ssh host key, keyed by fort name (HostKeyAlias) and
       mesh address. Both are committed; consumers Include the first and
@@ -335,5 +336,5 @@ func usage() {
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.
-  [libvirt] hosts reach soundship over ssh (LIBVIRT_DEFAULT_URI).`)
+  [libvirt] hosts reach the hypervisor over ssh: LIBVIRT_DEFAULT_URI names it.`)
 }

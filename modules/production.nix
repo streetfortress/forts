@@ -56,7 +56,7 @@
   # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at
   # the mesh address; pod traffic to the host's own wg0 IP ingresses on
   # cni0, so 9100 must be open there too. The wg0 10255 row above and
-  # hardened.nix's wg0 9100 are the soundship pull-model path — drop them
+  # hardened.nix's wg0 9100 are the hypervisor pull-model path — drop them
   # once the edge stack is verified on an edge cluster.
   networking.firewall.interfaces."cni0".allowedTCPPorts = [ 9100 ];
 }

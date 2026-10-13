@@ -20,8 +20,6 @@ import (
 // libvirtPoolName mirrors pulumi/libvirt.go (one lab, one pool).
 const libvirtPoolName = "images"
 
-const libvirtURI = "qemu+ssh://steven@soundship/system?sshauth=privkey&keyfile=%s"
-
 func cloudEnv(root string, provider string) error {
 	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
 	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
@@ -50,13 +48,12 @@ func cloudEnv(root string, provider string) error {
 
 	// The lab hypervisor, reached over ssh from wherever fort runs. The
 	// provider carries its own ssh client (no ~/.ssh/config, no agent
-	// unless asked): the key file goes in the URI. One lab today; the
-	// manifest's [libvirt] table is where a second hypervisor would name
-	// itself (a `uri` key, when there is one).
+	// unless asked): the key file goes in the URI. The operator names it
+	// (forts#139); the manifest's [libvirt] table is where it moves to
+	// (forts#27, a `uri` key).
 	if provider == "libvirt" {
 		if os.Getenv("LIBVIRT_DEFAULT_URI") == "" {
-			home, _ := os.UserHomeDir()
-			os.Setenv("LIBVIRT_DEFAULT_URI", fmt.Sprintf(libvirtURI, filepath.Join(home, ".ssh", "id_ed25519")))
+			return fmt.Errorf("LIBVIRT_DEFAULT_URI is not set — the hypervisor a [libvirt] fort lives on, as the provider dials it: qemu+ssh://<user>@<host>/system?sshauth=privkey&keyfile=<path to the key> (forts#27 moves it into the manifest)")
 		}
 		// The provider applies the domain's XSLT (the qcow2 driver fix,
 		// pulumi/libvirt.go) by exec'ing xsltproc; the plugin inherits

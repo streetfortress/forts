@@ -95,6 +95,17 @@ type Estate struct {
 	// estate staging is the zone staging.mesh. .mesh is the fleet's one
 	// private TLD; a name under it says which mesh it is on.
 	Zone string `toml:"zone"`
+	// KnownHosts is the forge's SSH host key as a known_hosts line
+	// ("[gitea.example:30022] ssh-ed25519 AAAA…"): what flux's git-auth
+	// and the rebuild loop pin the clone to. The framework ships no
+	// default (forts#139): a host of an estate that names none does not
+	// evaluate. `fort init --known-hosts` writes it; `ssh-keyscan -p
+	// <port> <forge>` prints it.
+	KnownHosts string `toml:"known_hosts"`
+	// ACMEEmail is the contact of the estate's public ACME account. Set,
+	// init renders the Let's Encrypt ClusterIssuer into the shared
+	// layer; absent, no public issuer is rendered.
+	ACMEEmail string `toml:"acme_email"`
 }
 
 // DefaultInterface is the mesh interface of an estate that names none.
@@ -172,6 +183,12 @@ func (e Estate) Validate() error {
 	if err := e.validateOperatorKeys(); err != nil {
 		return err
 	}
+	if e.KnownHosts != "" && len(strings.Fields(e.KnownHosts)) < 3 {
+		return fmt.Errorf("known_hosts %q — want one known_hosts line: <host> <key type> <key> (ssh-keyscan -p <port> <forge>)", e.KnownHosts)
+	}
+	if e.ACMEEmail != "" && !strings.Contains(e.ACMEEmail, "@") {
+		return fmt.Errorf("acme_email %q — want a mailbox", e.ACMEEmail)
+	}
 	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
 		return fmt.Errorf("interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Interface)
 	}
@@ -210,8 +227,8 @@ func (e Estate) RepoGit() string { return WithGit(e.Repo) }
 
 // Forge is where the estate's repo lives, read off Repo: the forge host
 // (no port — the ssh port in the URL is git's, the API answers on https),
-// the owner and the repo name. ssh://git@gitea.zen.lofi:30022/sfi/second-estate.git
-// is gitea.zen.lofi, sfi, second-estate. The deploy key fort mint
+// the owner and the repo name. ssh://git@forge.example:22/acme/second-estate.git
+// is forge.example, acme, second-estate. The deploy key fort mint
 // registers and fort destroy revokes goes on THIS repo, through this
 // host's API: the estate's repo is what flux clones, so it is where the
 // key must be (sfi/deployments#673's first finding — the path was a
@@ -331,11 +348,11 @@ var ForgePorts = []int{30022, 443}
 
 // Hub is one [hubs.<role>] table: the estate that holds the hub and the
 // fort that is it. Name is the forge's: the one name it keeps on every
-// mesh (gitea.zen.lofi), which is not <host>.<zone>; no other role has
+// mesh (forge.example), which is not <host>.<zone>; no other role has
 // one.
 type Hub struct {
 	// Estate is the hub's estate by its git URL, as its own estate.toml
-	// has it (ssh://git@gitea.zen.lofi:30022/sfi/infra): one spelling
+	// has it (ssh://git@forge.example:22/acme/hub): one spelling
 	// of an estate everywhere, and the owner and name derive from it.
 	// This estate's own URL is the in-estate case: a hub is declared the
 	// same way wherever it is.
@@ -462,7 +479,7 @@ func (e Estate) validateHubs() error {
 		case h.Name != "" && role != RoleForge:
 			return fmt.Errorf("[hubs.%s] name — only the forge has a name of its own; every other hub is <host>.<zone>", role)
 		case h.Name != "" && !zoneRE.MatchString(h.Name):
-			return fmt.Errorf("[hubs.%s] name %q — want a DNS name of lowercase labels (gitea.zen.lofi)", role, h.Name)
+			return fmt.Errorf("[hubs.%s] name %q — want a DNS name of lowercase labels (forge.example)", role, h.Name)
 		}
 	}
 	roles := make([]string, 0, len(e.Serves))

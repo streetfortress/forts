@@ -17,7 +17,7 @@
 #      .sops.yaml, and the nonce lives in one root process for the
 #      length of the prompt.
 #   2. The operator copies the armored block to a machine that holds an
-#      admin key (devbox, macmini), runs `age -d`, and pastes the nonce
+#      admin key (an operator machine), runs `age -d`, and pastes the nonce
 #      back within the TTL.
 #   3. The gate compares, writes the verb and its argv to the journal,
 #      and only then lets the verb body run.
@@ -146,7 +146,7 @@ let
         echo "== $verb needs the fleet admin age key"
         echo "   $reason"
         echo
-        echo "   Decrypt this on a machine that holds an admin key (devbox, macmini):"
+        echo "   Decrypt this on a machine that holds an admin key:"
         echo
         printf '%s\n' "$ciphertext"
         echo

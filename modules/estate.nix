@@ -84,6 +84,18 @@ in
     '';
   };
 
+  # The forge's host key (forts#139): what flux's git-auth secret and the
+  # rebuild loop pin their clones to. estate.toml's `known_hosts`, which
+  # `fort init --known-hosts` writes. The framework shipped its own
+  # forge's key as the default until the first public release; it ships
+  # none now, and a host of an estate that names none does not evaluate.
+  options.sfi.estate.knownHosts = lib.mkOption {
+    type = lib.types.str;
+    default = estateToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
+    defaultText = "estate.toml's `known_hosts`";
+    description = "The forge's SSH host key, one known_hosts line, pinned by every clone a fort makes of the estate.";
+  };
+
   config = {
     # The estate's CA root, trusted where the estate carries one
     # (forts#60). An estate that runs a step-ca issues the TLS of its own

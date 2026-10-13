@@ -335,7 +335,7 @@ its own (nixos/modules/auto-rebuild.nix).
 
 Then open the console once and log in, so the failsafe is exercised and
 not merely believed: Lish for a Linode fort, `+"`virsh console %s`"+` on
-soundship for a lab fort.
+the hypervisor for a lab fort.
 `, p.host, p.host)
 }
 

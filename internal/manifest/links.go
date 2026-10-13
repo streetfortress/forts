@@ -17,7 +17,7 @@ import (
 // fort's own key already has (sops + mesh/peers.json).
 //
 //	[links.staging]                  # the name: the last label of the estate URL, and sfi.links.<name>
-//	estate = "ssh://git@gitea.zen.lofi:30022/sfi/staging"
+//	estate = "ssh://git@forge.example:22/acme/staging"
 //	address = "10.2.0.254"           # this host's address on that mesh — a claim, until that estate records it
 //	port = 51821                     # the UDP port the link listens on; never 51820 (this host's own mesh)
 //	interface = "wg-staging"         # what that estate's estate.toml names its mesh

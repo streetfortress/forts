@@ -31,8 +31,8 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts string
-	Admins                                            []string
+	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, KnownHosts, ACMEEmail string
+	Admins                                                                   []string
 	// OperatorKeys: the devices that hold `deployer` on every fort of
 	// the estate (estate.toml operator_keys, forts#81). Empty renders
 	// the commented example, and no fort of the estate evaluates until
@@ -64,7 +64,7 @@ func hubsView(e estate.Estate) []hubView {
 }
 
 // parseHubFlag reads one --hub value, <role>=<fort>@<estate git url>
-// (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra): the
+// (forge=forge@ssh://git@forge.example:22/acme/hub): the
 // role, the hub fort, and the hub's estate by its URL — the one
 // spelling of an estate estate.toml uses everywhere, this estate's own
 // for an in-estate hub. The fort comes first because the URL carries an
@@ -72,11 +72,11 @@ func hubsView(e estate.Estate) []hubView {
 func parseHubFlag(v string) (role string, h estate.Hub, err error) {
 	role, rest, ok := strings.Cut(v, "=")
 	if !ok {
-		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=forge@ssh://git@forge.example:22/acme/hub)", v)
 	}
 	fort, repo, ok := strings.Cut(rest, "@")
 	if !ok || fort == "" || repo == "" {
-		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=forge@ssh://git@forge.example:22/acme/hub)", v)
 	}
 	return role, estate.Hub{Estate: repo, Fort: fort}, nil
 }
@@ -86,41 +86,41 @@ type multiFlag []string
 func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
 func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 
-const defaultForts = "git+https://gitea.zen.lofi/sfi/forts"
-
 func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<gitea>:<port>/<owner>/<name>)")
 	var hubs multiFlag
-	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra); repeat per role. The forge is the role the core renders for; any other name is a role a layer or the estate serves (docs/hub.md). The estate may be this one.")
-	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (gitea.zen.lofi), with --hub forge=…")
+	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (forge=forge@ssh://git@forge.example:22/acme/hub); repeat per role. The forge is the role the core renders for; any other name is a role a layer or the estate serves (docs/hub.md). The estate may be this one.")
+	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (forge.example), with --hub forge=…")
 	meshNet := fl.String("mesh", "", "the estate's WireGuard subnet, CIDR (10.2.0.0/24); fort check keeps every mesh address inside it")
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
 	zone := fl.String("zone", "", "the DNS zone of the mesh: every host on it is <host>.<zone> (docs/mesh.md); default <name>"+estate.DefaultZoneSuffix)
-	forts := fl.String("forts", defaultForts, "the framework's flake URL, inputs.forts of the estate flake")
+	forts := fl.String("forts", "", "the framework's flake URL, inputs.forts of the estate flake (git+https://<forge>/<owner>/forts?ref=v0.1.0); required")
+	knownHosts := fl.String("known-hosts", "", "the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); every clone a fort makes pins it, and no fort evaluates until the estate names one")
+	acmeEmail := fl.String("acme-email", "", "the public ACME account's contact; set, the shared layer carries a Let's Encrypt ClusterIssuer")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	var operatorKeys multiFlag
 	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `deployer`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
 	write := fl.Bool("write", false, "write the files (default: print the tree)")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--write]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
-	if *name == "" || *repo == "" || len(admins) == 0 {
+	if *name == "" || *repo == "" || len(admins) == 0 || *forts == "" {
 		fl.Usage()
-		return fmt.Errorf("--name, --repo and at least one --admin are required")
+		return fmt.Errorf("--name, --repo, --forts and at least one --admin are required")
 	}
 	for _, a := range admins {
 		if !strings.HasPrefix(a, "age1") {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone, OperatorKeys: operatorKeys}
+	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone, OperatorKeys: operatorKeys, KnownHosts: *knownHosts, ACMEEmail: *acmeEmail}
 	for _, v := range hubs {
 		role, h, err := parseHubFlag(v)
 		if err != nil {
@@ -152,7 +152,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.KnownHosts, ACMEEmail: est.ACMEEmail, Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -194,6 +194,10 @@ func initCmd(args []string) error {
 		// asserts it at evaluation, and so does `fort check --all`.
 		fmt.Printf("· %-44s operator_keys — the devices that hold `deployer` on every fort of this estate. No\n", estate.Path)
 		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
+	}
+	if est.KnownHosts == "" {
+		fmt.Printf("· %-44s known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
+		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort init --known-hosts, or this file).\n", "")
 	}
 	if !*write {
 		fmt.Println("\ndry run — nothing written (init --write).")

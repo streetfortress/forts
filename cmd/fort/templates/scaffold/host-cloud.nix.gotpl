@@ -14,7 +14,7 @@
 #
 # PRODUCTION PROFILE (every fort): SSH answers on the
 # wireguard mesh address ONLY — reach it as `deployer@{{ .MeshIP }}`,
-# not the public IP. No steven, no home stack, no wheel; see
+# not the public IP. No personal account, no home stack, no wheel; see
 # modules/production.nix. Public surface is the {{ .Provider }} cloud firewall
 # (default-deny + 80/443 + wireguard, forts/pulumi) in front of the host's
 # own firewall. Break-glass is the console password (ops/console.nix)
@@ -33,7 +33,7 @@
     inputs.forts.nixosModules.k3s-server
     inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest)
     # Hardened slim profile (#86): `deployer` account, mesh-only SSH, no
-    # home stack. Replaces interactive.nix + dotfiles.nix — steven does not
+    # home stack. Replaces interactive.nix + dotfiles.nix — a person does not
     # exist on a production node. The keys of `deployer` are the estate's,
     # not the framework's: estate.toml's operator_keys (sfi/forts#81).
     inputs.forts.nixosModules.production
@@ -78,7 +78,7 @@
 
   # Cloud host, no LAN. The names this fort needs are the hosts of its
   # mesh, <host>.{{ .Zone }} from mesh/peers.json, and the forge's pin
-  # (gitea.zen.lofi, at the address estate.toml's [hubs.forge] host has
+  # (its [hubs.forge] name, at the address estate.toml's [hubs.forge] host has
   # in that same file — forts#26): both in /etc/hosts and in
   # coredns-custom, rendered by modules/mesh-dns.nix and
   # modules/lab-dns.nix (forts#45). No split

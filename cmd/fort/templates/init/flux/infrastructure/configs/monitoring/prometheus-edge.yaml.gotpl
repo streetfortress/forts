@@ -95,8 +95,8 @@ spec:
         port: web
 
   # Select monitors and rules everywhere, EXCEPT rules marked for the
-  # central/fleet-wide set — on luxor those belong to the ThanosRuler
-  # (flux/apps/luxor/monitoring) and must not be evaluated twice.
+  # central/fleet-wide set — those belong to a monitoring hub's ruler
+  # and must not be evaluated twice.
   serviceMonitorSelector: {}
   serviceMonitorNamespaceSelector: {}
   podMonitorSelector: {}

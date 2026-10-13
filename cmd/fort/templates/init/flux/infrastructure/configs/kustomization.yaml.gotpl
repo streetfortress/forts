@@ -4,7 +4,9 @@ resources:
   # coredns-custom is a k3s add-on rendered by sfi/forts modules/mesh-dns.nix —
   # host-level fact, not fleet config.
   - gateway-class.yaml
+{{- if .ACMEEmail }}
   - cluster-issuer-letsencrypt.yaml
+{{- end }}
   # ops-readonly is ALSO a k3s add-on now (nixos/modules/ops/ops-kubeconfig.nix,
   # #185): the host applies it at start so the read-only kubeconfig exists
   # before flux does. This entry retires once every fort has reconciled the

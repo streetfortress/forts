@@ -5,8 +5,8 @@
 # are the peers and remotes of mesh/peers.json — so this module renders
 # them, and no resolver is on the fort's path. Every host on the mesh is
 # <host>.<zone> at its mesh address, where the zone is the estate's
-# (estate.toml `zone`, else <estate>.mesh — estate.nix): luxor.staging.mesh
-# is luxor as sfi/staging reaches it, luxor.infra.mesh is luxor on its own
+# (estate.toml `zone`, else <estate>.mesh — estate.nix): hub.staging.mesh
+# is the hub as staging reaches it, hub.infra.mesh is the hub on its own
 # mesh, and the two cannot be confused. The names are rendered twice from
 # the one file:
 #

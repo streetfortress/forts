@@ -135,7 +135,7 @@ let
           if estateURLFor name != null then estateURLFor name
           else throw "sfi.links.${name}.repo: no [[serves.<role>]] entry of estate.toml names this host the hub of an estate called ${name} — set repo in the host file, or declare the entry (forts#38)";
         defaultText = "the URL of the estate named after this link, from the serves tables that name this host";
-        example = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate.git";
+        example = "ssh://git@forge.example:22/acme/second-estate.git";
         description = "The other estate's git URL: the repo whose mesh/peers.json is the source of truth for this interface's peers. https:// for a public repo; ssh:// with `sshKeyFile` for a private one. Defaults to the [[serves]] entry of estate.toml whose estate's last label is this link's name.";
       };
       roles = lib.mkOption {

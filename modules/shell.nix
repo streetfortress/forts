@@ -9,7 +9,7 @@
 # sfi.shell.starshipSettings, an attrset — and the file starship reads is
 # generated from it, so a fort's own default.nix sets one path and keeps
 # every other key. [hostname].style is the label: bright-black on a dev
-# fort, bright-yellow on sfi-stage-d95cc36, bright-red on sfi-prod-439bf72.
+# fort, bright-yellow on a staging fort, bright-red on a production fort.
 # The let-block below says why the module's own values are mkDefault
 # definitions in `config` and not the option's `default`.
 #
@@ -44,7 +44,7 @@
 # The guard is the import, like modules/ops/admin-shell.nix: a host gets
 # this only by naming the module and setting enable. The estate's dev role
 # enables it for every dev fort; a cluster fort's own default.nix opts in (staging
-# does). sfi-prod-439bf72 imports it too: #558 weighed the cost against the
+# does). the production fort imports it too: #558 weighed the cost against the
 # posture of production.nix, settled the zsh question above, and a person
 # accepted the module on 2026-09-27 — that host's comment carries the
 # numbers. Not in modules/ops/: this is not a verb.
@@ -85,7 +85,7 @@ let
   #
   # The fort label lives in [hostname].style: bright-black is a dev fort
   # (the default here), sfi-stage-d95cc36 sets bright-yellow and
-  # sfi-prod-439bf72 sets bright-red. A person holds several fort shells
+  # the production fort sets bright-red. A person holds several fort shells
   # open, and the prompt is the only label on each one.
   starshipDefaults = {
     "$schema" = "https://starship.rs/config-schema.json";
@@ -262,7 +262,7 @@ in
     # cluster fort pays for twice. fastfetch is NOT here (#582): it pulls
     # imagemagick, librsvg, x265, libjxl and libpulseaudio to draw a logo —
     # 219.5 MiB over 99 store paths, against 41.8 MiB over 9 for the six
-    # tools below. #558 accepted this module for sfi-prod-439bf72 on the
+    # tools below. #558 accepted this module for the production fort on the
     # 41.8 MiB figure, which it measured one day before fastfetch joined
     # the list (#566). A dev fort still has fastfetch and its `ff` alias
     # through home/base.nix; a cluster fort has neither, and aliases.sh

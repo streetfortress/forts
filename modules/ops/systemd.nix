@@ -4,7 +4,7 @@
 #   sudo sfi-systemd-restart systemd-resolved
 #   sudo sfi-systemd-restart flux-bootstrap
 #
-# Why: 2026-09-13, luxor's systemd-resolved parked itself on 8.8.8.8 after
+# Why: 2026-09-13, a hub's systemd-resolved parked itself on 8.8.8.8 after
 # a dnsmasq blip and every .lofi name was NXDOMAIN for 12h+; the fix was
 # one `systemctl restart` and there was no way to run it — production
 # hosts have no root shell and the NUDGE rung only knew flux and workload

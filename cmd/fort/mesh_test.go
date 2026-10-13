@@ -15,8 +15,8 @@ import (
 // hand-managed peers and a roaming client.
 const testPeers = `{
   "peers": {
-    "soundship": {"wg_vpn_ip": "10.1.0.1", "public_key": "SS="},
-    "devbox": {"wg_vpn_ip": "10.1.0.3", "public_key": "DB="},
+    "soundship": {"wg_vpn_ip": "10.1.0.1", "public_key": "SS=", "ssh_user": "steven"},
+    "devbox": {"wg_vpn_ip": "10.1.0.3", "public_key": "DB=", "ssh_user": "steven"},
     "luxor": {"wg_vpn_ip": "10.1.0.5", "wg_endpoint_ip": "10.0.0.5", "public_key": "LX="},
     "sfi-dev-abc1234": {"wg_vpn_ip": "10.1.0.61", "wg_endpoint_ip": "10.0.0.61", "public_key": "DV="},
     "sfi-prod-1111111": {"wg_vpn_ip": "10.1.0.54", "wg_endpoint_ip": "p1.example.cloud", "public_key": "P1="},
@@ -86,10 +86,10 @@ func TestRenderSSHConfig(t *testing.T) {
 		// two forts on one stem: neither gets the alias
 		"# cluster fort, linode\nHost sfi-prod-1111111\n  Hostname 10.1.0.54\n",
 		"# cluster fort, linode\nHost sfi-prod-2222222\n  Hostname 10.1.0.55\n",
-		// hand-managed peers: steven, no HostKeyAlias
+		// hand-managed peers: the account their entry names, no HostKeyAlias
 		"# hand-managed peer (no manifest)\nHost devbox\n  Hostname 10.1.0.3\n  User steven\n\n",
 		"Host soundship\n  Hostname 10.1.0.1\n  User steven\n",
-		"Include ~/deployments/mesh/ssh_config",
+		"Include ~/<estate>/mesh/ssh_config",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

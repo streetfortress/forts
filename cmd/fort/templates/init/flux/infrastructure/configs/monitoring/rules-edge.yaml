@@ -1,7 +1,7 @@
 # Edge rule set (#53): "this cluster is unhealthy", nothing else. These must
 # evaluate and page locally with the mesh down. Cross-cluster rules and the
-# dead man's switch live ONLY on luxor's ThanosRuler
-# (flux/apps/luxor/monitoring/rules-central.yaml) so nothing pages twice.
+# dead man's switch live ONLY on a monitoring hub's ruler (a layer's)
+# so nothing pages twice.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -136,7 +136,7 @@ spec:
     # from whichever side still has a path out. Keepalive-gated so roaming
     # clients (laptops, phones) going quiet never page; mesh peers all
     # carry persistentKeepalive and handshake at least every ~2-3min, so
-    # >300s is drift/death, not jitter. The 2026-09-03 incident (luxor's
+    # >300s is drift/death, not jitter. The 2026-09-03 incident (a hub's
     # stale peer set silently killing the production-test tunnel) would
     # have fired this from production-test's side within minutes.
     - name: mesh-health

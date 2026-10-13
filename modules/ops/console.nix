@@ -2,7 +2,7 @@
 # an operator who reaches the provider console can still run
 # `sudo sfi-nixos-rollback` after the mesh breaks (#524).
 #
-#   Lish (linode) / `virsh console <host>` (soundship)
+#   Lish (linode) / `virsh console <host>` (the hypervisor)
 #   <host> login: deployer          # `fort console-password <host> --show`
 #   sudo sfi-nixos-rollback         # the menu, then the generation
 #
@@ -24,7 +24,7 @@
 #     getty and nowhere else. The second setting is the PAM path, which
 #     reads the same hash and which NixOS leaves on by default (#78).
 #   - The console is already behind one authentication: Lish needs the
-#     Linode account, `virsh console` needs SSH to soundship. This is the
+#     Linode account, `virsh console` needs SSH to the hypervisor. This is the
 #     second factor of a path that has one, not a new front door.
 #   - deployer keeps no wheel (ops/deployer.nix). After the login the
 #     operator holds rung 1 (the journal, the read-only kubeconfig) and

@@ -1,4 +1,4 @@
-# Cluster-component scrape wiring (#53). Replaces the soundship pull-model
+# Cluster-component scrape wiring (#53). Replaces the hypervisor pull-model
 # static jobs (KSM NodePort 30080, kubelet read-only 10255) — those firewall
 # openings are removed once this stack is verified on an edge cluster.
 apiVersion: monitoring.coreos.com/v1

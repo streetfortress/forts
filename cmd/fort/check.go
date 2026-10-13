@@ -86,6 +86,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, zoneFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
+		shared.findings = append(shared.findings, knownHostsFindings(est)...)
 		shared.findings = append(shared.findings, linkFindings(root, est, parsed, sopsCLI{root: root})...)
 		shared.findings = append(shared.findings, layerFindings(root)...)
 	}
@@ -178,6 +179,17 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 		out = append(out, finding{"error", estate.Path, "no operator_keys: the framework ships no operator key, so `deployer` holds none and no fort of this estate evaluates (the assertion in modules/ops/deployer.nix). Add one line per operator device, the device as the key's comment: operator_keys = [ \"ssh-ed25519 AAAAC3Nza… macbook-air\" ]"})
 	}
 	return out
+}
+
+// knownHostsFindings (forts#139): the forge's SSH host key is an estate
+// fact every clone a fort makes pins to, and the framework ships none.
+// An estate that names none has no fort that evaluates (the throw in
+// modules/estate.nix), and the gate says so where a reader is looking.
+func knownHostsFindings(est estate.Estate) []finding {
+	if est.KnownHosts == "" {
+		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
+	}
+	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.KnownHosts)[0] + ")"}}
 }
 
 type checkOpts struct {
