@@ -38,7 +38,7 @@ type hostView struct {
 	// declares no pv block: the host then imports no pv-backup module
 	// and declares nothing, rather than importing it disabled — a host
 	// that is not an origin should read as one. The db blocks reach the
-	// cluster tree through `fort add`, never the host file.
+	// cluster tree through the estate's flux or a layer's verb, never the host file.
 	PV []manifest.PVBackup
 	// AuditLogging is [cluster] audit_logging (#626): the host sets
 	// sfi.k3s.auditLog.enable. False renders nothing — a fort that does

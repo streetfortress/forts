@@ -12,7 +12,7 @@ import (
 )
 
 var testInitView = initView{Name: "test-estate", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate", RepoGit: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate.git",
-	Forts: defaultForts, Registry: "gitea.zen.lofi", Admins: []string{"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"}}
+	Forts: defaultForts, Admins: []string{"age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"}}
 
 // testOperatorKey is a throwaway operator key, the device in its comment.
 const testOperatorKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL macbook-air"
@@ -70,7 +70,10 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["nixos/flake.nix"], `forts.url = "`+defaultForts+`";`) || !strings.Contains(m["nixos/flake.nix"], "forts.nixosModules.common") {
 		t.Errorf("flake:\n%s", m["nixos/flake.nix"])
 	}
-	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "${{ gitea.actor }}") || !strings.Contains(m[".gitea/workflows/checks.yaml"], "helm registry login gitea.zen.lofi") {
+	// The gate is the core's two steps and no layer's: a layer's step is
+	// what `fort layer add` appends (forts#144), and nothing logs into a
+	// chart registry here since the contract gate left (forts#143).
+	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "nix run ./nixos#fort -- check --all") || strings.Contains(m[".gitea/workflows/checks.yaml"], "helm") || strings.Contains(m[".gitea/workflows/checks.yaml"], "crd-diff") {
 		t.Errorf("workflow:\n%s", m[".gitea/workflows/checks.yaml"])
 	}
 	// The cache key is a live workflow expression, not the escaping that
@@ -78,15 +81,6 @@ func TestRenderInit(t *testing.T) {
 	// nixos/flake.lock (forts#75).
 	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "key: nix-closure-v2-${{ hashFiles('nixos/flake.lock') }}") {
 		t.Errorf("workflow cache key:\n%s", m[".gitea/workflows/checks.yaml"])
-	}
-	// The chart-bump detector (forts#117) is the third thing the gate
-	// does, and it reads one commit of the base branch. The fetch and
-	// the verb travel together: the verb reports every release as new
-	// without it.
-	for _, want := range []string{"git fetch --no-tags --depth=1 origin main", "nix run ./nixos#fort -- crd-diff"} {
-		if !strings.Contains(m[".gitea/workflows/checks.yaml"], want) {
-			t.Errorf("the workflow does not carry %q:\n%s", want, m[".gitea/workflows/checks.yaml"])
-		}
 	}
 	if !strings.Contains(m["provisioning/pulumi/Pulumi.yaml"], "binary: fort-pulumi") {
 		t.Errorf("Pulumi.yaml:\n%s", m["provisioning/pulumi/Pulumi.yaml"])

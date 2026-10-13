@@ -56,7 +56,7 @@ differently). Leave `mac` unset on a box with one onboard NIC and the
 forts/<host>.toml ← [baremetal] ip, mac, disk; fort check --all
 fort scaffold <host> --write  ← baremetal-runtime.nix, the LAN block by MAC
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
-fort add / fort seed          ← as for any fort
+a layer's verbs over the tree  ← as for any fort (docs/layers.md)
                               → PR → merge
 fort image <host>             ← nix build ./nixos#<host>-baremetal, no secret inside
                                  → ~/.cache/forts/<host>-nixos.img

@@ -25,46 +25,6 @@ jobs:
           go vet ./cmd/... ./internal/...
           go test ./cmd/fort ./internal/...
 
-  crds:
-    # The chart-bump detector (forts#117). This repo pins eleven chart
-    # versions in the `fort init` template, so a Renovate bump lands
-    # here, and the one line of the upstream release notes that says the
-    # release changes a CRD is the line nobody reads. The verb reads the
-    # chart instead: it pulls both versions of every chart whose version
-    # moved against main and compares their CRD files.
-    #
-    # Its own job, not a step of `go`: the job IS the check a reviewer
-    # reads, and it needs helm and one commit of the base branch, which
-    # the test job needs for nothing. It is cheap here because the verb
-    # runs from the checkout (`go run`), so there is no nix closure to
-    # restore — the estate's gate runs it as a step for that reason.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-          token: ${{ secrets.CONNECTION_PAT }}
-
-      - uses: azure/setup-helm@v4
-        with:
-          version: v4.1.3
-
-      - name: The base branch is in this checkout
-        # actions/checkout clones at depth 1, so the checkout holds no
-        # main at all and `git show origin/main:<path>` has nothing to
-        # read. One commit is all the verb wants: it compares the chart
-        # version main states with the one this tree states, and it
-        # never walks the history between them.
-        run: git fetch --no-tags --depth=1 origin main
-
-      - name: The CRD diff of every chart version that moved
-        env:
-          GITEA_ACTIONS: "true"
-        run: go run ./cmd/fort crd-diff
-
   nix:
     runs-on: ubuntu-latest
     # The closure of this pin comes from the runner's own cache server, not

@@ -28,7 +28,7 @@ every file that exists.
 ● provisioning/README.md          what secrets.yaml holds
 ● provisioning/pulumi/Pulumi.yaml the project file: `runtime: go`, `binary: fort-pulumi`
 ● flux/infrastructure/            the shared flux layer: controllers + configs, minus the two files below
-● .gitea/workflows/checks.yaml    the gate: `nix run ./nixos#fort -- check --all`, `fort crd-diff` (crd-diff.md) + a nix eval of every host
+● .gitea/workflows/checks.yaml    the gate: `nix run ./nixos#fort -- check --all` + a nix eval of every host; a layer's step lands after (layers.md)
 ● nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state   (.gitkeep)
 ```
 

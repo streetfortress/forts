@@ -20,7 +20,7 @@ import (
 //
 // Two red states are deliberate gates, not breakage: a staged-but-unseeded
 // app tree (a kustomization lists sops files that only exist after
-// `fort seed` / `fort mint`, so kustomize build fails — that red X is the
+// a layer's seed / `fort mint`, so kustomize build fails — that red X is the
 // guard working, and the PR is not mergeable until the ◆ files land) and a
 // host dir with no manifest (a retired or renamed host's lingering config
 // — a warning, so a dismantle in flight does not go red on its residue).

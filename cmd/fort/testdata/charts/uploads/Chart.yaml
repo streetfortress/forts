@@ -1,8 +1,0 @@
-# Test fixture: a second s3 consumer on a fort that already runs the
-# rustfs instance (#326). Its contract requires s3 alone, so the golden
-# shows a tenant registration on an existing instance — a policy file,
-# three appended lines, a key to seed — and nothing else.
-apiVersion: v2
-name: uploads
-version: 0.1.0
-appVersion: "0.1.0"

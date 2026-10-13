@@ -31,8 +31,8 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, Registry string
-	Admins                                                      []string
+	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts string
+	Admins                                            []string
 	// OperatorKeys: the devices that hold `deployer` on every fort of
 	// the estate (estate.toml operator_keys, forts#81). Empty renders
 	// the commented example, and no fort of the estate evaluates until
@@ -101,7 +101,6 @@ func initCmd(args []string) error {
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
 	zone := fl.String("zone", "", "the DNS zone of the mesh: every host on it is <host>.<zone> (docs/mesh.md); default <name>"+estate.DefaultZoneSuffix)
 	forts := fl.String("forts", defaultForts, "the framework's flake URL, inputs.forts of the estate flake")
-	registry := fl.String("registry", "gitea.zen.lofi", "the chart registry the gate logs into")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	var operatorKeys multiFlag
@@ -155,7 +154,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Registry: *registry, Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -187,7 +186,7 @@ func initCmd(args []string) error {
 	fmt.Printf("● %-44s forts, nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state\n", "(the directories the verbs write into)")
 	fmt.Println()
 	fmt.Println("yours to provide (init cannot write them):")
-	fmt.Printf("· %-44s the lab CA (estate.nix trusts it where it exists; cert-manager's issuer and fort add read the copy)\n", "nixos/certs/step-ca-root.pem")
+	fmt.Printf("· %-44s the lab CA (estate.nix trusts it where it exists; cert-manager's issuer reads the copy)\n", "nixos/certs/step-ca-root.pem")
 	fmt.Printf("· %-44s the same file\n", "flux/infrastructure/configs/step-ca-root.pem")
 	fmt.Printf("· %-44s the edge Alertmanager's webhook, sops-encrypted under the shared rule\n", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml")
 	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")
@@ -221,7 +220,7 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 		"mesh/peers.json":                 "empty; fort mint adds the first peer",
 		"provisioning/README.md":          "what secrets.yaml holds",
 		"provisioning/pulumi/Pulumi.yaml": "the project file: the program is fort-pulumi, beside fort",
-		".gitea/workflows/checks.yaml":    "the gate: fort check --all, fort crd-diff, nix eval of every host",
+		".gitea/workflows/checks.yaml":    "the gate: fort check --all, nix eval of every host; a layer's step lands after it",
 	}
 	var out []scaffoldFile
 	err := fs.WalkDir(initTemplates, "templates/init", func(path string, d fs.DirEntry, err error) error {

@@ -1,8 +1,7 @@
 # sfi/forts — the framework under an SFI estate
 
-The modules a fort is made of, the `fort` CLI that scaffolds, mints,
-images, provisions and checks one, and the chart templates `fort add`
-renders. An **estate** (sfi/deployments, sfi/second-estate) is the other
+The modules a fort is made of, and the `fort` CLI that scaffolds, mints,
+images, provisions and checks one. An **estate** (sfi/deployments, sfi/second-estate) is the other
 half: the manifests, host files, secrets and flux trees of a set of
 forts, built on this repo as a flake input. This repo holds no estate.
 
@@ -10,10 +9,10 @@ forts, built on this repo as a flake input. This repo holds no estate.
 flake.nix          nixosModules.<name> (one per file under modules/), packages.fort (+ fort-pulumi,
                    wrapped with the CLI's tool set), devShells.default
 modules/           the NixOS modules: the hardened profile, the mesh, k3s, flux, the ops verbs, ...
-cmd/fort/          the CLI; templates/scaffold, templates/add and templates/init (an estate's
-                   skeleton, the shared flux layer included) are what it renders
+cmd/fort/          the CLI; templates/scaffold and templates/init (an estate's skeleton, the
+                   shared flux layer included) are what it renders; a layer's templates are the layer's (docs/layers.md)
 cmd/fort-pulumi/   the pulumi program fort provision execs
-internal/          manifest, contract, seed, b2, tools (the CLI's tool set: internal/tools/tools.json)
+internal/          manifest, estate, seed, b2, tools (the CLI's tool set: internal/tools/tools.json)
 tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh creates one with fort init
 docs/              the CLI handbook — start at docs/README.md
 ```
@@ -206,9 +205,8 @@ or cloud shape, the flux cluster dir, the apps root kustomization; the
 flake discovers the image variant from the host dir's runtime import);
 `fort mint` is the identity step (host key → age → sops → wg peer →
 deploy key → canary; private halves in memory, then only in the host's
-sops file). `fort add` renders a chart's workload tree from the
-contract the chart ships and `fort seed` produces the Secrets
-(docs/fort-configuration-contracts.md — status section there). `fort dismantle` is the repo half
+sops file). A layer renders a chart's workload tree and its Secrets
+(docs/layers.md; the apps layer lives in sfi/fort-layers). `fort dismantle` is the repo half
 of decommissioning (#217) and `fort destroy` the side-effects half, gated
 on the dismantle merge (docs/destroy.md). The public-face extraction (github.com/streetfortress/forts)
 splits the generic tool from repo-specific manifests/state — later, and

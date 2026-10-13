@@ -92,9 +92,8 @@ type verbSpec struct {
 
 // write, yes and the other switches every verb spells the same way.
 var (
-	writeFlag  = flagSpec{name: "write"}
-	yesFlag    = flagSpec{name: "yes"}
-	chartDirFl = flagSpec{name: "chart-dir", kind: dirsOnly}
+	writeFlag = flagSpec{name: "write"}
+	yesFlag   = flagSpec{name: "yes"}
 )
 
 // completions is the table — the third reader of the verb list, after
@@ -110,7 +109,6 @@ var completions = map[string]verbSpec{
 		{name: "interface", kind: opaque},
 		{name: "zone", kind: opaque},
 		{name: "forts", kind: opaque},
-		{name: "registry", kind: opaque},
 		{name: "admin", kind: opaque},
 		{name: "operator-key", kind: opaque},
 		writeFlag,
@@ -124,40 +122,17 @@ var completions = map[string]verbSpec{
 		{name: "image", kind: paths},
 		yesFlag,
 	}, args: []candidates{realized}},
-	"adopt":   {flags: []flagSpec{yesFlag}, args: []candidates{adoptableHosts}},
-	"preview": {flags: []flagSpec{{name: "all"}, {name: "refresh"}, {name: "expect-no-changes"}}, args: []candidates{realized}},
-	"add": {flags: []flagSpec{
-		{name: "version", kind: opaque},
-		{name: "follow-pr", kind: opaque},
-		{name: "follow-main"},
-		{name: "name", kind: opaque},
-		{name: "hostname", kind: opaque},
-		{name: "http", kind: opaque},
-		{name: "without", kind: closed, values: providerTypes},
-		chartDirFl,
-		writeFlag,
-		// The OCI ref is the second positional and has no candidate:
-		// a chart lives in a registry, not in the tree (#113, "Not in
-		// scope").
-	}, args: []candidates{clusters, nil}},
-	"seed": {flags: []flagSpec{
-		{name: "set", kind: opaque},
-		chartDirFl,
-		writeFlag,
-	}, args: []candidates{clusters, seedDirs}, repeat: true},
+	"adopt":            {flags: []flagSpec{yesFlag}, args: []candidates{adoptableHosts}},
+	"preview":          {flags: []flagSpec{{name: "all"}, {name: "refresh"}, {name: "expect-no-changes"}}, args: []candidates{realized}},
 	"mint":             {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
 	"b2-key":           {flags: []flagSpec{writeFlag}, args: []candidates{b2RoleWords, b2RoleHosts}},
 	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
 	"b2-buckets":       {flags: []flagSpec{writeFlag}},
-	"check":            {flags: []flagSpec{{name: "all"}, chartDirFl}, args: []candidates{manifests}, repeat: true},
-	// crd-diff takes no positional: it reads every HelmRelease of the
-	// tree, and --base is a git revision, which this file will not go
-	// to git for (the callback runs per <TAB>).
-	"crd-diff":   {flags: []flagSpec{{name: "base", kind: opaque}, {name: "chart-cache", kind: dirsOnly}}},
-	"ssh-config": {flags: []flagSpec{writeFlag}},
-	"wg-conf":    {args: []candidates{meshMembers}},
-	"dismantle":  {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
-	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
+	"check":            {flags: []flagSpec{{name: "all"}}, args: []candidates{manifests}, repeat: true},
+	"ssh-config":       {flags: []flagSpec{writeFlag}},
+	"wg-conf":          {args: []candidates{meshMembers}},
+	"dismantle":        {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
+	"destroy":          {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
 	// The link verbs (#55): a sub-verb word first, then the fort, then
 	// the other estate's git URL, which nothing in the tree can offer.
 	"link": {flags: []flagSpec{
@@ -411,25 +386,6 @@ func meshMembers(cx *completeCx) []string {
 	return out
 }
 
-// seedDirs: the app dirs of the fort, in the short form seed accepts —
-// `symbology`, or `forts/postgres` for a shared instance (appDir
-// resolves both). The same reader seed plans with.
-func seedDirs(cx *completeCx) []string {
-	if len(cx.args) == 0 {
-		return nil
-	}
-	apps := filepath.Join("flux/apps", cx.args[0])
-	dirs, err := contractDirs(cx.root, apps)
-	if err != nil {
-		return nil
-	}
-	for i, d := range dirs {
-		dirs[i] = strings.TrimPrefix(d, apps+"/")
-	}
-	sort.Strings(dirs)
-	return dirs
-}
-
 // b2RoleWords: the role words of `fort b2-key`, the fixed roles and the
 // four that take a host, from the verb's own tables.
 func b2RoleWords(*completeCx) []string {
@@ -468,18 +424,6 @@ func hubRoles(*completeCx) []string {
 	out := make([]string, 0, len(estate.Roles))
 	for _, r := range estate.Roles {
 		out = append(out, r+"=")
-	}
-	sort.Strings(out)
-	return out
-}
-
-// providerTypes: `fort add --without <type>` — the provider types a
-// contract can require, from the one table that names their dirs
-// (fullform.go).
-func providerTypes(*completeCx) []string {
-	out := make([]string, 0, len(providerDirs))
-	for t := range providerDirs {
-		out = append(out, t)
 	}
 	sort.Strings(out)
 	return out

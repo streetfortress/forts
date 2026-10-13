@@ -64,7 +64,7 @@ is on a fort's path. The default derives from the estate's name, so
 private TLD, and `fort init --zone <name>` overrides the default. A
 `clients` entry gets no name: a roaming device is dialed by nobody.
 
-`fort add` names a lab app `<app>.<fort>.<zone>` ([add.md](add.md)). A host
+An app on a lab fort is named `<app>.<fort>.<zone>`. A host
 of another estate that links here serves this zone on itself, from its
 cached copy of peers.json ([links.md](links.md)).
 

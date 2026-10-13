@@ -173,8 +173,8 @@ into `peers.json`.
 ## What it never carries
 
 No chart versions (Renovate owns `repository.yaml`), no values (the
-HelmRelease), no secrets (`fort seed`), and **no apps list**: the fort's
-workloads are declared by `flux/apps/<host>/` itself — `fort add` is
+HelmRelease), no secrets, and **no apps list**: the fort's
+workloads are declared by `flux/apps/<host>/` itself — a layer's verb is
 imperative, and provider dirs arrive on first need. A checked `[[apps]]`
 membership was designed and parked (#269) until a sibling cut shows the
 tree copy is the pain.
@@ -321,7 +321,7 @@ with what the sops secret derives, where the age key is at hand.
 | `estate link` (run in the *other* estate) | every `[links.<name>]` of a fetch of this repo that names that estate, plus the host's endpoint → its `remotes` entry there |
 | `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore`, `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` and `[links.<name>]` ↔ `sfi.links.<name>` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token); `[[backups.pv]]` — the restic password for any block, the rustfs identity it declares on the hub for a block on `rustfs-central`, the B2 application key it mints for a block on `b2` |
-| `add`, `seed`, `check` | `[dns] zone` (the app hostname's zone on a cloud fort); `add` reads `[backups.db-physical]` for the postgres archive (the `ObjectStore`, the `ScheduledBackup` at `hour`); `check` traces every `rustfs-central` pv block to an identity on the hub and back |
+| `check`, a layer's verbs | `[dns] zone` (the app hostname's zone on a cloud fort); the backups layer reads `[backups.db-physical]` for the postgres archive (the `ObjectStore`, the `ScheduledBackup` at `hour`); `check` traces every `rustfs-central` pv block to an identity on the hub and back |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |

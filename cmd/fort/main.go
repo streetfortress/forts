@@ -17,8 +17,6 @@
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
 //	fort dismantle web3 --write         # retire: repo half → PR (merge)
 //	fort destroy web3                   # then the side-effects half
-//	fort add web3 oci://…/symbology     # render a chart's fort-side tree
-//	    --version 0.1.5 --write         # from its contract (#144) → seed → PR
 //
 // The create-nixos / delete playbooks that raised lab VMs on soundship
 // are gone: scaffold + mint cover their Phase A and cluster-init, the
@@ -50,10 +48,6 @@ func main() {
 		err = adopt(os.Args[2:])
 	case "preview":
 		err = preview(os.Args[2:])
-	case "add":
-		err = add(os.Args[2:])
-	case "seed":
-		err = seed(os.Args[2:])
 	case "mint":
 		err = mint(os.Args[2:])
 	case "b2-key":
@@ -64,8 +58,6 @@ func main() {
 		err = b2BucketsCmd(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
-	case "crd-diff":
-		err = crdDiff(os.Args[2:])
 	case "ssh-config":
 		err = sshConfigCmd(os.Args[2:])
 	case "wg-conf":
@@ -106,14 +98,14 @@ func usage() {
   the two not yet built — describe (declared, from the repo) and status
   (observed, from the live host) — are spec and status (#224).
 
-  author  init, scaffold, mint, image, add, seed, dismantle, ssh-config,
+  author  init, scaffold, mint, image, dismantle, ssh-config,
           link add, estate link, layer add, layer remove
   layers  fort <layer> <verb> … runs the layer's own binary, fort-<layer>,
           from PATH: what sits on top of the core (docs/layers.md)
   keys    b2-key (the B2 credentials no other verb creates),
           console-password (the fort's getty password)
   apply   provision, adopt, destroy
-  read    check, crd-diff, preview, wg-conf
+  read    check, preview, wg-conf
 
   init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--write]
       create an estate: render into the root of a git checkout the files
@@ -311,48 +303,16 @@ func usage() {
       a [baremetal] host: no stack by design) — with --refresh
       --expect-no-changes that is 'just iac-drift'.
 
-  add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main)
-      [--name app] [--hostname fqdn] [--http service:port]
-      [--without type,...] [--chart-dir path] [--write]
-      render a chart's fort-side tree from the forts.contract.yaml it
-      ships (docs/fort-configuration-contracts.md): app dir + HelmRelease with the
-      contract's wire: values filled by convention, gateway listener +
-      certificate, provider instances (forts/postgres, forts/valkey,
-      forts/rustfs — one namespace, forts) on first need and tenant
-      registration after that, the seeding contract.
-      New files + appended list entries only; prints the marked tree.
-      --write lays it down for a PR, then seed the ◆ files. --follow-pr
-      pins a PR's per-commit preview charts via a semver filter, and
-      --follow-main pins main's — the staging pin, which names no
-      version. A chart that ships no contract declares nothing: add
-      renders the app dir alone and says so; --http names the Service
-      to route to.
-
-  seed <fort> [<dir>...] [--set KEY] [--chart-dir path] [--write]
-      produce the fort's sops-encrypted Secrets from contracts: the
-      committed full-form forts.contract.yaml where there is one, else
-      the chart's own contract (pulled at the pinned tag) + the fort's
-      overlay, resolved against the fort's providers by convention.
-      A <dir> is the app's name (symbology), a provider's (postgres,
-      valkey, rustfs — under forts/) or its repo-relative path;
-      dirs default to every contract/chart dir of the fort, in
-      dependency order. Existing files are never rewritten: missing keys
-      are added (sops set); --set KEY takes one value from stdin for an
-      external key. Prints the ◆ plan; --write seeds. No value is ever
-      printed.
-
-  check (<fort>... | --all) [--chart-dir path]
-      the merge gate. Fleet: the fort's nix host dir, flux cluster dir
-      and apps tree exist; flux/apps/<fort>, flux-system and the shared
-      infrastructure layers kustomize-build (a listed-but-unseeded sops
-      file fails it — the guard working); every ${VAR} they carry is a
-      cluster-vars key (flux's envsubst is strict), and CLUSTER_NAME and
-      ESTATE_NAME are the fort's and the estate's names. Contracts: every app
-      dir's committed Secret carries the keys its effective contract
-      requires (plaintext key names, no decryption), every provider var
-      resolves to a seeded file+key, every required provider is present
-      and its wire: values are set in the HelmRelease. Charts are pulled
-      at the pinned tag once per run. The B2 pruning key's holder
+  check (<fort>... | --all)
+      the merge gate over the core's tree. Fleet: the fort's nix host
+      dir, flux cluster dir and apps tree exist; flux/apps/<fort>,
+      flux-system and the shared infrastructure layers kustomize-build
+      (a listed-but-unseeded sops file fails it — the guard working);
+      every ${VAR} they carry is a cluster-vars key (flux's envsubst is
+      strict), and CLUSTER_NAME and ESTATE_NAME are the fort's and the
+      estate's names. A layer's check (an app's contract against its
+      Secrets, docs/layers.md) is the layer's own gate step after this
+      one. The B2 pruning key's holder
       (#400): a host that sweeps a tier of sfi.pv-prune names that
       tier's restic-prune-s3-env key in its sops file (else an error:
       the activation fails), and a host that names one sweeps the tier
@@ -362,26 +322,6 @@ func usage() {
       claims. Strict on
       every fort; exits nonzero on any error; annotates for CI when
       GITEA_ACTIONS is set.
-
-  crd-diff [--base <rev>] [--chart-cache <dir>]
-      the chart-bump detector (#117). For every HelmRelease in the tree
-      whose chart.spec.version differs from the one --base holds
-      (origin/main by default), pull both chart versions and compare the
-      chart's own crds/ directory: every file that differs, every file
-      the new version adds, every file it removes, and the diff of all
-      of them. Helm never touches crds/ after the install, and the
-      helm-controller defaults spec.upgrade.crds to Skip, so a bump can
-      move the schema of every custom object in the cluster and say so
-      nowhere but one line of the upstream release notes. The verdict
-      reads the release's own two keys (#116): CreateReplace is a
-      warning the reviewer must read, anything else is an error,
-      because the cluster keeps the old schema. A bump that leaves an
-      install-only crds/ unchanged moves no schema, and warns anyway
-      while the policy is not CreateReplace: the next bump that does
-      move one lands nothing. A release with no crds/ directory on
-      either version is reported and passes. CI runs it on every push,
-      after a depth-1 fetch of the base branch; annotates when
-      GITEA_ACTIONS is set. Writes nothing.
 
   ssh-config [--write]
       render the client side of the mesh from the tree (#434):

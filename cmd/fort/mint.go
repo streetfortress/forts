@@ -37,7 +37,7 @@ import (
 // or trip the deploy-key mismatch guard. No value is ever printed.
 //
 // Runs after `fort scaffold <host> --write` (the canary's home and the
-// flake's view of the host) and before `fort add`. `fort dismantle` is
+// flake's view of the host) and before a layer's verbs. `fort dismantle` is
 // the inverse.
 func mint(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
@@ -632,7 +632,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then the image build + fort provision %s --image <path>\n", p.host)
 		return
 	}
-	fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: fort add / fort seed %s → PR → merge; then the image build + fort provision %s --image <path>\n", p.host, p.host)
+	fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: the fort's workloads (the estate's flux, or a layer's verbs: docs/layers.md) → PR → merge; then the image build + fort provision %s --image <path>\n", p.host)
 }
 
 // planMesh is the client side of the peer (mesh.go): the fort's Host

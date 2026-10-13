@@ -5,7 +5,6 @@ resources:
   - gateway-api
   - traefik
   - cert-manager
-  - cnpg
   - kube-state-metrics
   - prometheus-operator
 {{- if .Push }}

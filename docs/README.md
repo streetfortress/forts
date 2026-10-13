@@ -27,10 +27,10 @@ changes hands ([manifest.md](manifest.md)).
 
 | kind | verbs | what they touch |
 |---|---|---|
-| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md), [`layer add`, `layer remove`](layers.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
+| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md), [`layer add`, `layer remove`](layers.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
 | **layers** | `fort <layer> <verb>` ([layers](layers.md)) | the layer's own binary, `fort-<layer>`, from PATH: what sits on top of the core — a hub role with a render, the chart contract, a backup store. Core knows the protocol and no layer by name. |
 | **apply** | [`provision`](provision.md), [`adopt`](provision.md#adopt), [`destroy`](destroy.md) | the provider (Linode, or soundship's libvirt), through pulumi with inherited stdio: you read the preview and confirm. |
-| **read** | `check`, [`crd-diff`](crd-diff.md), [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `crd-diff` compares the `crds/` directory of both chart versions on a bump (CI runs it too); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
+| **read** | `check`, [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
 
 Author verbs never overwrite: scaffold keeps a file that exists, add only
 creates files and appends list entries, seed adds missing keys and never
@@ -50,8 +50,8 @@ Every fort change follows the same beat, and the reasons are the rules.
    the estate names the devices that hold `deployer` ([init.md](init.md#the-operators)),
    every flux layer kustomize-builds — a listed-but-unseeded Secret fails
    it, that red X is the guard working — strict envsubst satisfiable, no
-   ConfigMap or Secret above the API server's 1 MiB limit, secrets match
-   contracts) and `nix eval` of every host.
+   ConfigMap or Secret above the API server's 1 MiB limit) and `nix eval`
+   of every host. A layer's gate is its own step after it ([layers](layers.md)).
 3. **Apply from merged main.** `provision` and `destroy` run against what
    main says. `destroy` refuses outright unless the host's manifest is
    *absent* from `origin/main` — the merged dismantle PR is the deliberate
@@ -97,9 +97,9 @@ fort check <host>             ← what CI will say
                               → PR → merge → flux reconciles
 ```
 
-`add` and `seed` can run before the host exists — they are pure repo
-mutations — and usually do, so the first flux sync already finds the
-workloads. `fort image` runs on any x86_64 Nix host with KVM (devbox;
+A layer's author verbs (an app's tree from its chart, [layers](layers.md))
+can run before the host exists — they are pure repo mutations — and
+usually do, so the first flux sync already finds the workloads. `fort image` runs on any x86_64 Nix host with KVM (devbox;
 soundship needs no shell) and needs nix alone. See
 [`docs/nixos/operations.md`](../nixos/operations.md) for the image and
 the host side.
@@ -115,11 +115,8 @@ the host side.
   compares the provider with the *checkpoint*, not the program — provision-time
   outputs (status, disks, firewall devices) look stale there until a
   `pulumi refresh` is committed; only the program diff counts.
-- **A new workload:** `fort add` → `fort seed` → `fort check` → PR, as at
-  the first provision. Replacing a chart version is an edit to `repository.yaml`
-  (renovate proposes it; the gate checks the new contract, and
-  [`crd-diff`](crd-diff.md) compares the chart's `crds/` directory across
-  the bump).
+- **A new workload:** the estate's flux, or a layer's verbs over it
+  ([layers](layers.md)) → `fort check` → PR, as at the first provision.
 - **OS updates** are pull-based on the host (`auto-rebuild`): a merge to
   main is the deploy. The CLI is not involved.
 
@@ -167,7 +164,7 @@ needs before it does any work, and a missing one is named with both ways
 to get it: the machine's own package manager, or the whole set through
 the package or the dev shell. So a dev who already keeps `git`, `helm`,
 `jq`, `kustomize` and `sops` needs no nix on the machine for `check`,
-`scaffold`, `add`, `seed` or the sops verbs; nix is for the servers, and
+`scaffold` or the sops verbs; nix is for the servers, and
 for the verbs that build or provision them (`image` runs `nix build`,
 `provision` and `console-password` want the libvirt and mkpasswd tools).
 
@@ -203,7 +200,7 @@ verb that prints the candidates for the word under the cursor
 (`cmd/fort/complete.go`). The candidate set is **per verb**, because the
 verbs do not want the same list — `destroy` wants a stack whose manifest
 is gone, `wg-conf` wants a mesh member, which `macmini` is and never has
-a manifest, `add` and `seed` want a fort with a `[cluster]` table, and
+a manifest, and
 `b2-key pv` wants a host whose PV key is not `fort mint`'s to create. The
 completion reads the tree only: it never `git fetch`es, so `destroy`'s
 candidates are right except between the merge of a dismantle PR and the
@@ -222,9 +219,7 @@ other fails `go test`.
 - [mint](mint.md) — the host's identity, sops-encrypted in-repo
 - [provision](provision.md) — the first provision and day-2 applies; `preview`, `adopt`
 - [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
-- [add](add.md) — a chart's fort-side tree, from its contract
 - [init](init.md) — create an estate: the files every other verb assumes
-- [seed](seed.md) — the sops Secrets, from contracts
 - [dismantle](dismantle.md) — the repo half of retirement
 - [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]`, `flux/hub/<hub fort>/`, the flux subscription
 - [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens
@@ -233,11 +228,7 @@ other fails `go test`.
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
-- [crd-diff](crd-diff.md) — the chart-bump detector: the `crds/` directory of both chart versions, and who owns it
 - [destroy](destroy.md) — the side-effects half, gated on the merge
-- [fort configuration contracts](fort-configuration-contracts.md) — the
-  contract schema, overlays, the gate, chart-author guidelines (the #144
-  design document)
 
 ## The estate layout (v1, 2026-10-04)
 

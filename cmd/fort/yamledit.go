@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// Text-level edits for the two "append a line to an existing file" cases
-// fort add is allowed (docs/fort-configuration-contracts.md: new files + appended list
-// entries, never a rewrite). Working on text rather than a YAML tree
+// Text-level edits for the "append a line to an existing file" cases an
+// author verb is allowed (new files + appended list entries, never a
+// rewrite). Working on text rather than a YAML tree
 // keeps every comment and the author's formatting byte-for-byte; the
 // files are ours, so the shapes assumed here are the shapes we render.
 
@@ -62,29 +62,6 @@ func appendBlock(text, block string) string {
 	return text + strings.TrimRight(block, "\n") + "\n"
 }
 
-// appendPatch registers a kustomize JSON6902 patch file against a target,
-// creating the `patches:` block (with the given comment) on first use.
-func appendPatch(text, comment, path, group, version, kind, name, namespace string) string {
-	entry := fmt.Sprintf(`  - path: %s
-    target:
-      group: %s
-      version: %s
-      kind: %s
-      name: %s
-      namespace: %s
-`, path, group, version, kind, name, namespace)
-	// The entry goes inside the existing patches: list. appendBlock would
-	// put it at the end of the file, under whatever block follows —
-	// `kustomize build` then reads `path` as a field of a trailing
-	// configMapGenerator and fails the whole apps layer with
-	// `unknown field "path"` (deployments#696, the staging sites-db).
-	if out, err := insertIntoBlock(text, "patches", entry); err == nil {
-		return out
-	}
-	// No patches: block — create one at the end of the file.
-	return appendBlock(text, comment+"patches:\n"+entry)
-}
-
 // appendMapEntry inserts `<indent><key>: <value>` as the last entry of the
 // mapping whose key line is exactly <anchor> (e.g. "    keys:"), i.e.
 // after the last line indented deeper than the anchor.
@@ -115,49 +92,6 @@ func appendMapEntry(text, anchor, entry string) (string, error) {
 	out := append([]string{}, lines[:end+1]...)
 	out = append(out, entry)
 	out = append(out, lines[end+1:]...)
-	return strings.Join(out, "\n"), nil
-}
-
-// appendMapEntryUnder is appendMapEntry scoped to one section: the anchor
-// is searched only after the line that is exactly <section>, for files
-// that carry the same anchor twice (the rustfs contract's two `keys:`).
-func appendMapEntryUnder(text, section, anchor, entry string) (string, error) {
-	lines := strings.Split(text, "\n")
-	at := -1
-	for i, l := range lines {
-		if l == section {
-			at = i
-			break
-		}
-	}
-	if at < 0 {
-		return "", fmt.Errorf("no %q line", section)
-	}
-	head := strings.Join(lines[:at+1], "\n")
-	tail, err := appendMapEntry(strings.Join(lines[at+1:], "\n"), anchor, entry)
-	if err != nil {
-		return "", err
-	}
-	return head + "\n" + tail, nil
-}
-
-// appendAfterLast inserts <line> after the last line that starts with
-// <prefix> (whitespace included) — the bucket Job's `rc bucket create`
-// run, where order is meaningless and the shape is one line per app.
-func appendAfterLast(text, prefix, line string) (string, error) {
-	lines := strings.Split(text, "\n")
-	at := -1
-	for i, l := range lines {
-		if strings.HasPrefix(l, prefix) {
-			at = i
-		}
-	}
-	if at < 0 {
-		return "", fmt.Errorf("no line starting with %q", prefix)
-	}
-	out := append([]string{}, lines[:at+1]...)
-	out = append(out, line)
-	out = append(out, lines[at+1:]...)
 	return strings.Join(out, "\n"), nil
 }
 

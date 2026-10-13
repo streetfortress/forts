@@ -51,17 +51,11 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"wg-conf", ""}, want: []string{"lab-fort", "macmini", "steven-mac"}},
 
 		// The forts with a [cluster] table: a plain fort has no fleet surface.
-		{line: []string{"add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "sfi-fort-e33e2d5"}},
-		{line: []string{"seed", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "sfi-fort-e33e2d5"}},
 		// The OCI ref comes from a registry, not from the tree.
 		{line: []string{"add", "cloud-fort", ""}},
 
 		// The fort's app dirs, in the short form seed accepts; gateway/
 		// ships no contract and is not one.
-		{line: []string{"seed", "cloud-fort", ""}, want: []string{"forts/postgres", "symbology"}},
-		{line: []string{"seed", "cloud-fort", "symbology", ""}, want: []string{"forts/postgres"}},
-		{line: []string{"seed", "cloud-fort", "--write", ""}, want: []string{"forts/postgres", "symbology"}},
-		{line: []string{"seed", "lab-fort", ""}}, // no apps tree at all
 
 		// Repeatable, and never twice.
 		{line: []string{"check", "lab-fort", ""}, want: []string{"cloud-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
@@ -84,17 +78,11 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"estate", "link", ""}},
 
 		// Flag names, and the values that are closed.
-		{line: []string{"seed", "--"}, want: []string{"--chart-dir", "--set", "--write"}},
 		{line: []string{"destroy", "gone-fort", "-"}, want: []string{"--no-stack", "--yes"}},
-		{line: []string{"add", "cloud-fort", "oci://r/c", "--without", ""}, want: []string{"postgres", "s3", "valkey"}},
 		{line: []string{"init", "--hub", ""}, want: []string{"ca=", "forge=", "monitoring="}, directive: dirNoSpace},
 
 		// The values the shell completes, and the ones only the operator knows.
 		{line: []string{"image", "lab-fort", "--from", ""}, directive: dirFiles},
-		{line: []string{"check", "--chart-dir", ""}, directive: dirDirs},
-		{line: []string{"add", "cloud-fort", "oci://r/c", "--version", ""}},
-		// A flag that took its value inline leaves the cursor on a positional.
-		{line: []string{"seed", "--chart-dir=/tmp/c", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "sfi-fort-e33e2d5"}},
 	} {
 		t.Run(strings.Join(tc.line, " "), func(t *testing.T) {
 			want, directive := tc.want, tc.directive

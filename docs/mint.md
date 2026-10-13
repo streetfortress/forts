@@ -10,7 +10,7 @@ secrets, the mesh peer entry, the console password where the host file
 enables the door, and — for a flux cluster — the cluster's
 age key, the deploy key gitea trusts, and the canary that proves the
 whole chain works. It runs after [`scaffold --write`](scaffold.md) and
-before [`add`](add.md); [`dismantle`](dismantle.md) is its exact inverse.
+before a layer's verbs over the fort's tree; [`dismantle`](dismantle.md) is its exact inverse.
 
 ## The custody model
 

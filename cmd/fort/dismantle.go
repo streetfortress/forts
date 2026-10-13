@@ -484,36 +484,6 @@ func scanResidue(root, host string, accounted []string, edited map[string]string
 	}
 	sort.Strings(residue)
 
-	contracts := fleetContracts(root)
-	target := filepath.Join(root, "flux/apps", host) + string(filepath.Separator)
-	for _, c := range contracts {
-		if strings.HasPrefix(c, target) {
-			continue
-		}
-		raw, err := os.ReadFile(c)
-		if err != nil || !isFullForm(raw) {
-			continue
-		}
-		ff, err := parseFullForm(raw)
-		if err != nil {
-			continue
-		}
-		dir := filepath.Dir(c)
-		check := func(what string, s Spec) {
-			if s.Sops != nil && strings.HasPrefix(filepath.Clean(filepath.Join(dir, s.Sops[0]))+string(filepath.Separator), target) {
-				rel, _ := filepath.Rel(root, c)
-				crossRefs = append(crossRefs, rel+": "+what+" ← "+s.Sops[0])
-			}
-		}
-		for _, v := range ff.Vars {
-			check("var "+v.Name, v.Spec)
-		}
-		for _, sf := range ff.Secrets {
-			for _, k := range sf.Keys {
-				check(sf.File+"/"+k.Name, k.Spec)
-			}
-		}
-	}
 	return residue, crossRefs
 }
 
