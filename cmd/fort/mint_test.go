@@ -21,10 +21,8 @@ func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
 // checks every artifact against the shape preseed-identity produced,
 // re-runs (a no-op that restores the identity from the secrets file),
 // then dismantles and expects the original files back byte-for-byte.
-// The fixture declares an empty [backups]: TestMint is about the identity,
-// and a pv block pulls fleet credentials out of
-// provisioning/secrets.yaml through sops, which a tmpdir has no age key
-// for. The backup half's pure logic is covered in mintbackup_test.go.
+// TestMint is about the identity alone: the backup credentials are the
+// backups layer's to mint (forts#143).
 func TestMint(t *testing.T) {
 	repo := estateRoot(t)
 	const host = "mint-fort"
@@ -43,7 +41,7 @@ func TestMint(t *testing.T) {
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
 	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nfort = \"luxor\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[backups]\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
@@ -288,7 +286,7 @@ func TestMintPlainFort(t *testing.T) {
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
 	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nfort = \"luxor\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[backups]\n[libvirt]\nip = \"10.0.0.96\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}
 	gitea, registered := newFakeGitea(t, st), &st.deploy
@@ -385,7 +383,7 @@ func TestMintConsole(t *testing.T) {
 	}
 	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
 	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.95\"\n[backups]\n[libvirt]\nip = \"10.0.0.95\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.95\"\n[libvirt]\nip = \"10.0.0.95\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
@@ -505,7 +503,7 @@ func TestMintConsole(t *testing.T) {
 	// rewrite: the first fort's entry is never touched
 	write(consoleRegistry, host+": ENC[z]\nsops: {}\n")
 	const other = "mint-console-2"
-	write(manifest.Path(other), "mesh_ip = \"10.1.0.94\"\n[backups]\n[libvirt]\nip = \"10.0.0.94\"\n")
+	write(manifest.Path(other), "mesh_ip = \"10.1.0.94\"\n[libvirt]\nip = \"10.0.0.94\"\n")
 	write("nixos/hosts/"+other+"/default.nix", "{\n  sfi.ops.console.enable = true;\n}\n")
 	tool4 := &fakeTool{}
 	p4, err := planMint(tmp, other, tool4, gitea, false)

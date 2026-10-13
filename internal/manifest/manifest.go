@@ -61,9 +61,6 @@ type Host struct {
 
 	Shape Shape `toml:"shape"`
 	DNS   DNS   `toml:"dns"`
-	// Backups is the [backups] table (backups.go): per-layer blocks by
-	// store name. Required; empty is a declaration.
-	Backups Backups `toml:"backups"`
 	// Cluster is the [cluster] table: this fort is a flux cluster (#426)
 	// — k3s on the datastore it names, flux, flux/clusters + flux/apps,
 	// the cluster age key — and what its k3s does beyond the
@@ -101,8 +98,8 @@ type Shape struct {
 // `sfi.k3s.datastore = "<value>"` from it, and modules/k3s-server.nix
 // maps that to services.k3s.clusterInit (etcd = true).
 //
-// audit_logging (#626) is the second toggle the manifest carries, for
-// the same reason as the first ([backups]): every cluster fort
+// audit_logging (#626) is a toggle the manifest carries because every
+// cluster fort
 // audits the same WAY, and not every fort pays the same disk for it. A
 // 4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
 // carry the same log.
@@ -325,6 +322,12 @@ func Parse(host string, raw []byte) (Host, error) {
 		return Host{}, fmt.Errorf("%s: %w", Path(host), err)
 	}
 	var tables []string
+	// [backups] was the core's until forts#143: it is the backups layer's
+	// table now, in layers/backups/forts/<host>.toml (sfi/fort-layers).
+	// Named here so the refusal says where it went, not "unknown key".
+	if md.IsDefined("backups") {
+		return Host{}, fmt.Errorf("%s: [backups] moved to layers/backups/forts/%s.toml — the backups layer's table (sfi/fort-layers, docs/layers.md)", Path(host), host)
+	}
 	for _, k := range md.Undecoded() {
 		if _, ok := providers[k[0]]; ok {
 			if len(k) == 1 {
@@ -343,10 +346,6 @@ func Parse(host string, raw []byte) (Host, error) {
 		return Host{}, fmt.Errorf("%s: %d provider tables (%s) — a fort has exactly one", Path(host), len(tables), strings.Join(tables, ", "))
 	}
 	h.Provider = tables[0]
-	// [backups] present-but-empty and [backups] absent decode to the same
-	// zero value, and they mean opposite things (backups.go): record
-	// which one the file said.
-	h.Backups.Declared = md.IsDefined("backups")
 	for name, l := range h.Links {
 		l.Name = name
 		h.Links[name] = l
@@ -407,9 +406,6 @@ func (h Host) Validate(host string) error {
 	if h.Shape.Vcpus < 0 || h.Shape.Memory < 0 {
 		return fail("[shape] vcpus/memory: want positive")
 	}
-	if err := h.Backups.Validate(); err != nil {
-		return fail("%v", err)
-	}
 	if err := h.ValidateLinks(); err != nil {
 		return fail("%v", err)
 	}
@@ -421,13 +417,9 @@ func (h Host) Validate(host string) error {
 			return fail("%v", err)
 		}
 	} else {
-		// A plain fort has nothing to back up and nothing to cluster; the
-		// manifest must not pretend otherwise. Lab VM only for now: the
-		// shape is a libvirt domain on the hypervisor, and a cloud or
-		// hardware plain fort would be its own host template.
-		if h.Backups.Backed() {
-			return fail("a fort with no [cluster] table has nothing to back up — leave [backups] empty, or add [cluster]")
-		}
+		// A plain fort is a lab VM for now: the shape is a libvirt domain
+		// on the hypervisor, and a cloud or hardware plain fort is its own
+		// host template (forts#142).
 		if h.Libvirt() == nil {
 			return fail("a fort with no [cluster] table is a lab VM for now — add the [libvirt] table, or add [cluster]")
 		}

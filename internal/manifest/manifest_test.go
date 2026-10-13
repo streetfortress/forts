@@ -11,9 +11,6 @@ const lab = `mesh_ip = "10.1.0.15"
 
 [cluster]
 
-[[backups.pv]]
-store = "rustfs-central"
-
 [shape]
 vcpus = 2
 memory = 4
@@ -27,13 +24,6 @@ const cloud = `mesh_ip = "10.1.0.54"
 
 [cluster]
 datastore = "sqlite"
-
-[backups.db-physical]
-store = "b2"
-hour = 4
-
-[backups.db-logical]
-store = "b2"
 
 [dns]
 zone = "streetfortress.cloud"
@@ -51,15 +41,6 @@ func TestParse(t *testing.T) {
 	}
 	if h.Provider != "libvirt" || h.Cloud() || h.Libvirt() == nil || h.Libvirt().IP != "10.0.0.41" || h.Linode() != nil {
 		t.Errorf("lab: %+v", h)
-	}
-	if !h.Backups.Backed() || h.Backups.PVTo(StoreRustfsCentral) == nil || h.Backups.PVTo(StoreB2) != nil || !h.Backups.NeedsHub() || h.Backups.PV[0].Cadence() != "6h" {
-		t.Errorf("lab backups: %+v", h.Backups)
-	}
-	if (Backups{Declared: true}).Backed() {
-		t.Error(`an empty [backups] is a declaration that nothing is backed up, not a table that backs up`)
-	}
-	if (Backups{Declared: true}).NeedsHub() {
-		t.Error("an empty [backups] needs no hub")
 	}
 	if h.Endpoint() != "10.0.0.41" || h.Shape.Disk != "80G" {
 		t.Errorf("lab derived: endpoint %q shape %+v", h.Endpoint(), h.Shape)
@@ -109,13 +90,6 @@ const metal = `mesh_ip = "10.1.0.6"
 
 [cluster]
 
-[[backups.pv]]
-store = "b2"
-
-[[backups.pv]]
-store = "rustfs-central"
-every = "weekly"
-
 [baremetal]
 ip = "10.0.0.6"
 mac = "f8:ce:72:02:05:07"
@@ -144,7 +118,7 @@ func TestParseBaremetal(t *testing.T) {
 		t.Errorf("cloud: realized %v lan %q", c.Realized(), c.LanIP())
 	}
 	// mac is optional: one wired NIC matches en* like a VM
-	if _, err := Parse("m", []byte("mesh_ip = \"10.1.0.6\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nip = \"10.0.0.6\"\n")); err != nil {
+	if _, err := Parse("m", []byte("mesh_ip = \"10.1.0.6\"\n[cluster]\n[baremetal]\nip = \"10.0.0.6\"\n")); err != nil {
 		t.Errorf("mac should be optional: %v", err)
 	}
 }
@@ -160,47 +134,33 @@ func TestParseRefuses(t *testing.T) {
 		{"bad mesh ip", "mesh_ip = \"lol\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_ip"},
 		// mesh_endpoint is rendered onto a WireGuard Endpoint line, of
 		// every peer of every estate this host links to, unescaped (#99).
-		{"endpoint injects a section", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"10.0.0.1\\n[Interface]\\nPostUp = id\"\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
-		{"endpoint with a port", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"hub.lan:51820\"\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
-		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
-		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
-		// The variant the manifest exists to make un-forgettable: silence
-		// is not "lab", and a typo is not a default.
-		{"no backups table", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[backups] is required"},
-		{"retired profile", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nprofile = \"lab\"\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key backups.profile"},
-		{"unknown backups key", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\nhour = 5\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key backups.hour"},
-		{"pv without store", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nevery = \"6h\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[[backups.pv]] #1: store is required"},
-		{"pv unknown store", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"offsite\"\n[libvirt]\nip = \"10.0.0.1\"\n", "store \"offsite\": want one of b2, rustfs-central"},
-		{"pv store twice", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"b2\"\n[[backups.pv]]\nstore = \"b2\"\nevery = \"weekly\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[[backups.pv]] #2: store \"b2\" is already named"},
-		{"pv bad cadence", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"b2\"\nevery = \"hourly\"\n[libvirt]\nip = \"10.0.0.1\"\n", "every \"hourly\": want one of 6h, daily, weekly"},
-		{"pv unknown key", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"b2\"\nhour = 5\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key backups.pv.hour"},
-		{"db-physical on the hub's rustfs", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups.db-physical]\nstore = \"rustfs-central\"\nhour = 4\n[libvirt]\nip = \"10.0.0.1\"\n", "[backups.db-physical]: store \"rustfs-central\" does not take this layer"},
-		{"db-physical without hour", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups.db-physical]\nstore = \"b2\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[backups.db-physical]: hour is required"},
-		{"db-physical hour 24", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups.db-physical]\nstore = \"b2\"\nhour = 24\n[libvirt]\nip = \"10.0.0.1\"\n", "hour 24: want 0–23"},
-		{"db-logical with hour", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups.db-logical]\nstore = \"b2\"\nhour = 4\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key backups.db-logical.hour"},
-		{"db-logical on the hub's rustfs", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups.db-logical]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[backups.db-logical]: store \"rustfs-central\" does not take this layer"},
+		{"endpoint injects a section", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"10.0.0.1\\n[Interface]\\nPostUp = id\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
+		{"endpoint with a port", "mesh_ip = \"10.1.0.1\"\nmesh_endpoint = \"hub.lan:51820\"\n[libvirt]\nip = \"10.0.0.1\"\n", "mesh_endpoint"},
+		{"linode missing type", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[linode]\nregion = \"us-sea\"\n", "[linode]: region and type are required"},
+		// [backups] is the backups layer's table now (forts#143): the refusal names where it went.
+		{"backups moved", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "layers/backups/forts/h.toml"},
+		{"libvirt missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[libvirt]\nlan_prefix = 24\n", "[libvirt]: ip is required"},
 		{"dns half", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[dns] needs both"},
 		{"bad disk", "mesh_ip = \"10.1.0.1\"\n[shape]\ndisk = \"80\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[shape] disk"},
 		// The shape table (#426) is handled like the provider tables:
 		// strict keys, and the retired top-level k3s_cluster_init is an
 		// unknown key like any other — the loader special-cases nothing.
 		// No [cluster] is a plain fort, which has nothing to back up.
-		{"plain with backups", "mesh_ip = \"10.1.0.1\"\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.1\"\n", "has nothing to back up"},
-		{"plain in the cloud", "mesh_ip = \"10.1.0.1\"\n[backups]\n[dns]\nzone = \"z\"\nname = \"n\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n", "is a lab VM for now"},
-		{"retired dev table", "mesh_ip = \"10.1.0.1\"\n[dev]\n[backups]\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key dev"},
-		{"retired k3s_cluster_init", "k3s_cluster_init = false\nmesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key k3s_cluster_init"},
-		{"bad datastore", "mesh_ip = \"10.1.0.1\"\n[[backups.pv]]\nstore = \"rustfs-central\"\n[cluster]\ndatastore = \"postgres\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[cluster] datastore \"postgres\": want one of sqlite, etcd"},
-		{"datastore wrong type", "mesh_ip = \"10.1.0.1\"\n[[backups.pv]]\nstore = \"rustfs-central\"\n[cluster]\ndatastore = false\n[libvirt]\nip = \"10.0.0.1\"\n", "datastore"},
+		{"plain in the cloud", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\nname = \"n\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n", "is a lab VM for now"},
+		{"retired dev table", "mesh_ip = \"10.1.0.1\"\n[dev]\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key dev"},
+		{"retired k3s_cluster_init", "k3s_cluster_init = false\nmesh_ip = \"10.1.0.1\"\n[cluster]\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key k3s_cluster_init"},
+		{"bad datastore", "mesh_ip = \"10.1.0.1\"\n[cluster]\ndatastore = \"postgres\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[cluster] datastore \"postgres\": want one of sqlite, etcd"},
+		{"datastore wrong type", "mesh_ip = \"10.1.0.1\"\n[cluster]\ndatastore = false\n[libvirt]\nip = \"10.0.0.1\"\n", "datastore"},
 		// [cluster] (#626): a typo is not a default, and a plain fort has
 		// no API server to audit.
-		{"unknown cluster key", "mesh_ip = \"10.1.0.1\"\n[[backups.pv]]\nstore = \"rustfs-central\"\n[cluster]\naudit_loging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key cluster.audit_loging"},
-		{"cluster wrong type", "mesh_ip = \"10.1.0.1\"\n[[backups.pv]]\nstore = \"rustfs-central\"\n[cluster]\naudit_logging = \"yes\"\n[libvirt]\nip = \"10.0.0.1\"\n", "audit_logging"},
-		{"baremetal missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nmac = \"f8:ce:72:02:05:07\"\n", "[baremetal]: ip is required"},
-		{"baremetal bad mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"f8ce.7202.0507x\"\n", "[baremetal]: mac"},
-		{"baremetal upper mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"F8:CE:72:02:05:07\"\n", "lowercase"},
-		{"baremetal bad disk", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nip = \"10.0.0.1\"\ndisk = \"nvme0n1\"\n", "[baremetal]: disk"},
-		{"baremetal with shape", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[shape]\nvcpus = 4\n[baremetal]\nip = \"10.0.0.1\"\n", "[shape] is meaningless"},
-		{"baremetal unknown key", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[baremetal]\nip = \"10.0.0.1\"\nbmc = \"x\"\n", "[baremetal]: unknown key bmc"},
+		{"unknown cluster key", "mesh_ip = \"10.1.0.1\"\n[cluster]\naudit_loging = true\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key cluster.audit_loging"},
+		{"cluster wrong type", "mesh_ip = \"10.1.0.1\"\n[cluster]\naudit_logging = \"yes\"\n[libvirt]\nip = \"10.0.0.1\"\n", "audit_logging"},
+		{"baremetal missing ip", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[baremetal]\nmac = \"f8:ce:72:02:05:07\"\n", "[baremetal]: ip is required"},
+		{"baremetal bad mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"f8ce.7202.0507x\"\n", "[baremetal]: mac"},
+		{"baremetal upper mac", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[baremetal]\nip = \"10.0.0.1\"\nmac = \"F8:CE:72:02:05:07\"\n", "lowercase"},
+		{"baremetal bad disk", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[baremetal]\nip = \"10.0.0.1\"\ndisk = \"nvme0n1\"\n", "[baremetal]: disk"},
+		{"baremetal with shape", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[shape]\nvcpus = 4\n[baremetal]\nip = \"10.0.0.1\"\n", "[shape] is meaningless"},
+		{"baremetal unknown key", "mesh_ip = \"10.1.0.1\"\n[cluster]\n[baremetal]\nip = \"10.0.0.1\"\nbmc = \"x\"\n", "[baremetal]: unknown key bmc"},
 	} {
 		_, err := Parse("h", []byte(tc.text))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -243,17 +203,17 @@ func TestLoadAll(t *testing.T) {
 	}
 }
 
-// A plain fort: no [cluster] table, no backups, a lab VM — the baseline
+// A plain fort: no [cluster] table, a lab VM — the baseline
 // host and nothing the framework names beyond it.
 func TestPlainFort(t *testing.T) {
-	h, err := Parse("plain-fort", []byte("mesh_ip = \"10.1.0.96\"\n[backups]\n[libvirt]\nip = \"10.0.0.96\"\n"))
+	h, err := Parse("plain-fort", []byte("mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if h.IsCluster() || h.Datastore() != "" {
 		t.Errorf("want a plain fort: cluster=%v datastore %q", h.IsCluster(), h.Datastore())
 	}
-	cluster, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.96\"\n"))
+	cluster, err := Parse("lab", []byte("mesh_ip = \"10.1.0.96\"\n[cluster]\n[libvirt]\nip = \"10.0.0.96\"\n"))
 	if err != nil || !cluster.IsCluster() {
 		t.Errorf("a fort with [cluster] is a cluster: %v", err)
 	}

@@ -9,8 +9,8 @@
 # qcow-runtime import below says which variant). The root filesystem and
 # bootloader come from qcow-runtime.nix + the qemu image variant, so there
 # is no hand-written hardware.nix.
-# PLAIN FORT (no [cluster] table in the manifest): no k3s, no flux, no
-# backups. What the framework gives every fort and nothing more — the
+# PLAIN FORT (no [cluster] table in the manifest): no k3s, no flux.
+# What the framework gives every fort and nothing more — the
 # hardened host, the mesh, the operator account `deployer` with the sfi-*
 # verbs (modules/ops/deployer.nix, #647), the shell at a pane, the rebuild
 # loop. Ideally nobody logs in; the prescribed access is

@@ -143,11 +143,11 @@ func TestEstateLinkRefusals(t *testing.T) {
 		"wrong zone":        {func(s string) string { return strings.Replace(s, "staging.mesh", "stage.mesh", 1) }, "one zone per mesh"},
 		// a cloud cluster fort with no [dns] and no mesh_endpoint has no endpoint
 		"no endpoint": {func(s string) string {
-			return strings.Replace(strings.Replace(s, "[backups]", "[cluster]\n[backups]", 1), "[libvirt]\nip = \"10.0.0.5\"", "[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"", 1)
+			return strings.Replace(strings.Replace(s, "[libvirt]", "[cluster]\n[libvirt]", 1), "[libvirt]\nip = \"10.0.0.5\"", "[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"", 1)
 		}, "no endpoint"},
 		// an endpoint built from [dns] that is not one name is refused on the claim (#99)
 		"endpoint not a name": {func(s string) string {
-			return strings.Replace(strings.Replace(s, "[backups]", "[cluster]\n[backups]", 1), "[libvirt]\nip = \"10.0.0.5\"", "[dns]\nzone = \"evil\\n[Interface]\"\nname = \"hub\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"", 1)
+			return strings.Replace(strings.Replace(s, "[libvirt]", "[cluster]\n[libvirt]", 1), "[libvirt]\nip = \"10.0.0.5\"", "[dns]\nzone = \"evil\\n[Interface]\"\nname = \"hub\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"", 1)
 		}, "not an IP address or a DNS name"},
 	} {
 		dir := fixture(tc.edit)

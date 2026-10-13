@@ -71,11 +71,11 @@ comes first because the URL carries an `@` of its own, and the forge's
 name is `--forge-name gitea.zen.lofi`), and `init` renders the shared
 layer for a monitoring hub or none:
 
-| estate.toml | the fort's file for the hub | the edges push | backups register |
-|---|---|---|---|
-| `[hubs.monitoring]` with `estate` = this estate | scaffold renders every fort's file into `flux/hub/<host>/`, and the hub's own `serves/` subscribes to it through the flux-system source | `HUB_MESH_IP` = the hub's `mesh_ip` | a `[[backups.pv]]` block on `rustfs-central` registers with `flux/apps/<hub>/rustfs-central`; a block on `b2` needs nothing |
-| `[hubs.monitoring]` with `estate` = another | the same `flux/hub/<host>/`; that estate's `[[serves.monitoring]]` entry subscribes to it | `HUB_MESH_IP` = the hub's `remotes` entry in `mesh/peers.json` | a block on `rustfs-central` is refused (nothing here to register with); `b2` blocks are fine |
-| no `[hubs.monitoring]` | none | the layer carries no `remote_write` and no fluent-bit | the same: `b2` only |
+| estate.toml | the fort's file for the hub | the edges push |
+|---|---|---|
+| `[hubs.monitoring]` with `estate` = this estate | scaffold renders every fort's file into `flux/hub/<host>/`, and the hub's own `serves/` subscribes to it through the flux-system source | `HUB_MESH_IP` = the hub's `mesh_ip` |
+| `[hubs.monitoring]` with `estate` = another | the same `flux/hub/<host>/`; that estate's `[[serves.monitoring]]` entry subscribes to it | `HUB_MESH_IP` = the hub's `remotes` entry in `mesh/peers.json` |
+| no `[hubs.monitoring]` | none | the layer carries no `remote_write` and no fluent-bit |
 
 `scaffold` writes `HUB_MESH_IP` into a cluster's `cluster-vars.yaml` when
 there is somewhere to push; the layer's edge Prometheus `remote_write` and

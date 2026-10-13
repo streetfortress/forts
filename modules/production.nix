@@ -49,10 +49,9 @@
   # 30909/30993: edge Prometheus/Alertmanager NodePorts (mesh-services-
   # edge.yaml) — the wg0-only opening IS their access control; silences
   # are set against 30993.
-  # 30432: postgres's primary NodePort (flux/apps/<fort>/forts/postgres/
-  # mesh-service.yaml), read by databasus-central on luxor (#327) — every
-  # fort, like the edge pair, so the consumer can assume the coordinate.
-  networking.firewall.interfaces.${config.sfi.mesh.interface}.allowedTCPPorts = [ 6443 10255 30432 30909 30993 ];
+  # A port a layer's workload answers on over the mesh (a database's
+  # NodePort for a hub's reader) is the estate's to open, in the host file.
+  networking.firewall.interfaces.${config.sfi.mesh.interface}.allowedTCPPorts = [ 6443 10255 30909 30993 ];
 
   # The in-cluster edge Prometheus (#53) scrapes the host node_exporter at
   # the mesh address; pod traffic to the host's own wg0 IP ingresses on

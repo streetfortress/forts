@@ -30,9 +30,8 @@ import (
 //	                            reads it, so the admin recipients alone
 //
 // WHERE THE PASSPHRASE LIVES, and why it is not the password manager.
-// The b2-key credentials live outside the repo because a key that can
-// delete every backup must not sit where every invocation can read it.
-// This one is the opposite case. An admin age key already decrypts each
+// A credential that can delete every backup lives outside the repo, where
+// no invocation can read it. This one is the opposite case. An admin age key already decrypts each
 // fort's ssh host key, its wireguard key, its cluster age key and its
 // deploy key (nixos/secrets/<host>.yaml). A console password for an
 // account with no wheel is strictly less than any of those, so the

@@ -200,8 +200,7 @@ verb that prints the candidates for the word under the cursor
 (`cmd/fort/complete.go`). The candidate set is **per verb**, because the
 verbs do not want the same list — `destroy` wants a stack whose manifest
 is gone, `wg-conf` wants a mesh member, which `macmini` is and never has
-a manifest, and
-`b2-key pv` wants a host whose PV key is not `fort mint`'s to create. The
+a manifest. The
 completion reads the tree only: it never `git fetch`es, so `destroy`'s
 candidates are right except between the merge of a dismantle PR and the
 pull.
@@ -252,7 +251,7 @@ mesh/
   peers.json                     who is on the mesh and where (mesh.md): mint adds, dismantle removes; remotes by hand
   ssh_config, known_hosts        rendered from peers.json + the manifests
 provisioning/
-  secrets.yaml                   the fleet secrets (gitea token, restic password, ...)
+  secrets.yaml                   the fleet secrets (gitea token, pulumi passphrase, ...)
   console-passwords.yaml         the console registry: mint adds a fort's passphrase, console-password rotates it, dismantle withdraws it
   pulumi/                        the project file, Pulumi.<host>.yaml per stack, and state/ (the file:// backend)
 .sops.yaml                       the flux rules: one per cluster, plus the shared infrastructure rule

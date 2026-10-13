@@ -140,12 +140,10 @@ and nothing else, and a `Kustomization` on `./flux/hub/luxor` under that
 account with `prune: true`. The own estate's subscription is the same
 without the `GitRepository`: its source is the FluxInstance's. No
 `decryption`: no secret rides `flux/hub/` yet. A secret the hub must
-hold for a served fort (a rustfs identity) fits the same path —
-encrypted to the hub cluster's age recipient, a public key — but the
-two estates of 2026-10 need none (staging declares no backups,
-production declares B2 only), and a `[[backups.pv]]` block on
-`rustfs-central` therefore still requires an in-estate monitoring hub
-([manifest.md](manifest.md)).
+hold for a served fort fits the same path — encrypted to the hub
+cluster's age recipient, a public key — but no role of the core carries
+one: a layer's registration (a backup identity) is the layer's channel
+(sfi/fort-layers).
 
 The served estate's branch rules keep `flux/hub/` protected where
 `flux/apps/<fort>/` is not: the hub applies what lands on `main` there.
@@ -161,7 +159,6 @@ The served estate's branch rules keep `flux/hub/` protected where
 | hub's estate: a `serves/` file no entry declares | error |
 | hub's estate: a fort that serves an estate a role has no `[links.<estate>]` in its manifest | warning, naming `fort link add` — the network half is its own verb ([links.md](links.md)), and the link's reconciler refuses on its own when the two sides disagree |
 | `[hubs.monitoring]` or a serves table names a fort that has no manifest here | error |
-| a `[[backups.pv]]` block on `rustfs-central` with no in-estate monitoring hub | error ([mint.md](mint.md)) |
 
 ## Interim
 

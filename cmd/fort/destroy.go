@@ -32,8 +32,8 @@ import (
 // tree — the right place for it — and the rerun picks up where it was.
 //
 // A [baremetal] host has no stack by design (#287): `--no-stack` skips
-// the pulumi steps and does only what is left — the off-repo identities
-// mint registered (deploy key, B2 keys). The machine itself goes by hand
+// the pulumi steps and does only what is left — the off-repo identity
+// mint registered (the deploy key). The machine itself goes by hand
 // (docs/baremetal.md). The flag is a declaration, not a detection:
 // with the manifest gone nothing says whether "no stack" meant hardware
 // or a host never provisioned, and only a human knows which.
@@ -44,7 +44,7 @@ func destroy(args []string) error {
 	host := args[0]
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "confirm the pulumi refresh and destroy without a prompt")
-	noStack := fs.Bool("no-stack", false, "a [baremetal] host: no pulumi stack to destroy — revoke the deploy key and B2 keys only")
+	noStack := fs.Bool("no-stack", false, "a [baremetal] host: no pulumi stack to destroy — revoke the deploy key only")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -150,34 +150,16 @@ func destroy(args []string) error {
 
 // revokeIdentities: the deploy key fort mint registered — the one
 // off-repo identity of the flux half (the flux age identity died with
-// the sops rule) — and the B2 application keys. An identity the estate
-// minted for an account of its own on the fort is the estate's to revoke.
-// Both warned rather than
-// fatal: the minting credential is an operational input
-// (docs/infra/backups.md), and a destroy must not be blocked waiting for
-// it. A B2 key is scoped to its fort's prefix, so what it can still
-// reach is only the backups that are about to age out — but it is live
-// until someone removes it.
-//
-// The retired nixos/secrets/<host>.yaml is read back from git history
-// once and answers for both: the GPG key ids (decrypted), and whether
-// the fort ever held a B2 key at all (a plaintext key name, #432) — so a
-// fort that never had one never asks for the minting key.
+// the sops rule). An identity the estate minted for an account of its
+// own on the fort is the estate's to revoke, and a layer's identities
+// (a backup store's keys) are the layer's: its dismantle runs before
+// this (docs/layers.md). Warned rather than fatal: a destroy must not
+// be blocked waiting for a credential.
 func revokeIdentities(root, host string) {
 	if msg, err := revokeDeployKey(root, host); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: deploy key: %v — delete flux-%s by hand in the repo's deploy-key settings\n", err, host)
 	} else {
 		fmt.Println("  deploy key:", msg)
-	}
-	secrets, err := readRetiredSecrets(root, host)
-	if err != nil {
-		// Unknown, not none: the B2 half falls back to listing by name.
-		fmt.Fprintf(os.Stderr, "warning: retired secrets: %v\n", err)
-	}
-	if msg, err := revokeB2Key(host, secrets); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: b2: %v — delete them by hand\n", err)
-	} else {
-		fmt.Println("  b2 key:", msg)
 	}
 }
 

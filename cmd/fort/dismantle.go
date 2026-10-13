@@ -63,13 +63,9 @@ type dismantlePlan struct {
 	sshConfig   string   // mesh/ssh_config re-rendered without the host ("" = nothing to do)
 	knownHosts  string   // mesh/known_hosts without the host's line ("" = nothing to do)
 	rekey       []string // sops files under the shared infrastructure rule
-	rustfsUser  string
-	rustfsUsers string   // the hub's users file the identity is withdrawn from   // the fort's identity to withdraw from luxor's provider contract
 	consolePass bool     // the fort has an entry in the console-password registry
 	stack       bool     // a pulumi stack exists: fort destroy deletes it after the merge
-	pruner      bool     // the fort's sops file names restic-prune-s3-env-b2: it holds the fleet's B2 pruning key (#400)
 	residue     []string // "path: N mention(s)"
-	crossRefs   []string // other forts' contracts sourcing from this fort
 	notes       []string
 }
 
@@ -152,30 +148,12 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// 5. the credentials and the stack this fort still owns. They come
 	// before the residue scan, because the scan skips the files they
 	// account for (p.settled).
-	//
-	// The registration with the hub's rustfs-central lives in the hub's
-	// tree, because that fort hosts the backup destination.
-	// Withdrawing it is what makes the credential go away
-	// — the IAM reconciler removes any user the contract no longer
-	// declares, so an orphaned identity cannot outlive its fort.
-	// Whatever the blocks minted is withdrawn — and whatever is there
-	// under the fort's name goes too, blocks or not: an identity the
-	// manifest no longer explains is the orphan `fort check` fails on.
-	if hub := est.LocalHub(estate.RoleMonitoring); hub != "" && secretHasKey(root, rustfsUsersPath(hub), rustfsPVUser(host)) {
-		p.rustfsUser = rustfsPVUser(host)
-		p.rustfsUsers = rustfsUsersPath(hub)
-	}
 	// The console password (#524) is the one credential of this fort
 	// that lives outside nixos/secrets/<host>.yaml, because an OPERATOR
 	// reads it and the host must not. Removing the host's secrets file
 	// therefore does not remove it: withdraw the registry entry too, or
 	// a retired fort's passphrase outlives the fort.
 	p.consolePass = sopsHasKey(filepath.Join(root, consoleRegistry), host)
-	// The B2 pruning key (#400, prune.go) is role-scoped: the host whose
-	// file names restic-prune-s3-env-b2 is the fleet's pruner, and the
-	// key dies with it. Dismantle never reaches outside the tree, so
-	// this is reported, not acted on — destroy revokes.
-	p.pruner = holdsPruneKey(root, host)
 	p.stack = exists(root, stackConfigPath(host)) || exists(root, stackStatePath(host))
 
 	// 6. residue: everything else that still names the host — counted
@@ -197,32 +175,25 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if p.knownHosts != "" {
 		edited[knownHostsPath] = p.knownHosts
 	}
-	p.residue, p.crossRefs = scanResidue(root, host, append(p.settled(), p.removes...), edited)
+	p.residue = scanResidue(root, host, append(p.settled(), p.removes...), edited)
 	if !entry.Realized() {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
 	}
 	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
-	if p.entry.Backups.Uses(manifest.StoreB2) {
-		p.notes = append(p.notes, "the B2 application keys (`"+b2KeyName(host)+"` and any db keys) stay live until fort destroy revokes them; the snapshots age out on the bucket's retention.")
-	}
 	sort.Strings(p.removes)
 	return p, nil
 }
 
 // settled names the files this retirement already accounts for, so the
-// residue scan must not count them. Two of them lose the host's entry in
-// apply, through `sops unset` — the registry of console passphrases and
-// the hub's rustfs users file. Their post-edit text is not computable
-// here, because the files are encrypted, so the plan names the file
-// instead. The third is the pulumi stack config, which `fort destroy`
+// residue scan must not count them. One loses the host's entry in
+// apply, through `sops unset` — the registry of console passphrases. Its
+// post-edit text is not computable here, because the file is encrypted,
+// so the plan names the file instead. The other is the pulumi stack config, which `fort destroy`
 // deletes with the stack after the merge.
 func (p *dismantlePlan) settled() []string {
 	var out []string
 	if p.consolePass {
 		out = append(out, consoleRegistry)
-	}
-	if p.rustfsUser != "" {
-		out = append(out, p.rustfsUsers)
 	}
 	if p.stack {
 		out = append(out, stackConfigPath(p.host))
@@ -236,14 +207,6 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 			return fmt.Errorf("withdrawing %s from %s: %w", p.host, consoleRegistry, err)
 		}
 		if err := tool.GitAdd(consoleRegistry); err != nil {
-			return err
-		}
-	}
-	if p.rustfsUser != "" {
-		if err := tool.UnsetWith(filepath.Join(p.root, ".sops.yaml"), filepath.Join(p.root, p.rustfsUsers), `["stringData"]["`+p.rustfsUser+`"]`); err != nil {
-			return fmt.Errorf("withdrawing %s from %s: %w", p.rustfsUser, p.rustfsUsers, err)
-		}
-		if err := tool.GitAdd(p.rustfsUsers); err != nil {
 			return err
 		}
 	}
@@ -314,18 +277,6 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	}
 	if p.consolePass {
 		fmt.Fprintf(w, "○ %-32s - the %s entry (its console passphrase, #524)\n", consoleRegistry, p.host)
-	}
-	if p.rustfsUser != "" {
-		fmt.Fprintf(w, "○ %-32s - the %s entry (its identity on the hub's rustfs)\n", p.rustfsUsers, p.rustfsUser)
-	}
-	if len(p.crossRefs) > 0 {
-		fmt.Fprintln(w, "! cross-fort sops refs INTO this fort — those contracts lose their source (fort check will fail them):")
-		for _, r := range p.crossRefs {
-			fmt.Fprintf(w, "    %s\n", r)
-		}
-	}
-	if p.pruner {
-		fmt.Fprintf(w, "! %s is the fleet's B2 pruner — %s names %s, the env file sfi.pv-prune's b2 tier reads. fort destroy revokes %s with the host, and the fleet then has no B2 pruner: enable sfi.pv-prune's b2 tier on another host and mint again (fort b2-key pruning --write). fort check --all warns until then.\n", p.host, filepath.Join("nixos/secrets", p.host+".yaml"), pruneEnvKey(pruneTierB2), b2PruningKeyName)
 	}
 	if len(p.residue) > 0 {
 		fmt.Fprintf(w, "! residue — %d file(s) still mention %s:\n", len(p.residue), p.host)
@@ -441,11 +392,10 @@ var textExt = map[string]bool{".yaml": true, ".yml": true, ".nix": true, ".md": 
 
 // scanResidue lists every tracked text file the retirement does not
 // account for and that still mentions the host (edited files are judged
-// on their post-edit text), tagged for triage, and every other fort's
-// contract whose sops refs point into this fort's app tree. The
+// on their post-edit text), tagged for triage. The
 // accounted paths are what the plan removes, edits by `sops unset` or
 // hands to `fort destroy` (dismantlePlan.settled).
-func scanResidue(root, host string, accounted []string, edited map[string]string) (residue, crossRefs []string) {
+func scanResidue(root, host string, accounted []string, edited map[string]string) (residue []string) {
 	skip := map[string]bool{filepath.Join(pulumiProject, "state"): true}
 	for _, r := range accounted {
 		skip[r] = true
@@ -484,7 +434,7 @@ func scanResidue(root, host string, accounted []string, edited map[string]string
 	}
 	sort.Strings(residue)
 
-	return residue, crossRefs
+	return residue
 }
 
 // trackedFiles: `git ls-files` when root is a checkout (so untracked

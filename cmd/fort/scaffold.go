@@ -33,13 +33,6 @@ type hostView struct {
 	// datastore is a positive declaration, with no silent default in
 	// the host file.
 	Datastore string
-	// PV is the manifest's [[backups.pv]] list: one restic target per
-	// store, rendered as sfi.pv-backup.targets. Empty when the manifest
-	// declares no pv block: the host then imports no pv-backup module
-	// and declares nothing, rather than importing it disabled — a host
-	// that is not an origin should read as one. The db blocks reach the
-	// cluster tree through the estate's flux or a layer's verb, never the host file.
-	PV []manifest.PVBackup
 	// AuditLogging is [cluster] audit_logging (#626): the host sets
 	// sfi.k3s.auditLog.enable. False renders nothing — a fort that does
 	// not audit carries no block, as with an empty pv list above.
@@ -375,7 +368,6 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		view.Serves = append(view.Serves, serveView{Hub: host, Name: s.Name(), Estate: s.Ref(), Repo: estate.WithGit(s.Estate)})
 	}
 	view.IsHub = len(view.Serves) > 0 && !view.Plain
-	view.PV = entry.Backups.PV
 	// The lab LAN block, from whichever lab table the host carries.
 	lan := func(ip string, prefix int, gw string, dns []string) {
 		view.IP = ip
@@ -431,7 +423,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, no LAN, zram)"
 	}
 	if view.Plain {
-		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)"
+		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)"
 	}
 	hostDir := filepath.Join("nixos/hosts", host)
 	plan := []struct{ path, tpl, note string }{
@@ -559,11 +551,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 	if err != nil {
 		return nil, fmt.Errorf("hub-kustomization.yaml.gotpl: %w", err)
 	}
-	note := clusterMonitoringNote
-	if len(view.PV) > 0 {
-		note += ", PVBackupNotConfigured"
-	}
-	return append(out, hubFiles(hub.Fort, host, b, note, k)...), nil
+	return append(out, hubFiles(hub.Fort, host, b, clusterMonitoringNote, k)...), nil
 }
 
 // withLinksEdit: a host file whose manifest declares links is appended

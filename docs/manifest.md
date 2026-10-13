@@ -18,14 +18,6 @@ datastore = "sqlite"         # sqlite (single node, the default) | etcd (embedde
 zone = "streetfortress.cloud" # and the mesh peer's default endpoint
 name = "sfi-prod-439bf72"
 
-[backups]                    # what this fort backs up, and to which store (required)
-[backups.db-physical]        # barman: base backups + WAL from its postgres
-store = "b2"
-hour = 4                     # the nightly base-backup hour (UTC) — forts stagger it
-[backups.db-logical]         # databasus: logical dumps
-store = "b2"
-                             # no [[backups.pv]]: nothing on its volumes is an original
-
 [linode]                     # THE provider table — exactly one per fort
 region = "us-sea"
 type = "g6-standard-2"
@@ -37,9 +29,6 @@ mesh_ip = "10.1.0.13"
 
 [cluster]                    # a flux cluster; datastore unset = sqlite
 audit_logging = true         # the API server's audit log, shipped to Loki (#626)
-
-[[backups.pv]]               # restic, every PVC: the hub's rustfs alone — reproducible data
-store = "rustfs-central"
 
 [shape]                      # what libvirt realizes (lab defaults 2 / 4 / 40G)
 vcpus = 2
@@ -57,20 +46,6 @@ mesh_ip = "10.1.0.6"
 [cluster]
 datastore = "sqlite"
 
-[[backups.pv]]               # B2 every 6 h is the RPO…
-store = "b2"
-
-[[backups.pv]]               # …and a weekly copy on the hub's rustfs for LAN-speed restore
-store = "rustfs-central"
-every = "weekly"
-
-[backups.db-physical]
-store = "b2"
-hour = 2
-
-[backups.db-logical]
-store = "b2"
-
 [baremetal]                  # no [shape]: the machine is the shape
 ip = "10.0.0.6"
 mac = "f8:ce:72:02:05:07"    # the NIC the address goes on — a dock's USB NIC
@@ -83,8 +58,6 @@ disk = "/dev/nvme0n1"        # the writer's target (docs/baremetal.md)
 # host and nothing else the framework names; what it does is its host file.
 mesh_ip = "10.1.0.61"
 
-[backups]                    # empty, and required: nothing on it is precious
-
 [shape]
 vcpus = 4
 memory = 8
@@ -95,8 +68,8 @@ ip = "10.0.0.61"
 ```
 
 **The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` /
-`nixos_state_version`, `[shape]`, `[dns]`, `[backups]` — this is what scaffold, mint,
-add, check, the pulumi program and the mesh read. Every consumer reads the
+`nixos_state_version`, `[shape]`, `[dns]` — this is what scaffold, mint,
+check, the pulumi program and the mesh read. Every consumer reads the
 same Go struct (`internal/manifest`), so the generators cannot drift.
 A key that only one shape has does not sit here: `k3s_cluster_init` did,
 and the loader had to special-case it (#426).
@@ -119,9 +92,8 @@ fleet tree, no cluster age key. Ideally nobody logs in; the prescribed
 access is `deployer` over the mesh and the console password. What a plain
 fort does beyond that — accounts, services, a role — is plain NixOS in its
 host file, the estate's to write; the manifest names no user and no role.
-A plain fort requires an empty `[backups]` table and is `[libvirt]`-only
-for now (a lab VM on the hypervisor; a cloud plain fort would be its own
-host template).
+A plain fort is `[libvirt]`-only for now (a lab VM on the hypervisor; a
+cloud or hardware plain fort is forts#142).
 
 **`[cluster] datastore` is k3s's datastore**, and a positive word rather
 than a negated boolean: the reader asks *which datastore*, not *was
@@ -179,85 +151,15 @@ imperative, and provider dirs arrive on first need. A checked `[[apps]]`
 membership was designed and parked (#269) until a sibling cut shows the
 tree copy is the pain.
 
-No toggles for the standard components either — with the exceptions that
-earned their way in. There are no `[production]` / `[staging]` tables:
-those are not shapes but the same `[cluster]` with a different
-`[backups]` table and provider table, both of which the manifest
-already says. Monitoring stays per-fort identical (the shared
-infrastructure layer is, by design, and per-app monitoring is
-contract-driven), but **`[backups]` is the first real second variant**:
-every fort's data is backed up the same *way* and not to the same
-*places*, and not every layer on every fort (sfi/forts#4, #39).
+No toggles for the standard components either — with the one exception
+that earned its way in. There are no `[production]` / `[staging]` tables:
+those are not shapes but the same `[cluster]` with a different provider
+table. The `[backups]` table, which was the first second variant, is the
+backups layer's now: `layers/backups/forts/<fort>.toml` (sfi/fort-layers,
+forts#143), and a manifest that still carries `[backups]` is refused
+with the path it moved to.
 
-```toml
-[backups]                    # required; empty = "this fort does not back up"
-
-[[backups.pv]]               # restic, every PVC that is an original (one block per store)
-store = "b2"
-every = "6h"                 # 6h (the default) | daily | weekly — the fleet supplies the phase
-
-[[backups.pv]]
-store = "rustfs-central"
-every = "weekly"
-
-[backups.db-physical]        # barman: base backups + WAL from the fort's postgres
-store = "b2"
-hour = 4                     # the nightly base-backup hour, UTC — required, so forts stagger it
-
-[backups.db-logical]         # databasus: logical dumps
-store = "b2"
-```
-
-**One block per layer, each naming a store.** The three layers are the
-three backup mechanisms (docs/infra/backups.md): `pv` is restic from
-the host, `db-physical` is CNPG's barman archive, `db-logical` is
-databasus. A block names a **store**, never an endpoint: there are
-exactly two object stores at fleet level, and enumerating endpoints per
-fort is how they drift. `b2` takes every layer. `rustfs-central` — the
-hub's rustfs — takes `pv` alone in this cut (`db-physical` never: CNPG
-has one `archive_command`, and it points offsite; `db-logical` is #4's
-open question). The store decides what the block needs of the estate:
-**a block on `rustfs-central` requires a monitoring hub in this estate**
-(`[hubs.monitoring]` with `estate` = this estate; the fort registers an
-identity in the hub's tree), **a block on `b2` requires nothing** —
-which is what lets an estate whose hub is another estate's
-(sfi/production; [hub.md](hub.md)) declare backups at all.
-
-**The table is required and its blocks are not**, and that is the point:
-a production fort silently inheriting lab-only backups is the failure
-worth one line of typing, and it cannot be inferred from the provider
-table (a lab VM may want covering; a Linode drill fort should not pay for
-B2). `[backups]` with nothing under it is the positive declaration that
-nothing on the fort is backed up — the hub of copies and an origin of
-nothing, or a staging fort — and renders no `sfi.pv-backup` wiring at
-all, rather than an imported module sitting disabled. A manifest without
-the table is an error.
-
-**What each block renders.** `[[backups.pv]]` → one `sfi.pv-backup`
-target per block in the host file, `{ store; every }` word for word
-(`modules/pv-backup.nix` holds the endpoint, the credential name and the
-phase per store), the credentials `fort mint` seeds for the stores named
-(`restic-password` for any; the rustfs identity on the hub for
-`rustfs-central`; the B2 key `sfi-pv-<host>` for `b2`), and the
-`PVBackupNotConfigured` rule in the cluster's file for the hub
-(`flux/hub/<hub host>/<host>.yaml`) — no pv
-block, no unit, no credential, no rule. `[backups.db-physical]` → the
-`ObjectStore` and the `ScheduledBackup` (at `hour`) that `fort add`
-renders beside the fort's postgres; no block, no archive, said so in
-`cluster.yaml`. `[backups.db-logical]` is accepted and checked; nothing
-renders from it yet (#4, #375). The cadence vocabulary beyond `every`'s
-three words and the one store-registry file both halves would read stay
-on #4.
-
-**It replaces `profile = "lab" | "production" | "none"`** (retired in
-sfi/forts#39): one word that bundled three layers, a destination set and
-a cadence, and could not say what the production fort wants (physical and
-logical to B2, no PV leg) or what the hub wants (PV to B2, nothing
-physical). The three manifests of sfi/deployments stay on its in-tree
-CLI and do not migrate.
-
-**`[cluster] audit_logging` is the second exception** (#626), for the
-same reason as the first: every cluster fort audits the same *way* — the
+**`[cluster] audit_logging` is the exception** (#626): every cluster fort audits the same *way* — the
 policy, the rotation and the stream are one module and one fluent-bit
 config, fleet-wide — and not every fort pays the same disk for it. A
 4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
@@ -316,16 +218,16 @@ with what the sops secret derives, where the age key is at hand.
 
 | verb | reads |
 |---|---|
-| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[[backups.pv]]` → the host's `sfi.pv-backup.targets` (and the `PVBackupNotConfigured` rule in the fort's file for the hub), `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line, `[links.<name>]` → the host's `sfi.links.<name>` block |
+| `scaffold` | everything: the provider table picks the host shape, the `[cluster]` table picks cluster or plain (a plain fort drops the fleet surface), `mesh_ip` → `MESH_IP`, the seeds, `[cluster] datastore` → the host's `sfi.k3s.datastore` line, `[cluster] audit_logging` → the host's `sfi.k3s.auditLog.enable` line, `[links.<name>]` → the host's `sfi.links.<name>` block |
 | `link add` | writes `[links.<name>]`: the estate, the address and port it picked, the interface and zone the other estate names, the public half of the key it minted |
 | `estate link` (run in the *other* estate) | every `[links.<name>]` of a fetch of this repo that names that estate, plus the host's endpoint → its `remotes` entry there |
 | `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore`, `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` and `[links.<name>]` ↔ `sfi.links.<name>` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
-| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token); `[[backups.pv]]` — the restic password for any block, the rustfs identity it declares on the hub for a block on `rustfs-central`, the B2 application key it mints for a block on `b2` |
-| `check`, a layer's verbs | `[dns] zone` (the app hostname's zone on a cloud fort); the backups layer reads `[backups.db-physical]` for the postgres archive (the `ObjectStore`, the `ScheduledBackup` at `hour`); `check` traces every `rustfs-central` pv block to an identity on the hub and back |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token). A layer's identities are the layer's mint to make ([layers](layers.md)) |
+| `check`, a layer's verbs | `[dns] zone` (the app hostname's zone on a cloud fort); a layer reads its own file beside this one, `layers/<layer>/forts/<fort>.toml` |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
-| `destroy` | the gate: no manifest on `origin/main` and none in the working tree (so it revokes the B2 key by name, not by block — there is no manifest left to read) |
+| `destroy` | the gate: no manifest on `origin/main` and none in the working tree (there is no manifest left to read) |
 | `check --all` (fleet half), the nix-eval job | the list of hosts; a plain fort → a host dir and no fleet dirs is the expected tree (a fleet dir anyway is an error) |
 
 ## History

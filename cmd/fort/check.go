@@ -87,7 +87,6 @@ func check(args []string) error {
 	// monitoring hub, and every subscription the hub owes an estate. The
 	// forge's half is its address on this mesh (forts#26).
 	if *all {
-		shared.findings = append(shared.findings, rustfsIdentityFindings(root, est.LocalHub(estate.RoleMonitoring), parsed)...)
 		shared.findings = append(shared.findings, hubFileFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, hubBuildFindings(root, est)...)
 		shared.findings = append(shared.findings, servesFindings(root, est, parsed)...)
@@ -97,7 +96,6 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, linkFindings(root, est, parsed, sopsCLI{root: root})...)
-		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
 		shared.findings = append(shared.findings, layerFindings(root)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
@@ -112,9 +110,6 @@ func check(args []string) error {
 		// The console failsafe (#524): its two halves live in different
 		// files, and either one alone fails quietly (console.go).
 		findings = append(findings, consoleFindings(root, fort)...)
-		// The pruning key's holder (#400): a host that sweeps a tier of
-		// sfi.pv-prune names that tier's key, and the inverse (prune.go).
-		findings = append(findings, pruneFindings(root, fort)...)
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
 	}
 	if errors > 0 {

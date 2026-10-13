@@ -29,7 +29,6 @@ dismantle sfi-x   (cloud: linode)
 ◆ mesh/ssh_config           re-rendered without sfi-x
 ◆ mesh/known_hosts          - the sfi-x line
 ○ provisioning/console-passwords.yaml   - the sfi-x entry (its console passphrase, #524)
-○ flux/apps/luxor/rustfs-central/users.sops.yaml   - the fort-sfi-x-pv entry (its identity on the hub's rustfs)
 ! residue — 3 file(s) still mention sfi-x:
     README.md: 2   (doc)
     flux/apps/luxor/monitoring/s3-exporter-targets.yaml: 3   (central monitoring — anything here naming the host is hand-written and usually goes)
@@ -68,18 +67,6 @@ Three things deserve the explanation:
   anything else under central monitoring that names the host is
   hand-written — an s3-exporter target, a dashboard — and usually goes
   too.
-  Cross-fort `sops:` refs *into* this fort are called out separately —
-  those contracts lose their source and `fort check` will fail them, so
-  re-point them in the same PR.
-- **The fleet's B2 pruner is called out too** (#400). `sfi-b2-pruning-key`
-  is role-scoped: it belongs to whichever host enables `sfi.pv-prune`'s
-  b2 tier, and that host's `nixos/secrets/<host>.yaml` is the one that
-  names `restic-prune-s3-env-b2` — a plaintext key name, so the plan can
-  tell. Dismantle reports it as a `!` line (the key stays live until
-  `fort destroy` revokes it, and the fleet then has no pruner until
-  another host enables the tier and mints again); it acts on nothing,
-  because it never reaches outside the tree.
-
 The residue is counted on the post-edit text of the files the plan
 edits, so the dry run shows what the reviewer will actually face.
 
@@ -97,8 +84,8 @@ planned only where the host's rule block exists.
   the merge and the destroy, which is the correct signal. The last line
   of the report is that one next step.
 - **The gitea deploy key**, revoked by `destroy`.
-- **The B2 keys**, the fort's own and — when this host is the pruner —
-  `sfi-b2-pruning-key`, revoked by `destroy`.
+- **A layer's identities** (a backup store's keys), withdrawn by the
+  layer's own dismantle, which runs before this one ([layers](layers.md)).
 - **The `.files` wireguard copy** for the ubuntu mesh members (#183) —
   still a hand re-render.
 

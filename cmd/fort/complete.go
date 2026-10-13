@@ -49,8 +49,8 @@ const completeVerb = "__complete"
 
 // completeCx is what a candidate function may read: the estate's root,
 // and the positionals the operator already typed for this verb (the
-// cursor's own word is NOT one of them). `fort b2-key pv <TAB>` asks the
-// host set of the pv role, so the role has to be legible here.
+// cursor's own word is NOT one of them). `fort link add <fort> <TAB>` asks
+// for a URL after a fort, so the positionals have to be legible here.
 type completeCx struct {
 	root string
 	args []string
@@ -125,9 +125,7 @@ var completions = map[string]verbSpec{
 	"adopt":            {flags: []flagSpec{yesFlag}, args: []candidates{adoptableHosts}},
 	"preview":          {flags: []flagSpec{{name: "all"}, {name: "refresh"}, {name: "expect-no-changes"}}, args: []candidates{realized}},
 	"mint":             {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
-	"b2-key":           {flags: []flagSpec{writeFlag}, args: []candidates{b2RoleWords, b2RoleHosts}},
 	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
-	"b2-buckets":       {flags: []flagSpec{writeFlag}},
 	"check":            {flags: []flagSpec{{name: "all"}}, args: []candidates{manifests}, repeat: true},
 	"ssh-config":       {flags: []flagSpec{writeFlag}},
 	"wg-conf":          {args: []candidates{meshMembers}},
@@ -384,37 +382,6 @@ func meshMembers(cx *completeCx) []string {
 	out := append(sortedNames(m.Peers), sortedNames(m.Clients)...)
 	sort.Strings(out)
 	return out
-}
-
-// b2RoleWords: the role words of `fort b2-key`, the fixed roles and the
-// four that take a host, from the verb's own tables.
-func b2RoleWords(*completeCx) []string {
-	out := append(b2RoleNames(), b2HostRoleNames()...)
-	sort.Strings(out)
-	return out
-}
-
-// b2RoleHosts: the host a host-bearing role takes. `pv` is the one role
-// with a host set of its own: it refuses a host whose manifest declares a
-// [[backups.pv]] block on b2, because that key is `fort mint`'s to
-// create (b2key.go). The rest take any host the estate knows — a mesh
-// member with no manifest included, which is the case the verb exists
-// for.
-func b2RoleHosts(cx *completeCx) []string {
-	if len(cx.args) == 0 || b2HostRoles[cx.args[0]] == nil {
-		return nil
-	}
-	hosts := manifests(cx)
-	if cx.args[0] == "pv" {
-		hosts = manifestsWhere(cx, func(h manifest.Host) bool { return h.Backups.PVTo(manifest.StoreB2) == nil })
-	}
-	for _, m := range meshMembers(cx) {
-		if !exists(cx.root, manifest.Path(m)) {
-			hosts = append(hosts, m)
-		}
-	}
-	sort.Strings(hosts)
-	return slices.Compact(hosts)
 }
 
 // hubRoles: `--hub <role>=<fort>@<estate git url>` — the role words are

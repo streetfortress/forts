@@ -3,8 +3,6 @@
 # and nothing else the framework names.
 mesh_ip = "10.1.0.96"
 
-[backups]                     # empty: nothing on it is backed up (required even so)
-
 [shape]
 vcpus = 4
 memory = 8

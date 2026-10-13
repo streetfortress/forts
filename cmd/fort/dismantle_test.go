@@ -147,13 +147,12 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 		}
 	}
 	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\nfort = \"luxor\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[[backups.pv]]\nstore = \"rustfs-central\"\n[libvirt]\nip = \"10.0.0.94\"\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[libvirt]\nip = \"10.0.0.94\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
-	// the three files the retirement settles
+	// the two files the retirement settles
 	write(consoleRegistry, host+": ENC[AES256_GCM,data:aaaa,type:str]\nsops:\n    age: []\n")
-	write(rustfsUsersPath("luxor"), "stringData:\n    "+rustfsPVUser(host)+": ENC[AES256_GCM,data:bbbb,type:str]\nsops:\n    age: []\n")
 	write(stackConfigPath(host), "encryptionsalt: v1:abc\nconfig:\n  forts:name: "+host+"\n")
 	// and one the reviewer must still see
 	write("README.md", "# fleet\n\nthe fort "+host+" is mentioned here\n")
@@ -162,8 +161,8 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.consolePass || p.rustfsUser != rustfsPVUser(host) || !p.stack {
-		t.Fatalf("plan: consolePass=%v rustfsUser=%q stack=%v", p.consolePass, p.rustfsUser, p.stack)
+	if !p.consolePass || !p.stack {
+		t.Fatalf("plan: consolePass=%v stack=%v", p.consolePass, p.stack)
 	}
 	if len(p.residue) != 1 || !strings.HasPrefix(p.residue[0], "README.md:") {
 		t.Errorf("residue: want README.md alone, got %v", p.residue)
@@ -171,11 +170,10 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 	var sb strings.Builder
 	p.report(&sb, true)
 	rep := sb.String()
-	// the report names both settled secrets, so the skip is not silence
+	// the report names the settled secret, so the skip is not silence
 	for _, want := range []string{
 		"! residue — 1 file(s) still mention " + host + ":",
 		"○ " + consoleRegistry,
-		"○ " + rustfsUsersPath("luxor"),
 		"Dismantle staged. Merge, then run `fort destroy " + host + "` to delete the pulumi stack.",
 	} {
 		if !strings.Contains(rep, want) {

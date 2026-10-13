@@ -123,14 +123,6 @@ type mintPlan struct {
 	newRegistry   bool   // the registry does not exist yet
 	consoleHash   string // filled by apply, and only there — a dry run mints nothing
 
-	// The backup credentials a [backups] profile implies (mintbackup.go).
-	resticPassword string
-	resticRustfs   string
-	rustfsUser     string // the fort's rustfs identity (= its access key)
-	rustfsSecret   string // "" unless apply must declare it on luxor
-	resticB2       string
-	b2Status       string // "" = no B2 key in this fort's shape
-	b2Mint         bool   // apply must create it
 }
 
 // giteaDeployKeys is the gitea client shared with fort destroy: the
@@ -256,13 +248,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		return nil, err
 	}
 
-	// 2b. the backup credentials the manifest's [[backups.pv]] blocks
-	// imply — restored where the file has them, sourced or minted
-	// where not.
-	if err := p.planBackups(take); err != nil {
-		return nil, err
-	}
-	// 2c. the console door (sfi/forts#24): the host file enables the
+	// 2b. the console door (sfi/forts#24): the host file enables the
 	// module, so the credential is part of the identity — the hash in
 	// the secrets file beside the keys, the passphrase in the registry.
 	// Restore-not-rotate holds here too: a hash already in the file is
@@ -399,30 +385,6 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 	if err := writeRendered(p.root, tool, p.sshConfig, p.knownHosts); err != nil {
 		return err
 	}
-	// Before the secrets file: b2_create_key returns the secret half
-	// exactly once, so it must be in hand before anything renders it. A
-	// write that fails after this leaves a live key the re-mint guard
-	// refuses to shadow — it names the id and asks for a deliberate delete.
-	if p.b2Mint {
-		if err := p.mintB2Key(); err != nil {
-			return err
-		}
-	}
-	// Registering with the hub's rustfs-central: this fort's identity is
-	// declared in that fort's tree, because the hub hosts the backup
-	// destination. `fort check` traces it both ways, so the two halves
-	// cannot drift unnoticed, and dismantle withdraws it.
-	if p.rustfsSecret != "" {
-		rustfsUsers := rustfsUsersPath(p.est.LocalHub(estate.RoleMonitoring))
-		full := filepath.Join(p.root, rustfsUsers)
-		if err := tool.SetWith(filepath.Join(p.root, ".sops.yaml"), full, `["stringData"]["`+p.rustfsUser+`"]`, p.rustfsSecret); err != nil {
-			return fmt.Errorf("declaring %s in %s: %w", p.rustfsUser, rustfsUsers, err)
-		}
-		if err := tool.GitAdd(rustfsUsers); err != nil {
-			return err
-		}
-	}
-
 	nixosConfig := filepath.Join(p.root, "nixos/.sops.yaml")
 	fleetConfig := filepath.Join(p.root, ".sops.yaml")
 
@@ -532,12 +494,6 @@ func (p *mintPlan) value(key string) string {
 		return p.cluster.identity
 	case keyDeploy:
 		return p.deploy.private
-	case keyResticPassword:
-		return p.resticPassword
-	case keyResticRustfs:
-		return p.resticRustfs
-	case keyResticB2:
-		return p.resticB2
 	case keyDeployerPasswordHash:
 		return p.consoleHash
 	}
@@ -605,19 +561,6 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	if p.deployKey != "" {
 		fmt.Fprintf(w, "· gitea deploy key flux-%s: %s\n", p.host, p.deployKey)
-	}
-	if p.b2Status != "" {
-		fmt.Fprintf(w, "· b2 application key %s\n", p.b2Status)
-	}
-	if p.rustfsUser != "" {
-		verb := "declared in"
-		if p.rustfsSecret == "" {
-			verb = "already in"
-		}
-		fmt.Fprintf(w, "· rustfs identity %s: %s %s (scoped to sfi-pv-backups/%s/*, no delete)\n", p.rustfsUser, verb, rustfsUsersPath(p.est.LocalHub(estate.RoleMonitoring)), p.host)
-	}
-	if p.entry.Backups.Backed() {
-		fmt.Fprintf(w, "· backups: %s\n", p.entry.Backups.Summary())
 	}
 	fmt.Fprintln(w)
 	if !written {

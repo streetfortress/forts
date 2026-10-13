@@ -51,10 +51,8 @@ Consequences worth knowing:
 | ○ | `.sops.yaml` — the fleet rule for `flux/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `flux/infrastructure` rule | always |
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
-| ● | `nixos/secrets/<host>.yaml` — `restic-password` for any `[[backups.pv]]` block; `restic-s3-env-rustfs` for a block on `rustfs-central`; `restic-s3-env-b2` for a block on `b2` | when the manifest declares a pv block |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
 | · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `repo`) | always; registered under `--write` only |
-| · | B2 application key `sfi-pv-<host>` — `sfi-pv-backups` alone, `namePrefix <host>/`, **no `deleteFiles`** | a `[[backups.pv]]` block on `b2` only; minted under `--write` |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
@@ -75,53 +73,10 @@ from the registry mint says so and names `console-password <host>
 hold. A host whose `default.nix` does not enable the module gets no
 console half at all.
 
-**The calls outside the tree** are the gitea deploy key and, on a
-fort with a pv block on `b2`, the B2 application key. Both are registered only under `--write`,
-all are reported without printing a value, and all are revoked by `fort
-destroy`.
-
-**Where the backup credentials come from** is the design, not a detail
-(docs/infra/backups.md):
-
-- `restic-password` is a **fleet** secret, copied from
-  `provisioning/secrets.yaml`, never generated per host. The central
-  pruner on luxor opens every fort's repo; per-host passwords would mean
-  a keyring there.
-- `restic-s3-env-rustfs` is the fort's own identity on the hub's
-  rustfs-central, declared in the hub's tree
-  (`flux/apps/<hub>/rustfs-central/users.sops.yaml`) — so a pv block on
-  `rustfs-central` needs a monitoring hub in this estate
-  (`[hubs.monitoring]` with `estate` = this estate; [hub.md](hub.md)),
-  and an estate whose hub is another's cannot take one yet. A fort on
-  `b2` alone registers nothing and needs no hub.
-- `restic-s3-env-b2` is **minted against the B2 API**, and the credential
-  that mints it is an **operational input**: from the password
-  manager, for the moment of a raise — `fort mint --write` prompts for
-  the key (not echoed), or reads `B2_APP_KEY` when set. It is deliberately not in `provisioning/secrets.yaml` beside
-  `linode-token` — B2 does not enforce capability subsetting, so a key
-  that can mint keys can mint one that deletes backups, and that really
-  deletes (verified, #291). A credential which can destroy the recovery
-  path does not get to sit where every `fort` invocation, and eventually
-  a CI recipient (#284), can read it. Its **id** is a different thing
-  (#432): an identifier, echoed on every prompt and listed in every
-  `b2_list_keys` row, worth nothing without the secret. It sits in that
-  file as `b2-minting-key-id`, seeded once, so the prompt is one paste
-  and `B2_KEY_ID` is only an override.
-
-**The B2 guard is not the deploy key's.** A deploy key has a public half
-to compare; a B2 key's secret is shown exactly once and never again. So
-the recorded `AWS_ACCESS_KEY_ID` — which *is* the application key id — is
-checked against `b2_list_keys`, along with the restrictions: two buckets,
-this fort's prefix, and no `deleteFiles`. That catches a key edited in
-the console into holding delete rights, which a name comparison never
-would. A same-named key whose id is not the repo's is refused by id, for
-a deliberate deletion — exactly as a mismatched deploy key is.
-
-Without `B2_APP_KEY`, a re-mint that needs to create
-nothing says so (`NOT verified`) and proceeds, and a dry run plans
-without asking; only a `--write` that must mint prompts for
-`sfi-b2-key-minting-key` — or, with no terminal to ask on, refuses and
-names it.
+**The call outside the tree** is the gitea deploy key, registered only
+under `--write`, reported without printing a value, and revoked by `fort
+destroy`. A layer's credentials (a backup store's identities) are the
+layer's mint to make and its dismantle to withdraw ([layers](layers.md)).
 
 **The shared admin set is read from the configs, not hardcoded**: the
 recipient lines every existing host rule shares ("readable by whoever can
@@ -194,14 +149,7 @@ check after importing a key by hand.
 
 The admin age key (to encrypt and to read the existing file), and for a
 flux cluster the `gitea-token` in `provisioning/secrets.yaml` (every
-fort, for the deploy key). A fort with a `[[backups.pv]]` block needs
-`restic-password` in that same file; a block on `rustfs-central` needs
-the hub's `rustfs-central/users.sops.yaml` to exist (`fort seed <hub>
-flux/apps/<hub>/rustfs-central --write`); a block on `b2` needs the B2
-minting key (its id from `b2-minting-key-id` in that file, the key
-prompted for or `B2_APP_KEY`), and only when the key it would mint does
-not exist yet. The db blocks need nothing of mint: the db-physical key
-is in-cluster (`fort b2-key db-physical`, then `fort seed --set`). `jq` (the peers file is edited through it
+fort, for the deploy key). `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it). `mkpasswd` for the console password hash, when the host enables the
 door and the file has no hash — one of the CLI's declared tools, as

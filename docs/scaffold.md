@@ -67,10 +67,7 @@ here, removed by [`dismantle`](dismantle.md), required by `fort check
 error), and applied by the hub's flux subscription to that path
 (forts#38). The kustomization line is a text-level append, idempotent,
 so a re-run reports `○ exists — kept (already listed)`; the estate's
-first fort creates the file. `PVBackupNotConfigured` is rendered only
-where a `[[backups.pv]]` block promises the leg — no pv block, no rule,
-so a fort whose backups are the db layers alone has nothing to be silent
-about. `HUB_MESH_IP` is the hub's address on this mesh: its manifest's
+first fort creates the file. `HUB_MESH_IP` is the hub's address on this mesh: its manifest's
 `mesh_ip` when the hub is a fort of this estate, its `remotes` entry in
 `mesh/peers.json` when it is another estate's — and a missing entry is
 refused by name, not rendered empty.
@@ -93,9 +90,7 @@ Manifest fields it reads: the provider table (`[libvirt]` or
 block's `en*` name match into a MAC match; `[linode]` `region` + `type`
 for the header comment), `mesh_ip`, `[cluster] datastore` (rendered as
 the host's `sfi.k3s.datastore` line, `sqlite` when unset; #426),
-`[[backups.pv]]` (rendered as `sfi.pv-backup.targets`, one
-`{ store; every }` per block, word for word — the module holds the
-endpoint and the phase per store; no block, no import), and the
+and the
 optional seed `nixos_state_version`. The lab defaults
 are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
 `25.11`.
@@ -113,7 +108,7 @@ A manifest with no `[cluster]` table renders the host dir and the fort's
 file on the hub:
 
 ```
-● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux/backups)
+● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
 flux/hub/luxor/
 ● sfi-lab-x.yaml                      mesh scrape target (node-exporter), HostDown

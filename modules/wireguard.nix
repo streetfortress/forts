@@ -109,7 +109,7 @@ in
     # Public names never ride the mesh (sfi/deployments#441, forts#45).
     # wg-quick hands a `dns` setting to resolvconf in exclusive mode, and
     # systemd-resolved then routes every query of the host through the
-    # mesh interface — day-0 pulls from ghcr.io and backups to B2 waited
+    # mesh interface — day-0 pulls from ghcr.io and uploads off-site waited
     # on a mesh that was down. The mesh interface answers for the names
     # it is given (`~<domain>` routing domains) and for nothing else. A
     # host without resolved has no routing to correct; the mesh names a

@@ -50,12 +50,8 @@ func main() {
 		err = preview(os.Args[2:])
 	case "mint":
 		err = mint(os.Args[2:])
-	case "b2-key":
-		err = b2Key(os.Args[2:])
 	case "console-password":
 		err = consolePassword(os.Args[2:])
-	case "b2-buckets":
-		err = b2BucketsCmd(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "ssh-config":
@@ -102,8 +98,7 @@ func usage() {
           link add, estate link, layer add, layer remove
   layers  fort <layer> <verb> … runs the layer's own binary, fort-<layer>,
           from PATH: what sits on top of the core (docs/layers.md)
-  keys    b2-key (the B2 credentials no other verb creates),
-          console-password (the fort's getty password)
+  keys    console-password (the fort's getty password)
   apply   provision, adopt, destroy
   read    check, preview, wg-conf
 
@@ -179,45 +174,6 @@ func usage() {
       the host on its next rebuild, and the host's reconciler fills its
       own peer set on its next run.
 
-  b2-key <minting|pruning|audit|pv <host>|db-physical <host>|db-logical <host>|restore <host>> [--write]
-      mint a B2 credential no verb may create for itself, because these
-      live outside the repo and the web console cannot express their
-      capability sets. minting (sfi-b2-key-minting-key)
-      is what fort mint exports to create per-fort keys: writeKeys, no
-      deleteFiles. pruning (sfi-b2-pruning-key) is the fleet's ONLY
-      delete-capable credential, scoped to sfi-pv-backups, and belongs in
-      luxor's host secrets for sfi.pv-prune. audit (sfi-b2-audit-key)
-      is the s3-exporter's: list on all three backup buckets, no
-      readFiles — the one key that stands in a Secret for good, because
-      it reads nothing. The host roles are ONE KEY
-      PER HOST PER BUCKET, namePrefix <host>/, no deleteFiles, the role
-      word being the key's stem and the bucket's: pv (sfi-pv-<host>) is
-      the restic credential the HOST holds — the grant fort mint gives a
-      fort, so it is refused for a host that has a manifest; db-physical
-      (sfi-db-physical-<host>) is what the host's CNPG cluster ships
-      barman backups with, held in-cluster; db-logical
-      (sfi-db-logical-<host>) is what a databasus instance writes that
-      host's dumps with. They are separate because their holders are, and
-      because a writer can destroy whatever it can reach (overwrite, then
-      the lifecycle rule deletes the hidden original). restore
-      (sfi-restore-<host>) is the credential a RESTORE runs with:
-      list/read on all three buckets under <host>/ and nothing that
-      writes. It is the one grant that crosses a prefix, because the
-      machine restoring a host is never that host; it is NOT refused for
-      a fort, fort destroy leaves it standing, and it belongs in the
-      password manager for the length of the restore.
-      Prompts for the credential it needs, or reads B2_APP_KEY: the
-      account master key for minting, and sfi-b2-key-minting-key for
-      everything else. The minting key's id is not a secret and sits
-      in provisioning/secrets.yaml as b2-minting-key-id, so only the
-      key is pasted (B2_KEY_ID overrides the id; the master key's id
-      is always asked for). Prints the plan and the grant; --write
-      creates it and prints the secret ONCE — one of the two verbs that
-      print a value (console-password is the other), because there is
-      nowhere else for it to go. An existing key is never replaced (its
-      secret is unrecoverable) and any drift from the role's grant is
-      named.
-
   console-password <host> [--write] [--rotate] [--show]
       rotate (--rotate) and read (--show) the console password of the
       host's deployer account (#524); fort mint mints the first one with
@@ -240,20 +196,6 @@ func usage() {
       A hash the fort already carries is never replaced without
       --rotate. fort dismantle withdraws the entry; fort check traces
       all three halves.
-
-  b2-buckets [--write]
-      reconcile the B2 backup buckets with their declaration: each
-      exists, is allPrivate, and carries exactly one lifecycle rule in
-      the API's raw fields — daysFromHidingToDeleting on all three,
-      daysFromUploadingToHiding on the two append-only db buckets and
-      NEVER on sfi-pv-backups, where it would shred a restic repo. The
-      console's lifecycle presets abstract over those two fields, which
-      is why this is a verb. Rules are replaced wholesale; buckets it
-      does not declare are reported and never touched. The plan runs on
-      the minting key; --write needs the account master key
-      (writeBuckets), prompted for or from B2_KEY_ID / B2_APP_KEY.
-      destroy asks for the minting key only when the retired
-      nixos/secrets/<host>.yaml shows the fort held a B2 key.
 
   image <host> [--from <built image>] [--out <dir>]
       build the host's bootstrap image: nix build ./nixos#<host>-{qcow|
@@ -312,13 +254,7 @@ func usage() {
       strict), and CLUSTER_NAME and ESTATE_NAME are the fort's and the
       estate's names. A layer's check (an app's contract against its
       Secrets, docs/layers.md) is the layer's own gate step after this
-      one. The B2 pruning key's holder
-      (#400): a host that sweeps a tier of sfi.pv-prune names that
-      tier's restic-prune-s3-env key in its sops file (else an error:
-      the activation fails), and a host that names one sweeps the tier
-      (else a warning: a deleting credential nothing reads); --all
-      also wants exactly one host naming the b2 key. --all also
-      validates every manifest and warns on host dirs no manifest
+      one. and warns on host dirs no manifest
       claims. Strict on
       every fort; exits nonzero on any error; annotates for CI when
       GITEA_ACTIONS is set.
@@ -359,9 +295,7 @@ func usage() {
       flux/apps/<host> — and prints the
       residue: every remaining mention of the host that the plan does not
       settle, for the reviewer to triage in the same PR, cross-fort sops
-      refs into it, and whether the host is the fleet's B2 pruner (#400:
-      its sops file names restic-prune-s3-env-b2; destroy revokes the
-      key). Touches no pulumi state: the report's last line is the one
+      refs into it. Touches no pulumi state: the report's last line is the one
       next step, fort destroy <host> after the merge.
 
   destroy <host> [--yes] [--no-stack]
@@ -376,12 +310,8 @@ func usage() {
       failure mid-way leaves the unprotected state in the tree and says
       "rerun". Provider comes from the checkpoint, not the manifest.
       --no-stack is for a [baremetal] host, which has no stack by design:
-      the same gates minus the stack, then only the identities (deploy
-      key, B2 keys); the machine goes by hand (docs/baremetal.md).
-      The B2 keys are the fort's own and, when the retired secrets file
-      names restic-prune-s3-env-b2, sfi-b2-pruning-key too (#400): the
-      host was the fleet's pruner, and the output says the fleet now
-      has none.
+      the same gates minus the stack, then only the deploy key; the
+      machine goes by hand (docs/baremetal.md).
 
   layer add <flake url>#<role> [--write] [-- <the layer's init flags>]
       install a layer (forts#144, docs/layers.md): the flake input named

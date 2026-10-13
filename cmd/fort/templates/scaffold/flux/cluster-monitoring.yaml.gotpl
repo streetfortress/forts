@@ -1,5 +1,5 @@
 # {{ .Hostname }}'s per-cluster monitoring for the hub (#288, forts#38) —
-# rendered by `fort scaffold` from the manifest (mesh_ip, [[backups.pv]])
+# rendered by `fort scaffold` from the manifest (mesh_ip)
 # into flux/hub/{{ .HubHost }}/ of this estate, removed by `fort dismantle`;
 # `fort check --all` requires one per flux cluster. The hub subscribes
 # to the directory with flux. Everything the central layer has to know
@@ -33,23 +33,6 @@ spec:
             estate: {{ .Estate }}
           annotations:
             summary: "No data from {{ .Hostname }}'s edge Prometheus"
-{{- if .PV }}
-        # [[backups.pv]] blocks: the host imports sfi.pv-backup (fort
-        # scaffold), so a fort that declares a pv leg and publishes no
-        # pv-backup metrics is a manifest/host disagreement. The unit-side
-        # rules in rules-edge.yaml can only judge series that exist (#323).
-        # No pv block, no rule: a fort whose backups are the db layers
-        # alone (the production fort) has nothing here to be silent about.
-        - alert: PVBackupNotConfigured
-          expr: absent(node_pv_backup_paths{cluster="{{ .Hostname }}"})
-          for: 1h
-          labels:
-            severity: warning
-            cluster: {{ .Hostname }}
-            estate: {{ .Estate }}
-          annotations:
-            summary: "{{ .Hostname }} declares [[backups.pv]] blocks ({{ range $i, $p := .PV }}{{ if $i }}, {{ end }}{{ $p.Store }}{{ end }}) but publishes no pv-backup metrics — sfi.pv-backup not enabled on the host?"
-{{- end }}
 ---
 # Log analog of the dead man's switch, synced into the Loki ruler by the
 # chart's rules sidecar (any ConfigMap labeled loki_rule). Warning: the

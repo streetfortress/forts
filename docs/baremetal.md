@@ -69,7 +69,7 @@ fort check <host>             ← flux reconciles; the host rebuilds itself from
 no backend and no stack. `fort preview --all` lists it as `SKIP` so the
 walk is visibly complete. At retirement, `fort dismantle` is the same
 PR as for any fort; `fort destroy <host> --no-stack` then revokes the
-identities mint registered (deploy key, B2 keys) with the same
+identity mint registered (the deploy key) with the same
 merged-main gate, skipping the pulumi steps — the machine itself is
 powered off and its disk wiped by hand.
 

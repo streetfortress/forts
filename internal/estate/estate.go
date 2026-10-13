@@ -527,9 +527,8 @@ func (h Hub) Local(e Estate) bool { return SameRepo(h.Estate, e.Repo) }
 func (h Hub) Ref() string { return Ref(h.Estate) }
 
 // LocalHub is the host that serves a role from inside this estate, ""
-// when the role is unserved or served from another estate. What mint
-// and dismantle need: a registration in the hub's tree (the rustfs
-// identity) is possible only when that tree is this one.
+// when the role is unserved or served from another estate: a write into
+// the hub's tree is possible only when that tree is this one.
 func (e Estate) LocalHub(role string) string {
 	h, ok := e.Hubs[role]
 	if !ok || !h.Local(e) {

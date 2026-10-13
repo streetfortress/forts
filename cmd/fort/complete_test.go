@@ -60,14 +60,6 @@ func TestCompleteCandidates(t *testing.T) {
 		// Repeatable, and never twice.
 		{line: []string{"check", "lab-fort", ""}, want: []string{"cloud-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
 
-		// The role words, then the host the role takes. pv refuses a host
-		// whose manifest has a [[backups.pv]] block on b2, so cloud-fort
-		// and metal-fort are not offered; restore refuses none.
-		{line: []string{"b2-key", ""}, want: []string{"audit", "db-logical", "db-physical", "minting", "pruning", "pv", "restore"}},
-		{line: []string{"b2-key", "pv", ""}, want: []string{"lab-fort", "macmini", "plain-fort", "sfi-fort-e33e2d5", "steven-mac"}},
-		{line: []string{"b2-key", "restore", ""}, want: []string{"cloud-fort", "lab-fort", "macmini", "metal-fort", "plain-fort", "sfi-fort-e33e2d5", "steven-mac"}},
-		{line: []string{"b2-key", "minting", ""}}, // takes no host
-
 		// The link verbs (#55): the sub-verb word, the fort, and a URL
 		// nothing in the tree can offer.
 		{line: []string{"link", ""}, want: []string{"add"}},

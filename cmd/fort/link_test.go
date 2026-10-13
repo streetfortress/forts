@@ -34,7 +34,7 @@ func linkEstate(t *testing.T) (root string, tool *fakeTool) {
 	write("estate.toml", readFile(t, filepath.Join(infraFix, "estate.toml")))
 	write("mesh/peers.json", readFile(t, filepath.Join(infraFix, "mesh/peers.json")))
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - age1admin\n")
-	write(manifest.Path("hub"), "# The hub: a plain fort of infra.\nmesh_ip = \"10.1.0.5\"   # on infra's mesh\n\n[backups]\n\n[libvirt]\nip = \"10.0.0.5\"\n")
+	write(manifest.Path("hub"), "# The hub: a plain fort of infra.\nmesh_ip = \"10.1.0.5\"   # on infra's mesh\n\n[libvirt]\nip = \"10.0.0.5\"\n")
 	write(manifest.Path("other"), readFile(t, filepath.Join(infraFix, "forts/other.toml")))
 	entry, err := manifest.Load(root, "hub")
 	if err != nil {
@@ -305,7 +305,7 @@ func TestLinkAddCountsSiblingClaims(t *testing.T) {
 }
 
 func TestTomlSetInTable(t *testing.T) {
-	text := "mesh_ip = \"10.1.0.5\"\n\n[backups]\n\n[links.staging]\nestate = \"x\"\naddress = \"10.2.0.1\"   # the claim\nport = 51821\n\n[libvirt]\nip = \"10.0.0.5\"\n"
+	text := "mesh_ip = \"10.1.0.5\"\n\n[links.staging]\nestate = \"x\"\naddress = \"10.2.0.1\"   # the claim\nport = 51821\n\n[libvirt]\nip = \"10.0.0.5\"\n"
 	got := tomlSetInTable(text, "links.staging", "address", `"10.2.0.2"`)
 	if !strings.Contains(got, "address = \"10.2.0.2\"   # the claim\nport = 51821\n") || strings.Contains(got, "10.2.0.1") {
 		t.Errorf("rewrite:\n%s", got)
