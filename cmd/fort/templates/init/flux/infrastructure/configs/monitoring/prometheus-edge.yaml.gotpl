@@ -1,7 +1,7 @@
 # Edge Prometheus (#53): full mode — not Agent — because rule evaluation
-# must keep working on the edge when the mesh is down. Short local retention;
-# long-term storage is the remote_write stream into luxor's central
-# Prometheus (#98), which the Thanos sidecar uploads to rustfs.
+# must keep working on the edge when the mesh is down. Short local
+# retention; a monitoring layer adds the remote_write into its hub
+# (docs/layers.md).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -85,19 +85,6 @@ spec:
     runAsGroup: 65534
     fsGroup: 65534
     runAsNonRoot: true
-
-{{- if .Push }}
-  # The hub's central Prometheus, NodePort 30990 on its mesh address
-  # (HUB_MESH_IP from cluster-vars: the [hubs.monitoring] fort's address
-  # on this mesh, estate.toml; docs/hub.md). The
-  # mesh IP, not a name: a dual A record only survives here because Go's
-  # dialer retries every answer — the paging-critical path shouldn't
-  # depend on client dialer behavior (the same ambiguity broke fluent-bit
-  # outright). An estate with no hub has no remote_write: the edge keeps
-  # its own retention and nothing else.
-  remoteWrite:
-    - url: http://${HUB_MESH_IP}:30990/api/v1/write
-{{- end }}
 
   # Edge Prometheus points ONLY at its local Alertmanager: Prometheus fans
   # out to every configured AM, so adding a second target double-pages.

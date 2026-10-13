@@ -1,6 +1,6 @@
 # The metrics a fort publishes, on any provider and any estate (forts#60):
 # the node exporter on 9100, and the textfile collectors the framework
-# writes into. This is what the monitoring hub scrapes over the mesh
+# writes into. This is what a monitoring hub scrapes over the mesh
 # (forts#38): a cluster fort's edge Prometheus and a plain fort's pulled
 # ScrapeConfig read the same exporter under the same job name.
 #

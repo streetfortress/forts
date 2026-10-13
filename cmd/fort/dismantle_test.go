@@ -39,7 +39,7 @@ func TestDismantle(t *testing.T) {
 			}
 			// a doc that names the host, so residue reporting has something to find
 			write("README.md", "# fleet\n\nthe fort "+tc.host+" is mentioned here\n")
-			write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\nfort = \"luxor\"\n")
+			write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 			// the client side (#434), as the tree before the dismantle has it
 			m, _ := loadMesh(tmp)
 			hosts, _, _ := manifest.LoadAll(tmp)
@@ -146,7 +146,7 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\nfort = \"luxor\"\n")
+	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.94\"\n[cluster]\n[libvirt]\nip = \"10.0.0.94\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")

@@ -185,7 +185,7 @@ table to put the key in.
 
 **`[links.<name>]` is a hub on another estate's mesh** (forts#55,
 [links.md](links.md)). A fort is on one mesh, its estate's; a host that
-serves another estate a role — the forge, the monitoring hub — links to
+serves another estate a role — the forge, a hub a layer serves — links to
 that estate, and the link's facts live here, one table per estate:
 
 ```toml

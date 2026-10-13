@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
@@ -164,4 +165,24 @@ func copyTree(t *testing.T, src, dst string) {
 		}
 		copyFile(t, filepath.Join(src, e.Name()), filepath.Join(dst, e.Name()))
 	}
+}
+
+func writeTree(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for rel, content := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func levelsOf(fs []finding) string {
+	var out []string
+	for _, f := range fs {
+		out = append(out, f.level)
+	}
+	return strings.Join(out, ",")
 }

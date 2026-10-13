@@ -52,7 +52,7 @@ func TestRenderInit(t *testing.T) {
 		t.Error("a .gotpl suffix survived the render")
 	}
 	est, err := estate.Parse([]byte(m["estate.toml"]))
-	if err != nil || est.Name != "test-estate" || est.Pushes() || len(est.Hubs) != 0 {
+	if err != nil || est.Name != "test-estate" || len(est.Hubs) != 0 {
 		t.Errorf("estate.toml: %+v %v", est, err)
 	}
 	// no zone named: the default derives from the name, and the comment
@@ -99,45 +99,26 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["justfile"], "-F mesh/ssh_config") {
 		t.Errorf("fetch-kubeconfig must read mesh/ssh_config:\n%s", m["justfile"])
 	}
-	// no hub: the layer has no push targets and no log shipper
+	// The core pushes nowhere: a monitoring layer adds the remote_write,
+	// the log shipper and the variable they read (forts#143).
 	if strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "remoteWrite") || strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "fluent-bit") {
-		t.Error("no hub: the layer must carry neither remote_write nor fluent-bit")
+		t.Error("the core must carry neither remote_write nor fluent-bit")
 	}
 	for p, c := range m {
-		if strings.HasPrefix(p, "flux/infrastructure/") && strings.Contains(c, "${HUB_MESH_IP}") && !strings.Contains(p, "fluent-bit/") {
-			t.Errorf("%s references HUB_MESH_IP in a layer with no hub", p)
+		if strings.HasPrefix(p, "flux/infrastructure/") && strings.Contains(c, "${HUB_MESH_IP}") {
+			t.Errorf("%s references HUB_MESH_IP, a layer's variable", p)
 		}
 	}
-	// with an in-estate monitoring hub, estate.toml names it as a role
-	// (forts#38) and the layer pushes to it
-	v := testInitView
-	v.Hubs, v.Push = []hubView{{Role: "monitoring", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/test-estate", Fort: "luxor"}}, true
-	files, _ = renderInit(v)
-	m = map[string]string{}
-	for _, f := range files {
-		m[f.path] = string(f.content)
-	}
-	if !strings.Contains(m["estate.toml"], "\n[hubs.monitoring]\nestate = \"ssh://git@gitea.zen.lofi:30022/sfi/test-estate\"\nfort = \"luxor\"\n") {
-		t.Errorf("estate.toml with hub:\n%s", m["estate.toml"])
-	}
-	if est, err := estate.Parse([]byte(m["estate.toml"])); err != nil || est.LocalHub(estate.RoleMonitoring) != "luxor" {
-		t.Errorf("estate.toml with hub parses back: %+v %v", est, err)
-	}
-	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "url: http://${HUB_MESH_IP}:30990/api/v1/write") || !strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "  - fluent-bit\n") {
-		t.Error("with a hub: the layer must remote_write to HUB_MESH_IP and ship logs")
-	}
 	// The two identity labels (forts#50): estate beside cluster on every
-	// series the edge pushes and on each of the three log streams.
+	// series the edge keeps; a monitoring layer pushes them on.
 	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "  externalLabels:\n    cluster: ${CLUSTER_NAME}\n    estate: ${ESTATE_NAME}\n") {
 		t.Errorf("prometheus-edge external labels:\n%s", m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"])
 	}
-	if fb := m["flux/infrastructure/controllers/fluent-bit/release.yaml"]; strings.Count(fb, "cluster=${CLUSTER_NAME}, estate=${ESTATE_NAME}, ") != 3 || strings.Count(fb, "[OUTPUT]") != 3 {
-		t.Errorf("fluent-bit: want estate beside cluster on each of the 3 outputs:\n%s", fb)
-	}
-	// hubs in another estate: the forge with its name, the monitoring
-	// hub; the commented examples give way to the real tables
-	v = testInitView
-	v.Hubs, v.Push, v.Forge = []hubView{{Role: "forge", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "sfi-fort-zenbook", Name: "gitea.zen.lofi"}, {Role: "monitoring", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "luxor"}}, true, true
+	// hubs in another estate: the forge with its name, and a role the
+	// estate names (a layer's, forts#143); the commented examples give
+	// way to the real tables
+	v := testInitView
+	v.Hubs, v.Forge = []hubView{{Role: "forge", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "sfi-fort-zenbook", Name: "gitea.zen.lofi"}, {Role: "monitoring", Estate: "ssh://git@gitea.zen.lofi:30022/sfi/infra", Fort: "luxor"}}, true
 	files, _ = renderInit(v)
 	for _, f := range files {
 		if f.path != "estate.toml" {
@@ -148,7 +129,7 @@ func TestRenderInit(t *testing.T) {
 			t.Errorf("estate.toml with hubs in another estate:\n%s", got)
 		}
 		est, err := estate.Parse(f.content)
-		if err != nil || !est.Pushes() || est.LocalHub(estate.RoleMonitoring) != "" {
+		if err != nil || est.LocalHub("monitoring") != "" {
 			t.Errorf("parses back: %+v %v", est, err)
 		}
 	}

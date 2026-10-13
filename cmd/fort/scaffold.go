@@ -59,32 +59,11 @@ type hostView struct {
 	Zone string
 	// Estate: the estate's name (estate.toml `name`): cluster-vars
 	// ESTATE_NAME, the identity label beside cluster on every metric and
-	// log line the fort emits, and the static label on what the hub
-	// pulls from a plain fort (forts#50).
+	// log line the fort emits (forts#50).
 	Estate string
-	// HubMeshIP: where the edge stack pushes (cluster-vars HUB_MESH_IP):
-	// the monitoring hub's address on this mesh (hubMeshIP). "" with no
-	// monitoring hub, and the layer init rendered then carries no push
-	// targets.
-	HubMeshIP string
-	// HubHost is the monitoring hub fort's name (estate.toml
-	// [hubs.monitoring] fort): the directory a fort's file renders into,
-	// flux/hub/<HubHost>/. HubLocal says the hub is a fort of this
-	// estate, so the subscription to that directory is this estate's own.
-	HubHost  string
-	HubLocal bool
-	// Hub: this host IS the hub (clustermon.go), so its edge Alertmanager
-	// is reached by cluster DNS rather than over the mesh.
-	Hub bool
-	// IsHub: this host subscribes to some estate's flux/hub/<host>/ — its
-	// own estate's (Hub) or one a [[serves.monitoring]] entry names it
-	// for — so the apps root gains serves/, one subscription per estate
-	// (Serves).
-	IsHub  bool
-	Serves []serveView
 	// Plain: a fort with no [cluster] table — the baseline host shape
 	// (hardened, the mesh, deployer + the ops verbs, the shell; no
-	// k3s/flux/backups) and no fleet surface at all.
+	// k3s/flux) and no fleet surface at all.
 	Plain bool
 	// Links is the manifest's [links.<name>] tables (forts#55): one
 	// sfi.links.<name> block per estate this host is on the mesh of,
@@ -161,14 +140,6 @@ func ensureLinks(text string, entry manifest.Host) (string, error) {
 	return out, nil
 }
 
-// serveView is one subscription the hub fort's tree carries (serve.yaml
-// .gotpl): the estate it serves the monitoring role, its repo, and
-// whether that estate is this one (Local: the source is flux-system's).
-type serveView struct {
-	Hub, Name, Estate, Repo string
-	Local                   bool
-}
-
 // scaffoldFile is one rendered file: repo-relative path + content — or,
 // when edit is set, an append to a file that already exists (the hub
 // directory's kustomization gaining the fort's line). Appends are
@@ -220,11 +191,7 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	hubIP, err := hubMeshIP(root, est)
-	if err != nil {
-		return err
-	}
-	files, err := renderScaffold(host, entry, est, hubIP)
+	files, err := renderScaffold(host, entry, est)
 	if err != nil {
 		return err
 	}
@@ -301,49 +268,13 @@ func scaffoldShape(e manifest.Host) string {
 	return s + ", k3s on " + e.Datastore()
 }
 
-// hubMeshIP is where this estate's edges push: the monitoring hub's
-// address on THIS mesh (forts#38). A hub that is a fort of this estate
-// has it in its manifest (mesh_ip); a hub in another estate is on this
-// mesh through a link, and its address is its remotes entry in
-// mesh/peers.json — the one place the fact is written, by the PR that
-// linked it (docs/mesh.md). "" when there is no monitoring hub and
-// nothing to push to.
-func hubMeshIP(root string, est estate.Estate) (string, error) {
-	h, ok := est.Hub(estate.RoleMonitoring)
-	if !ok {
-		return "", nil
-	}
-	if h.Local(est) {
-		hub, err := manifest.Load(root, h.Fort)
-		if err != nil {
-			return "", fmt.Errorf("%s [hubs.monitoring] names %q as a fort of this estate: %w", estate.Path, h.Fort, err)
-		}
-		return hub.MeshIP, nil
-	}
-	m, err := loadMesh(root)
-	if err != nil {
-		return "", fmt.Errorf("%s [hubs.monitoring] names %s in %s, whose address on this mesh is its remotes entry: %w", estate.Path, h.Fort, h.Ref(), err)
-	}
-	r, ok := m.Remotes[h.Fort]
-	if !ok {
-		return "", fmt.Errorf("%s [hubs.monitoring] names %s in %s, and %s has no remotes.%s — the hub reaches this mesh through a link, and its address here is that entry (docs/mesh.md, \"Linking\"); add it first", estate.Path, h.Fort, h.Ref(), peersPath, h.Fort)
-	}
-	return r.IP, nil
-}
-
-// renderScaffold is the pure half: the manifests → files. hubIP is the
-// monitoring hub's address on this mesh (hubMeshIP), "" for an estate
-// with no monitoring hub.
-func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP string) ([]scaffoldFile, error) {
-	hub, hasHub := est.Hub(estate.RoleMonitoring)
+// renderScaffold is the pure half: the manifests → files.
+func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaffoldFile, error) {
 	view := hostView{
 		RepoURL:       est.RepoGit(),
 		MeshInterface: est.InterfaceName(),
 		Zone:          est.ZoneName(),
 		Estate:        est.Name,
-		HubMeshIP:     hubIP,
-		HubHost:       hub.Fort,
-		HubLocal:      hasHub && hub.Local(est),
 		Hostname:      host,
 		MeshIP:        entry.MeshIP,
 		LanPrefix:     24,
@@ -353,21 +284,10 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 		Datastore:     entry.Datastore(),
 		Cloud:         entry.Cloud(),
 		Provider:      entry.Provider,
-		Hub:           hasHub && hub.Local(est) && host == hub.Fort,
 		Plain:         !entry.IsCluster(),
 		AuditLogging:  entry.AuditLogging(),
 		Links:         linkViews(entry),
 	}
-	// The subscriptions this fort's tree carries: its own estate's forts
-	// when it is this estate's monitoring hub, then every estate a
-	// [[serves.monitoring]] entry names it the hub of.
-	if view.Hub {
-		view.Serves = append(view.Serves, serveView{Hub: host, Name: estate.ShortName(est.Repo), Estate: est.Ref(), Repo: est.RepoGit(), Local: true})
-	}
-	for _, s := range est.ServedBy(host, estate.RoleMonitoring) {
-		view.Serves = append(view.Serves, serveView{Hub: host, Name: s.Name(), Estate: s.Ref(), Repo: estate.WithGit(s.Estate)})
-	}
-	view.IsHub = len(view.Serves) > 0 && !view.Plain
 	// The lab LAN block, from whichever lab table the host carries.
 	lan := func(ip string, prefix int, gw string, dns []string) {
 		view.IP = ip
@@ -432,10 +352,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 	}
 	if view.Plain {
 		// No fleet surface: no cluster dir, no apps root, no canary home.
-		// The hub still gets the fort's file: with no edge Prometheus the
-		// hub PULLS node-exporter over the mesh and arms the switch, in
-		// the same <host>-keyed place a cluster's lives. Anything else the
-		// estate runs on the fort is the estate's to scrape.
+		// Anything the estate runs on the fort is the estate's to scrape.
 		var out []scaffoldFile
 		for _, p := range plan {
 			b, err := render(p.tpl)
@@ -444,18 +361,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 			}
 			out = append(out, withLinksEdit(scaffoldFile{path: p.path, content: b, note: p.note}, p.tpl, entry))
 		}
-		if !hasHub {
-			return out, nil
-		}
-		b, err := render("host-monitoring.yaml.gotpl")
-		if err != nil {
-			return nil, fmt.Errorf("host-monitoring.yaml.gotpl: %w", err)
-		}
-		k, err := render("hub-kustomization.yaml.gotpl")
-		if err != nil {
-			return nil, fmt.Errorf("hub-kustomization.yaml.gotpl: %w", err)
-		}
-		return append(out, hubFiles(hub.Fort, host, b, plainMonitoringNote, k)...), nil
+		return out, nil
 	}
 	clusters := filepath.Join("flux/clusters", host)
 	plan = append(plan,
@@ -479,79 +385,16 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate, hubIP s
 			// gains the line: the shared layer references it, and flux's
 			// strict envsubst fails the whole layer without it. The one
 			// key scaffold adds to an existing cluster-vars; the rest of
-			// the file stays the estate's (HUB_MESH_IP is a hand edit,
+			// the file stays the estate's (a layer's variable is its own edit,
 			// docs/init.md).
 			f.edit = func(s string) (string, error) {
 				return ensureClusterVar(s, "ESTATE_NAME", view.Estate)
 			}
 			f.editNote = "+ ESTATE_NAME " + view.Estate
 		}
-		if view.IsHub && p.tpl == "apps-kustomization.yaml.gotpl" {
-			// A hub's apps root lists serves/; a root that already
-			// exists (the hub scaffolded before it served anyone) gains
-			// the line, never a rewrite.
-			f.note += ", serves/ (the subscriptions)"
-			f.edit = func(s string) (string, error) {
-				if strings.Contains(s, "- "+servesDirName+"\n") || strings.HasSuffix(s, "- "+servesDirName) {
-					return s, nil
-				}
-				return appendListItem(s, "resources", servesDirName)
-			}
-		}
 		out = append(out, f)
 	}
-	// The hub side (forts#38): one subscription per estate this host
-	// serves the monitoring role, its own included — the GitRepository
-	// on the served repo, the scoped service account, the Kustomization
-	// on flux/hub/<this host>/ — and the kustomization that lists them.
-	if view.IsHub {
-		var items []string
-		for _, sv := range view.Serves {
-			var b bytes.Buffer
-			if err := tpl.ExecuteTemplate(&b, "serve.yaml.gotpl", sv); err != nil {
-				return nil, fmt.Errorf("serve.yaml.gotpl: %w", err)
-			}
-			note := "subscription: " + hubDir(host) + "/ of " + sv.Estate
-			if sv.Local {
-				note += " (this estate, through the flux-system source)"
-			} else {
-				note += " (" + sv.Repo + ", with this cluster's deploy key)"
-			}
-			out = append(out, scaffoldFile{path: servesPath(host, sv.Estate), content: b.Bytes(), note: note})
-			items = append(items, sv.Name+".yaml")
-		}
-		k, err := render("serves-kustomization.yaml.gotpl")
-		if err != nil {
-			return nil, fmt.Errorf("serves-kustomization.yaml.gotpl: %w", err)
-		}
-		out = append(out, scaffoldFile{path: servesKustomization(host), content: k, note: "the subscriptions, one line per estate", edit: func(s string) (string, error) {
-			var err error
-			for _, item := range items {
-				if strings.Contains(s, item) {
-					continue
-				}
-				if s, err = appendListItem(s, "resources", item); err != nil {
-					return "", err
-				}
-			}
-			return s, nil
-		}})
-	}
-	// The cluster's monitoring for the hub (#288): everything the central
-	// layer knows about this one cluster, in one file keyed by its name,
-	// plus the line that makes the hub's flux apply it. No hub, no file.
-	if !hasHub {
-		return out, nil
-	}
-	b, err := render("cluster-monitoring.yaml.gotpl")
-	if err != nil {
-		return nil, fmt.Errorf("cluster-monitoring.yaml.gotpl: %w", err)
-	}
-	k, err := render("hub-kustomization.yaml.gotpl")
-	if err != nil {
-		return nil, fmt.Errorf("hub-kustomization.yaml.gotpl: %w", err)
-	}
-	return append(out, hubFiles(hub.Fort, host, b, clusterMonitoringNote, k)...), nil
+	return out, nil
 }
 
 // withLinksEdit: a host file whose manifest declares links is appended
@@ -566,24 +409,6 @@ func withLinksEdit(f scaffoldFile, tpl string, entry manifest.Host) scaffoldFile
 	f.edit = func(s string) (string, error) { return ensureLinks(s, entry) }
 	f.editNote = "+ sfi.links." + strings.Join(entry.LinkNames(), ", sfi.links.") + " (from [links] in the manifest)"
 	return f
-}
-
-// hubFiles is a fort's file for the hub plus the line that makes the
-// hub's flux apply it (clustermon.go) — the same pair for a cluster and
-// a plain fort, different content. The kustomization is appended to
-// when it exists and created from kust (the whole file, this fort's
-// line in it) when this is the first fort of the estate to render one.
-func hubFiles(hub, host string, content []byte, note string, kust []byte) []scaffoldFile {
-	item := host + ".yaml"
-	return []scaffoldFile{
-		{path: hubFilePath(hub, host), content: content, note: note},
-		{path: hubKustomization(hub), content: kust, note: "+ " + item, edit: func(s string) (string, error) {
-			if strings.Contains(s, item) {
-				return s, nil
-			}
-			return appendListItem(s, "resources", item)
-		}},
-	}
 }
 
 func repoRoot() (string, error) {

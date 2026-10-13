@@ -1,8 +1,8 @@
 # Links — a host on another estate's mesh
 
 A fort is on one mesh, its estate's ([mesh.md](mesh.md)). Some hosts serve
-more than one estate — the forge every estate clones from, a monitoring
-hub — and those **link** to the other estate. Linking a host to an estate
+more than one estate — the forge every estate clones from, a hub a layer
+serves — and those **link** to the other estate. Linking a host to an estate
 puts it on that estate's mesh as if it were a fort there: it peers with
 every fort of that estate, and every one of them peers with it. An
 allowlist (a hub-to-hub link) is not a thing yet; decided in
@@ -42,9 +42,9 @@ sfi.links.staging = {
 ```
 
 A link is the network half of a hub relationship ([hub.md](hub.md)),
-and `roles` says which: `forge` opens 30022 and 443 (gitea), `monitoring`
-30990 and 31100 (the central Prometheus' remote_write, Loki's push), `ca`
-nothing yet (forts#46). `openTCPPorts` derives from the roles and can
+and `roles` says which: `forge` opens 30022 and 443 (gitea); any other
+role opens the `ports` its `[[serves.<role>]]` entry declares (forts#105;
+[hub.md](hub.md)). `openTCPPorts` derives from the roles and can
 still be set by hand. `roles` is not in the manifest and not in the
 rendered block: it defaults to the roles whose `[[serves.<role>]]`
 entries in this estate's `estate.toml` name this host and an estate

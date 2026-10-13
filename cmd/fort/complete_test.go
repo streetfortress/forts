@@ -71,7 +71,7 @@ func TestCompleteCandidates(t *testing.T) {
 
 		// Flag names, and the values that are closed.
 		{line: []string{"destroy", "gone-fort", "-"}, want: []string{"--no-stack", "--yes"}},
-		{line: []string{"init", "--hub", ""}, want: []string{"ca=", "forge=", "monitoring="}, directive: dirNoSpace},
+		{line: []string{"init", "--hub", ""}}, // a role is a name the estate chooses (forts#105): nothing to offer
 
 		// The values the shell completes, and the ones only the operator knows.
 		{line: []string{"image", "lab-fort", "--from", ""}, directive: dirFiles},

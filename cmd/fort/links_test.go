@@ -285,24 +285,6 @@ func TestLinkFindings(t *testing.T) {
 	if fs := only(linkFindings(root, est, map[string]manifest.Host{"hub": self}, withKey), "error"); len(fs) < 1 || !strings.Contains(fs[0].msg, "names this estate") {
 		t.Errorf("link to self: %+v", fs)
 	}
-	// the hub side (servesFindings): a fort that serves an estate a role
-	// with no link to it is warned about, by its manifest
-	noLink := hosts["hub"]
-	noLink.Links = nil
-	var warned bool
-	for _, f := range servesFindings(root, est, map[string]manifest.Host{"hub": noLink, "other": hosts["other"]}) {
-		if f.level == "warning" && strings.Contains(f.msg, "no [links.staging]") && strings.Contains(f.msg, "fort link add hub "+stagingURL) && f.dir == manifest.Path("hub") {
-			warned = true
-		}
-	}
-	if !warned {
-		t.Error("servesFindings: a serving fort with no link is not warned about")
-	}
-	for _, f := range servesFindings(root, est, hosts) {
-		if f.level == "warning" && strings.Contains(f.msg, "[links.staging]") {
-			t.Errorf("servesFindings warns with the link declared: %+v", f)
-		}
-	}
 }
 
 func estateLoadT(t *testing.T, root string) (estate.Estate, error) {

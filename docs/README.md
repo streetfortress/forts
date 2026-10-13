@@ -220,7 +220,7 @@ other fails `go test`.
 - [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
 - [init](init.md) — create an estate: the files every other verb assumes
 - [dismantle](dismantle.md) — the repo half of retirement
-- [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]`, `flux/hub/<hub fort>/`, the flux subscription
+- [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]` with its `ports`; the forge is the one role the core renders for
 - [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens
 - [layers](layers.md) — what sits on top of the core: `layers/<layer>/` in the estate, `fort <layer> <verb>` execs `fort-<layer>`, `fort layer add` installs one and passes its flags through, the verb order
 - [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
@@ -244,9 +244,9 @@ nixos/
   .sops.yaml                     the per-host rules, a marker block per fort
 flux/
   clusters/<host>/               the FluxInstance and the cluster's Kustomizations
-  apps/<host>/                   the apps root; fort add renders into it; a hub's serves/ (hub.md)
-  hub/<hub host>/                what this estate asks of its monitoring hub, one file per fort (hub.md)
+  apps/<host>/                   the apps root: the estate's flux, or what a layer renders into it
   infrastructure/                the shared layer every cluster applies
+layers/<layer>/                  a layer's estate.toml and forts/<fort>.toml (layers.md); the core reads nothing here
 mesh/
   peers.json                     who is on the mesh and where (mesh.md): mint adds, dismantle removes; remotes by hand
   ssh_config, known_hosts        rendered from peers.json + the manifests

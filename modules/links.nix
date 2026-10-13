@@ -2,7 +2,7 @@
 #
 # A fort is on one mesh, its estate's (wireguard.nix: wg0, from
 # mesh/peers.json). Some hosts serve more than one estate — the forge
-# every estate clones from, a monitoring hub — and those LINK to the
+# every estate clones from, a hub a layer serves — and those LINK to the
 # other estate: one more WireGuard interface, with its own key, its own
 # listen port and the address the other estate allocated. Linking puts
 # the host on that mesh as if it were a fort there: it peers with every
@@ -23,9 +23,9 @@
 #
 # What the link does not do: open ssh (hardened.nix opens 22 on wg0
 # only; a link interface serves exactly the ports of the roles this host
-# serves that estate — `roles`, forts#38: the forge's 30022 and 443, the
-# monitoring hub's 30990 and 31100; `openTCPPorts` derives from them and
-# is overridable), forward between meshes (a DROP rule in FORWARD for
+# serves that estate — `roles`, forts#38: the forge's 30022 and 443, and
+# for every other role the `ports` its [[serves.<role>]] entry declares
+# (forts#105); `openTCPPorts` derives from them and is overridable), forward between meshes (a DROP rule in FORWARD for
 # every pair of mesh interfaces: a hub never bridges), or read anything
 # but mesh/peers.json. For a private estate the clone needs a read
 # credential: a read-only deploy key on that repo, registered by that
@@ -86,16 +86,12 @@ let
   ownIP = ((peersData.peers or { }).${config.networking.hostName} or { }).wg_vpn_ip or null;
 
   # The roles (forts#38): what a hub opens on a link to the estate it
-  # serves, per role. The forge is gitea's ssh and https; monitoring is
-  # the central Prometheus' remote_write and Loki's push, the NodePorts
-  # the edges dial; the ca role has no port yet (forts#46 chooses the
-  # step-ca NodePort).
-  rolePorts = {
-    forge = [ 30022 443 ];
-    monitoring = [ 30990 31100 ];
-    ca = [ ];
-  };
-  roleNames = lib.attrNames rolePorts;
+  # serves, per role. The forge is the one role the core knows: gitea's
+  # ssh and https. Every other role is a name the estate chooses and the
+  # `ports` its [[serves.<role>]] entry declares (forts#105) — a layer's
+  # role (a monitoring hub's remote_write and push ports) or the estate's
+  # own; the core renders nothing for it.
+  forgePorts = [ 30022 443 ];
 
   # This estate's serves tables ([[serves.<role>]] fort, estates), read
   # for THIS host: the roles whose entry names this host and lists an
@@ -109,6 +105,12 @@ let
     (entry: lib.filter (url: lastLabel url == name) (entry.estates or [ ]))
     (lib.filter (entry: (entry.fort or null) == config.networking.hostName) (servesTables.${role} or [ ]));
   rolesFor = name: lib.filter (role: servedHere name role != [ ]) (lib.attrNames servesTables);
+  # The ports those entries declare for this host and that estate, plus
+  # the forge's when the forge is one of the roles.
+  portsFor = name: lib.unique (lib.concatMap
+    (role: lib.concatMap (entry: if role == "forge" then forgePorts else (entry.ports or [ ]))
+      (lib.filter (entry: (entry.fort or null) == config.networking.hostName && lib.any (url: lastLabel url == name) (entry.estates or [ ])) (servesTables.${role} or [ ])))
+    (lib.attrNames servesTables));
   estateURLFor = name:
     let urls = lib.unique (lib.concatMap (role: servedHere name role) (lib.attrNames servesTables));
     in if urls == [ ] then null else lib.head urls;
@@ -137,11 +139,11 @@ let
         description = "The other estate's git URL: the repo whose mesh/peers.json is the source of truth for this interface's peers. https:// for a public repo; ssh:// with `sshKeyFile` for a private one. Defaults to the [[serves]] entry of estate.toml whose estate's last label is this link's name.";
       };
       roles = lib.mkOption {
-        type = lib.types.listOf (lib.types.enum roleNames);
+        type = lib.types.listOf lib.types.str;
         default = rolesFor name;
         defaultText = "the roles whose [[serves.<role>]] entry names this host and the estate named after this link, else none";
         example = [ "forge" "monitoring" ];
-        description = "The roles this host serves the other estate (forts#38): what `openTCPPorts` derives from — forge: 30022 and 443; monitoring: 30990 and 31100; ca: nothing yet (forts#46). Defaults to the roles whose [[serves.<role>]] entry in estate.toml names this host and that estate.";
+        description = "The roles this host serves the other estate (forts#38): what `openTCPPorts` derives from — forge: 30022 and 443; any other role: the `ports` its [[serves.<role>]] entry declares (forts#105). Defaults to the roles whose entry in estate.toml names this host and that estate.";
       };
       ref = lib.mkOption {
         type = lib.types.str;
@@ -174,8 +176,8 @@ let
       };
       openTCPPorts = lib.mkOption {
         type = lib.types.listOf lib.types.port;
-        default = lib.unique (lib.concatMap (r: rolePorts.${r}) config.roles);
-        defaultText = "the ports of `roles`";
+        default = portsFor name;
+        defaultText = "the ports of `roles`: the forge's pair, and the `ports` of every other role's serves entry";
         example = [ 30022 443 ];
         description = "TCP ports the other estate's forts may reach on this interface: the ports of the roles this host serves it, by default. Nothing else answers there — not ssh, not the exporters.";
       };

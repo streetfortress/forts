@@ -10,7 +10,7 @@
 # A test in cmd/fort keeps the manifest and the host file equal.
 #
 # k3s runs the API server in its own process, so the path is a host
-# path. It is under /var/log on purpose: the fleet's fluent-bit
+# path. It is under /var/log on purpose: a monitoring layer's log shipper
 # DaemonSet already mounts /var/log, so the stream to Loki
 # (flux/infrastructure/controllers/fluent-bit) needs no new volume and
 # costs nothing on a fort without the file. Loki keeps every stream 30
@@ -122,7 +122,7 @@ let
 in
 {
   options.sfi.k3s.auditLog = {
-    enable = lib.mkEnableOption "the k3s API server's audit log under ${dir}, shipped to Loki by the fleet's fluent-bit";
+    enable = lib.mkEnableOption "the k3s API server's audit log under ${dir}, shipped to Loki by a monitoring layer's log shipper";
   };
 
   config = lib.mkIf cfg.enable {

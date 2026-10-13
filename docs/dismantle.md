@@ -20,11 +20,9 @@ dismantle sfi-x   (cloud: linode)
 ✗ nixos/hosts/sfi-x
 ✗ nixos/secrets/sfi-x.yaml
 ✗ forts/sfi-x.toml
-✗ flux/hub/luxor/sfi-x.yaml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
 ○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared flux/infrastructure rule
 ◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
-○ flux/hub/luxor/kustomization.yaml   - sfi-x.yaml
 ○ mesh/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
 ◆ mesh/ssh_config           re-rendered without sfi-x
 ◆ mesh/known_hosts          - the sfi-x line
@@ -59,11 +57,9 @@ Three things deserve the explanation:
   entry in this plan, and the stack config goes with the stack in `fort
   destroy`, so all three get a `○` line of their own instead of a
   residue count. What the list holds is work for the reviewer, one item
-  per line. Docs and CLI fixtures are usually kept (history, goldens); the
-  fort's own file for the hub (`flux/hub/<hub host>/<host>.yaml`, its
-  dead man's switch and datasource; [hub.md](hub.md)) is part of the
-  generated surface and goes with the plan — the hub's flux prunes the
-  resources when the merge lands, whichever estate the hub is in — so
+  per line. Docs and CLI fixtures are usually kept (history, goldens); a layer's
+  file for the fort (a dead man's switch on a hub) is the layer's own
+  dismantle's, which runs before this one ([layers](layers.md)) — so
   anything else under central monitoring that names the host is
   hand-written — an s3-exporter target, a dashboard — and usually goes
   too.

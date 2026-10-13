@@ -328,7 +328,7 @@ func TestTomlSetInTable(t *testing.T) {
 		"  [ links.staging ]  ":         "links.staging",
 		"[links.staging]   # a comment": "links.staging",
 		"[links.staging] x = 1":         "",
-		"[[serves.monitoring]]":         "",
+		"[[serves.metrics]]":            "",
 		"[links.staging":                "",
 		"links.staging = 1":             "",
 	} {

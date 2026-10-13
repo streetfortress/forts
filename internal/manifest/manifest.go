@@ -91,7 +91,7 @@ type Shape struct {
 //
 //	[cluster]
 //	datastore = "sqlite"    # sqlite (single node, the default) | etcd (embedded, cluster-init)
-//	audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
+//	audit_logging = true    # the API server writes an audit log; a log shipper ships it
 //
 // datastore is a positive word, not a negated boolean: the reader asks
 // "which datastore", not "was cluster-init set". scaffold renders
@@ -111,7 +111,7 @@ type ClusterSpec struct {
 	Datastore string `toml:"datastore"`
 	// AuditLogging: the API server writes an audit log under
 	// /var/log/kube-audit (modules/k3s-audit.nix), and the fleet's
-	// fluent-bit tails it into Loki as job="kube-audit". Default false.
+	// a log shipper (a monitoring layer's) tails it. Default false.
 	// scaffold renders `sfi.k3s.auditLog.enable = true` from it; on a
 	// host that already exists the block is a hand edit, and a test in
 	// cmd/fort keeps the manifest and the host file equal.

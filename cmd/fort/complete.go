@@ -38,7 +38,6 @@ import (
 	"strconv"
 	"strings"
 
-	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -103,7 +102,7 @@ var completions = map[string]verbSpec{
 	"init": {flags: []flagSpec{
 		{name: "name", kind: opaque},
 		{name: "repo", kind: opaque},
-		{name: "hub", kind: closed, values: hubRoles, noSpace: true},
+		{name: "hub", kind: opaque},
 		{name: "forge-name", kind: opaque},
 		{name: "mesh", kind: opaque},
 		{name: "interface", kind: opaque},
@@ -380,18 +379,6 @@ func meshMembers(cx *completeCx) []string {
 		return nil
 	}
 	out := append(sortedNames(m.Peers), sortedNames(m.Clients)...)
-	sort.Strings(out)
-	return out
-}
-
-// hubRoles: `--hub <role>=<fort>@<estate git url>` — the role words are
-// closed (estate.Roles), the rest is the operator's. Completed with the
-// '=' and no space, so the line continues where the knowledge stops.
-func hubRoles(*completeCx) []string {
-	out := make([]string, 0, len(estate.Roles))
-	for _, r := range estate.Roles {
-		out = append(out, r+"=")
-	}
 	sort.Strings(out)
 	return out
 }

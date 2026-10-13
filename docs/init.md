@@ -58,33 +58,20 @@ estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # the estate that holds th
 fort = "sfi-fort-zenbook"
 name = "gitea.zen.lofi"       # the forge's one name on every mesh
 
-[hubs.monitoring]
+[hubs.monitoring]            # a layer's role (layers.md): the core renders nothing for it
 estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # this estate's own repo URL for an in-estate hub
-fort = "luxor"
+fort = "central"
 ```
 
 `scaffold` renders the FluxInstance source and `sfi.auto-rebuild.repoUrl`
 from `repo`. The hubs are roles ([hub.md](hub.md)): `--hub
-<role>=<fort>@<estate git url>` once per role (`--hub
-monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra`; the fort
-comes first because the URL carries an `@` of its own, and the forge's
-name is `--forge-name gitea.zen.lofi`), and `init` renders the shared
-layer for a monitoring hub or none:
-
-| estate.toml | the fort's file for the hub | the edges push |
-|---|---|---|
-| `[hubs.monitoring]` with `estate` = this estate | scaffold renders every fort's file into `flux/hub/<host>/`, and the hub's own `serves/` subscribes to it through the flux-system source | `HUB_MESH_IP` = the hub's `mesh_ip` |
-| `[hubs.monitoring]` with `estate` = another | the same `flux/hub/<host>/`; that estate's `[[serves.monitoring]]` entry subscribes to it | `HUB_MESH_IP` = the hub's `remotes` entry in `mesh/peers.json` |
-| no `[hubs.monitoring]` | none | the layer carries no `remote_write` and no fluent-bit |
-
-`scaffold` writes `HUB_MESH_IP` into a cluster's `cluster-vars.yaml` when
-there is somewhere to push; the layer's edge Prometheus `remote_write` and
-fluent-bit's Loki outputs read it. `check` and `dismantle` read the hubs
-too. An estate with no monitoring hub has nobody to notice a silent
-fort: the edge Alertmanager is its only alerting, and `fort check --all`
-says so. The `[[serves.<role>]]` tables of a hub's estate are a hand
-edit after init; `fort scaffold <fort>` renders the subscriptions from
-them.
+<role>=<fort>@<estate git url>` once per role (the fort comes first
+because the URL carries an `@` of its own, and the forge's name is
+`--forge-name gitea.zen.lofi`). The forge is the one role the core
+renders for. Any other role is a name a layer or the estate serves: the
+core writes the table and nothing else, and the layer's init renders
+what the role asks of each fort ([layers](layers.md)). The
+`[[serves.<role>]]` tables of a hub's estate are a hand edit after init.
 
 `[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
 one name on every mesh (`gitea.zen.lofi`) to the address `fort` has in
@@ -93,11 +80,11 @@ of the estate (forts#26; [mesh.md](mesh.md)). The address is written in
 that entry and nowhere else. An estate that names no forge host gets no
 pin, and `fort check --all` says so.
 
-Changing the monitoring hub after init is a hand edit: `flux/infrastructure`
-is the estate's once rendered (re-render it from a scratch `fort init`
-and diff), and `cluster-vars.yaml` is never overwritten by scaffold (it
-appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)), so
-each cluster gains or loses its `HUB_MESH_IP` line by hand.
+Adding a hub role after init is a hand edit of `estate.toml` for the
+core, and the layer's own verbs for what the role renders
+([layers](layers.md)); `flux/infrastructure` is the estate's once
+rendered, and `cluster-vars.yaml` is never overwritten by scaffold (it
+appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)).
 
 ## The operators
 

@@ -1,7 +1,7 @@
 # The names of the mesh: mesh/peers.json is the zone (forts#45).
 #
 # A fort needs the names of the hosts on its mesh: the forge, the
-# monitoring hub, the CA. It knows every one of them at build time — they
+# hub a layer serves, the CA. It knows every one of them at build time — they
 # are the peers and remotes of mesh/peers.json — so this module renders
 # them, and no resolver is on the fort's path. Every host on the mesh is
 # <host>.<zone> at its mesh address, where the zone is the estate's

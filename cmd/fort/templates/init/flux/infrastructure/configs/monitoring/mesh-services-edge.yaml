@@ -9,7 +9,7 @@
 # (k3s does enforce NetworkPolicy, but NodePort traffic is SNAT'd under
 # externalTrafficPolicy=Cluster, so pod-level source filtering can't
 # distinguish mesh from LAN — the host firewall can, and already does
-# for 30990/31100.)
+# for a hub's ports on a link.)
 #
 # Port mnemonics: 9090 → 30909, 9093 → 30993 (NodePort range caps at
 # 32767).

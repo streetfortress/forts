@@ -43,9 +43,12 @@ operator_keys = [
 # ]
 {{- end }}
 
-# The hubs (docs/hub.md): the roles another fort serves this estate — the
-# forge every fort clones from, the monitoring hub the edges push to and
-# that notices a silent fort, the CA a lab issuer reaches. Each names the
+# The hubs (docs/hub.md): the roles another fort serves this estate. The
+# forge every fort clones from is the one role the framework renders for
+# (its name is pinned to the fort's address on this mesh). Every other
+# role is a name you choose — a layer's (a monitoring hub) or your own —
+# and the framework renders nothing for it: the hub is <fort>.<zone>, and
+# the link opens the ports the hub's estate declares. Each names the
 # estate that holds the hub by its git URL (this estate's own `repo` for
 # an in-estate hub) and the fort that is it. The hub's address on this
 # mesh is that fort's entry in mesh/peers.json: its manifest when the
@@ -60,13 +63,6 @@ fort = "{{ .Fort }}"
 name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- end }}
 {{- end }}
-{{- if not .Push }}
-
-# [hubs.monitoring]            # no monitoring hub: edge-only, and nobody notices a
-# estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # silent fort. Adding one later means
-# fort = "luxor"               # re-rendering flux/infrastructure and HUB_MESH_IP in
-                               # every cluster-vars by hand (docs/init.md).
-{{- end }}
 {{- if not .Forge }}
 
 # [hubs.forge]                 # the forge: the gitea every fort clones from, by its one
@@ -76,14 +72,15 @@ name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- end }}
 
 # The other half, declared by the hub's estate, by role: a fort of this
-# estate and the estates it serves that role. fort scaffold <fort>
-# renders the flux subscription for each estate a monitoring entry names
-# it the hub of; the served estate renders what it asks into
-# flux/hub/<fort>/ of its own tree. Two entries under one role are two
-# hubs; an estate appears once per role.
+# estate, the estates it serves that role, and — for every role but the
+# forge — the ports the link opens for it (forts#105). Two entries under
+# one role are two hubs; an estate appears once per role. A role with a
+# render on the served side is a layer's (docs/layers.md): the layer's
+# files say what the hub runs and what each served fort renders.
 # [[serves.forge]]
 # fort = "sfi-fort-zenbook"
 # estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]
 # [[serves.monitoring]]
-# fort = "luxor"
+# fort = "central"
 # estates = ["ssh://git@gitea.zen.lofi:30022/sfi/staging"]
+# ports = [30990, 31100]

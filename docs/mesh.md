@@ -118,7 +118,7 @@ behind NAT), `wg_endpoint_port` (only when it is not 51820), and
 ## Linking: a host on another estate's mesh (deployments#674)
 
 A fort is on one mesh, its estate's. Some hosts serve more than one
-estate — the forge every estate clones from, the monitoring hub — and
+estate — the forge every estate clones from, a hub a layer serves — and
 those **link** to the other estate: one more WireGuard interface on that
 host, with its own key, its own listen port and the address the other
 estate allocated to it. Linking a host to an estate puts it on that
@@ -147,12 +147,11 @@ The endpoint port is the field a link needs: the linked host already
 listens on 51820 for its own mesh, so its link interface listens beside
 it (51821, 51822, …), and this estate's entry says which.
 
-A hub this estate names in `estate.toml` (`[hubs.monitoring]`,
-`[hubs.forge]`; [hub.md](hub.md)) and that is another estate's fort is
-a `remotes` entry here, and that entry is its address on this mesh:
-`fort scaffold` renders `HUB_MESH_IP` from `remotes.<host>.wg_vpn_ip`,
-and refuses by name when the entry is missing. The address is written
-once, in the PR that linked the host.
+A hub this estate names in `estate.toml` (`[hubs.<role>]`;
+[hub.md](hub.md)) and that is another estate's fort is a `remotes` entry
+here, and that entry is its address on this mesh, named `<host>.<zone>`.
+A layer that needs the address in a file reads it from this entry. The
+address is written once, in the PR that linked the host.
 
 ## Joining
 

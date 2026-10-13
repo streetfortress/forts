@@ -7,8 +7,3 @@ resources:
   - cert-manager
   - kube-state-metrics
   - prometheus-operator
-{{- if .Push }}
-  # The log shipper exists to push to the hub's Loki over the mesh; an
-  # estate with no hub has none.
-  - fluent-bit
-{{- end }}

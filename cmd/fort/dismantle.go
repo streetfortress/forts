@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
@@ -118,23 +117,6 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 			p.removes = append(p.removes, rel)
 		}
 	}
-	// The cluster's monitoring for the hub (#288, forts#38): scaffold's
-	// file under flux/hub/<hub>/ and its line in that directory's
-	// kustomization — a retired cluster's dead man's switch would
-	// otherwise page forever. The hub's flux prunes the resources when
-	// the merge lands, whichever estate the hub is in.
-	est, err := estate.Load(root)
-	if err != nil {
-		return nil, err
-	}
-	if hub, ok := est.Hub(estate.RoleMonitoring); ok && exists(root, hubFilePath(hub.Fort, host)) {
-		p.removes = append(p.removes, hubFilePath(hub.Fort, host))
-		p.edits = append(p.edits, dEdit{hubKustomization(hub.Fort), "- " + host + ".yaml", func(s string) (string, error) {
-			s, _ = removeLinesContaining(s, "- "+host+".yaml")
-			return s, nil
-		}})
-	}
-
 	// 4. wireguard peer
 	p.edits = append(p.edits, dEdit{"mesh/peers.json", "- .peers." + host + " (the other peers shed it on their next rebuild)", func(s string) (string, error) { return removePeer(s, host) }})
 
@@ -480,7 +462,7 @@ func residueTag(rel string) string {
 	case strings.HasSuffix(rel, ".md"):
 		return "   (doc)"
 	case strings.HasPrefix(rel, "flux/hub/"):
-		return "   (the fort's file for the hub is dismantle's; anything else under flux/hub/ naming the host is hand-written and usually goes)"
+		return "   (a layer's directory: its own dismantle removes the fort's file; anything else here naming the host is hand-written and usually goes)"
 	case strings.Contains(rel, "/monitoring/"):
 		return "   (central monitoring — anything here naming the host is hand-written and usually goes)"
 	}

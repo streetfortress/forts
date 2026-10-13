@@ -6,12 +6,8 @@
 # (forts#50): the fort's name, and the name of the estate it belongs to
 # (estate.toml `name`), so a hub that serves several estates can group
 # what it receives by estate. MESH_IP must stay in sync with
-# mesh/peers.json. HUB_MESH_IP is where the edge Prometheus remote-writes
-# and fluent-bit ships logs: the monitoring hub's address on this mesh
-# (estate.toml [hubs.monitoring]; its manifest's mesh_ip when the hub is
-# a fort of this estate, its remotes entry in mesh/peers.json when it is
-# another estate's); an estate with no monitoring hub has no such line
-# and no such targets.
+# mesh/peers.json. A layer that pushes somewhere (a monitoring hub) adds
+# the variable its wiring reads, beside these (docs/layers.md).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,6 +17,3 @@ data:
   CLUSTER_NAME: {{ .Hostname }}
   ESTATE_NAME: {{ .Estate }}
   MESH_IP: {{ .MeshIP }}
-{{- if .HubMeshIP }}
-  HUB_MESH_IP: {{ .HubMeshIP }}
-{{- end }}

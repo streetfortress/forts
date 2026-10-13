@@ -80,16 +80,7 @@ func check(args []string) error {
 		return err
 	}
 	shared.estate = est.Name
-	// Cross-fort providers are a fleet-wide invariant, not a per-fort
-	// one: the declaration lives in the hub's tree, so it can only be
-	// traced with every manifest in hand (--all). The hub relationship
-	// (forts#38) is checked from both ends: every fort's file for the
-	// monitoring hub, and every subscription the hub owes an estate. The
-	// forge's half is its address on this mesh (forts#26).
 	if *all {
-		shared.findings = append(shared.findings, hubFileFindings(root, est, parsed)...)
-		shared.findings = append(shared.findings, hubBuildFindings(root, est)...)
-		shared.findings = append(shared.findings, servesFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 		shared.findings = append(shared.findings, meshSubnetFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, zoneFindings(root, est, parsed)...)

@@ -41,11 +41,9 @@ type initView struct {
 	// Hubs: the roles another fort serves this estate ([hubs.<role>],
 	// forts#38), in role order.
 	Hubs []hubView
-	// Push: the edges have a monitoring hub to push to (a fort here or in
-	// another estate), so the layer carries remote_write and fluent-bit.
 	// Forge: a [hubs.forge] is declared (the template's example is
 	// omitted then).
-	Push, Forge bool
+	Forge bool
 }
 
 // hubView is one [hubs.<role>] table as the template renders it.
@@ -66,7 +64,7 @@ func hubsView(e estate.Estate) []hubView {
 }
 
 // parseHubFlag reads one --hub value, <role>=<fort>@<estate git url>
-// (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra): the
+// (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra): the
 // role, the hub fort, and the hub's estate by its URL — the one
 // spelling of an estate estate.toml uses everywhere, this estate's own
 // for an in-estate hub. The fort comes first because the URL carries an
@@ -74,11 +72,11 @@ func hubsView(e estate.Estate) []hubView {
 func parseHubFlag(v string) (role string, h estate.Hub, err error) {
 	role, rest, ok := strings.Cut(v, "=")
 	if !ok {
-		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
 	}
 	fort, repo, ok := strings.Cut(rest, "@")
 	if !ok || fort == "" || repo == "" {
-		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
+		return "", h, fmt.Errorf("--hub %q: want <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra)", v)
 	}
 	return role, estate.Hub{Estate: repo, Fort: fort}, nil
 }
@@ -95,7 +93,7 @@ func initCmd(args []string) error {
 	name := fl.String("name", "", "the estate's name (the repo's)")
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<gitea>:<port>/<owner>/<name>)")
 	var hubs multiFlag
-	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (monitoring=luxor@ssh://git@gitea.zen.lofi:30022/sfi/infra); repeat per role. The estate may be this one.")
+	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (forge=zenbook@ssh://git@gitea.zen.lofi:30022/sfi/infra); repeat per role. The forge is the role the core renders for; any other name is a role a layer or the estate serves (docs/hub.md). The estate may be this one.")
 	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (gitea.zen.lofi), with --hub forge=…")
 	meshNet := fl.String("mesh", "", "the estate's WireGuard subnet, CIDR (10.2.0.0/24); fort check keeps every mesh address inside it")
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
@@ -154,7 +152,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Push: est.Pushes(), Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}

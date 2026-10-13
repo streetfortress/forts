@@ -40,49 +40,16 @@ flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
 ● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
 ● flux-system/kustomization.yaml
-● cluster-vars.yaml                          CLUSTER_NAME <host>, ESTATE_NAME <estate>, MESH_IP <mesh_ip>[, HUB_MESH_IP — the monitoring hub's address on this mesh]
+● cluster-vars.yaml                          CLUSTER_NAME <host>, ESTATE_NAME <estate>, MESH_IP <mesh_ip>
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → flux/apps/<host>
 flux/apps/<host>/
 ● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
-flux/hub/<hub host>/
-● <host>.yaml                                dead man's switch (metrics, logs), edge Alertmanager datasource[, PVBackupNotConfigured]
-○ kustomization.yaml                         + <host>.yaml   (● on the estate's first fort)
 ```
 
-The last two are the fort's file for its monitoring hub
-([hub.md](hub.md)), and they are why nothing about a cluster lives
-outside a `<host>`-keyed file (#288): the central layer has to know each
-cluster by name — `absent(up{cluster="<host>"})` is the only expression
-that can fire when a cluster goes silent, its log analog the same, and
-its edge Alertmanager has to be a Grafana datasource for silences to be
-managed from one pane. Those used to be hand-edited hunks in shared
-files, and forts joined without them (the production fort had no dead
-man's switch until 2026-09-20); then one file per cluster written into
-the hub's tree, which broke when the hub moved to another estate. Now
-they are one file per fort under `flux/hub/<hub host>/` of the fort's
-OWN estate — the hub host's name whichever estate holds it — rendered
-here, removed by [`dismantle`](dismantle.md), required by `fort check
---all` (a flux cluster with no file, or a file with no manifest, is an
-error), and applied by the hub's flux subscription to that path
-(forts#38). The kustomization line is a text-level append, idempotent,
-so a re-run reports `○ exists — kept (already listed)`; the estate's
-first fort creates the file. `HUB_MESH_IP` is the hub's address on this mesh: its manifest's
-`mesh_ip` when the hub is a fort of this estate, its `remotes` entry in
-`mesh/peers.json` when it is another estate's — and a missing entry is
-refused by name, not rendered empty.
-
-On a hub fort (this estate's `[hubs.monitoring]` fort, or one a
-`[[serves.monitoring]]` entry names), scaffold also renders the
-subscriptions its tree carries:
-
-```
-flux/apps/<hub>/
-○ kustomization.yaml                         + serves
-● serves/<this estate>.yaml                  subscription: flux/hub/<hub>/ of this estate (through the flux-system source) — on the [hubs.monitoring] fort
-● serves/<served estate>.yaml                subscription: flux/hub/<hub>/ of <url>, with this cluster's deploy key — one per estate the fort's [[serves.monitoring]] entry lists
-● serves/kustomization.yaml                  the subscriptions, one line per estate
-```
+What a hub asks of the fort — a dead man's switch file, a datasource —
+is a layer's render into the layer's own directory ([layers](layers.md));
+the core's tree stops at the apps root.
 
 Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
@@ -104,19 +71,15 @@ is a plain fort.
 
 ## The plain shape
 
-A manifest with no `[cluster]` table renders the host dir and the fort's
-file on the hub:
+A manifest with no `[cluster]` table renders the host dir alone:
 
 ```
 ● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
-flux/hub/luxor/
-● sfi-lab-x.yaml                      mesh scrape target (node-exporter), HostDown
-○ kustomization.yaml                  + sfi-lab-x.yaml
 ```
 
 `default.nix` imports the baseline in place of `k3s-server.nix` +
-`production.nix` + `flux-bootstrap.nix` (+ `pv-backup.nix`): `hardened.nix`,
+`production.nix` + `flux-bootstrap.nix`: `hardened.nix`,
 `ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with the four
 modules a role names — `estate.nix`, `wireguard.nix`, `metrics.nix`,
 `lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the LAN and zram
@@ -124,21 +87,6 @@ blocks of the lab VM. Nothing under `flux/`: there is no cluster to sync and no 
 prove decryption. `secrets.nix` declares no `k3s-token`. The file is the
 estate's from then on: an account, a service, a role is plain NixOS
 written below the imports, and the framework names none of it.
-
-The hub file is the pull-shaped counterpart of a cluster's: with no edge
-Prometheus, the hub scrapes the fort over the mesh — node-exporter on 9100 —
-and arms `HostDown` on the target. `cluster` is the fort's name, as on
-every other fort, and `estate` is the estate's (below): a pulled target
-has no edge Prometheus to stamp it, so the hub does. No edge Alertmanager datasource: a plain fort has none.
-Anything else the estate runs on the fort is the estate's to scrape, in a
-file of its own beside this one.
-
-The operator owns `job`: it relabels it to the CR's `jobName` after the
-target's own labels are merged, so a `job:` under `staticConfigs` never
-survives. The leg is `jobName: host-node-exporter` — the name a cluster
-fort's edge ServiceMonitor gives the same exporter, and the job the Host
-Overview dashboard keys every panel on — so a plain fort lists there the
-moment the hub scrapes it (#442).
 
 ## The operator defaults
 
@@ -174,15 +122,9 @@ in the host file: the manifest has no key for it.
 `cluster-vars.yaml` carries the two labels every metric and log line
 leaves the fort with: `CLUSTER_NAME`, the fort's name, and `ESTATE_NAME`,
 the estate's (`estate.toml` `name`; forts#50). The shared layer stamps
-both: the edge Prometheus as external labels on every series it
-remote-writes, fluent-bit on each of its three Loki streams. A hub that
-serves several estates (forts#38) receives one flat set of clusters
-otherwise, and "the staging estate's log rate" is a list of fort names
-that goes stale when staging raises or dismantles a fort. The hub-side
-file (above) carries `estate` too: on every alert it raises about the
-fort, and on the static labels of a plain fort's scrape target, which
-no edge stamps. The dead man's switch keys on `cluster` alone —
-`absent()` has no `by` clause, and the fort's name is the identity.
+both on the edge Prometheus as external labels, so whatever a monitoring
+layer pushes on carries them. A hub that serves several estates
+(forts#38) receives one flat set of clusters otherwise.
 
 The label is one value per estate, so Loki gains no streams. On
 metrics it is an external label, and an external label that changes on
@@ -192,8 +134,8 @@ that queries by `cluster` alone shows no gap.
 
 `fort check` reads the values, not only the keys: a `CLUSTER_NAME` that
 is not the fort's name, or an `ESTATE_NAME` that is not this estate's,
-passes flux's strict substitution and mislabels the fort at the hub,
-which only the hub would notice. A cluster scaffolded before
+passes flux's strict substitution and mislabels the fort wherever its
+series go. A cluster scaffolded before
 `ESTATE_NAME` existed fails the gate (the shared layer references a
 var its cluster-vars lacks) until `fort scaffold <host> --write` adds
 the line — the one key scaffold appends to an existing
