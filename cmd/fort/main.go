@@ -78,13 +78,17 @@ func main() {
 		err = dismantle(os.Args[2:])
 	case "destroy":
 		err = destroy(os.Args[2:])
+	case "layer":
+		err = layerCmd(os.Args[2:])
 	case completeVerb:
 		// The shell's callback, not an operator's verb: hidden from
 		// usage(), and it answers nothing when it cannot (complete.go).
 		err = complete(os.Args[2:])
 	default:
-		usage()
-		os.Exit(2)
+		// A verb core does not have is a layer's name: fort-<name> on
+		// PATH takes the rest (layer.go, forts#144). The error names
+		// both when there is neither.
+		err = execLayer(os.Args[1], os.Args[2:])
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -103,7 +107,9 @@ func usage() {
   (observed, from the live host) — are spec and status (#224).
 
   author  init, scaffold, mint, image, add, seed, dismantle, ssh-config,
-          link add, estate link
+          link add, estate link, layer add, layer remove
+  layers  fort <layer> <verb> … runs the layer's own binary, fort-<layer>,
+          from PATH: what sits on top of the core (docs/layers.md)
   keys    b2-key (the B2 credentials no other verb creates),
           console-password (the fort's getty password)
   apply   provision, adopt, destroy
@@ -436,6 +442,26 @@ func usage() {
       names restic-prune-s3-env-b2, sfi-b2-pruning-key too (#400): the
       host was the fleet's pruner, and the output says the fleet now
       has none.
+
+  layer add <flake url>#<role> [--write] [-- <the layer's init flags>]
+      install a layer (forts#144, docs/layers.md): the flake input named
+      after the repo, the role's binary re-exported at that pin so the
+      gate runs "nix run ./nixos#fort-<role>", and the layer's gate step
+      after core's. Then the layer's own init runs with every flag after
+      "--", passed through unread; it writes layers/<role>/ itself. Core
+      reads nothing under layers/. Prints the plan; --write edits,
+      stages and runs the init.
+
+  layer remove <role> [--write]
+      the reversal: layers/<role>/, the gate step, the re-export, and
+      the input when no other role of it stays. The layer's own
+      dismantle runs first, per fort.
+
+  <layer> <verb> [args]
+      any other first word is a layer's name: fort-<layer> on PATH takes
+      the rest, in this process, with FORT_ESTATE_ROOT set. The order
+      across the two is the operator's: core's verb, then the layer's —
+      except dismantle and destroy, where the layer's runs first.
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.

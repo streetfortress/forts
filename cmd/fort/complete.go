@@ -166,6 +166,15 @@ var completions = map[string]verbSpec{
 		writeFlag,
 	}, args: []candidates{words("add"), manifests, nil}},
 	"estate": {flags: []flagSpec{writeFlag}, args: []candidates{words("link"), nil}},
+	// The layer verbs (#144): add takes a flake url nothing in the tree
+	// can offer; remove takes an installed layer, which the tree can.
+	"layer": {flags: []flagSpec{writeFlag}, args: []candidates{words("add", "remove"), layerNames}},
+}
+
+// layerNames: the layers/<name>/ directories of the estate.
+func layerNames(cx *completeCx) []string {
+	names, _ := installedLayers(cx.root)
+	return names
 }
 
 // words is a closed positional: the sub-verb words a verb takes.

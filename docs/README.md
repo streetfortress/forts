@@ -27,7 +27,8 @@ changes hands ([manifest.md](manifest.md)).
 
 | kind | verbs | what they touch |
 |---|---|---|
-| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
+| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`add`](add.md), [`seed`](seed.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md), [`layer add`, `layer remove`](layers.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
+| **layers** | `fort <layer> <verb>` ([layers](layers.md)) | the layer's own binary, `fort-<layer>`, from PATH: what sits on top of the core — a hub role with a render, the chart contract, a backup store. Core knows the protocol and no layer by name. |
 | **apply** | [`provision`](provision.md), [`adopt`](provision.md#adopt), [`destroy`](destroy.md) | the provider (Linode, or soundship's libvirt), through pulumi with inherited stdio: you read the preview and confirm. |
 | **read** | `check`, [`crd-diff`](crd-diff.md), [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `crd-diff` compares the `crds/` directory of both chart versions on a bump (CI runs it too); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
 
@@ -227,6 +228,7 @@ other fails `go test`.
 - [dismantle](dismantle.md) — the repo half of retirement
 - [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]`, `flux/hub/<hub fort>/`, the flux subscription
 - [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens
+- [layers](layers.md) — what sits on top of the core: `layers/<layer>/` in the estate, `fort <layer> <verb>` execs `fort-<layer>`, `fort layer add` installs one and passes its flags through, the verb order
 - [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
 - [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a

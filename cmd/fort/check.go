@@ -108,6 +108,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, linkFindings(root, est, parsed, sopsCLI{root: root})...)
 		shared.findings = append(shared.findings, pruneHolderFindings(root, parsed)...)
+		shared.findings = append(shared.findings, layerFindings(root)...)
 	}
 	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
 	for _, fort := range forts {
