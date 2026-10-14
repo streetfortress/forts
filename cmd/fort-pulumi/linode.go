@@ -164,7 +164,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 		Type:           pulumi.String(spec.Type),
 		FirewallId:     firewall.ID().ApplyT(func(id string) (int, error) { return strconv.Atoi(id) }).(pulumi.IntOutput),
 		PrivateIp:      pulumi.Bool(false),
-		BackupsEnabled: pulumi.Bool(false), // backups are #47's job, not the provider's
+		BackupsEnabled: pulumi.Bool(false), // backups are a layer's job, not the provider's
 		Metadatas:      metadatas,
 		// Empty shell: disks + boot config below own what runs on it.
 		Booted: pulumi.Bool(false),

@@ -300,13 +300,15 @@ func giteaClient(root string) (*giteaDeployKeys, error) {
 	if err != nil {
 		return nil, fmt.Errorf("no gitea-token in provisioning/secrets.yaml: %w", err)
 	}
-	ca, err := os.ReadFile(filepath.Join(root, "nixos/certs/step-ca-root.pem"))
-	if err != nil {
-		return nil, err
+	// The estate's CA root, when it carries one (nixos/certs/ca-root.pem,
+	// the file estate.nix trusts): a forge behind a private CA answers the
+	// API under it. No file, the system roots.
+	client := &http.Client{Timeout: 30 * time.Second}
+	if ca, err := os.ReadFile(filepath.Join(root, "nixos/certs/ca-root.pem")); err == nil {
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(ca)
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
 	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(ca)
-	client := &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
 	return &giteaDeployKeys{client: client, api: api, base: base, token: token}, nil
 }
 

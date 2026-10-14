@@ -83,7 +83,7 @@ const (
 )
 
 type mintPlan struct {
-	est        estate.Estate // estate.toml: the hub the backups register with
+	est        estate.Estate // estate.toml: the forge and the roles
 	root, host string
 	entry      manifest.Host
 	endpoint   string // wireguard endpoint, "" = none (a peer others dial out to is optional)

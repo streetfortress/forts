@@ -60,7 +60,7 @@
 #   - A failed switch fails nixos-upgrade.service and stays on the old
 #     generation (atomic) — and so does an unreachable gitea (gate exit
 #     255; nix would otherwise rebuild the cached clone and report
-#     success); the failure is visible in journald → Loki
+#     success); the failure is visible in journald (and a log shipper's stream)
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
 #     NixosUpgradeFailed rule of a monitoring hub
 #     alerts on it.
@@ -77,7 +77,7 @@ let
   # exit 255 = the UNIT fails (systemd.service(5)). Inherits the service's
   # GIT_SSH_COMMAND and $STATE_DIRECTORY. Recording the rev here (not
   # after the switch) is what caps failing commits at one attempt each.
-  # Echoes land in the unit's journal (→ Loki) so gate decisions are
+  # Echoes land in the unit's journal so gate decisions are
   # visible next to the rebuild output they explain.
   #
   # An unreachable gitea is a unit FAILURE, not a pass-through: nix's git
@@ -86,7 +86,7 @@ let
   # that cannot reach gitea would otherwise report a green "Finished NixOS
   # Upgrade" forever while silently frozen — a hub did exactly that for
   # 12h+ on 2026-09-13 (resolver stuck, the forge's name NXDOMAIN). Exit 255
-  # trips NixosUpgradeFailed (loki-rules) the same as a failed switch.
+  # trips a hub's NixosUpgradeFailed rule the same as a failed switch.
   #
   # Path granularity: the trees below are everything the host closure
   # reads from the repo (the flake under nixos/, peers.json, and the

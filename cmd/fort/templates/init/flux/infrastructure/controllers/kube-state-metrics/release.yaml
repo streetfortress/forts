@@ -28,7 +28,7 @@ spec:
     # gotk_resource_info (ready condition, applied revision, suspended)
     # is the flux-blessed KSM customResourceState pattern — CRD fields
     # become metric labels declaratively, no operator code. This is also
-    # the template for any future operator's CRDs (databasus etc.): one
+    # the template for any future operator's CRDs (a layer's): one
     # more `resources:` entry with its GVK + labelsFromPath, plus the
     # matching rbac rule. Config shape follows fluxcd's
     # flux2-monitoring-example.

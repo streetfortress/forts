@@ -36,7 +36,7 @@ every file that exists.
 
 The estate's own, named in the report:
 
-- `nixos/certs/step-ca-root.pem` and `flux/infrastructure/configs/step-ca-root.pem` — the lab CA. `estate.nix` trusts the first file on every host of the estate where the file exists; an estate with no CA provides neither.
+- `nixos/certs/ca-root.pem` — the estate's CA root, when it runs a private CA. `estate.nix` trusts the first file on every host of the estate where the file exists; an estate with no CA provides neither.
 - `flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml` — the edge Alertmanager's webhook.
 - `provisioning/secrets.yaml` — the fleet secrets (`provisioning/README.md` lists the keys).
 

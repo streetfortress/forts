@@ -1,8 +1,8 @@
 # sfi-admin-kubectl: the ADMIN rung as a verb, for hosts that opt in.
 #
-#   sudo sfi-admin-kubectl delete cluster -n forts postgres
+#   sudo sfi-admin-kubectl delete cluster -n forts db
 #   sudo sfi-admin-kubectl get pvc -A
-#   sudo sfi-admin-kubectl edit helmrelease symbology -n symbology
+#   sudo sfi-admin-kubectl edit helmrelease web -n web
 #
 # The verb carries its own editor. `kubectl edit` runs KUBE_EDITOR, else
 # EDITOR, else `vi`, and a fort has none of the three: hardened.nix

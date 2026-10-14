@@ -11,7 +11,7 @@ nixos/
   flake.nix                  the hosts, auto-discovered under hosts/; sfi/forts as inputs.forts
   hosts/<host>/              default.nix + secrets.nix, rendered by fort scaffold, then yours
   secrets/<host>.yaml        the fort's sops file, written by fort mint
-  certs/step-ca-root.pem     the lab CA — provide it
+  certs/ca-root.pem          the estate's CA root, when it runs a private CA — provide it
   .sops.yaml                 the per-host rules
 flux/
   clusters/<host>/           the FluxInstance and the cluster's Kustomizations
@@ -31,8 +31,7 @@ justfile                     the estate's own verbs: fetch-kubeconfig (a fort's 
 ## The first fort
 
 1. `nix flake lock ./nixos` — pin the framework.
-2. Provide `nixos/certs/step-ca-root.pem` and
-   `flux/infrastructure/configs/step-ca-root.pem` (the lab CA), and seed
+2. Provide `nixos/certs/ca-root.pem` when the estate runs a private CA, and seed
    `flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml`
    (the edge Alertmanager's webhook; `sops` it under the shared rule).
 3. Create `provisioning/secrets.yaml` (provisioning/README.md).

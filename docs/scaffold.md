@@ -126,7 +126,7 @@ both on the edge Prometheus as external labels, so whatever a monitoring
 layer pushes on carries them. A hub that serves several estates
 (forts#38) receives one flat set of clusters otherwise.
 
-The label is one value per estate, so Loki gains no streams. On
+The label is one value per estate, so a log store gains no streams. On
 metrics it is an external label, and an external label that changes on
 a running edge changes the identity of every series it remote-writes:
 the hub's old series end and new ones start at the rollout. A dashboard

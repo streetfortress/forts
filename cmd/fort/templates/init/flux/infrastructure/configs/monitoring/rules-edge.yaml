@@ -87,14 +87,6 @@ spec:
           annotations:
             summary: "{{ $labels.customresource_kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} not Ready for 15m"
 
-        - alert: CNPGClusterDown
-          expr: cnpg_collector_up == 0
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "CNPG cluster {{ $labels.cluster }} exporter reports down"
-
         - alert: CertificateExpiringSoon
           expr: >-
             certmanager_certificate_expiration_timestamp_seconds - time()

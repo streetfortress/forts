@@ -12,7 +12,7 @@ modules/           the NixOS modules: the hardened profile, the mesh, k3s, flux,
 cmd/fort/          the CLI; templates/scaffold and templates/init (an estate's skeleton, the
                    shared flux layer included) are what it renders; a layer's templates are the layer's (docs/layers.md)
 cmd/fort-pulumi/   the pulumi program fort provision execs
-internal/          manifest, estate, seed, b2, tools (the CLI's tool set: internal/tools/tools.json)
+internal/          manifest, estate, seed, tools (the CLI's tool set: internal/tools/tools.json)
 tests/estate/      a one-fort fixture estate the flake evaluates; tests/init-estate.sh creates one with fort init
 docs/              the CLI handbook — start at docs/README.md
 ```
@@ -35,7 +35,7 @@ the resource program it wraps; `internal/manifest` is the shared schema.
 The provider-side surface is deliberately three things — **instance,
 firewall, DNS** — because the WireGuard mesh owns machine-to-machine
 traffic and flux owns everything above the machine (no managed services:
-rustfs/valkey/cnpg ride the clusters). Full design discussion on #87.
+a store or a database rides the cluster). Full design discussion on #87.
 
 ## Shape
 

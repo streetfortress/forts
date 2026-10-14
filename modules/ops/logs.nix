@@ -2,8 +2,8 @@
 # exists (#185).
 #
 #   sudo sfi-k8s-logs                                  # menu: pods + phase
-#   sudo sfi-k8s-logs postgres-1 forts
-#   sudo sfi-k8s-logs symbology-worker-abc symbology --previous
+#   sudo sfi-k8s-logs db-1 forts
+#   sudo sfi-k8s-logs web-worker-abc web --previous
 #   sudo sfi-k8s-logs source-controller-x flux-system --tail 500
 #
 # Why a verb for a read: the read-only kubeconfig already carries

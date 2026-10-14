@@ -6,9 +6,8 @@
 # whose charts ship aggregate-to-view roles — flux, flux-operator,
 # cert-manager. The ones that DON'T are granted read explicitly below
 # (verified with `kubectl auth can-i`, 2026-09-13):
-# Gateway API (vendored CRDs, no roles at all), cnpg (the chart's
-# aggregation is off by default), traefik Middlewares, and the
-# prometheus-operator kinds. What it deliberately lacks: Secrets (helm
+# Gateway API (vendored CRDs, no roles at all), traefik Middlewares, and
+# the prometheus-operator kinds. A layer's CRDs are the layer's rule. What it deliberately lacks: Secrets (helm
 # release state is inspected via HelmRelease status / `flux` CLI, NOT a
 # secret carve-out — "the RO config cannot read any Secret" stays an
 # absolute), and cluster-scoped objects, added narrowly below (nodes,
@@ -75,14 +74,6 @@ rules:
   # CRDs without an aggregate-to-view role (read-only, no Secrets).
   - apiGroups: [gateway.networking.k8s.io]
     resources: [gatewayclasses, gateways, httproutes, grpcroutes, referencegrants]
-    verbs: [get, list, watch]
-  - apiGroups: [postgresql.cnpg.io]
-    resources: [clusters, databases, backups, scheduledbackups, poolers, publications, subscriptions, imagecatalogs, clusterimagecatalogs]
-    verbs: [get, list, watch]
-  # The barman-cloud plugin's CR (#48): where a cluster's archive goes,
-  # and its status is where a failing object store says why.
-  - apiGroups: [barmancloud.cnpg.io]
-    resources: [objectstores]
     verbs: [get, list, watch]
   - apiGroups: [traefik.io]
     resources: [middlewares]

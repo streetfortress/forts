@@ -32,7 +32,7 @@ spec:
   #
   # Traefik is the only chart this tree pins that ships a crds/ directory.
   # Every other chart here renders its CRDs as templates (cert-manager,
-  # cloudnative-pg, plugin-barman-cloud, flux-operator), or takes them from a
+  # flux-operator), or takes them from a
   # CRD-only release (prometheus-operator-crds, with crds.enabled=false on
   # the stack chart), or ships none. The Gateway API CRDs have no upstream
   # chart, so ../gateway-api keeps the vendored bundle. The test is two
@@ -87,8 +87,8 @@ spec:
         protocol: TCP
         http:
           # Response compression for every https route on every cluster —
-          # edge posture, not an app fact (#226: 4x wire cut on symbology's
-          # company pages, knee unharmed, validated on staging). An
+          # edge posture, not an app fact (#226: 4x wire cut on an app's
+          # pages, knee unharmed, validated on staging). An
           # entrypoint middleware applies to all routers on the entrypoint
           # whatever provider made them, so Gateway API routes need no
           # per-app Middleware + ExtensionRef (the shape #227 first used).
@@ -105,7 +105,7 @@ spec:
 
     log:
       level: INFO
-    # JSON so the fluent-bit kubernetes filter (Merge_Log) lifts the access
+    # JSON so a log shipper's kubernetes filter (Merge_Log) lifts the access
     # log fields — the caddy-log-pipeline equivalent as ingress moves to
     # traefik (#54).
     #
@@ -113,11 +113,10 @@ spec:
     # retried, or slower than the knee), so the happy path is dropped.
     # Unfiltered, every 200 cost ~1.1 KiB of JSON — about a third of the
     # compressed response bytes it described — shipped again over the mesh
-    # to a hub's Loki, where nothing reads it: the symbology dashboard's
+    # to a hub's log store, where nothing reads it: an app dashboard's
     # request layer is traefik's Prometheus metrics (podmonitors.yaml),
-    # and the only LogQL rule on this stream (TraefikBackendErrors,
-    # loki-rules.yaml) wants 5xx, which the filter keeps. Found on
-    # sfi-stage-d95cc36's capacity run (2026-09-26): traefik was the
+    # and a rule on this stream wants 5xx, which the filter keeps. Found
+    # on a staging fort's capacity run (2026-09-26): traefik was the
     # fort's whole log volume. 1s is the knee the k6 runs settled on, so a
     # slow 200 still lands. statusCodes is a string in the chart (rendered
     # as --accesslog.filters.statuscodes), not a list.
@@ -146,7 +145,7 @@ spec:
     # helm release. gzip only: traefik 3's default set adds brotli + zstd,
     # and the validated CPU trade (2 vCPU nodes at 90% on the knee) was
     # gzip's. Restricted to text types so a hub's edge never re-compresses
-    # gitea's git packs or rustfs object downloads (already compressed —
+    # git packs or object downloads (already compressed —
     # pure CPU waste); everything else passes through untouched. The 1 KiB
     # minimum body is the default.
     extraObjects:

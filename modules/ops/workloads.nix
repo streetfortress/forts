@@ -5,9 +5,9 @@
 # the pods — the 2026-09-12 Config B switch sat on the old database for
 # hours this way.
 #
-#   sudo sfi-k8s-restart deployment symbology-worker
-#   sudo sfi-k8s-restart pod postgres-1            # delete; controller recreates
-#   sudo sfi-k8s-scale deployment symbology-worker 0
+#   sudo sfi-k8s-restart deployment web-worker
+#   sudo sfi-k8s-restart pod db-1                  # delete; controller recreates
+#   sudo sfi-k8s-scale deployment web-worker 0
 #
 # One deliberate nuance to the framework's "never desired state" rule:
 # sfi-k8s-scale DOES edit live spec.replicas — but the edit is ephemeral
@@ -15,7 +15,7 @@
 # reconcile restores the declared count; the verb exists to quiesce a
 # workload mid-runbook (the Config B copy needed exactly this), not to
 # manage capacity. Restart-by-pod is the same shape: deleting a pod nudges
-# its controller (CNPG instance pods, one-off stuck replicas) and the
+# its controller (a database operator's instance pods, one-off stuck replicas) and the
 # controller re-realizes desired state.
 #
 # Framework security rule (flux.nix precedent): sudo + user args is
@@ -104,7 +104,7 @@
         ns=''${matches[0]}
         if [ "$kind" = "pod" ]; then
           # No rollout machinery for bare pods: delete and let the owning
-          # controller recreate. CNPG instance pods come back under the
+          # controller recreate. An operator's instance pods come back under the
           # same name — wait for that; controllers that rename (ReplicaSet
           # pods) make the wait a no-op, which is fine: the delete is the
           # nudge, `kubectl get pods -n $ns` shows the successor.

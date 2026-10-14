@@ -11,10 +11,9 @@
 #
 # k3s runs the API server in its own process, so the path is a host
 # path. It is under /var/log on purpose: a monitoring layer's log shipper
-# DaemonSet already mounts /var/log, so the stream to Loki
-# (flux/infrastructure/controllers/fluent-bit) needs no new volume and
-# costs nothing on a fort without the file. Loki keeps every stream 30
-# days; a longer life for this one is #618's decision, not this
+# already mounts /var/log, so the stream needs no new volume and costs
+# nothing on a fort without the file. How long the stream lives is the
+# layer's; a longer life for this one is #618's decision, not this
 # module's.
 { config, lib, pkgs, ... }:
 
@@ -28,9 +27,9 @@ let
   # components authenticate as, and the groups its nodes and the
   # platform namespaces' service accounts carry. A namespace is
   # platform here when a controller converges it and no person works in
-  # it: cnpg-system runs the CNPG operator and its barman-cloud plugin
-  # (flux/infrastructure/controllers/cnpg), which were the two largest
-  # sources in the stage fort's first hours of the stream (#653).
+  # it. A layer's operator namespace (a database operator's was the
+  # largest source in the stage fort's first hours, #653) joins through
+  # extraPlatformGroups.
   platformUsers = [
     "system:apiserver"
     "system:kube-controller-manager"
@@ -44,8 +43,7 @@ let
     "system:serviceaccounts:kube-system"
     "system:serviceaccounts:flux-system"
     "system:serviceaccounts:monitoring"
-    "system:serviceaccounts:cnpg-system"
-  ];
+  ] ++ cfg.extraPlatformGroups;
 
   # Rules apply first match wins, so the noise is dropped first and the
   # secret-bearing resources are capped before any body-logging rule can
@@ -84,11 +82,10 @@ let
       # and a renew timestamp, rewritten every few seconds for as long
       # as an operator runs. The group below quiets the lease of an
       # operator that runs in a platform namespace; this rule reaches
-      # the one it cannot — CNPG gives each Cluster its own service
-      # account in the *tenant's* namespace (forts on this fort),
-      # and that account holds the primary-election lease, so a
-      # namespace list would need an edit for every new database
-      # (#653). The who, the verb and the name stay in the event.
+      # the one it cannot — an operator that gives each instance its
+      # own service account in the *tenant's* namespace, which holds a
+      # leader-election lease, so a namespace list would need an edit
+      # for every new instance (#653). The who, the verb and the name stay in the event.
       {
         level = "Metadata";
         resources = [
@@ -122,7 +119,13 @@ let
 in
 {
   options.sfi.k3s.auditLog = {
-    enable = lib.mkEnableOption "the k3s API server's audit log under ${dir}, shipped to Loki by a monitoring layer's log shipper";
+    enable = lib.mkEnableOption "the k3s API server's audit log under ${dir}, shipped by a monitoring layer's log shipper";
+    extraPlatformGroups = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "system:serviceaccounts:db-operator" ];
+      description = "Groups whose traffic the policy drops as platform noise, beside the control plane's own: a layer's operator namespace, as system:serviceaccounts:<namespace>.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -142,7 +145,7 @@ in
     ];
 
     # Root-only: the file names every principal and, for a write, the
-    # body. fluent-bit reads it as root through its read-only /var/log
+    # body. A log shipper reads it as root through a read-only /var/log
     # mount.
     systemd.tmpfiles.rules = [ "d ${dir} 0700 root root -" ];
   };

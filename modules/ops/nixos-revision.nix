@@ -9,7 +9,7 @@
 # fleet-only commit advances this without a rebuild), and a successful
 # switch records what the running closure was EFFECTIVELY built from. All
 # three are textfile metrics on the fleet dashboards, and a host with no
-# metrics path out — no mesh, no Thanos, day 0 — had no way to say any of
+# metrics path out — no mesh, no hub, day 0 — had no way to say any of
 # them on its own console. The revision is deliberately not in the
 # closure (embedding it would churn a generation per commit), so
 # `nixos-version` cannot answer this and this verb has to.

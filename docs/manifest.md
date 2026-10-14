@@ -28,7 +28,7 @@ type = "g6-standard-2"
 mesh_ip = "10.1.0.13"
 
 [cluster]                    # a flux cluster; datastore unset = sqlite
-audit_logging = true         # the API server's audit log, shipped to Loki (#626)
+audit_logging = true         # the API server's audit log, shipped by a monitoring layer (#626)
 
 [shape]                      # what libvirt realizes (lab defaults 2 / 4 / 40G)
 vcpus = 2
@@ -160,15 +160,15 @@ forts#143), and a manifest that still carries `[backups]` is refused
 with the path it moved to.
 
 **`[cluster] audit_logging` is the exception** (#626): every cluster fort audits the same *way* — the
-policy, the rotation and the stream are one module and one fluent-bit
-config, fleet-wide — and not every fort pays the same disk for it. A
+policy and the rotation are one module, fleet-wide, and a monitoring
+layer's shipper takes the stream — and not every fort pays the same disk for it. A
 4 GB Linode SKU with a 25 GB disk and the lab hub with 450 GB do not
 carry the same log.
 
 ```toml
 [cluster]
 datastore = "sqlite"    # the shape's own key, above
-audit_logging = true    # the API server writes an audit log; fluent-bit ships it to Loki
+audit_logging = true    # the API server writes an audit log; a monitoring layer ships it
 ```
 
 **Default false, and the key is absent on a fort that does not audit**,

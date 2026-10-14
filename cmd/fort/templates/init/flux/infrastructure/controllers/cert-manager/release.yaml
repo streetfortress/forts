@@ -1,6 +1,7 @@
-# cert-manager issues per-hostname TLS certs from step-ca via ACME http01
-# (solver routes attach to the Gateway — enableGatewayAPI). The step-ca
-# ClusterIssuer lives in ../../configs/cluster-issuer.yaml.
+# cert-manager issues per-hostname TLS certs via ACME http01 (solver
+# routes attach to the Gateway — enableGatewayAPI). The public issuer
+# lives in ../../configs/cluster-issuer-letsencrypt.yaml when the estate
+# names an ACME contact; a private CA's issuer is a layer's.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

@@ -35,8 +35,8 @@ var orphanAllowlist = map[string]bool{}
 var infraLayers = []string{"flux/infrastructure/controllers", "flux/infrastructure/configs"}
 
 // ${VAR} tokens flux's post-build envsubst substitutes. Resources annotated
-// kustomize.toolkit.fluxcd.io/substitute: disabled are exempt (the grafana
-// dashboards ConfigMap carries Grafana's own ${DS_...} vars).
+// kustomize.toolkit.fluxcd.io/substitute: disabled are exempt (a
+// dashboards ConfigMap carries its own ${DS_...} vars).
 // varRE matches what flux's envsubst will try to substitute. The
 // trailing [^}]* is load-bearing: shell parameter expansion — ${f##*/},
 // ${user#fort-}, ${host%-pv} — is still a ${VAR} reference to envsubst,
@@ -47,7 +47,7 @@ var varRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}`)
 
 // escapedRE matches what flux's envsubst leaves alone: `$$` is one
 // literal `$`, so `$${NODE_NAME}` reaches the cluster as `${NODE_NAME}`
-// for the next interpreter (fluent-bit's own env expansion, #626). The
+// for the next interpreter (a log shipper's own env expansion, #626). The
 // gate blanks these before it looks for references.
 var escapedRE = regexp.MustCompile(`\$\$`)
 
@@ -252,8 +252,8 @@ var clusterScoped = map[string]bool{
 // bare ConfigMap, the apply fails with "namespace not specified: the
 // server could not find the requested resource", and flux stops the
 // WHOLE layer on it. That took a hub's apps kustomization down (and
-// databasus-configs with it, as a dependency) the day rustfs-central
-// landed, which is the same blast radius as the envsubst trap below and
+// its dependents with it) the day a store landed, which is the same
+// blast radius as the envsubst trap below and
 // deserves the same gate.
 func namespaceFindings(layer, fort, built string) []finding {
 	var out []finding
@@ -294,8 +294,8 @@ const (
 // then fails the WHOLE layer — every other resource in the directory
 // stops to reconcile, and the symptom the operator sees first is "my
 // dashboard did not appear" (#508). Nothing warned before that point:
-// kustomize build applies no size limit of its own, and the 13 grafana
-// dashboards in one ConfigMap reached 63% of the limit unremarked.
+// kustomize build applies no size limit of its own, and 13 dashboards
+// in one ConfigMap reached 63% of the limit unremarked.
 // The warning at three quarters of the limit is that notice.
 func dataSizeFindings(layer, built string) []finding {
 	var out []finding

@@ -53,9 +53,9 @@ Three things deserve the explanation:
 - **The residue is a report, not an action.** Everything outside the
   generated surface that still names the host is listed with a triage
   hint — and nothing the retirement already settles is listed at all:
-  the console registry and the hub's rustfs users file lose the host's
-  entry in this plan, and the stack config goes with the stack in `fort
-  destroy`, so all three get a `○` line of their own instead of a
+  the console registry loses the host's entry in this plan, and the
+  stack config goes with the stack in `fort destroy`, so both get a `○`
+  line of their own instead of a
   residue count. What the list holds is work for the reviewer, one item
   per line. Docs and CLI fixtures are usually kept (history, goldens); a layer's
   file for the fort (a dead man's switch on a hub) is the layer's own

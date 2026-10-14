@@ -23,7 +23,7 @@ git init -q -b main
 # The estate's own files init names: the lab CA. And what mint would
 # write for the fort: its peer, its secrets file (names, no values).
 cp "$repo/tests/estate/forts/plain-fort.toml" forts/
-cp "$repo/tests/estate/nixos/certs/step-ca-root.pem" nixos/certs/
+cp "$repo/tests/estate/nixos/certs/ca-root.pem" nixos/certs/
 cp "$repo/tests/estate/nixos/secrets/plain-fort.yaml" nixos/secrets/
 cp "$repo/tests/estate/mesh/peers.json" mesh/peers.json
 "$fort" scaffold plain-fort --write
