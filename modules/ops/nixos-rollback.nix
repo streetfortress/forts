@@ -13,14 +13,14 @@
 # provider console: deployer has no root shell, `nixos-rebuild
 # --rollback` is root's, and the only lever was "merge a revert and wait
 # for the loop". Every generation on disk was built from a vetted main
-# commit (or a branch named on `sfi-nixos-rebuild --from`), so choosing
-# one is choosing among states git already produced: the NUDGE rung, a
-# sibling of sfi-flux-suspend — a deliberate, sudo-logged, VISIBLE hold
-# on desired state, never a new state. The rung-3 ceremony proposed in
-# #256 is for verbs that widen REACH (arbitrary code in any workload);
-# this one narrows a menu. `sfi-nixos-rebuild --from <ip> --ref <branch>`
-# already lets deployer switch to ANY branch of the repo; a rollback to a
-# prior generation is strictly less than that.
+# commit — `sfi-nixos-rebuild` builds main and nothing else, and its
+# `--from <ip>` names another address for that same main (#76) — so
+# choosing one is choosing among states git already produced: the NUDGE
+# rung, a sibling of sfi-flux-suspend — a deliberate, sudo-logged,
+# VISIBLE hold on desired state, never a new state. The rung-3 ceremony
+# proposed in #256 is for verbs that widen REACH (arbitrary code in any
+# workload); this one narrows a menu, and the menu holds only what main
+# built.
 #
 # The pin is what makes a rollback more than a race with the timer.
 # Without it the next closure-relevant merge — fixing this fort or

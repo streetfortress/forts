@@ -73,6 +73,38 @@ let
   flakeRef = "git+${repoUrl}?ref=main&dir=nixos#${config.networking.hostName}";
   knownHostsFile = pkgs.writeText "auto-rebuild-known-hosts" cfg.gitKnownHosts;
 
+  # repoUrl, read apart (#77). `--from <ip>` (the verb, below) replaces
+  # the ADDRESS of the forge and nothing else, so the user, the port, the
+  # repo path and the known_hosts alias all have to come from the same
+  # option the timer builds flakeRef from. They were literals —
+  # /sfi/deployments and [gitea.zen.lofi]:30022 — which made the
+  # recovery hatch of EVERY estate pull sfi/deployments and check a host
+  # key that is not its own forge's. The fixture estate
+  # (tests/estate, sfi/fixture-estate) already names a second repo.
+  #
+  # This module is ssh-only by construction: gitKnownHosts is an ssh
+  # known_hosts line and GIT_SSH_COMMAND carries the deploy key. So a
+  # repoUrl this pattern cannot read is a config error, and the eval —
+  # `fort check`, in CI — is where it must appear. The one remaining
+  # verb of a stranded fort is the wrong place to learn it.
+  repo =
+    let m = builtins.match "ssh://(([^@/]*)@)?([^@:/]+)(:([0-9]+))?(/.+)" repoUrl;
+    in if m == null then
+      throw "sfi.auto-rebuild.repoUrl: want ssh://[user@]host[:port]/owner/name, got '${repoUrl}'"
+    else rec {
+      user = let u = builtins.elemAt m 1; in if u == null || u == "" then "git" else u;
+      host = builtins.elemAt m 2;
+      port = builtins.elemAt m 4;
+      path = builtins.elemAt m 5;
+      # known_hosts spells a non-default port as [host]:port, and ssh
+      # matches a HostKeyAlias against that text verbatim — brackets and
+      # port included (checked against gitea 2026-09-18). The alias has
+      # to name a line of gitKnownHosts or the fetch fails closed.
+      hostKeyAlias = if port == null then host else "[${host}]:${port}";
+      # The address is the one hole: the verb passes a shell $from.
+      urlFor = address: "ssh://${user}@${address}${lib.optionalString (port != null) ":${port}"}${path}";
+    };
+
   # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run;
   # exit 255 = the UNIT fails (systemd.service(5)). Inherits the service's
   # GIT_SSH_COMMAND and $STATE_DIRECTORY. Recording the rev here (not
@@ -279,14 +311,23 @@ in
         The estate's git URL: what the gate reads main's tip from and
         what the rebuild clones, with the deploy key fort mint
         registered. The host file sets it; `fort scaffold` renders it
-        from estate.toml.
+        from estate.toml. It must be ssh://[user@]host[:port]/owner/name
+        — the module reads the host, the port and the path back out of
+        it for `sfi-nixos-rebuild --from` (#77), and it fails the eval
+        when it cannot.
       '';
     };
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
       default = config.sfi.estate.knownHosts;
       defaultText = "estate.toml's `known_hosts` (sfi.estate.knownHosts)";
-      description = "SSH known_hosts line(s) for the git host.";
+      description = ''
+        SSH known_hosts line(s) for the git host. One line must name the
+        host and port of repoUrl, spelled as known_hosts spells them
+        ([host]:port for a port other than 22): `sfi-nixos-rebuild
+        --from <ip>` checks the host key against that line, and a forge
+        the file does not name has no recovery path.
+      '';
     };
   };
 
@@ -382,22 +423,30 @@ in
     # host that is gone — the interim never came up, or the flip has to
     # be rolled back to the previous host — cannot fetch the config that would
     # re-pin it, and without this verb the only way forward is the
-    # provider console. The source is still authenticated: the deploy
-    # key dials `git@<ip>:30022` with HostKeyAlias set to the pinned
-    # known_hosts entry, so any address may be named but only the real
-    # gitea's host key passes (an alias is matched verbatim, brackets
-    # and port included — checked against gitea 2026-09-18). `--ref`
-    # takes a branch so a fix can be tried before it is on main; the
-    # next timer run converges back to main regardless.
+    # provider console. The address is all it replaces: the user, the
+    # port, the repo path and the known_hosts alias come from repoUrl
+    # (the `repo` parse above, #77), so the verb pulls THIS estate's
+    # repo. The source is still authenticated: the deploy key dials the
+    # address with HostKeyAlias set to the forge's pinned known_hosts
+    # entry, so any address may be named but only the real forge's host
+    # key passes. The branch
+    # is always main — this verb has no way to name another one (#76).
+    # It used to take `--ref <branch>`, and that was a path from the
+    # deployer key to root: a branch is an unvetted closure that
+    # nixos-rebuild runs as root, every member of sfi-agentic-dev can
+    # push one, and the pinned sudoers rule restricts no argument. The
+    # way back from a bad main is sfi-nixos-rollback
+    # (ops/nixos-rollback.nix) — a menu of generations main already
+    # built, not an arbitrary build target.
     sfi.ops.commands.nixos-rebuild = {
-      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> [--ref <branch>] pulls from a gitea by address (the name is pinned and moves with gitea)";
+      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> pulls main from a gitea by address (the name is pinned and moves with gitea). Main only — the way back is sfi-nixos-rollback";
       script = ''
-        from="" ref=main
+        from=""
         while [ $# -gt 0 ]; do
           case "$1" in
             --from) from=$2; shift 2 ;;
-            --ref) ref=$2; shift 2 ;;
-            *) echo "usage: sfi-nixos-rebuild [--from <ip> [--ref <branch>]]" >&2; exit 2 ;;
+            --ref) echo "--ref is gone: this verb builds main only (#76); to leave a bad main use 'sudo sfi-nixos-rollback'" >&2; exit 2 ;;
+            *) echo "usage: sfi-nixos-rebuild [--from <ip>]" >&2; exit 2 ;;
           esac
         done
         # A rollback pin (sfi-nixos-rollback) ends here, on either path:
@@ -417,25 +466,19 @@ in
             *[!0-9.]*|"") echo "--from: want an IPv4 address, got '$from'" >&2; exit 2 ;;
           esac
           lift_pin
-          case "$ref" in
-            *[!A-Za-z0-9._/-]*|"") echo "--ref: want a branch name, got '$ref'" >&2; exit 2 ;;
-          esac
-          url="ssh://git@$from:30022/sfi/deployments"
-          echo "pulling $ref from $url (host key checked as [gitea.zen.lofi]:30022) and switching..."
+          url="${repo.urlFor "$from"}"
+          echo "pulling main from $url (host key checked as ${repo.hostKeyAlias}) and switching..."
           export GIT_SSH_COMMAND="${lib.concatStringsSep " " [
             "${pkgs.openssh}/bin/ssh"
             "-i ${config.sops.secrets.flux-git-deploy-key.path}"
             "-o UserKnownHostsFile=${knownHostsFile}"
             "-o IdentitiesOnly=yes"
-            "-o HostKeyAlias=[gitea.zen.lofi]:30022"
+            "-o HostKeyAlias=${repo.hostKeyAlias}"
           ]}"
           ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh \
-            --flake "git+$url?ref=$ref&dir=nixos#${config.networking.hostName}"
-          echo "switched from $from ($ref); the timer converges back to main from wherever gitea.zen.lofi now points"
+            --flake "git+$url?ref=main&dir=nixos#${config.networking.hostName}"
+          echo "switched from $from (main); the timer converges back to main from wherever ${repo.host} now points"
           exit 0
-        fi
-        if [ "$ref" != main ]; then
-          echo "--ref needs --from (the unit pulls main by name)" >&2; exit 2
         fi
         lift_pin
         marker=/var/lib/sfi-auto-rebuild/last-attempted-rev

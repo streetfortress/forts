@@ -16,7 +16,9 @@
 #   - deployer is a plain user: no wheel, so no path to root from SSH (the
 #     carve-outs are the pinned NOPASSWD `sfi-*` ops verbs from
 #     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
-#     the pull loop against vetted main; `sfi-ops` lists them). Root
+#     the pull loop against vetted main: it takes no branch, and its
+#     `--from <ip>` changes the address it reaches gitea at, never the
+#     ref (#76); `sfi-ops` lists them). Root
 #     logins stay off (common.nix) and no account here has a password,
 #     so SSH on the mesh is the only login path this profile makes. A
 #     host that also imports ops/console.nix (#524) gives deployer a

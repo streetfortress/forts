@@ -84,6 +84,28 @@ jobs:
           grep -qx 'KbdInteractiveAuthentication no' "$conf"
           grep -qx 'PermitRootLogin no' "$conf"
 
+      - name: sfi-nixos-rebuild builds main, from the estate's own repo
+        # The rendered verb, not the module. `--ref <branch>` was a path
+        # from the deployer key to root (forts#76) and the `--from`
+        # handler named /sfi/deployments in a literal, so every estate's
+        # recovery hatch recovered the first estate (forts#77). Both
+        # regress silently: the module still evaluates, and the verb is
+        # only ever read on a fort that is already in trouble. The script
+        # is an eval away — writeShellApplication keeps the text as a
+        # derivation ATTRIBUTE — so CI reads what the fort will run. The
+        # fixture estate is sfi/fixture-estate, which is the point: a
+        # literal shows up as the wrong repo.
+        run: |
+          set -euo pipefail
+          nix eval --raw \
+            .#nixosConfigurations.plain-fort.config.sfi.ops.commands.nixos-rebuild.script \
+            > verb.sh
+          grep -q 'ref=main&dir=nixos' verb.sh
+          grep -q '/sfi/fixture-estate.git' verb.sh
+          grep -q 'HostKeyAlias=\[gitea.zen.lofi\]:30022' verb.sh
+          ! grep -q 'ref=\$ref' verb.sh
+          ! grep -q '/sfi/deployments' verb.sh
+
       - name: An estate that fort init created evaluates against this checkout
         run: tests/init-estate.sh
 
