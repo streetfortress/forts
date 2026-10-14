@@ -90,11 +90,7 @@ in
     # inert on a host where k3s is disabled.
     ./mesh-dns.nix
     ./textfile-metrics.nix
-    ./ops/systemd.nix # sfi-systemd-restart wg-quick-<iface> (#212)
   ];
-
-  # A peer rollout that wg-quick did not pick up is one restart away.
-  sfi.ops.restartableUnits = [ "wg-quick-${iface}" ];
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 

@@ -14,11 +14,11 @@
 #   - The public/LAN interface serves exactly 80/443; the cluster and edge
 #     ports re-open on the mesh interface only.
 #   - deployer is a plain user: no wheel, so no path to root from SSH (the
-#     carve-outs are the pinned NOPASSWD `sfi-*` ops verbs from
-#     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
+#     carve-outs are the pinned NOPASSWD ops verbs from
+#     ops/ops-commands.nix — e.g. `nixos-pull`, which only re-runs
 #     the pull loop against vetted main: it takes no branch, and its
 #     `--from <ip>` changes the address it reaches gitea at, never the
-#     ref (#76); `sfi-ops` lists them). A host that also enables
+#     ref (#76); `ops` lists them). A host that also enables
 #     ops/admin.nix opens `sudo -i` and kubectl behind the admin-key
 #     challenge, which is sudo's authentication here (ops/challenge.nix,
 #     #115) — a second factor, not a password. Root
@@ -26,7 +26,7 @@
 #     so SSH on the mesh is the only login path this profile makes. A
 #     host that also imports ops/console.nix (#524) gives deployer a
 #     password a GETTY accepts and sshd still refuses — the door to
-#     `sudo sfi-nixos-rollback` when the mesh is the thing that broke.
+#     `sudo nixos-rollback` when the mesh is the thing that broke.
 #     Without that import the console offers only the GRUB menu that
 #     precedes it (3 s, qcow-runtime.nix / upstream linode-config.nix,
 #     #523), and then the offline paths: the provider's rescue boot, or

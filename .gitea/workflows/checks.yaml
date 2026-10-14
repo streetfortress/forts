@@ -109,11 +109,11 @@ jobs:
             > "$out/sudoers"
           grep -n '^deployer ' "$out/sudoers"
           test "$(grep '^deployer ' "$out/sudoers" | head -n1)" = "deployer     ALL=(ALL:ALL)    PASSWD: ALL"
-          grep -q '^deployer .*PASSWD: /run/current-system/sw/bin/sfi-challenge, NOPASSWD: ' "$out/sudoers"
+          grep -q '^deployer .*PASSWD: /run/current-system/sw/bin/challenge, NOPASSWD: ' "$out/sudoers"
           grep -qx 'Defaults:deployer timestamp_timeout=15, timestamp_type=tty' "$out/sudoers"
-          grep -qx 'Defaults!/run/current-system/sw/bin/sfi-challenge timestamp_timeout=0' "$out/sudoers"
+          grep -qx 'Defaults!/run/current-system/sw/bin/challenge timestamp_timeout=0' "$out/sudoers"
 
-      - name: sfi-nixos-rebuild builds main, from the estate's own repo
+      - name: nixos-pull builds main, from the estate's own repo
         # The rendered verb, not the module. `--ref <branch>` was a path
         # from the deployer key to root (forts#76) and the `--from`
         # handler named /sfi/deployments in a literal, so every estate's
@@ -127,13 +127,31 @@ jobs:
         run: |
           set -euo pipefail
           nix eval --raw \
-            .#nixosConfigurations.plain-fort.config.sfi.ops.commands.nixos-rebuild.script \
+            .#nixosConfigurations.plain-fort.config.sfi.ops.commands.nixos-pull.script \
             > verb.sh
           grep -q 'ref=main&dir=nixos' verb.sh
           grep -q '/sfi/fixture-estate.git' verb.sh
           grep -q 'HostKeyAlias=\[gitea.zen.lofi\]:30022' verb.sh
           ! grep -q 'ref=\$ref' verb.sh
           ! grep -q '/sfi/deployments' verb.sh
+
+      - name: The core's verbs are the ladder and nothing else
+        # forts#151: a verb that exists for one workload, one runbook or
+        # one unit is a layer's, declared through sfi.ops.commands in the
+        # estate. The set the core declares is read off the fixture hosts,
+        # so a module that grows a verb back fails here, by name. The
+        # plain fort has no cluster, so admin-unlock (a cluster verb of
+        # the admin rung) is absent from it and present on admin-fort
+        # only when k3s is — which the fixture does not enable.
+        run: |
+          set -euo pipefail
+          test "$(nix eval --json .#nixosConfigurations.plain-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
+            = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
+          test "$(nix eval --json .#nixosConfigurations.admin-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
+            = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
+          test "$(nix eval --json .#nixosConfigurations.linked-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
+            = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
+          nix eval --json .#nixosModules --apply builtins.attrNames | grep -qv 'ops-flux\|ops-logs\|ops-workloads\|ops-systemd'
 
       - name: An estate that fort init created evaluates against this checkout
         run: tests/init-estate.sh

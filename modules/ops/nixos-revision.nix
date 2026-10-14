@@ -1,7 +1,7 @@
-# sfi-nixos-revision: which revision of this repo the host actually runs
+# nixos-revision: which revision of this repo the host actually runs
 # (#185).
 #
-#   sudo sfi-nixos-revision
+#   sudo nixos-revision
 #
 # Why: `main` is the deploy (auto-rebuild.nix), and the three revisions
 # that describe a host are not the same number. The gate records what it
@@ -15,7 +15,7 @@
 # `nixos-version` cannot answer this and this verb has to.
 #
 # It reads and prints; it changes nothing. The way to act on what it says
-# is sfi-nixos-rebuild (pull main now) or sfi-nixos-rollback (go back and
+# is nixos-pull (pull main now) or nixos-rollback (go back and
 # pin), both in this directory.
 { config, lib, pkgs, ... }:
 
@@ -32,7 +32,7 @@ in
     runtimeInputs = [ pkgs.coreutils pkgs.gnused pkgs.gawk pkgs.systemd ];
     script = ''
       if [ "$#" -ne 0 ]; then
-        echo "usage: sudo sfi-nixos-revision   (no arguments; reads only)" >&2
+        echo "usage: sudo nixos-revision   (no arguments; reads only)" >&2
         exit 64
       fi
 
@@ -62,7 +62,7 @@ in
       if [ -n "$built_from" ]; then
         echo "  built from:  main@$(short "$built_from")  ($built_from)"
       else
-        echo "  built from:  no revision recorded — this generation was built outside the pull loop (an image's first boot, or sfi-nixos-rebuild --from)"
+        echo "  built from:  no revision recorded — this generation was built outside the pull loop (an image's first boot, or nixos-pull --from)"
       fi
       echo
 
@@ -78,7 +78,7 @@ in
       # The three comparisons that mean something, said plainly. Anything
       # else is normal and gets no line.
       if [ -n "$attempted" ] && [ "$applied" != "$attempted" ]; then
-        echo "applied is behind attempted: the last run FAILED. journalctl -u nixos-upgrade, then 'sudo sfi-nixos-rebuild' to retry."
+        echo "applied is behind attempted: the last run FAILED. journalctl -u nixos-upgrade, then 'sudo nixos-pull' to retry."
       fi
       if [ -n "$effective" ] && [ -n "$applied" ] && [ "$effective" != "$applied" ]; then
         echo "effective is behind applied: normal — every commit since the last closure-relevant one was fleet-only."
@@ -95,7 +95,7 @@ in
       fi
 
       if [ -e "$pin" ]; then
-        echo "pin: generation $(cat "$pin") — nixos-upgrade SKIPS while the host is on it (sudo sfi-nixos-rollback --lift, or sudo sfi-nixos-rebuild)"
+        echo "pin: generation $(cat "$pin") — nixos-upgrade SKIPS while the host is on it (sudo nixos-rollback --lift, or sudo nixos-pull)"
       else
         echo "pin: none — the loop follows main"
       fi
@@ -104,7 +104,7 @@ in
         "$(systemctl show -p ActiveState --value nixos-upgrade.service)" \
         "$(systemctl show -p Result --value nixos-upgrade.service)" \
         "$(systemctl show -p ActiveState --value nixos-upgrade.timer)"
-      echo "generations on disk: sudo sfi-nixos-rollback (no arguments lists them with the commit each was built from)"
+      echo "generations on disk: sudo nixos-rollback (no arguments lists them with the commit each was built from)"
     '';
   };
 }

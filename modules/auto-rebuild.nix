@@ -31,26 +31,28 @@
 #     real switch advances. Only a closure-relevant commit buys the flake eval (~2.5s /
 #     0.8 GB on a lab machine; tens of seconds on the VMs) and a switch — the
 #     cost that used to justify an hours-long cadence. Merging a config
-#     change is the rollout; sfi-nixos-rebuild remains the "now" lever
-#     and the retry for a failed attempt.
+#     change is the rollout; nixos-pull (the HANDS-ON rung,
+#     ops/ops-commands.nix) remains the "now" lever and the retry for a
+#     failed attempt.
 #   - Gating on last-attempted (not last-succeeded) rev means a failing
 #     commit gets exactly one try — no eval-crash loop across ticks — and
 #     the NixosUpgradeFailed alert fires once. The next push to main (or
-#     `sfi-nixos-rebuild`) retries. If gitea is unreachable the gate lets
+#     `nixos-pull`) retries. If gitea is unreachable the gate lets
 #     the run proceed and fail loudly rather than skipping silently
 #     forever.
-#   - The way back: `sudo sfi-nixos-rollback <generation>` (ops/nixos-
+#   - The way back: `sudo nixos-rollback <generation>` (ops/nixos-
 #     rollback.nix) switches to a prior generation and PINS the loop
 #     there — the gate skips while the host is on that generation, a
 #     textfile metric shows the hold, and this verb lifts it.
-#   - Escape hatch: `sudo sfi-nixos-rebuild` as deployer clears the
+#   - Escape hatch: `sudo nixos-pull` as deployer clears the
 #     attempted-rev marker and starts nixos-upgrade.service immediately —
 #     the moral equivalent of `flux reconcile --with-source`. Declared via
 #     the ops framework (ops/ops-commands.nix), which generates the same
 #     pinned NOPASSWD sudoers rule this module used to carry directly; the
 #     host still only ever pulls vetted main, so deployer gains no write
-#     path. The old name, `sfi-rebuild-now`, survives as a deprecation
-#     shim (below) that execs the new verb.
+#     path. The verb is not named `nixos-rebuild`: that is NixOS's own
+#     tool on every host's PATH, and the system path resolves a name
+#     collision silently (forts#151).
 #   - Auth reuses the host's flux-git-deploy-key (read-only deploy key,
 #     already in every flux host's sops file) via GIT_SSH_COMMAND; the
 #     pinned gitea host key matches flux-bootstrap.nix.
@@ -126,7 +128,7 @@ let
   # fleet-only commit: markers advance, no eval.
   closureTrees = [ "nixos" "mesh" "flux/clusters" ];
   gate = pkgs.writeShellScript "auto-rebuild-gate" ''
-    # node_nixos_generations (#423): what is on disk for sfi-nixos-rollback
+    # node_nixos_generations (#423): what is on disk for nixos-rollback
     # to choose from, and the thing nix.gc (below) actually bounds. Written
     # first so it is fresh whatever the gate decides next — a pin skip, a
     # failed ls-remote — and minutely, so a collection shows within the
@@ -139,14 +141,14 @@ let
 
     # A pin (ops/nixos-rollback.nix) holds the host on the generation it
     # names; it is stale — and dropped — the moment the host is on any
-    # other generation, so an older generation's sfi-nixos-rebuild (which
+    # other generation, so an older generation's nixos-pull (which
     # does not know pins) can never strand the host behind one.
     pin="$STATE_DIRECTORY/pinned-generation"
     if [ -e "$pin" ]; then
       pinned=$(${pkgs.coreutils}/bin/cat "$pin")
       current=$(${pkgs.coreutils}/bin/readlink /nix/var/nix/profiles/system | ${pkgs.gnused}/bin/sed -n 's/^system-\([0-9][0-9]*\)-link$/\1/p')
       if [ "$pinned" = "$current" ]; then
-        echo "gate: pinned to generation $pinned (sfi-nixos-rollback); skipping — sudo sfi-nixos-rebuild lifts the pin"
+        echo "gate: pinned to generation $pinned (nixos-rollback); skipping — sudo nixos-pull lifts the pin"
         exit 1
       fi
       echo "gate: pin to generation $pinned is stale (host is on $current); lifting it"
@@ -229,7 +231,7 @@ let
   # on host-fleet keys on it.
   recordEffective = pkgs.writeShellScript "auto-rebuild-record-effective" ''
     rev=$(${pkgs.coreutils}/bin/cat /var/lib/sfi-auto-rebuild/last-attempted-rev 2>/dev/null) || exit 0
-    # Ledger for sfi-nixos-rollback's menu: which main commit each
+    # Ledger for nixos-rollback's menu: which main commit each
     # generation was built from. The switch has happened by now, so the
     # profile link names the new generation. Append-only; a generation
     # that nix-env has deleted simply stops being listed.
@@ -246,17 +248,6 @@ let
     ${pkgs.coreutils}/bin/mv "$tmp" ${textfileDir}/nixos-effective.prom
   '';
 
-  # Old-name compatibility shim: muscle memory and existing runbooks say
-  # `sudo sfi-rebuild-now`; point them at the framework name and run it
-  # anyway. Gets its own pinned sudoers rule below so the old invocation
-  # keeps working for deployer.
-  rebuildNowShim = pkgs.writeShellApplication {
-    name = "sfi-rebuild-now";
-    text = ''
-      echo "sfi-rebuild-now is deprecated — use 'sudo sfi-nixos-rebuild' (running it for you)" >&2
-      exec /run/current-system/sw/bin/sfi-nixos-rebuild "$@"
-    '';
-  };
 in
 {
   options.sfi.auto-rebuild = {
@@ -281,7 +272,7 @@ in
 
     # Retention (#423). The loop makes a generation per closure-relevant
     # merge and nothing else ever removes one, so the loop owns the
-    # bound too. The window is the rollback depth: sfi-nixos-rollback can
+    # bound too. The window is the rollback depth: nixos-rollback can
     # reach any generation younger than this (the running one — and so a
     # pinned one — is never collected, whatever its age). Measured
     # 2026-09-22: stores 3.4–4.3 GiB, growing 0.2–0.4 GiB/week, 8–15
@@ -290,7 +281,7 @@ in
       olderThan = lib.mkOption {
         type = lib.types.str;
         default = "30d";
-        description = "nix-collect-garbage --delete-older-than window: generations (and their closures) younger than this survive. This IS sfi-nixos-rollback's reach.";
+        description = "nix-collect-garbage --delete-older-than window: generations (and their closures) younger than this survive. This IS nixos-rollback's reach.";
       };
       dates = lib.mkOption {
         type = lib.types.str;
@@ -313,7 +304,7 @@ in
         registered. The host file sets it; `fort scaffold` renders it
         from estate.toml. It must be ssh://[user@]host[:port]/owner/name
         — the module reads the host, the port and the path back out of
-        it for `sfi-nixos-rebuild --from` (#77), and it fails the eval
+        it for `nixos-pull --from` (#77), and it fails the eval
         when it cannot.
       '';
     };
@@ -324,7 +315,7 @@ in
       description = ''
         SSH known_hosts line(s) for the git host. One line must name the
         host and port of repoUrl, spelled as known_hosts spells them
-        ([host]:port for a port other than 22): `sfi-nixos-rebuild
+        ([host]:port for a port other than 22): `nixos-pull
         --from <ip>` checks the host key against that line, and a forge
         the file does not name has no recovery path.
       '';
@@ -333,21 +324,15 @@ in
 
   imports = [
     ./textfile-metrics.nix # nixos-{attempted,applied,effective}.prom
-    ./ops/ops-commands.nix # sfi-nixos-rebuild is an ops verb
-    ./ops/systemd.nix # sfi-systemd-restart nixos-upgrade (#212)
-    ./ops/nixos-rollback.nix # sfi-nixos-rollback: prior generation + pin
-    ./ops/nixos-revision.nix # sfi-nixos-revision: what the host runs (#185)
+    ./ops/ops-commands.nix # nixos-pull is an ops verb
+    ./ops/nixos-rollback.nix # nixos-rollback: prior generation + pin
+    ./ops/nixos-revision.nix # nixos-revision: what the host runs (#185)
   ];
 
   config = lib.mkIf cfg.enable {
     # Also declared by flux-bootstrap.nix on flux hosts; identical empty
     # definitions merge cleanly, and non-flux hosts get it from here.
     sops.secrets.flux-git-deploy-key = { };
-
-    # sfi-nixos-rebuild is the curated path (clears the attempted-rev
-    # marker first); the bare restart is the escape hatch when that verb
-    # itself is what misbehaves.
-    sfi.ops.restartableUnits = [ "nixos-upgrade" ];
 
     # Retention — see the gc options above. Collection and optimisation
     # are root's own timers, sudo-free and not verbs: nothing about them
@@ -409,9 +394,9 @@ in
       };
     };
 
-    # The escape hatch for production-profile hosts, where deployer has no
-    # wheel: run the same pull loop, now. The framework generates the
-    # PATH wrapper, the pinned NOPASSWD sudoers rule, and the sfi-ops
+    # The HANDS-ON rung's first verb (forts#151): run the same pull loop,
+    # now, as deployer, who has no wheel. The framework generates the
+    # PATH wrapper, the pinned NOPASSWD sudoers rule, and the `ops`
     # index row. `--wait` makes it synchronous: the operator's prompt
     # blocks through eval+switch and the exit status reflects the unit's
     # result (fire-and-forget `start` reported nothing, which read as
@@ -435,21 +420,21 @@ in
     # deployer key to root: a branch is an unvetted closure that
     # nixos-rebuild runs as root, every member of sfi-agentic-dev can
     # push one, and the pinned sudoers rule restricts no argument. The
-    # way back from a bad main is sfi-nixos-rollback
+    # way back from a bad main is nixos-rollback
     # (ops/nixos-rollback.nix) — a menu of generations main already
     # built, not an arbitrary build target.
-    sfi.ops.commands.nixos-rebuild = {
-      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> pulls main from a gitea by address (the name is pinned and moves with gitea). Main only — the way back is sfi-nixos-rollback";
+    sfi.ops.commands.nixos-pull = {
+      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> pulls main from the forge by address (the name is pinned and moves with the forge). Main only — the way back is nixos-rollback";
       script = ''
         from=""
         while [ $# -gt 0 ]; do
           case "$1" in
             --from) from=$2; shift 2 ;;
-            --ref) echo "--ref is gone: this verb builds main only (#76); to leave a bad main use 'sudo sfi-nixos-rollback'" >&2; exit 2 ;;
-            *) echo "usage: sfi-nixos-rebuild [--from <ip>]" >&2; exit 2 ;;
+            --ref) echo "--ref is gone: this verb builds main only (#76); to leave a bad main use 'sudo nixos-rollback'" >&2; exit 2 ;;
+            *) echo "usage: sudo nixos-pull [--from <ip>]" >&2; exit 2 ;;
           esac
         done
-        # A rollback pin (sfi-nixos-rollback) ends here, on either path:
+        # A rollback pin (nixos-rollback) ends here, on either path:
         # this verb IS "move on from the hold". The gate would drop it
         # anyway once the switch lands (stale pin), but lifting first
         # keeps the metric honest through the run.
@@ -496,18 +481,5 @@ in
         fi
       '';
     };
-
-    environment.systemPackages = [ rebuildNowShim ];
-
-    # Pinned rule for the deprecation shim, same pattern the framework
-    # generates for the real verb; drop once runbooks/muscle memory have
-    # moved to `sudo sfi-nixos-rebuild`.
-    security.sudo.extraRules = [{
-      users = [ "deployer" ];
-      commands = [{
-        command = "/run/current-system/sw/bin/sfi-rebuild-now";
-        options = [ "NOPASSWD" ];
-      }];
-    }];
   };
 }

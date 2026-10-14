@@ -20,7 +20,8 @@
 #
 # The unit retries on failure (a minute apart, no start limit): day 0 is
 # when k3s under it is most likely to flap, and a oneshot that stays
-# `failed` needs a reboot — or sfi-systemd-restart (#212) — to try again.
+# `failed` needs a reboot — or a `systemctl restart` from the admin rung
+# (ops/admin.nix) — to try again.
 #
 # The FluxInstance manifest is NOT duplicated here: the flake's source is
 # the whole repo, so the module applies the very file flux later owns
@@ -45,7 +46,7 @@ let
   knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
 in
 {
-  imports = [ ./estate.nix ./ops/systemd.nix ]; # sfi-systemd-restart flux-bootstrap (#212)
+  imports = [ ./estate.nix ];
 
   options.sfi.flux-bootstrap = {
     enable = lib.mkEnableOption "day-0 Flux bootstrap (flux-operator + FluxInstance)";
@@ -79,11 +80,6 @@ in
     # `fort mint` seeds both, flux-sops-age-key and flux-git-deploy-key).
     sops.secrets.flux-sops-age-key = { };
     sops.secrets.flux-git-deploy-key = { };
-
-    # Day 0 is when k3s is most likely to flap under it (#408: the day-0
-    # bootstrap died with k3s and the fort had to be rebooted to retry) —
-    # a oneshot's retry is a restart.
-    sfi.ops.restartableUnits = [ "flux-bootstrap" ];
 
     systemd.services.flux-bootstrap = {
       description = "Day-0 Flux bootstrap (${cfg.cluster})";

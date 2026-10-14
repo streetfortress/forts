@@ -11,7 +11,7 @@
 # is no hand-written hardware.nix.
 # PLAIN FORT (no [cluster] table in the manifest): no k3s, no flux.
 # What the framework gives every fort and nothing more — the
-# hardened host, the mesh, the operator account `deployer` with the sfi-*
+# hardened host, the mesh, the operator account `deployer` with the ops
 # verbs (modules/ops/deployer.nix, #647), the shell at a pane, the rebuild
 # loop. Ideally nobody logs in; the prescribed access is
 # `deployer@10.1.0.96` over the mesh for the ops verbs, and the console
@@ -70,10 +70,10 @@
   sfi.ops.console.enable = true;
 
   # Watch main; a changed host config lands within a minute or two of
-  # merging — or now, via `sudo sfi-nixos-rebuild` as deployer (#93).
-  # deployer holds the host's sfi-* verbs (sfi-nixos-rebuild, -rollback,
-  # -revision, sfi-systemd-restart); the loop is the only other way config
-  # reaches this host.
+  # merging — or now, via `sudo nixos-pull` as deployer (#93).
+  # deployer holds the host's verbs (nixos-pull, nixos-rollback,
+  # nixos-revision; `ops` lists them); the loop is the only other way
+  # config reaches this host.
   sfi.auto-rebuild.enable = true;
   sfi.auto-rebuild.repoUrl = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate.git"; # the estate (estate.toml): what the gate watches and the rebuild clones
 

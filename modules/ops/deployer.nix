@@ -1,5 +1,5 @@
 # `deployer`: the operator account of EVERY fort (#647) — the one login
-# the sfi-* verbs are pinned to (ops-commands.nix) and the one a getty
+# the ops verbs are pinned to (ops-commands.nix) and the one a getty
 # accepts where the host enables ops/console.nix (#524).
 #
 # It lived in production.nix until #647, which made dev forts the
@@ -13,17 +13,16 @@
 # account exists. Both profiles import it too, so a reader of either
 # sees the account set in one place.
 #
-# WHAT IT HOLDS, on every fort alike:
-#   - rung 1, OBSERVE: the host journal (systemd-journal). A cluster fort
-#     adds the read-only kubeconfig (production.nix → kubeops, #90).
-#     Day-0 units (flux-bootstrap, nixos-upgrade, k3s) fail before any
-#     kubeconfig can say why, and without journal access the only
-#     readable evidence is `systemctl show`'s exit code (#185).
-#   - rung 2, NUDGE: the pinned NOPASSWD `sudo sfi-*` verbs each module
-#     declares through ops-commands.nix — on a dev fort that is the host
-#     set (sfi-nixos-rebuild, sfi-nixos-rollback, sfi-nixos-revision,
-#     sfi-systemd-restart); a cluster fort adds the flux and k8s set.
-#     `sfi-ops` lists what this host has.
+# WHAT IT HOLDS, on every fort alike (the ladder: docs/ops.md):
+#   - OBSERVE: the host journal (systemd-journal) and `nixos-revision`.
+#     A cluster fort adds the read-only kubeconfig (production.nix →
+#     kubeops, #90). Day-0 units (flux-bootstrap, nixos-upgrade, k3s)
+#     fail before any kubeconfig can say why, and without journal access
+#     the only readable evidence is `systemctl show`'s exit code (#185).
+#   - HANDS-ON: the pinned NOPASSWD verbs on the pull loop, `nixos-pull`
+#     and `nixos-rollback`, declared through ops-commands.nix; plus
+#     whatever verbs the estate or a layer declares the same way. `ops`
+#     lists what this host has.
 #
 # WHAT IT DOES NOT HOLD. No wheel, so no path to root from SSH: writes go
 # through git, not a shell, and ops/admin.nix is the opt-in ADMIN rung —
@@ -63,7 +62,7 @@
   imports = [ ../estate.nix ];
 
   # An operator account no device can reach is the state #647 refused
-  # for dev forts in the other direction: the sfi-* verbs each module
+  # for dev forts in the other direction: the ops verbs each module
   # declares through ops-commands.nix are present and unreachable, and
   # ops/console.nix opens a door for a login that holds no key. The
   # assertion is the estate's reminder, at evaluation, before an image
@@ -73,7 +72,7 @@
       assertion = config.sfi.ops.deployer.authorizedKeys != [ ];
       message = ''
         sfi.ops.deployer.authorizedKeys is empty: no device holds `deployer`, the
-        operator account of this fort, so the sfi-* verbs are unreachable. The
+        operator account of this fort, so the ops verbs are unreachable. The
         framework ships no operator key (forts#81). Name the estate's operator
         devices in estate.toml:
 
@@ -90,7 +89,7 @@
   users.users.deployer = {
     isNormalUser = true;
     # No colon — the GECOS field is colon-separated.
-    description = "SFI fort operator — the sfi-* ops verbs and the console door";
+    description = "fort operator — the ops verbs and the console door";
     extraGroups = [ "systemd-journal" ];
     # The estate's keys, verbatim: this is the one definition of the
     # list, so nothing merges a key in that the estate did not name.

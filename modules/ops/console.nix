@@ -1,10 +1,10 @@
 # sfi.ops.console: a password for `deployer` that ONLY a getty accepts, so
 # an operator who reaches the provider console can still run
-# `sudo sfi-nixos-rollback` after the mesh breaks (#524).
+# `sudo nixos-rollback` after the mesh breaks (#524).
 #
 #   Lish (linode) / `virsh console <host>` (the hypervisor)
 #   <host> login: deployer          # `fort console-password <host> --show`
-#   sudo sfi-nixos-rollback         # the menu, then the generation
+#   sudo nixos-rollback         # the menu, then the generation
 #
 # WHY. A merge to main IS the rollout (auto-rebuild.nix), and
 # ops/nixos-rollback.nix is the remedy for a rollout that misbehaves. The
@@ -27,10 +27,10 @@
 #     Linode account, `virsh console` needs SSH to the hypervisor. This is the
 #     second factor of a path that has one, not a new front door.
 #   - deployer keeps no wheel (ops/deployer.nix). After the login the
-#     operator holds rung 1 (the journal, the read-only kubeconfig) and
-#     rung 2 (the pinned NOPASSWD sfi-* verbs, ops/ops-commands.nix).
-#     sfi-nixos-rollback chooses among generations git already produced;
-#     it never makes a new state.
+#     operator holds the OBSERVE rung (the journal, the read-only
+#     kubeconfig) and the HANDS-ON rung (the pinned NOPASSWD verbs,
+#     ops/ops-commands.nix). nixos-rollback chooses among generations
+#     git already produced; it never makes a new state.
 #   - root keeps no password, and the console password opens no sudo:
 #     sudo's authentication on a fort is the admin-key challenge
 #     (ops/challenge.nix), not pam_unix, so the hash this module installs
@@ -75,7 +75,7 @@ in
   options.sfi.ops.console.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "Give `deployer` a console-only password, so an operator on Lish or `virsh console` reaches `sudo sfi-nixos-rollback` when the mesh is gone. Needs `deployer-password-hash` in the host's sops file (`fort console-password <host> --write`).";
+    description = "Give `deployer` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `deployer-password-hash` in the host's sops file (`fort console-password <host> --write`).";
   };
 
   config = lib.mkIf cfg.enable {
@@ -102,7 +102,7 @@ in
     # the same fact rather than changing it — the assertion is what
     # NOTICES it. The console login this module adds is the answer to it:
     # the lockout the assertion warns about is what #524 is about, and
-    # `deployer` + the sfi-* verbs is the way back in.
+    # `deployer` + the ops verbs is the way back in.
     users.allowNoPasswordLogin = true;
 
     users.users.deployer.hashedPasswordFile =

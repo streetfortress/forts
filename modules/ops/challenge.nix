@@ -21,7 +21,7 @@
 #     a terminal runs the ceremony, the next ones inside the window do not.
 #   - A host that enables the admin rung (ops/admin.nix) adds
 #     `deployer ALL=(ALL) ALL` without NOPASSWD: `sudo -i` is the shell,
-#     behind the same gate, and `sfi-admin-unlock` mints the kubectl
+#     behind the same gate, and `admin-unlock` mints the kubectl
 #     credential behind it.
 # The framework builds no window of its own. The shell's window is sudo's
 # timestamp (`Defaults:deployer timestamp_timeout`, timestamp_type=tty: one
@@ -79,7 +79,7 @@
 # sharedRecipients makes on the Go side). A rotated admin key therefore
 # reaches the gate on the next rebuild, and a fort key never can.
 #
-# `sudo sfi-challenge` is the rehearsal: a PASSWD verb whose body prints
+# `sudo challenge` is the rehearsal: a PASSWD verb whose body prints
 # success, with `timestamp_timeout=0` for that one command so it always
 # runs the ceremony and leaves no window behind. It answers "does an
 # admin key still reach this host, and does the operator still have one"
@@ -259,7 +259,7 @@ in
         Minutes one proof keeps a terminal open: sudo's
         `timestamp_timeout` for deployer (one terminal, one window —
         `timestamp_type=tty`; `sudo -k` ends it early), and the life of
-        the kubectl credential `sfi-admin-unlock` mints (ops/admin.nix),
+        the kubectl credential `admin-unlock` mints (ops/admin.nix),
         which the API server enforces. At least 10, because the
         TokenRequest API issues no token for less; at most 60, because a
         longer window stops being an event.
@@ -269,10 +269,10 @@ in
     verbs = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      example = [ "k8s-scale" "flux-suspend" ];
+      example = [ "nixos-rollback" ];
       description = ''
-        Verb names (without the `sfi-` prefix) this host puts behind the
-        challenge in addition to the ones their own modules declare with
+        Verb names (`sfi.ops.commands` attribute names) this host puts
+        behind the challenge in addition to the ones their own modules declare with
         `challenge = true`: their sudoers line requires authentication,
         so the first one on a terminal runs the ceremony and the next
         ones ride the window. Per-fort policy: a fort that wants the
@@ -324,7 +324,7 @@ in
       # The rehearsal always runs the ceremony and leaves no window: a
       # zero timeout means sudo neither reads nor writes a timestamp for
       # this command.
-      Defaults!/run/current-system/sw/bin/sfi-challenge timestamp_timeout=0
+      Defaults!/run/current-system/sw/bin/challenge timestamp_timeout=0
     '';
 
     systemd.tmpfiles.rules = [ "d ${store} 0700 root root -" ];

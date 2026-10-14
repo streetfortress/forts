@@ -86,7 +86,7 @@ provider tables — strict keys, decoded by its own Spec — and can be
 empty; every key in it has a default. **No `[cluster]` table makes a plain
 fort**: the baseline the framework gives every host — `hardened.nix`,
 `estate.nix`, `metrics.nix`, `lab-dns.nix`, the operator account
-`deployer` with the sfi-* verbs (#647), `shell.nix`, the mesh,
+`deployer` with the ops verbs (#647, [ops.md](ops.md)), `shell.nix`, the mesh,
 auto-rebuild — with no k3s, no flux, no
 fleet tree, no cluster age key. Ideally nobody logs in; the prescribed
 access is `deployer` over the mesh and the console password. What a plain

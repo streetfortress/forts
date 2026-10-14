@@ -10,8 +10,8 @@
 # A fort renders its own read-only ops kubeconfig at
 # /var/lib/sfi/kubeconfig-ro (modules/ops/ops-kubeconfig.nix): the ops-ro
 # ServiceAccount token, with the mesh address as the server URL, so the
-# same bytes work on the host and over the VPN. This file is rung 1 of
-# the intervention ladder. Cluster-admin is break-glass on the host.
+# same bytes work on the host and over the VPN. This file is the observe
+# rung of the ops ladder. Cluster-admin is break-glass on the host.
 #
 # The local copy is keyed by host, and so is every name inside it.
 # kubectl merges each file on KUBECONFIG by key name, and the first file

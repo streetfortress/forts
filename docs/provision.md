@@ -414,7 +414,7 @@ installing and retries on failure a minute apart; by hand it is
 
 ```
 kubectl -n flux-system delete secret sh.helm.release.v1.flux-operator.v1   # the admin rung (ops/admin.nix)
-sudo sfi-systemd-restart flux-bootstrap
+sudo systemctl restart flux-bootstrap                                      # the same rung: sudo behind the challenge
 ```
 
 The chart's resources survive the delete and the fresh install adopts

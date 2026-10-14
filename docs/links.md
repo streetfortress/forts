@@ -103,8 +103,9 @@ runs `links/reconcile.sh`:
    `sfi_link_fetch_success`, `sfi_link_last_run_seconds`,
    `sfi_link_peers`.
 
-`sudo sfi-systemd-restart wg-link-<name>` runs it now; `wg-quick-<interface>`
-and `coredns` are restartable the same way.
+`systemctl restart wg-link-<name>` runs it now, from the admin rung
+([ops.md](ops.md)); an estate that wants a pinned verb for it declares
+one through `sfi.ops.commands`, as that page shows.
 
 ## The zone of a linked estate
 

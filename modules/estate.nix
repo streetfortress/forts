@@ -78,7 +78,7 @@ in
     description = ''
       The SSH public keys that hold the operator account `deployer` on
       this host, one line per device in authorized_keys form. An empty
-      list is refused (ops/deployer.nix): the sfi-* verbs are pinned to
+      list is refused (ops/deployer.nix): the ops verbs are pinned to
       this account, so a fort no operator device can reach carries
       verbs nobody can run.
     '';

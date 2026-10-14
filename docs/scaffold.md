@@ -98,7 +98,7 @@ person reads at a pane as that account, and the console password is
 the one door that survives a broken mesh — hosts answer SSH on the
 mesh alone, so a merged change that breaks wireguard locks every
 operator out of every fort at once, and the getty login to `sudo
-sfi-nixos-rollback` is the way back in (#524). The first fort of
+nixos-rollback` is the way back in (#524). The first fort of
 sfi/second-estate came up with neither, and both had to be added by
 hand after the provision; a door each estate must remember to add is not a
 door. The three cluster forts of sfi/deployments had added the same

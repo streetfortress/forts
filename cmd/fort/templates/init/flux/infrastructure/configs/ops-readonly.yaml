@@ -20,7 +20,7 @@
 #
 # THE HOST APPLIES THIS FILE TOO (#185). ops-kubeconfig.nix hands it to
 # k3s's own add-on directory, so k3s applies it at start — before flux
-# exists. Rung 1 of the intervention ladder therefore exists from first
+# exists. The observe rung of the ops ladder therefore exists from first
 # boot, which is what the drill fort's flux deadlock needed and did not
 # have. Every object carries `kustomize.toolkit.fluxcd.io/prune: disabled`
 # so the fleet can stop listing the file without kustomize-controller

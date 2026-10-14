@@ -44,7 +44,7 @@
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
     # The operator defaults every fort carries (sfi/forts#24): the shell at
     # a pane, and the console door — a password for `deployer` that only a
-    # getty accepts, so an operator reaches `sudo sfi-nixos-rollback` after
+    # getty accepts, so an operator reaches `sudo nixos-rollback` after
     # the mesh breaks (#524). fort mint minted the hash into this host's
     # sops file and the passphrase into provisioning/console-passwords.yaml.
     inputs.forts.nixosModules.shell
@@ -95,7 +95,7 @@
 
   # Watch main (minutely gate, rebuild only when the closure inputs
   # changed); a changed host config lands within minutes — or now, via
-  # `sudo sfi-nixos-rebuild` (#93).
+  # `sudo nixos-pull` (#93).
   sfi.auto-rebuild.enable = true;
   sfi.auto-rebuild.repoUrl = "{{ .RepoURL }}"; # the estate (estate.toml): what the gate watches and the rebuild clones
 {{ if .AuditLogging }}

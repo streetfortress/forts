@@ -213,7 +213,6 @@ in
     ./estate.nix # sfi.mesh.interface: this host's own mesh interface
     ./mesh-dns.nix # sfi.mesh.coredns: the linked zones in this host's cluster DNS
     ./textfile-metrics.nix # wg-link-<name>.prom
-    ./ops/systemd.nix # sfi-systemd-restart wg-quick-<iface>, wg-link-<name>, coredns
   ];
 
   options.sfi.links = lib.mkOption {
@@ -360,11 +359,6 @@ in
         }
       '')
       names));
-
-    sfi.ops.restartableUnits =
-      (map (n: "wg-quick-${cfg.${n}.interface}") names)
-      ++ (map (n: "wg-link-${n}") names)
-      ++ [ "coredns" ];
 
     systemd.services = lib.mkMerge ([{
       # The zone server (above): after this host's own mesh, retried

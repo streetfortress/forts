@@ -3,13 +3,13 @@
 # /var/lib/sfi/kubeconfig-ro — the everyday kubeconfig for humans, local
 # and fetched (`just fetch-kubeconfig`). The admin k3s.yaml is root-only
 # 0600; using it directly IS the break-glass event (README Key
-# decisions). Between observe (this file) and full admin sits the curated
-# `sudo sfi-*` verb layer (ops-commands.nix in this directory).
+# decisions). This file is the OBSERVE rung of the ladder for the
+# cluster; the admin rung is ops/admin.nix (docs/ops.md).
 #
 # THE HOST APPLIES THE ops-ro IDENTITY ITSELF (#185). The identity used to
-# arrive with the fleet, so rung 1 of the ladder existed only after flux
+# arrive with the fleet, so the OBSERVE rung existed only after flux
 # had converged — and the drill fort's flux deadlock is exactly the hour
-# that needs rung 1. So this module hands the same file to k3s's own
+# that needs it. So this module hands the same file to k3s's own
 # add-on directory (services.k3s.manifests →
 # /var/lib/rancher/k3s/server/manifests), which k3s applies at start,
 # before flux exists. mesh-dns.nix does this for the coredns override and
@@ -58,7 +58,7 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "k3s.service" ];
     # A oneshot that stays `failed` needs a reboot to try again, and this
-    # unit is rung 1: no start limit, so it keeps trying for as long as
+    # unit is the OBSERVE rung: no start limit, so it keeps trying for as long as
     # the cluster takes (flux-bootstrap.nix's reason, #408).
     unitConfig.StartLimitIntervalSec = 0;
     serviceConfig = {

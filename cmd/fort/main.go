@@ -187,7 +187,7 @@ func usage() {
       and NOT to the fort. nixos/modules/ops/console.nix consumes the
       hash, and only a getty accepts it — sshd refuses every password
       (nixos/modules/common.nix). The door exists for one failure: the
-      mesh breaks, no operator reaches ssh, and sudo sfi-nixos-rollback
+      mesh breaks, no operator reaches ssh, and sudo nixos-rollback
       is the remedy. The registry is why the credential survives that
       failure: a checkout and an admin age key read it with no network
       at all. --write prints NO value; --show decrypts one fort's

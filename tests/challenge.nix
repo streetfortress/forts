@@ -8,7 +8,7 @@
 #   - a wrong answer is refused, a pinned verb never asks, a verb the host
 #     names in sfi.ops.challenge.verbs does, and the rehearsal verb leaves
 #     no window behind;
-#   - deployer's kubectl unlocks itself through `sudo sfi-admin-unlock`,
+#   - deployer's kubectl unlocks itself through `sudo admin-unlock`,
 #     and the credential it mints is the ops-admin service account for the
 #     timeout and nothing longer.
 #
@@ -132,17 +132,17 @@ in
         assert "pam_unix" not in "\n".join(auth), auth
 
     with subtest("a pinned verb runs with no terminal and no challenge"):
-        rc, out = as_deployer("sudo -n sfi-hello")
+        rc, out = as_deployer("sudo -n hello")
         assert rc == 0 and "hello from root" in out, (rc, out)
 
     with subtest("an unpinned sudo with no terminal is refused, not asked"):
         rc, out = as_deployer("sudo -n true")
         assert rc != 0 and "password is required" in out, (rc, out)
-        rc, out = as_deployer("sudo -n sfi-gated")
+        rc, out = as_deployer("sudo -n gated")
         assert rc != 0 and "password is required" in out, (rc, out)
 
     with subtest("the admin key opens the terminal, and the window holds for the next sudo on it"):
-        rc, out = ceremony("good", "sudo id -u && sudo -n sfi-gated && sudo -n -i id -un")
+        rc, out = ceremony("good", "sudo id -u && sudo -n gated && sudo -n -i id -un")
         assert rc == 0, (rc, out)
         assert "challenges=1 " in out, out
         assert "the gated verb ran" in out and "\nroot" in out.replace("\r", ""), out
@@ -156,14 +156,14 @@ in
         assert rc != 0 and "password is required" in out, (rc, out)
 
     with subtest("a wrong answer is refused, three times, and nothing runs"):
-        rc, out = ceremony("bad", "sudo sfi-gated")
+        rc, out = ceremony("bad", "sudo gated")
         assert rc != 0, (rc, out)
         assert "challenges=3 " in out, out
         assert "not the nonce" in out, out
         assert "the gated verb ran" not in out, out
 
     with subtest("the rehearsal runs the ceremony every time and leaves no window"):
-        rc, out = ceremony("good", "sudo sfi-challenge && sudo -n true")
+        rc, out = ceremony("good", "sudo challenge && sudo -n true")
         assert rc != 0, (rc, out)
         assert "success: the admin key answered" in out, out
         assert "password is required" in out, out
@@ -187,7 +187,7 @@ in
         rc, out = ceremony("good", "kubectl auth whoami")
         assert rc == 0, (rc, out)
         assert "challenges=1 " in out, out
-        assert "unlocking (sudo sfi-admin-unlock)" in out, out
+        assert "unlocking (sudo admin-unlock)" in out, out
         assert "kubectl is cluster-admin for deployer" in out, out
         assert "system:serviceaccount:ops-admin:ops-admin" in out, out
 

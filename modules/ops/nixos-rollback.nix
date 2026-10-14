@@ -1,11 +1,11 @@
-# sfi-nixos-rollback: switch the host to a previous NixOS generation and
+# nixos-rollback: switch the host to a previous NixOS generation and
 # pin the pull loop there.
 #
-#   sudo sfi-nixos-rollback            # menu: generations on disk, what
+#   sudo nixos-rollback            # menu: generations on disk, what
 #                                      #   each was built from, the pin
-#   sudo sfi-nixos-rollback 46         # switch to generation 46 + pin
-#   sudo sfi-nixos-rollback --lift     # unpin, stay on this generation
-#   sudo sfi-nixos-rebuild             # unpin AND pull main now
+#   sudo nixos-rollback 46         # switch to generation 46 + pin
+#   sudo nixos-rollback --lift     # unpin, stay on this generation
+#   sudo nixos-pull             # unpin AND pull main now
 #
 # Why: a merge to main IS the rollout (auto-rebuild.nix), and a merged
 # host-config change that misbehaves on one fort — a firewall rule, a
@@ -13,14 +13,13 @@
 # provider console: deployer has no root shell, `nixos-rebuild
 # --rollback` is root's, and the only lever was "merge a revert and wait
 # for the loop". Every generation on disk was built from a vetted main
-# commit — `sfi-nixos-rebuild` builds main and nothing else, and its
+# commit — `nixos-pull` builds main and nothing else, and its
 # `--from <ip>` names another address for that same main (#76) — so
-# choosing one is choosing among states git already produced: the NUDGE
-# rung, a sibling of sfi-flux-suspend — a deliberate, sudo-logged,
-# VISIBLE hold on desired state, never a new state. The rung-3 ceremony
-# proposed in #256 is for verbs that widen REACH (arbitrary code in any
-# workload); this one narrows a menu, and the menu holds only what main
-# built.
+# choosing one is choosing among states git already produced: the
+# HANDS-ON rung (ops/ops-commands.nix) — a deliberate, sudo-logged,
+# VISIBLE hold on desired state, never a new state. The admin-key
+# challenge (ops/challenge.nix) is for verbs that widen REACH; this one
+# narrows a menu, and the menu holds only what main built.
 #
 # The pin is what makes a rollback more than a race with the timer.
 # Without it the next closure-relevant merge — fixing this fort or
@@ -28,7 +27,7 @@
 # So the verb writes /var/lib/sfi-auto-rebuild/pinned-generation and the
 # gate in auto-rebuild.nix skips while the host is on that generation;
 # a switch to any other generation makes the pin stale and the gate
-# drops it, which is what keeps an older generation's sfi-nixos-rebuild
+# drops it, which is what keeps an older generation's nixos-pull
 # (which knows nothing of pins) from stranding the host. The pin is a
 # textfile metric, node_nixos_pinned_generation_info, and
 # NixosGenerationPinned (rules-edge.yaml) nags after 6 h: a forgotten
@@ -63,7 +62,7 @@ in
   imports = [ ./ops-commands.nix ];
 
   sfi.ops.commands.nixos-rollback = {
-    description = "Switch to a previous NixOS generation and pin the pull loop there: sfi-nixos-rollback <generation>; --lift unpins; no args lists generations and what each was built from";
+    description = "Switch to a previous NixOS generation and pin the pull loop there: nixos-rollback <generation>; --lift unpins; no args lists generations and what each was built from";
     runtimeInputs = [ pkgs.coreutils pkgs.gawk pkgs.gnused pkgs.gnugrep pkgs.systemd config.nix.package ];
     script = ''
       pin=${stateDir}/pinned-generation
@@ -96,7 +95,7 @@ in
       }
 
       usage() {
-        echo "usage: sudo sfi-nixos-rollback [<generation> | --lift]   (no args lists generations)"
+        echo "usage: sudo nixos-rollback [<generation> | --lift]   (no args lists generations)"
       }
 
       # nix-env's listing is the menu: "  47   2026-09-22 05:10:33   (current)".
@@ -104,7 +103,7 @@ in
       current=$(current_generation)
 
       if [ "$#" -eq 0 ]; then
-        echo "NixOS generations on ${config.networking.hostName} (sudo sfi-nixos-rollback <n> switches and pins; --lift unpins):"
+        echo "NixOS generations on ${config.networking.hostName} (sudo nixos-rollback <n> switches and pins; --lift unpins):"
         for row in "''${rows[@]}"; do
           gen=$(awk '{print $1}' <<<"$row")
           when=$(awk '{print $2 " " substr($3, 1, 5)}' <<<"$row")
@@ -114,7 +113,7 @@ in
           printf '  %4s  %s  %-14s%s\n' "$gen" "$when" "''${rev:-(no revision recorded: built outside the pull loop)}" "$mark"
         done
         if [ -e "$pin" ]; then
-          echo "pin: generation $(cat "$pin") — nixos-upgrade skips while the host is on it (sudo sfi-nixos-rebuild lifts it and pulls main)"
+          echo "pin: generation $(cat "$pin") — nixos-upgrade skips while the host is on it (sudo nixos-pull lifts it and pulls main)"
         else
           echo "pin: none — the pull loop follows main"
         fi
@@ -162,7 +161,7 @@ in
       printf '%s\n' "$target" > "$pin"
       write_pin_metric "$target"
       echo "pinned: nixos-upgrade skips while the host is on generation $target (node_nixos_pinned_generation_info; NixosGenerationPinned nags after 6 h)"
-      echo "to move on: merge the fix, then 'sudo sfi-nixos-rebuild' (lifts the pin, pulls main) — or 'sudo sfi-nixos-rollback --lift' to let the timer take main's next change"
+      echo "to move on: merge the fix, then 'sudo nixos-pull' (lifts the pin, pulls main) — or 'sudo nixos-rollback --lift' to let the timer take main's next change"
 
       # A generation from before the pin-aware gate would roll forward on
       # main's next closure-relevant merge regardless of the pin.

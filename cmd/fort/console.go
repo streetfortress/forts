@@ -18,7 +18,7 @@ import (
 // `fort console-password <host>` mints the credential
 // nixos/modules/ops/console.nix reads: a passphrase for `deployer` that
 // only a getty accepts, so an operator on Lish or `virsh console`
-// reaches `sudo sfi-nixos-rollback` after the mesh breaks (#524).
+// reaches `sudo nixos-rollback` after the mesh breaks (#524).
 //
 // It writes the credential in two halves, to two files, because the two
 // readers are different:
@@ -67,7 +67,7 @@ import (
 // mints only where mint did not: a host that enabled the module after
 // the first provision.
 //
-// SCOPE: every fort. ops/ops-commands.nix pins every sfi-* sudo rule to
+// SCOPE: every fort. ops/ops-commands.nix pins every verb's sudo rule to
 // `deployer`, and the account is ops/deployer.nix's on cluster forts and
 // plain forts alike (#647) — whatever an estate builds on top of a fort,
 // the hatch is the fort's. This verb used to refuse a fort with no
@@ -255,7 +255,7 @@ func (p *consolePlan) show(w io.Writer) error {
 }
 
 func (p *consolePlan) report(w io.Writer, written bool) {
-	fmt.Fprintf(w, "console-password %s   (the getty door to `sudo sfi-nixos-rollback`; ssh never accepts it)\n", p.host)
+	fmt.Fprintf(w, "console-password %s   (the getty door to `sudo nixos-rollback`; ssh never accepts it)\n", p.host)
 	switch {
 	case p.haveHash && !p.rotate:
 		fmt.Fprintf(w, "○ %-40s carries %s already\n", p.secretsPath, keyDeployerPasswordHash)

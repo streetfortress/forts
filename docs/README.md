@@ -16,7 +16,7 @@ just <verb> …                  # the estate's own verbs, which are not the CLI
 
 Two shapes, one table apart: a fort with a `[cluster]` table is a flux
 cluster; without one it is a **plain fort** — the same hardened host and
-the same `deployer` with the ops verbs (#647), and no cluster. The
+the same `deployer` with the ops verbs (#647, [ops.md](ops.md)), and no cluster. The
 framework stops there on purpose: ideally nobody logs in, and the
 prescribed access is `deployer` over the mesh and the console password.
 What a plain fort does beyond that is plain NixOS in its host file, the
@@ -219,6 +219,7 @@ other fails `go test`.
 - [provision](provision.md) — the first provision and day-2 applies; `preview`, `adopt`
 - [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
 - [init](init.md) — create an estate: the files every other verb assumes
+- [ops](ops.md) — the host side: the three rungs of the ops ladder, the verb each rung has, and how an estate or a layer declares one of its own
 - [dismantle](dismantle.md) — the repo half of retirement
 - [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]` with its `ports`; the forge is the one role the core renders for
 - [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens

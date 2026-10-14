@@ -99,8 +99,9 @@ appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)).
 
 ## The operators
 
-`deployer` is the operator account of every fort: the `sfi-*` ops verbs
-are pinned to it, and `ops/console.nix` opens the console door for it.
+`deployer` is the operator account of every fort: the ops verbs
+([ops.md](ops.md)) are pinned to it, and `ops/console.nix` opens the
+console door for it.
 **The framework ships no operator key** (forts#81). `operator_keys` is
 the one place a key enters an estate — one line per device, in
 `authorized_keys` form, with the device as the key's comment — and
@@ -122,7 +123,7 @@ that operates it.
   vetting trims the list by device.
 - **An estate that names none has forts that do not evaluate.** The
   assertion in `ops/deployer.nix` refuses a host whose operator account
-  no device can reach — the `sfi-*` verbs would be present and
+  no device can reach — the ops verbs would be present and
   unreachable. `fort check --all` reports the same gap against
   `estate.toml`, before the eval.
 - One fort that must carry a different set sets

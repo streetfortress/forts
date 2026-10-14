@@ -5,10 +5,10 @@
 #   sudo -i                   # a root shell; the ceremony once per terminal and window
 #   kubectl get pvc -A        # cluster-admin; the first call on a terminal unlocks
 #   kubectl delete cluster -n forts db
-#   sudo sfi-admin-unlock     # the unlock by hand: mints the kubectl credential
+#   sudo admin-unlock     # the unlock by hand: mints the kubectl credential
 #
-# No admin wrappers (forts#151). The two verbs this replaces,
-# sfi-admin-shell and sfi-admin-kubectl, each carried a copy of a tool
+# No admin wrappers (forts#151). The two verbs this replaces, an admin
+# shell and an admin kubectl, each carried a copy of a tool
 # behind a NOPASSWD line — the shell module handed deployer ALL NOPASSWD,
 # so a gate anywhere else read as a control and was none. Here the host
 # adds one sudoers line, `deployer ALL=(ALL) ALL` WITHOUT NOPASSWD, and
@@ -22,7 +22,7 @@
 # kubectl is native, behind one unlock. deployer's PATH carries a
 # `kubectl` (this module's, ahead of k3s's symlink by priority) that
 # execs the real one when ~/.kube/admin.config holds a credential that
-# has not expired, and runs `sudo sfi-admin-unlock` first when it does
+# has not expired, and runs `sudo admin-unlock` first when it does
 # not. The unlock is a PASSWD verb, so it passes through the same PAM
 # stack — the ceremony, or the open window of this terminal — and then,
 # as root, mints the credential: a kubeconfig whose token comes from the
@@ -62,7 +62,7 @@ let
   # flux does and needs no estate file.
   manifest = pkgs.writeText "ops-admin.yaml" ''
     # The admin rung's service account (sfi/forts, modules/ops/admin.nix).
-    # No standing token: sfi-admin-unlock mints one through the
+    # No standing token: admin-unlock mints one through the
     # TokenRequest API for sfi.ops.challenge.timeout minutes.
     apiVersion: v1
     kind: Namespace
@@ -128,8 +128,8 @@ let
       }
 
       if ! valid; then
-        echo "kubectl on $(hostname) is the admin rung: unlocking (sudo sfi-admin-unlock)" >&2
-        /run/wrappers/bin/sudo /run/current-system/sw/bin/sfi-admin-unlock
+        echo "kubectl on $(hostname) is the admin rung: unlocking (sudo admin-unlock)" >&2
+        /run/wrappers/bin/sudo /run/current-system/sw/bin/admin-unlock
       fi
 
       export KUBECONFIG="$cred"
@@ -155,7 +155,7 @@ in
       The ADMIN rung on this host: `deployer ALL=(ALL) ALL` behind the
       admin-key challenge, so `sudo -i` is the root shell and, on a
       cluster fort, `kubectl` is cluster-admin behind `sudo
-      sfi-admin-unlock`. One ceremony opens a terminal for
+      admin-unlock`. One ceremony opens a terminal for
       sfi.ops.challenge.timeout minutes. For a host whose operators are
       the fleet admins; a disposable fort, a migration window.
     '';
@@ -182,7 +182,7 @@ in
         runtimeInputs = [ pkgs.kubectl pkgs.coreutils pkgs.util-linux pkgs.glibc ];
         script = ''
           if [ "$#" -ne 0 ]; then
-            echo "usage: sudo sfi-admin-unlock   (no arguments; writes ~/${credential} for the calling operator)" >&2
+            echo "usage: sudo admin-unlock   (no arguments; writes ~/${credential} for the calling operator)" >&2
             exit 64
           fi
           who=''${SUDO_USER:-}

@@ -32,8 +32,8 @@ in
   # The import list of a role (forts#60): the estate, the mesh and its
   # names, the metrics the hub scrapes, and today's homelab DNS. A role
   # module names each one — it does not depend on a bundle.
-  # ops/: the observe/nudge ladder — read-only kubeconfig, the sfi-* verb
-  # framework, and the flux verbs every k3s host should carry.
+  # ops/: the OBSERVE rung of the ladder for the cluster, the read-only
+  # kubeconfig (docs/ops.md).
   imports = [
     # The estate's files under one root, and the CA root it carries.
     ./estate.nix
@@ -48,12 +48,10 @@ in
     # The API server's audit log, off until a host's manifest says
     # [cluster] audit_logging = true (#626).
     ./k3s-audit.nix
+    # The OBSERVE rung of a cluster fort: the read-only kubeconfig. The
+    # core ships no verb for the cluster (forts#151) — kubectl and flux
+    # are the cluster's own tools, behind the two kubeconfigs.
     ./ops/ops-kubeconfig.nix
-    ./ops/ops-commands.nix
-    ./ops/flux.nix
-    ./ops/workloads.nix
-    ./ops/logs.nix
-    ./ops/systemd.nix
   ];
 
   options.sfi.k3s.datastore = lib.mkOption {
@@ -84,10 +82,10 @@ in
         "--disable=traefik"
         "--kubelet-arg=read-only-port=10255"
         # Admin kubeconfig is root-only (0600 default): daily ops use the
-        # read-only config rendered by ops/ops-kubeconfig.nix (#90);
-        # curated interventions go through the `sudo sfi-*` verbs
-        # (ops/ops-commands.nix); touching k3s.yaml directly is the
-        # break-glass event.
+        # read-only config rendered by ops/ops-kubeconfig.nix (#90); the
+        # admin rung is deployer's kubectl behind the admin-key challenge
+        # on a host that enables ops/admin.nix; touching k3s.yaml
+        # directly is the break-glass event.
       ] ++ lib.optional (meshIp != null) "--tls-san=${meshIp}";
     };
 
@@ -169,9 +167,5 @@ in
     };
 
     networking.firewall.allowedTCPPorts = [ 6443 80 443 ];
-
-    # k3s after a cached-cert change (the SAN note above) is one restart —
-    # sfi-systemd-restart k3s (#212).
-    sfi.ops.restartableUnits = [ "k3s" ];
   };
 }
