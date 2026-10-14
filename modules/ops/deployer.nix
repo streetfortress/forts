@@ -26,8 +26,9 @@
 #     `sfi-ops` lists what this host has.
 #
 # WHAT IT DOES NOT HOLD. No wheel, so no path to root from SSH: writes go
-# through git, not a shell, and ops/admin-shell.nix is the opt-in window
-# for the ADMIN rung. No nix daemon access (hardened.nix keeps allowed-users to
+# through git, not a shell, and ops/admin.nix is the opt-in ADMIN rung —
+# `sudo -i` and kubectl behind the admin-key challenge, which is sudo's
+# authentication on every fort (ops/challenge.nix). No nix daemon access (hardened.nix keeps allowed-users to
 # root; a profile whose accounts build appends THEM, never this one):
 # deployer observes the host, not the store. No password — sshd refuses
 # every password (common.nix) and the only hash it can carry is the

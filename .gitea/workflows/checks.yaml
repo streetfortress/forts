@@ -68,6 +68,7 @@ jobs:
           nix eval --json .#nixosModules --apply builtins.attrNames
           nix eval --raw .#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
       - name: sshd refuses a password on both of its paths
@@ -83,6 +84,34 @@ jobs:
           grep -qx 'PasswordAuthentication no' "$conf"
           grep -qx 'KbdInteractiveAuthentication no' "$conf"
           grep -qx 'PermitRootLogin no' "$conf"
+
+      - name: sudo authenticates through the challenge, and the pinned verbs never reach it
+        # The rendered files, not the options (forts#115). Two regressions
+        # are silent at eval time: pam_unix back in the sudo service makes
+        # the console password good for root, and the admin rung's `ALL`
+        # line AFTER the pinned rules puts every verb behind the ceremony,
+        # because sudo takes the tags of the last line that matches. CI
+        # reads what sudo gets on the fixture host that enables the rung.
+        run: |
+          set -euo pipefail
+          out=$(mktemp -d)
+          nix eval --raw \
+            '.#nixosConfigurations.admin-fort.config.security.pam.services.sudo.text' \
+            > "$out/pam-sudo"
+          grep '^auth ' "$out/pam-sudo" > "$out/pam-sudo-auth"
+          test "$(wc -l < "$out/pam-sudo-auth")" -eq 3
+          sed -n 1p "$out/pam-sudo-auth" | grep -q 'requisite .*pam_exec.so seteuid stdout quiet .*/sfi-challenge-issue'
+          sed -n 2p "$out/pam-sudo-auth" | grep -q 'sufficient .*pam_exec.so seteuid expose_authtok quiet .*/sfi-challenge-verify'
+          sed -n 3p "$out/pam-sudo-auth" | grep -q 'required .*pam_deny.so'
+          ! grep -q pam_unix "$out/pam-sudo-auth"
+          nix eval --raw \
+            '.#nixosConfigurations.admin-fort.config.security.sudo.configFile' \
+            > "$out/sudoers"
+          grep -n '^deployer ' "$out/sudoers"
+          test "$(grep '^deployer ' "$out/sudoers" | head -n1)" = "deployer     ALL=(ALL:ALL)    PASSWD: ALL"
+          grep -q '^deployer .*PASSWD: /run/current-system/sw/bin/sfi-challenge, NOPASSWD: ' "$out/sudoers"
+          grep -qx 'Defaults:deployer timestamp_timeout=15, timestamp_type=tty' "$out/sudoers"
+          grep -qx 'Defaults!/run/current-system/sw/bin/sfi-challenge timestamp_timeout=0' "$out/sudoers"
 
       - name: sfi-nixos-rebuild builds main, from the estate's own repo
         # The rendered verb, not the module. `--ref <branch>` was a path

@@ -21,8 +21,8 @@
 # tick and the vi mode showed no indicator (#576).
 #
 # The bash branch stays, reduced, for the contexts that are still bash:
-# `sudo sfi-admin-shell` execs `bash -l` (ops/admin-shell.nix), and a
-# person runs `bash` at a zsh prompt. Its prompt, keys, fzf and aliases
+# `sudo -i` on a host that enables ops/admin.nix is root's login shell,
+# which is bash, and a person runs `bash` at a zsh prompt. Its prompt, keys, fzf and aliases
 # work; the tick and the mode indicator cannot, for reasons that belong
 # to the shell and not to this module (the bash block below says which).
 #
@@ -41,7 +41,7 @@
 # (zvm_after_init_commands), then the Ctrl-R widget that starts with an
 # empty query.
 #
-# The guard is the import, like modules/ops/admin-shell.nix: a host gets
+# The guard is the import, like modules/ops/admin.nix: a host gets
 # this only by naming the module and setting enable. The estate's dev role
 # enables it for every dev fort; a cluster fort's own default.nix opts in (staging
 # does). the production fort imports it too: #558 weighed the cost against the
@@ -319,9 +319,9 @@ in
     programs.zsh.enable = true;
     users.defaultUserShell = pkgs.zsh;
 
-    # root keeps bash, deliberately: `sudo sfi-admin-shell` execs
-    # `bash -l` (ops/admin-shell.nix), and a fort's break-glass shell
-    # must not depend on the ergonomics module. nixpkgs sets root's shell
+    # root keeps bash, deliberately: `sudo -i` (ops/admin.nix) is root's
+    # login shell, and a fort's break-glass shell must not depend on the
+    # ergonomics module. nixpkgs sets root's shell
     # with mkDefault, so this assignment wins.
     users.users.root.shell = pkgs.bashInteractive;
 
@@ -332,8 +332,8 @@ in
         source ${aliases}
       '';
 
-    # bash: the reduced prompt, for a bash context — `sudo sfi-admin-shell`'s
-    # `bash -l`, a `bash` run at a zsh prompt, an account that pins bash.
+    # bash: the reduced prompt, for a bash context — root's shell under
+    # `sudo -i`, a `bash` run at a zsh prompt, an account that pins bash.
     # The prompt, the vi keys, fzf and the aliases all work. Two facts of
     # the zsh prompt cannot follow them here (#576 measured both):
     #   - The clock stamps the time of the DRAW and never ticks after it.

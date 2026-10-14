@@ -132,10 +132,11 @@ interim has served through the name.
 6. **Delete the artifact** on devbox when you like: it holds no secret,
    and the host does not need it again. With a provider this is `fort
    provision`'s release step.
-7. **Verify** from a mesh member: `ssh deployer@<mesh_ip>`, `sudo
-   sfi-admin-kubectl get nodes` if the host carries
-   ops/admin-kubectl.nix, `kubectl get gitrepository -n flux-system`
-   through the ops-ro kubeconfig.
+7. **Verify** from a mesh member: `ssh deployer@<mesh_ip>`, then
+   `kubectl get gitrepository -n flux-system` through the ops-ro
+   kubeconfig — or `kubectl get nodes` behind the admin-key challenge if
+   the host enables ops/admin.nix, where deployer's kubectl is
+   cluster-admin after one unlock.
 
 Nothing is registered anywhere: no stack, no `Pulumi.<host>.yaml`, no
 state PR. `git log` on the manifest is the provenance of the provision.

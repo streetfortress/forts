@@ -29,7 +29,9 @@ let
   # platform here when a controller converges it and no person works in
   # it. A layer's operator namespace (a database operator's was the
   # largest source in the stage fort's first hours, #653) joins through
-  # extraPlatformGroups.
+  # extraPlatformGroups. The admin rung's service account
+  # (ops/admin.nix) lives in its own namespace, ops-admin, so that it is
+  # NOT in this list: its requests are the ones this log exists for.
   platformUsers = [
     "system:apiserver"
     "system:kube-controller-manager"

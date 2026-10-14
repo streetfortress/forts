@@ -398,11 +398,12 @@ however many starts there are. `k3s-ccm-rbac-guard.service`
 in an up-window; by hand it is
 
 ```
-until sudo sfi-admin-kubectl apply -f /var/lib/rancher/k3s/server/manifests/ccm.yaml; do sleep 1; done
+until kubectl apply -f /var/lib/rancher/k3s/server/manifests/ccm.yaml; do sleep 1; done
 ```
 
-from a fort that has the disposable-fort `sfi-admin-kubectl` verb. Upstream:
-k3s-io/k3s#7328.
+as deployer on a fort that enables ops/admin.nix: the first `kubectl`
+on the terminal runs the admin-key challenge and mints the cluster-admin
+credential, the loop rides it. Upstream: k3s-io/k3s#7328.
 
 **`flux-bootstrap.service` failed: `UPGRADE FAILED: another operation
 (install/upgrade/rollback) is in progress`.** A previous bootstrap run
@@ -412,7 +413,7 @@ release is pending. The unit now clears any `pending-*` record before
 installing and retries on failure a minute apart; by hand it is
 
 ```
-sudo sfi-admin-kubectl -n flux-system delete secret sh.helm.release.v1.flux-operator.v1
+kubectl -n flux-system delete secret sh.helm.release.v1.flux-operator.v1   # the admin rung (ops/admin.nix)
 sudo sfi-systemd-restart flux-bootstrap
 ```
 

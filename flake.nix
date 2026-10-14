@@ -113,6 +113,11 @@
 
       checks = forAll (pkgs: {
         fort = self.packages.${pkgs.system}.fort;
+      } // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
+        # The admin-key challenge as sudo's authentication, end to end in
+        # a VM (tests/challenge.nix, forts#115). A VM test needs KVM, so
+        # it is a check and not a step of CI's eval-only gate.
+        challenge = pkgs.testers.runNixOSTest (import ./tests/challenge.nix);
       });
 
       # `nix develop` in this repo: the Go toolchain and the same
@@ -135,6 +140,22 @@
           self.nixosModules.common
           ./tests/estate/nixos/hosts/plain-fort
           sops-nix.nixosModules.sops
+        ];
+      };
+
+      # The same fort with the admin rung enabled (modules/ops/admin.nix,
+      # forts#115): CI evaluates it so the `deployer ALL` line, the PAM
+      # stack of the sudo service and the challenge's sudoers Defaults
+      # compose with a hardened host, and reads the rendered files.
+      nixosConfigurations.admin-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/estate/nixos/hosts/plain-fort
+          sops-nix.nixosModules.sops
+          self.nixosModules.ops-admin
+          { sfi.ops.admin.enable = true; }
         ];
       };
 

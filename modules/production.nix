@@ -18,7 +18,10 @@
 #     ops/ops-commands.nix — e.g. `sfi-nixos-rebuild`, which only re-runs
 #     the pull loop against vetted main: it takes no branch, and its
 #     `--from <ip>` changes the address it reaches gitea at, never the
-#     ref (#76); `sfi-ops` lists them). Root
+#     ref (#76); `sfi-ops` lists them). A host that also enables
+#     ops/admin.nix opens `sudo -i` and kubectl behind the admin-key
+#     challenge, which is sudo's authentication here (ops/challenge.nix,
+#     #115) — a second factor, not a password. Root
 #     logins stay off (common.nix) and no account here has a password,
 #     so SSH on the mesh is the only login path this profile makes. A
 #     host that also imports ops/console.nix (#524) gives deployer a
