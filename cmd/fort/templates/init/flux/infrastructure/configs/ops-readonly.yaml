@@ -14,7 +14,7 @@
 # PVs, CRD listing, kubectl-top metrics).
 #
 # The long-lived token Secret is populated by kubernetes from the
-# annotation; nixos/modules/ops/ops-kubeconfig.nix renders it into
+# annotation; modules/ops/ops-kubeconfig.nix renders it into
 # /var/lib/sfi/kubeconfig-ro on each node for local use and
 # `just fetch-kubeconfig`.
 #

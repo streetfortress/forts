@@ -6,16 +6,16 @@
 # file — the manifest seeds the host, you refine it here.
 #
 # Built as a Linode image via the upstream framework (#95/#42) — the flake
-# exposes it as `{{ .Hostname }}-linode` (the linode-runtime import below
+# exposes it as `{{ .Hostname }}-linode` (the runtime-linode import below
 # says which variant). Root filesystem, bootloader (GRUB + LISH serial),
 # eth0 DHCP, and swap on /dev/sdb all come from upstream's linode-config.nix
-# via modules/linode-runtime.nix — no hand-written hardware.nix and no
+# via modules/runtime/linode.nix — no hand-written hardware.nix and no
 # static-LAN block.
 #
-# PRODUCTION PROFILE (every fort): SSH answers on the
+# HARDENED (every fort, modules/hardened.nix): SSH answers on the
 # wireguard mesh address ONLY — reach it as `deployer@{{ .MeshIP }}`,
-# not the public IP. No personal account, no home stack, no wheel; see
-# modules/production.nix. Public surface is the {{ .Provider }} cloud firewall
+# not the public IP. No personal account, no home stack, no wheel: the
+# one login is `deployer` (modules/ops/deployer.nix). Public surface is the {{ .Provider }} cloud firewall
 # (default-deny + 80/443 + wireguard, forts/pulumi) in front of the host's
 # own firewall. Break-glass is the console password (ops/console.nix)
 # at Lish in the Linode console.
@@ -26,17 +26,19 @@
     # Linode runtime contract (upstream linode-config.nix, by-label devices)
     # — declares sfi.platform = "linode", which is how the flake knows to
     # build `{{ .Hostname }}-linode`.
-    inputs.forts.nixosModules.linode-runtime
+    inputs.forts.nixosModules.runtime-linode
     # Role modules — the host dir is self-describing so the flake stays uniform
     # and needs no per-host edit when a new host gets a manifest.
     ./secrets.nix
     inputs.forts.nixosModules.k3s-server
     inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest)
-    # Hardened slim profile (#86): `deployer` account, mesh-only SSH, no
-    # home stack. Replaces interactive.nix + dotfiles.nix — a person does not
-    # exist on a production node. The keys of `deployer` are the estate's,
+    # The baseline every fort imports, which k3s-server names too: the
+    # hardening (mesh-only SSH, no home stack, #86/#417) and the operator
+    # account `deployer` with the ops verbs (#647). k3s-server adds the
+    # cluster grant and the ports. The keys of `deployer` are the estate's,
     # not the framework's: estate.toml's operator_keys (sfi/forts#81).
-    inputs.forts.nixosModules.production
+    inputs.forts.nixosModules.hardened
+    inputs.forts.nixosModules.ops-deployer
     # Day-0 flux: fort scaffold rendered
     # flux/clusters/{{ .Hostname }}/ and the identity pre-seed put
     # flux-sops-age-key + flux-git-deploy-key into this host's sops file.
@@ -135,7 +137,7 @@
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host
   # key (age.sshKeyPaths), which the initrd places from the Linode
-  # Metadata channel before activation (modules/seed.nix, #606).
+  # Metadata channel before activation (modules/runtime/seed.nix, #606).
   # Secrets are split per-host, so this host only declares the keys it
   # actually carries — no declared-but-absent secrets to fail activation.
 

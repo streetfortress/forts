@@ -1,6 +1,6 @@
 # Linode cloud-host runtime contract: upstream linode-config.nix (GRUB +
 # LISH serial, eth0 DHCP, qemu-guest profile, diag tools) hardened with
-# by-label device addressing — the qcow-runtime.nix discipline.
+# by-label device addressing — the runtime/qemu.nix discipline.
 #
 # Upstream mounts root as /dev/sda and swaps on /dev/sdb, but virtio-scsi
 # enumeration order is NOT guaranteed: web3's first boot (#142) raced it,

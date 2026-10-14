@@ -33,7 +33,7 @@ import (
 // provider's cloud-init disk resource, an ISO in the same pool named
 // <host>-seed.iso, attached to the domain as a CD-ROM (`hdd` on the
 // `ide` bus, which is the i440FX machine's PIIX3 controller). The initrd
-// mounts it and places the key before activation (nixos/modules/seed.nix,
+// mounts it and places the key before activation (modules/runtime/seed.nix,
 // the nocloud channel). No cloud-init runs on the host; only the layout
 // is borrowed. `fort provision` hands the seed over in seed.Env (base64,
 // as for Linode) when the apply creates the domain, and records
@@ -67,7 +67,7 @@ const (
 	// seedChannel is the value of the stack's `forts:seed` config that
 	// says the host was provisioned with the cidata volume (#657). `fort
 	// provision` sets it when the apply creates the domain; the name is
-	// the channel's in nixos/modules/seed.nix.
+	// the channel's in modules/runtime/seed.nix.
 	seedChannel = "nocloud"
 )
 
@@ -152,11 +152,11 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		// Serial console so `virsh console <host>` works. It is the
 		// lab's recovery path when the mesh is gone, and it shows two
 		// things in turn. First the GRUB menu, for 3 s, because
-		// nixos/modules/qcow-runtime.nix gives GRUB its own serial
+		// modules/runtime/qemu.nix gives GRUB its own serial
 		// terminal (#523) — a previous generation, or init=/bin/sh, on
 		// a host that does not start. Then a `deployer` login, not a
 		// root one, and only where the host imports
-		// nixos/modules/ops/console.nix and carries
+		// modules/ops/console.nix and carries
 		// deployer-password-hash (#524). Without that import the
 		// login prompt appears and no account can answer it.
 		Consoles: libvirt.DomainConsoleArray{

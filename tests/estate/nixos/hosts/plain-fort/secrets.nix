@@ -1,7 +1,7 @@
 # sops-nix wiring for plain-fort: decrypts secrets/plain-fort.yaml
 # with the age key derived from this host's SSH ed25519 host key
 # (minted by fort mint and placed by the initrd from the NoCloud
-# cidata volume before activation (modules/seed.nix, #657) — the host never
+# cidata volume before activation (modules/runtime/seed.nix, #657) — the host never
 # generates its own). No k3s-token: a dev
 # fort has no cluster. wireguard-private-key (declared
 # below) is consumed by modules/wireguard.nix. deployer-password-hash is

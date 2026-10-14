@@ -7,7 +7,7 @@ resources:
 {{- if .ACMEEmail }}
   - cluster-issuer-letsencrypt.yaml
 {{- end }}
-  # ops-readonly is ALSO a k3s add-on now (nixos/modules/ops/ops-kubeconfig.nix,
+  # ops-readonly is ALSO a k3s add-on now (modules/ops/ops-kubeconfig.nix,
   # #185): the host applies it at start so the read-only kubeconfig exists
   # before flux does. This entry retires once every fort has reconciled the
   # prune-disabled annotation the file now carries — removing it earlier

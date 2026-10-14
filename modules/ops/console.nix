@@ -84,7 +84,7 @@ in
     # there is no catch-22 with the hash the user declaration reads. Nor
     # is there one with the age key: a fort's identity is pre-seeded, so
     # the initrd places the ssh host key from the platform's channel
-    # (modules/seed.nix) and sops-nix finds it at the first boot
+    # (modules/runtime/seed.nix) and sops-nix finds it at the first boot
     # (docs/mint.md, and the knowledge base's
     # config-management/pre-seeded-identity.md for why).
     sops.secrets.deployer-password-hash.neededForUsers = true;

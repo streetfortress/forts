@@ -42,7 +42,7 @@ func linodePlanDiskMB(instanceType string) (int, error) {
 // Linode realizes a host on Linode: boot an instance from the bootstrap
 // image, attach a default-deny firewall at creation, hand it its ssh host
 // key through the Metadata service, and point DNS at it. The host comes up
-// holding its sops identity before activation (nixos/modules/seed.nix
+// holding its sops identity before activation (modules/runtime/seed.nix
 // reads metadata.user_data in the initrd, #606) and flux-bootstraps itself
 // — no SSH in the provisioning path.
 //
@@ -98,7 +98,7 @@ func (l *Linode) Provision(ctx *pulumi.Context, name string, host manifest.Host)
 	var opts []pulumi.ResourceOption
 	opts = append(opts, pulumi.Protect(true))
 
-	// Default-deny + exactly the production profile's public surface:
+	// Default-deny + exactly a cluster fort's public surface (k3s-server.nix):
 	// 80/443 and the WireGuard transport — IPv4 ONLY, by declaration:
 	// only A records are published, LE challenges over v4, wg rides v4,
 	// so open v6 inbounds would be surface serving nothing (#86: the

@@ -1,7 +1,7 @@
 # Shared base configuration for every SFI NixOS host — cluster forts,
 # dev forts and hubs alike — so only genuinely user-agnostic settings
 # belong here. Accounts are the profile's: `deployer` from
-# modules/production.nix, `agent` from the estate's dev role.
+# modules/ops/deployer.nix, `agent` from the estate's dev role.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.
 { pkgs, ... }:
 
@@ -14,8 +14,11 @@
   # sops-nix CLI tooling (per-host sops wiring lives in hosts/<name>/secrets.nix)
   environment.systemPackages = with pkgs; [ sops age ssh-to-age ];
 
-  # Timezone and locale
-  time.timeZone = "America/Los_Angeles";
+  # Servers run UTC: journald, timer calendars and dashboard timestamps
+  # need no mental offset. (America/Los_Angeles was the interactive-host
+  # leftover, forced to UTC by hardened.nix until #154; no interactive
+  # host remains since #570.)
+  time.timeZone = "UTC";
   i18n.defaultLocale = "en_US.UTF-8";
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "en_US.UTF-8";

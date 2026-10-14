@@ -47,7 +47,7 @@ func TestRenderScaffold(t *testing.T) {
 			t.Errorf("%s secrets.nix does not name %s", name, keyDeployerPasswordHash)
 		}
 	}
-	for _, s := range []string{"linode-runtime", "modules/interactive.nix", "modules/dotfiles.nix"} {
+	for _, s := range []string{"runtime-linode", "modules/interactive.nix", "modules/dotfiles.nix"} {
 		if strings.Contains(l, s) {
 			t.Errorf("lab default.nix should not carry %q", s)
 		}
@@ -104,7 +104,7 @@ func TestRenderScaffold(t *testing.T) {
 	}
 
 	// a [libvirt] host is the lab shape (fort adopt, the libvirt backend)
-	if got := lab["nixos/hosts/lab-fort/default.nix"]; !strings.Contains(got, "qcow-runtime") || strings.Contains(got, "linode") {
+	if got := lab["nixos/hosts/lab-fort/default.nix"]; !strings.Contains(got, "runtime-qemu") || strings.Contains(got, "linode") {
 		t.Errorf("libvirt host should render the lab shape")
 	}
 
@@ -154,12 +154,12 @@ func TestRenderScaffold(t *testing.T) {
 	// when the manifest names one, everything else as the lab VM.
 	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
 	m := metal["nixos/hosts/metal-fort/default.nix"]
-	for _, s := range append([]string{"inputs.forts.nixosModules.baremetal-runtime", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.production", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", "docs/baremetal.md"}, operatorDefaults...) {
+	for _, s := range append([]string{"inputs.forts.nixosModules.runtime-baremetal", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", "docs/baremetal.md"}, operatorDefaults...) {
 		if !strings.Contains(m, s) {
 			t.Errorf("metal default.nix lacks %q", s)
 		}
 	}
-	for _, s := range []string{"qcow-runtime", "-qcow", `matchConfig.Name`, "linode", "hypervisor's LAN bridge"} {
+	for _, s := range []string{"runtime-qemu", "-qcow", `matchConfig.Name`, "linode", "hypervisor's LAN bridge", "nixosModules.production"} {
 		if strings.Contains(m, s) {
 			t.Errorf("metal default.nix should not carry %q", s)
 		}
@@ -253,7 +253,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	d := m["nixos/hosts/plain-fort/default.nix"]
 	// The baseline and nothing else: the hardened profile, the mesh,
 	// deployer with the ops verbs (#647), the shell, the rebuild loop.
-	for _, s := range append([]string{"inputs.forts.nixosModules.qcow-runtime", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
+	for _, s := range append([]string{"inputs.forts.nixosModules.runtime-qemu", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
 		if !strings.Contains(d, s) {
 			t.Errorf("plain default.nix lacks %q", s)
 		}

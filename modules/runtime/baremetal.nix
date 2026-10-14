@@ -1,6 +1,6 @@
 # The physical-host runtime contract (#287): an image that boots the
 # machine rather than a description of it. The same two consumers as
-# qcow-runtime.nix share it:
+# runtime/qemu.nix share it:
 #
 #   1. The bare `nixosConfigurations.<host>` — what `nixos-rebuild switch`
 #      and the auto-rebuild loop (#93) evaluate on the host.
@@ -37,7 +37,7 @@
 # the manifest names one), and a physical box has a screen.
 #
 # Priorities: mkDefault wherever the image variant defines the same
-# value, so the extended config merges cleanly (as qcow-runtime.nix).
+# value, so the extended config merges cleanly (as runtime/qemu.nix).
 { lib, ... }:
 
 {

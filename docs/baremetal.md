@@ -21,7 +21,7 @@ pretending it has one.
 
 The point of an image is that it boots anywhere. The four facts a
 hand-generated `hardware.nix` carries each have a hardware-neutral answer,
-and `modules/baremetal-runtime.nix` gives them:
+and `modules/runtime/baremetal.nix` gives them:
 
 | `hardware.nix` fact | what it is for | the image's answer |
 |---|---|---|
@@ -54,7 +54,7 @@ differently). Leave `mac` unset on a box with one onboard NIC and the
 
 ```
 forts/<host>.toml ← [baremetal] ip, mac, disk; fort check --all
-fort scaffold <host> --write  ← baremetal-runtime.nix, the LAN block by MAC
+fort scaffold <host> --write  ← runtime/baremetal.nix, the LAN block by MAC
 fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary
 a layer's verbs over the tree  ← as for any fort (docs/layers.md)
                               → PR → merge

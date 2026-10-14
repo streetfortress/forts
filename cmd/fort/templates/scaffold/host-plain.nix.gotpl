@@ -6,8 +6,8 @@
 #
 # Built as a qcow2 via the upstream image framework (#95) — the flake auto-
 # discovers this dir and exposes it as `{{ .Hostname }}-qcow` (the
-# qcow-runtime import below says which variant). The root filesystem and
-# bootloader come from qcow-runtime.nix + the qemu image variant, so there
+# runtime-qemu import below says which variant). The root filesystem and
+# bootloader come from runtime/qemu.nix + the qemu image variant, so there
 # is no hand-written hardware.nix.
 # PLAIN FORT (no [cluster] table in the manifest): no k3s, no flux.
 # What the framework gives every fort and nothing more — the
@@ -25,7 +25,7 @@
     # qcow VM runtime contract (virtio guest profile, root-by-label, grub on
     # /dev/vda, serial console) — declares sfi.platform = "qemu", which is
     # how the flake knows to build `{{ .Hostname }}-qcow`.
-    inputs.forts.nixosModules.qcow-runtime
+    inputs.forts.nixosModules.runtime-qemu
     # Role modules — the host dir is self-describing so the flake stays uniform
     # and needs no per-host edit when a new host gets a manifest.
     ./secrets.nix
@@ -109,7 +109,7 @@
   # sops wiring is in ./secrets.nix: it points defaultSopsFile at
   # secrets/{{ .Hostname }}.yaml and decrypts via the pre-seeded SSH host key
   # (age.sshKeyPaths), which the initrd places from the NoCloud cidata
-  # volume before activation (modules/seed.nix, #657). Secrets are
+  # volume before activation (modules/runtime/seed.nix, #657). Secrets are
   # split per-host, so this host only declares the keys it actually carries —
   # no declared-but-absent secrets to fail activation.
 

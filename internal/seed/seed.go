@@ -1,7 +1,7 @@
 // Package seed is the Go side of the seed format (#606; the decision is
 // deployments#605): what travels from the repo to a fort at bootstrap, through
 // the channel its platform provides, so the bootstrap image carries no
-// secret. The reader on the host is nixos/modules/seed/reader.sh, and the
+// secret. The reader on the host is modules/runtime/seed/reader.sh, and the
 // two must agree on the format — this package's test is that contract.
 // Two channels carry it today: the Linode Metadata service (base64 in
 // metadata.user_data) and the NoCloud cidata volume of a lab fort (the
@@ -86,7 +86,7 @@ func Decode(userData string) (string, error) {
 	return string(raw), nil
 }
 
-// Parse mirrors the reader's split (nixos/modules/seed/reader.sh): the
+// Parse mirrors the reader's split (modules/runtime/seed/reader.sh): the
 // PEM block from header to trailer, then the first ssh-ed25519 line after
 // the trailer. It exists so the test proves the shell and the Go agree.
 func Parse(text string) (private, public string, err error) {

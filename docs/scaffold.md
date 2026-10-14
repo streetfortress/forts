@@ -78,8 +78,8 @@ A manifest with no `[cluster]` table renders the host dir alone:
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
 ```
 
-`default.nix` imports the baseline in place of `k3s-server.nix` +
-`production.nix` + `flux-bootstrap.nix`: `hardened.nix`,
+`default.nix` imports the baseline without `k3s-server.nix` and
+`flux-bootstrap.nix`: `hardened.nix`,
 `ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with the four
 modules a role names — `estate.nix`, `wireguard.nix`, `metrics.nix`,
 `lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the LAN and zram

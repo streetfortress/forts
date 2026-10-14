@@ -109,7 +109,7 @@ spec:
           annotations:
             summary: "{{ $labels.instance }}: node_exporter textfile collector failing — a .prom file is unreadable or malformed"
 
-        # nixos-rollback (nixos/modules/ops/nixos-rollback.nix) pins
+        # nixos-rollback (modules/ops/nixos-rollback.nix) pins
         # the pull loop to a prior generation; the metric IS the pin. A
         # hold is deliberate for hours, not days — a forgotten one is the
         # 2026-09-03 drift incident again (a host quietly off main), so
@@ -123,7 +123,7 @@ spec:
             summary: "{{ $labels.instance }} pinned to NixOS generation {{ $labels.generation }} for >6h (nixos-rollback) — main is not being applied; sudo nixos-pull lifts it"
 
     # Mesh health (#121): metrics come from the wireguard-metrics timer on
-    # each host (nixos/modules/wireguard.nix) via the node_exporter
+    # each host (modules/wireguard.nix) via the node_exporter
     # textfile collector. Edge-local on purpose — a dead tunnel must page
     # from whichever side still has a path out. Keepalive-gated so roaming
     # clients (laptops, phones) going quiet never page; mesh peers all

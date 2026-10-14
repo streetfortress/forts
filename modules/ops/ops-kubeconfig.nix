@@ -45,7 +45,7 @@ in
   services.k3s.manifests.ops-readonly.source =
     config.sfi.estate.root + "/flux/infrastructure/configs/ops-readonly.yaml";
 
-  # Read access to the rendered file; production.nix adds deployer.
+  # Read access to the rendered file; k3s-server.nix adds deployer.
   users.groups.kubeops = { };
 
   # Everyday kubectl resolves to the RO config for every login shell —

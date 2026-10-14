@@ -16,7 +16,7 @@ import (
 )
 
 // `fort console-password <host>` mints the credential
-// nixos/modules/ops/console.nix reads: a passphrase for `deployer` that
+// modules/ops/console.nix reads: a passphrase for `deployer` that
 // only a getty accepts, so an operator on Lish or `virsh console`
 // reaches `sudo nixos-rollback` after the mesh breaks (#524).
 //
@@ -105,7 +105,7 @@ func consolePassword(args []string) error {
 }
 
 const (
-	// keyDeployerPasswordHash is the key nixos/modules/ops/console.nix
+	// keyDeployerPasswordHash is the key modules/ops/console.nix
 	// declares and `fort check` looks for.
 	keyDeployerPasswordHash = "deployer-password-hash"
 
@@ -331,7 +331,7 @@ module without the hash, and warns on a credential nothing reads.
 	}
 	fmt.Fprintf(w, `Next: PR the secrets file and the registry. The password works when %s
 has activated the generation that carries it; the pull loop does that on
-its own (nixos/modules/auto-rebuild.nix).
+its own (modules/auto-rebuild.nix).
 
 Then open the console once and log in, so the failsafe is exercised and
 not merely believed: Lish for a Linode fort, `+"`virsh console %s`"+` on

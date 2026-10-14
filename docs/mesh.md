@@ -37,7 +37,7 @@ another estate that links here gives its link interface the same name
 both. At most 15 characters from `A-Za-z0-9_=+.-`, the kernel's rule;
 `fort init --interface <name>` renders it. The modules read it through
 `sfi.mesh.interface` (estate.nix): `wireguard.nix` builds the interface,
-hardened.nix and production.nix open the admin ports on it, the metrics
+hardened.nix and k3s-server.nix open the admin ports on it, the metrics
 carry it as the `interface` label. An estate that names none is on
 `wg0`, as before; renaming a live estate's interface is a switch that
 stops one unit and starts another on every fort, so it is a decision per

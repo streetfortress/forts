@@ -34,7 +34,7 @@
 # shell in a dotfiles repo (sfi/.fortfiles#1) had that backwards.
 #
 # System level, not home-manager, for the same reason: /etc/zshrc and
-# /etc/bashrc reach deployer (production.nix) and agent (the estate's dev role)
+# /etc/bashrc reach deployer (ops/deployer.nix) and agent (the estate's dev role)
 # alike, and a cluster fort has no Home Manager user at all. The
 # zsh-vi-mode plugin is loaded HERE, not by Home Manager, so the module
 # owns the whole key chain: the plugin, then fzf after it
@@ -45,7 +45,7 @@
 # this only by naming the module and setting enable. The estate's dev role
 # enables it for every dev fort; a cluster fort's own default.nix opts in (staging
 # does). the production fort imports it too: #558 weighed the cost against the
-# posture of production.nix, settled the zsh question above, and a person
+# posture of hardened.nix, settled the zsh question above, and a person
 # accepted the module on 2026-09-27 — that host's comment carries the
 # numbers. Not in modules/ops/: this is not a verb.
 #
@@ -288,7 +288,7 @@ in
     # nixpkgs's own mkDefault. home/base.nix's Home Manager EDITOR =
     # "nvim" is a different, later-sourced variable, so this line does
     # not touch an estate's Home Manager accounts — it is for deployer
-    # (production.nix, no Home Manager user) and any other zsh account
+    # (ops/deployer.nix, no Home Manager user) and any other zsh account
     # this module reaches without one (#630).
     environment.variables.EDITOR = "vim";
 
@@ -297,7 +297,7 @@ in
     # ~/.zshenv, ~/.zprofile, ~/.zshrc, ~/.zlogin exist. Home Manager
     # creates ~/.zshrc for an estate's accounts that have one (programs.zsh.enable,
     # home/base.nix); an account with no Home Manager profile —
-    # deployer, production.nix's mkForce — never gets one, and the
+    # deployer (ops/deployer.nix) — never gets one, and the
     # message repeats on every SSH login (#630). An empty ~/.zshrc
     # silences it: zsh checks only that one of the four files exists,
     # never its content. tmpfiles' `f` line creates a file if it is
@@ -311,7 +311,7 @@ in
 
     # zsh, and zsh as the login shell: the module owns both halves of the
     # promise instead of waiting for a host to enable zsh (#558, #576). An
-    # account that does not pin a shell — deployer (production.nix), agent
+    # account that does not pin a shell — deployer (ops/deployer.nix), agent
     # (the dev role) — follows users.defaultUserShell, because nixpkgs
     # gives every isNormalUser `useDefaultShell = true`
     # (config/users-groups.nix). A fort that does not import this module

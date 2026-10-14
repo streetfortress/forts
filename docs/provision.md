@@ -172,8 +172,8 @@ needs the admin age key, as the token lookups in
 [the environment](#environment) already do.
 
 **The initrd placement** is `sfi-seed.service` in the systemd initrd
-(`nixos/modules/seed.nix`, imported and enabled by
-`modules/linode-runtime.nix` and `modules/qcow-runtime.nix`, so every
+(`modules/runtime/seed.nix`, imported and enabled by
+`modules/runtime/linode.nix` and `modules/runtime/qemu.nix`, so every
 Linode and every lab fort has it; the channel follows `sfi.platform`). It
 runs after the root is mounted on `/sysroot` and is required by
 `initrd.target`, so before the switch to stage 2. Activation runs in the

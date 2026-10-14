@@ -1,7 +1,7 @@
 # Pull-based OS updates (#93): a root-side timer watches main and runs
 # `nixos-rebuild switch --flake` when the host's config changes — flux for
 # the k8s layer, this loop for the nix layer. No interactive root, no new
-# SSH surface; deployer stays read-only on production hosts (the pinned
+# SSH surface; deployer stays read-only on every fort (the pinned
 # sudo carve-out comes from the ops framework, ops/ops-commands.nix) and
 # the no-SSH end-state stays viable.
 #
@@ -17,7 +17,7 @@
 #     reads like ../../mesh/peers.json work from the fetched source —
 #     verified by eval'ing a peers-derived attr from the git URL (#93's
 #     "wrinkle" checkbox). The bare nixosConfigurations entry is made
-#     switch-capable by qcow-runtime.nix in the flake's vmModules.
+#     switch-capable by runtime/qemu.nix in the flake's vmModules.
 #   - Minutely timer (flux's cadence) + an ExecCondition gate that is
 #     PATH-granular: `git ls-remote` first (one round trip; unchanged tip
 #     = free skip, which is nearly every tick), then, when the tip moved,

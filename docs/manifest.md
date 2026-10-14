@@ -80,7 +80,8 @@ key (#272): every fort imports the hardened profile (mesh-scoped SSH, no
 wheel), gets the deploy key (auto-rebuild's pull credential), carries
 `protect: true` on its stack, and `mesh_ip` is required. **`[cluster]`**
 (#426) makes the host a flux cluster: `k3s-server.nix` on the datastore
-it names, `production.nix` (deployer-only), `flux/clusters/<host>`,
+it names (the cluster grant and the ports ride with it, #154),
+`flux/clusters/<host>`,
 `flux/apps/<host>` and the cluster key. The table is handled like the
 provider tables — strict keys, decoded by its own Spec — and can be
 empty; every key in it has a default. **No `[cluster]` table makes a plain

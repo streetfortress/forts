@@ -34,7 +34,7 @@ import (
 // sets it as metadata.user_data on the instance; the libvirt program
 // writes it to a NoCloud cidata volume attached to the domain. Both as a
 // pulumi secret, both read by the host's initrd before activation
-// (nixos/modules/seed.nix). The read needs the admin age key, as the
+// (modules/runtime/seed.nix). The read needs the admin age key, as the
 // token lookups in cloudEnv already do.
 //
 // The delete after the apply is hygiene, not custody: Linode bills a
@@ -236,7 +236,7 @@ var seedHostTypes = map[string]string{
 }
 
 // seedChannels is, per provider, the channel the seed travels through
-// (nixos/modules/seed.nix's names) — recorded on the stack as
+// (modules/runtime/seed.nix's names) — recorded on the stack as
 // `forts:seed` at the first provision.
 var seedChannels = map[string]string{
 	"linode":  "linode-metadata",

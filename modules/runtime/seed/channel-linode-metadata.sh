@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# The Linode channel of the seed reader (nixos/modules/seed.nix, #606):
+# The Linode channel of the seed reader (modules/runtime/seed.nix, #606):
 # the seed is metadata.user_data on the instance, which `fort provision`
 # sets from the sops file, and which the Metadata service serves to the
 # instance alone. Two steps the service requires: a token (PUT /v1/token,

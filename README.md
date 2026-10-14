@@ -67,7 +67,7 @@ The bootstrap image is the plain build output of `fort image` (#42,
 both sides because nothing needs it afterwards. It carries no secret on
 any variant — the host's key is `metadata.user_data` on the instance
 (#606), or a NoCloud `cidata` volume attached to the domain (#657), set
-by `fort provision` and read by the initrd (`nixos/modules/seed.nix`;
+by `fort provision` and read by the initrd (`modules/runtime/seed.nix`;
 the model is #605's). Modeling the image as a pulumi resource is wrong
 in both lifecycle directions:
 

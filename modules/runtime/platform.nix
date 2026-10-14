@@ -1,8 +1,8 @@
 # The one fact the flake needs per auto-discovered host that the host
 # dir itself must declare: which runtime contract (and therefore which
-# image variant) it is built for. Set by modules/qcow-runtime.nix
-# ("qemu" → `<host>-qcow`), modules/linode-runtime.nix ("linode" →
-# `<host>-linode`) and modules/baremetal-runtime.nix ("baremetal" →
+# image variant) it is built for. Set by modules/runtime/qemu.nix
+# ("qemu" → `<host>-qcow`), modules/runtime/linode.nix ("linode" →
+# `<host>-linode`) and modules/runtime/baremetal.nix ("baremetal" →
 # `<host>-baremetal`); `fort scaffold` renders the matching import from
 # the manifest's provider table ([libvirt] → qemu, [linode] → linode,
 # [baremetal] → baremetal). No default on purpose: a host dir that

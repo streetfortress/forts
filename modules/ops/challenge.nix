@@ -62,7 +62,7 @@
 # PAM stack and the journal are all the host's, so a host with root
 # already taken can fake the whole ceremony. This gate controls
 # UNAUTHORIZED OPERATORS — someone with the deployer key and the mesh —
-# and that is the threat the production profile (#86/#90) is shaped
+# and that is the threat the hardened profile (#86/#90) is shaped
 # around.
 #
 # What it changes for every account on the host: sudo's password

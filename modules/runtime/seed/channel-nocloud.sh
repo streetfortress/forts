@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# The NoCloud channel of the seed reader (nixos/modules/seed.nix, #657):
+# The NoCloud channel of the seed reader (modules/runtime/seed.nix, #657):
 # the seed is /user-data on a volume labelled `cidata` — the layout of
 # cloud-init's NoCloud datasource, which pulumi-libvirt's cloud-init disk
 # resource writes (an ISO 9660 image, `mkisofs -volid cidata`, attached to

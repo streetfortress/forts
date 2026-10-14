@@ -1,8 +1,7 @@
 # Host node_exporter stays a NixOS service; an Endpoints-backed headless
 # Service points at the host's mesh address so the in-cluster edge
 # Prometheus can scrape it. Pod traffic to the host's own wg0 address
-# arrives on cni0 — production.nix opens 9100 there (lab hosts have it open
-# globally via k3s-server.nix).
+# arrives on cni0 — k3s-server.nix opens 9100 there.
 apiVersion: v1
 kind: Service
 metadata:

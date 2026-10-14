@@ -8,6 +8,14 @@
 # from the manifest's [cluster] datastore, and a test in cmd/fort keeps
 # the manifest and the host file equal; the module maps the word to
 # services.k3s.clusterInit, so no host sets clusterInit itself.
+#
+# The surface of a k3s host is here too (#154; production.nix held it
+# until then, under a name from #86 that stopped meaning anything once
+# every fort was hardened, #272): the baseline every fort imports —
+# hardened.nix and ops/deployer.nix — plus what a CLUSTER fort adds to
+# both, the cluster grant for deployer and the ports, declared once
+# below instead of opened here, collapsed by hardened.nix and re-opened
+# by a third module.
 { config, lib, pkgs, ... }:
 
 let
@@ -23,8 +31,8 @@ let
   # On an ALREADY-RUNNING node, changing the SAN set needs the cached serving
   # cert cleared as well — k3s keeps it in server/tls/dynamic-cert.json and
   # mirrors it to the `k3s-serving` secret in kube-system; delete both and
-  # restart k3s if the old SANs survive the rebuild. Production hosts sidestep
-  # this: they are replaced as images, so they come up with the SAN baked in.
+  # restart k3s if the old SANs survive the rebuild. A fort sidesteps this:
+  # it is replaced as an image, so it comes up with the SAN baked in.
   peers = (builtins.fromJSON (builtins.readFile (config.sfi.estate.root + "/mesh/peers.json"))).peers;
   meshIp = (peers.${config.networking.hostName} or { }).wg_vpn_ip or null;
 in
@@ -35,6 +43,12 @@ in
   # ops/: the OBSERVE rung of the ladder for the cluster, the read-only
   # kubeconfig (docs/ops.md).
   imports = [
+    # The baseline every fort imports (the plain shape names the same
+    # pair): the hardening — mesh-only admin surface, root-only nix, the
+    # closure trims — and the operator account `deployer` with the ops
+    # verbs. The cluster grant and the ports are below.
+    ./hardened.nix
+    ./ops/deployer.nix
     # The estate's files under one root, and the CA root it carries.
     ./estate.nix
     # The mesh, and with it the names of the mesh (mesh-dns.nix): a k3s
@@ -166,6 +180,31 @@ in
       '';
     };
 
-    networking.firewall.allowedTCPPorts = [ 6443 80 443 ];
+    # What a cluster fort adds to the operator account (ops/deployer.nix
+    # holds the account itself — isNormalUser, the journal, the keys):
+    # the ops-ro kubeconfig (ops/ops-kubeconfig.nix, #90), so deployer
+    # observes the cluster as well as the host. Still no wheel and no nix
+    # daemon access: writes go through git, and rebuilds arrive through
+    # the pull loop.
+    users.users.deployer.extraGroups = [ "kubeops" ];
+
+    # The public face of a cluster fort is exactly 80/443, the ingress;
+    # hardened.nix collapses every other merged opening to this list.
+    # mkDefault: a host that serves no public ingress narrows it.
+    sfi.hardened.publicTCPPorts = lib.mkDefault [ 80 443 ];
+    # The cluster ports on the mesh interface only (22 + 9100 are already
+    # there from hardened.nix): the API server, the kubelet's read-only
+    # port, and 30909/30993 — the edge Prometheus/Alertmanager NodePorts
+    # (mesh-services-edge.yaml); the mesh-only opening IS their access
+    # control, and silences are set against 30993. A port a layer's
+    # workload answers on over the mesh (a database's NodePort for a hub's
+    # reader) is the estate's to open, in the host file.
+    networking.firewall.interfaces.${config.sfi.mesh.interface}.allowedTCPPorts = [ 6443 10255 30909 30993 ];
+    # The in-cluster edge Prometheus (#53) scrapes the host node_exporter
+    # at the mesh address; pod traffic to the host's own mesh IP
+    # ingresses on cni0, so 9100 must be open there too. The 10255 row
+    # above and hardened.nix's mesh 9100 are the hypervisor pull-model
+    # path — drop them once the edge stack is verified on an edge cluster.
+    networking.firewall.interfaces."cni0".allowedTCPPorts = [ 9100 ];
   };
 }

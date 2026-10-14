@@ -19,7 +19,7 @@ import (
 // nix store. The key does not enter the image either (#605's decision,
 // #659): it travels through a channel the platform provides, handed over
 // by `fort provision` when the apply creates the host, and the initrd
-// places it before activation (nixos/modules/seed.nix). So the artifact
+// places it before activation (modules/runtime/seed.nix). So the artifact
 // is the plain build output on every variant — this verb reads no
 // secret and needs nix only (skipped with --from):
 //
@@ -161,7 +161,7 @@ func imageVariant(host string, h manifest.Host) variantSpec {
 	return variantSpec{host, "qcow", "./nixos#" + host + "-qcow"}
 }
 
-// channel names the seed channel of a variant (nixos/modules/seed.nix's
+// channel names the seed channel of a variant (modules/runtime/seed.nix's
 // names), for the verb's next-step line. The baremetal channel is #658
 // and has no name yet.
 func (v variantSpec) channel() string {

@@ -15,7 +15,7 @@
 #
 # WHAT IT HOLDS, on every fort alike (the ladder: docs/ops.md):
 #   - OBSERVE: the host journal (systemd-journal) and `nixos-revision`.
-#     A cluster fort adds the read-only kubeconfig (production.nix →
+#     A cluster fort adds the read-only kubeconfig (k3s-server.nix →
 #     kubeops, #90). Day-0 units (flux-bootstrap, nixos-upgrade, k3s)
 #     fail before any kubeconfig can say why, and without journal access
 #     the only readable evidence is `systemctl show`'s exit code (#185).

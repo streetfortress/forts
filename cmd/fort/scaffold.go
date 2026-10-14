@@ -37,14 +37,14 @@ type hostView struct {
 	// sfi.k3s.auditLog.enable. False renders nothing — a fort that does
 	// not audit carries no block, as with an empty pv list above.
 	AuditLogging bool
-	// Cloud hosts (a cloud provider table): the linode-runtime shape —
+	// Cloud hosts (a cloud provider table): the runtime-linode shape —
 	// no LAN block, zram, Lish break-glass.
 	Cloud        bool
 	Provider     string
 	Region       string
 	InstanceType string
 	// Baremetal hosts ([baremetal]): the lab shape on a physical machine
-	// — baremetal-runtime instead of qcow-runtime, the LAN block matched
+	// — runtime-baremetal instead of runtime-qemu, the LAN block matched
 	// by MAC when the manifest names one (#287).
 	Baremetal bool
 	MAC       string

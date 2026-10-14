@@ -2,10 +2,10 @@
 # and — the real operator need — the edge Alertmanager's API/UI, so
 # silences can be set without kubectl port-forward gymnastics (silences
 # live per-alertmanager; edge-evaluated alerts can ONLY be silenced
-# here). NodePorts per the mesh-services.yaml precedent: on production-
-# profile hosts 80/443 face the public internet, so the ingress path is
-# the wrong place for admin planes — the ports are opened wg0-only in
-# nixos/modules/production.nix, which is the actual trust boundary.
+# here). NodePorts per the mesh-services.yaml precedent: on a cluster
+# fort 80/443 face the public internet, so the ingress path is the
+# wrong place for admin planes — the ports are opened mesh-only in
+# modules/k3s-server.nix, which is the actual trust boundary.
 # (k3s does enforce NetworkPolicy, but NodePort traffic is SNAT'd under
 # externalTrafficPolicy=Cluster, so pod-level source filtering can't
 # distinguish mesh from LAN — the host firewall can, and already does

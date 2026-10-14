@@ -67,7 +67,7 @@ func TestUserData(t *testing.T) {
 	}
 }
 
-// The contract with the host: the shell reader (nixos/modules/seed/
+// The contract with the host: the shell reader (modules/runtime/seed/
 // reader.sh) splits the same text into the same two files, with the same
 // modes. Skipped where there is no sh.
 func TestReaderAgrees(t *testing.T) {
@@ -75,7 +75,7 @@ func TestReaderAgrees(t *testing.T) {
 	if err != nil {
 		t.Skip("no sh")
 	}
-	reader, err := os.ReadFile("../../../nixos/modules/seed/reader.sh")
+	reader, err := os.ReadFile("../../modules/runtime/seed/reader.sh")
 	if err != nil {
 		t.Skip("reader.sh not at the expected path")
 	}

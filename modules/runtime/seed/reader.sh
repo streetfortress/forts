@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# The shared half of the seed reader (nixos/modules/seed.nix, #606). It is
+# The shared half of the seed reader (modules/runtime/seed.nix, #606). It is
 # the body of sfi-seed.service in the systemd initrd, after the root is
 # mounted on /sysroot and before the switch to stage 2. POSIX sh, run by
 # bash under `set -e`: every command that may fail is guarded. The channel

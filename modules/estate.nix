@@ -29,7 +29,7 @@ in
   # every host on it — this host's own
   # (wireguard.nix) and a linked host's link interface (links.nix) — so
   # `wg show <name>` means the same thing everywhere, and hardened.nix /
-  # production.nix open the admin ports on it by that name. An estate
+  # k3s-server.nix open the admin ports on it by that name. An estate
   # that names none is on wg0, as before.
   options.sfi.mesh.interface = lib.mkOption {
     type = lib.types.strMatching "^[A-Za-z0-9_=+.-]{1,15}$";
