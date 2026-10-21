@@ -117,7 +117,8 @@ func TestCompletionFlagsAreTheFlagSets(t *testing.T) {
 	for verb, spec := range completions {
 		got, ok := registered[verb]
 		if !ok {
-			// scaffold and wg-conf parse their arguments by hand. Keeping
+			// scaffold and wg-conf parse their arguments by hand, --version
+			// takes none. Keeping
 			// the list here, rather than skipping silently, means the day
 			// one of them takes a flag.FlagSet the test starts checking it
 			// and this line fails until it is removed.
@@ -146,7 +147,7 @@ func TestCompletionFlagsAreTheFlagSets(t *testing.T) {
 
 // handParsedVerbs read their arguments without a flag.FlagSet, so the AST
 // has nothing to compare their flag lists against.
-var handParsedVerbs = []string{"scaffold", "wg-conf"}
+var handParsedVerbs = []string{"scaffold", "wg-conf", "--version"}
 
 // switchVerbs reads the verbs out of main's dispatch switch, sorted.
 func switchVerbs(t *testing.T) []string {

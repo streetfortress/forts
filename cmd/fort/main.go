@@ -36,6 +36,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "--version":
+		err = version(os.Stdout)
 	case "init":
 		err = initCmd(os.Args[2:])
 	case "scaffold":
@@ -100,7 +102,7 @@ func usage() {
           from PATH: what sits on top of the core (docs/layers.md)
   keys    console-password (the fort's getty password)
   apply   provision, adopt, destroy
-  read    check, preview, wg-conf
+  read    check, preview, wg-conf, --version
 
   init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--write]
       create an estate: render into the root of a git checkout the files
@@ -276,6 +278,12 @@ func usage() {
       and said so. fort check --all fails on a stale ssh_config and
       warns on a missing key line. Prints the plan; --write writes and
       stages.
+
+  --version
+      the commit this binary was built from and, inside an estate, the
+      release the estate pins — the tag forts.url names, from
+      nixos/flake.lock — and whether this binary is that pin's build
+      (docs/release.md).
 
   wg-conf <member>
       print a mesh member's own mesh interface the way the WireGuard app (or

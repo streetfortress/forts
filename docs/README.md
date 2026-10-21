@@ -122,6 +122,10 @@ the host side.
   ([layers](layers.md)) → `fort check` → PR, as at the first provision.
 - **OS updates** are pull-based on the host (`auto-rebuild`): a merge to
   main is the deploy. The CLI is not involved.
+- **A framework bump:** move the tag in `nixos/flake.nix`, `nix flake
+  lock ./nixos`, PR. The gate runs the new pin's `fort check`, so the
+  edits the release needs surface in the PR; the release note lists the
+  rest. nixpkgs moves with it, by design ([release](release.md)).
 
 ## Retirement
 
@@ -232,6 +236,7 @@ other fails `go test`.
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
 - [destroy](destroy.md) — the side-effects half, gated on the merge
+- [release](release.md) — a release is the flake at a tag: the contract, the two kinds of tag, nixpkgs as the channel, templates as bootstrap only, how an estate bumps
 
 ## The estate layout (v1, 2026-10-04)
 

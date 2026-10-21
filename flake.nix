@@ -61,11 +61,17 @@
         # The Go build alone. An output of its own because the wrapper
         # below is a second derivation over it, and because `nix build
         # .#fort-unwrapped` is the compile check without the tools.
-        fort-unwrapped = pkgs.buildGoModule {
-          pname = "fort-unwrapped";
+        fort-unwrapped = let
           version = self.shortRev or self.dirtyShortRev or "dirty";
+        in pkgs.buildGoModule {
+          pname = "fort-unwrapped";
+          inherit version;
           src = ./.;
           subPackages = [ "cmd/fort" "cmd/fort-pulumi" ];
+          # `fort --version` prints the rev it was built from. The tag
+          # is not here to stamp — a flake's `self` has no tag — so the
+          # binary reads the estate's lock for it (docs/release.md).
+          ldflags = [ "-X main.buildRev=${version}" ];
           vendorHash = "sha256-nl0SVyeEfyRK/LmoiGI3fY7nrIk2d9zbfvJE+8kUiDs=";
           # The mirror tests want an estate; the fixtures do not need the
           # network. Build-time tests are what CI runs on the checkout.

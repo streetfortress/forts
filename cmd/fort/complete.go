@@ -130,6 +130,7 @@ var completions = map[string]verbSpec{
 	"check":            {flags: []flagSpec{{name: "all"}}, args: []candidates{manifests}, repeat: true},
 	"ssh-config":       {flags: []flagSpec{writeFlag}},
 	"wg-conf":          {args: []candidates{meshMembers}},
+	"--version":        {}, // a flag in the verb position (forts#135): completes, takes nothing
 	"dismantle":        {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
 	"destroy":          {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
 	// The link verbs (#55): a sub-verb word first, then the fort, then
