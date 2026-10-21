@@ -174,3 +174,7 @@ of decommissioning (#217) and `fort destroy` the side-effects half, gated
 on the dismantle merge (docs/destroy.md). The public-face extraction (github.com/streetfortress/forts)
 splits the generic tool from repo-specific manifests/state — later, and
 a publish step.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
