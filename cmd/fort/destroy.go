@@ -12,6 +12,7 @@ import (
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"github.com/linode/linodego"
+	"gopkg.in/yaml.v3"
 )
 
 // destroy is the second half of decommissioning (#217): everything with
@@ -87,7 +88,9 @@ func destroy(args []string) error {
 	}
 	fmt.Println("  ✓ no manifest on origin/main or in the working tree; tree clean; stack exists")
 
-	if err := cloudEnv(root, provider); err != nil {
+	// The hypervisor comes from the stack, not the manifest: the
+	// dismantle PR deleted the manifest before this verb may run.
+	if err := cloudEnv(root, provider, recordedLibvirtURI(root, host)); err != nil {
 		return err
 	}
 	ctx := context.Background()
@@ -214,6 +217,37 @@ func providerFromState(raw []byte) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no pulumi:providers:* resource in the checkpoint (empty stack?)")
+}
+
+// recordedLibvirtURI reads the hypervisor the provision recorded on the
+// stack (`forts:libvirtUri`, provision.go) out of the stack's config
+// file. `fort destroy` is the one verb with no manifest to read — the
+// dismantle PR deleted it — and the config file is still in the tree
+// here, because this verb deletes it after the destroy. The file is
+// read, not `pulumi config get`: the read happens before cloudEnv, so
+// no passphrase is in the environment yet. "" when the key is absent (a
+// stack provisioned before forts#27), and LIBVIRT_DEFAULT_URI is then
+// the only source — cloudEnv says so.
+func recordedLibvirtURI(root, host string) string {
+	raw, err := os.ReadFile(filepath.Join(root, stackConfigPath(host)))
+	if err != nil {
+		return ""
+	}
+	return libvirtURIFromStackConfig(raw)
+}
+
+// libvirtURIFromStackConfig picks forts:libvirtUri out of a
+// Pulumi.<host>.yaml. A value this verb cannot read is no value: the
+// error belongs to cloudEnv, which names both sources.
+func libvirtURIFromStackConfig(raw []byte) string {
+	var doc struct {
+		Config map[string]any `yaml:"config"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	uri, _ := doc.Config["forts:libvirtUri"].(string)
+	return uri
 }
 
 // pulumiProject is the estate's pulumi project directory, and

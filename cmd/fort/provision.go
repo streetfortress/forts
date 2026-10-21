@@ -78,7 +78,7 @@ func provision(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := cloudEnv(root, entry.Provider); err != nil {
+	if err := cloudEnv(root, entry.Provider, entry.LibvirtURI()); err != nil {
 		return err
 	}
 	if initNeeded {
@@ -88,6 +88,9 @@ func provision(args []string) error {
 		if err := initStack(pulumiDir, host); err != nil {
 			return err
 		}
+	}
+	if err := recordLibvirtURI(pulumiDir, host, entry); err != nil {
+		return err
 	}
 	// The seed for the platform's channel, read only when this apply
 	// creates the host (PR #654 review): a day-2 apply on a live host would
@@ -285,6 +288,26 @@ func hasResourceType(export []byte, typ string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// recordLibvirtURI writes the hypervisor the manifest names onto the
+// stack (`forts:libvirtUri`), as provision records the image and the
+// seed channel: committed provenance, and the one source `fort destroy`
+// has. A destroy runs after the dismantle PR deleted the manifest, so
+// nothing else can say which machine holds the domain. The program never
+// reads this key — the provider takes the URI from the environment
+// (cmd/fort/env.go) — so a stale value costs a destroy nothing until the
+// next provision rewrites it. A fort whose manifest names no uri records
+// none, and the environment stays its only source.
+func recordLibvirtURI(pulumiDir, host string, entry manifest.Host) error {
+	uri := entry.LibvirtURI()
+	if entry.Provider != "libvirt" || uri == "" {
+		return nil
+	}
+	if err := runPulumi(pulumiDir, "config", "set", "libvirtUri", uri, "--stack", host); err != nil {
+		return fmt.Errorf("recording the hypervisor %s on the stack: %w", uri, err)
+	}
+	return nil
 }
 
 // initStack is the one `pulumi stack init` — passphrase secrets provider,

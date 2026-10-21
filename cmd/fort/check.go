@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -103,6 +104,8 @@ func check(args []string) error {
 		// The console failsafe (#524): its two halves live in different
 		// files, and either one alone fails quietly (console.go).
 		findings = append(findings, consoleFindings(root, fort)...)
+		// Which hypervisor a lab fort lives on (forts#27).
+		findings = append(findings, hypervisorFindings(fort, entry)...)
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
 	}
 	if errors > 0 {
@@ -178,6 +181,39 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 		out = append(out, finding{"warning", estate.Path, "no operator_keys, and every host file names its own operator keys — the next fort of this estate carries no operator key, and does not evaluate until a host file or this file names one"})
 	default:
 		out = append(out, finding{"error", estate.Path, "no operator_keys: the framework ships no operator key, so `deployer` holds none and no fort of this estate evaluates (the assertion in modules/ops/deployer.nix). Add one line per operator device, the device as the key's comment: operator_keys = [ \"ssh-ed25519 AAAAC3Nza… macbook-air\" ]"})
+	}
+	return out
+}
+
+// hypervisorFindings (forts#27): which hypervisor a [libvirt] fort
+// lives on. The manifest's [libvirt] uri records it, as [linode] region
+// records a cloud host's region, and the shape of that URI is the
+// manifest's own refusal (internal/manifest.ValidateLibvirtURI). Two
+// things remain for the gate, because neither one is a bad manifest.
+//
+// A fort that names no uri works, as long as every operator exports
+// LIBVIRT_DEFAULT_URI before every apply — and nothing in the repo then
+// says which machine holds the domain. That is a warning, not an error:
+// the variable is the escape hatch, and an estate migrates one fort at
+// a time.
+//
+// A uri that carries keyfile= works on the machine that wrote it alone.
+// The manifest is one file, and a key path is one machine's: /Users on
+// a Mac against /home on a Linux box (sfi/estate-hub, 2026-10-21). Put
+// the identity in ~/.ssh/config, or the whole URI in
+// LIBVIRT_DEFAULT_URI on that machine.
+func hypervisorFindings(fort string, entry manifest.Host) []finding {
+	spec := entry.Libvirt()
+	if spec == nil {
+		return nil
+	}
+	path := manifest.Path(fort)
+	if spec.URI == "" {
+		return []finding{{"warning", path, "[libvirt] names no uri: nothing here says which hypervisor holds this fort, and every apply verb needs LIBVIRT_DEFAULT_URI in the environment. Add uri = \"qemu+ssh://<hypervisor>/system\" (forts#27)"}}
+	}
+	out := []finding{{"ok", path, fmt.Sprintf("[libvirt] uri %s, pool %s", spec.URI, spec.PoolName())}}
+	if u, err := url.Parse(spec.URI); err == nil && u.Query().Get("keyfile") != "" {
+		out = append(out, finding{"warning", path, "[libvirt] uri carries keyfile=: that path belongs to one operator machine, and a second machine with another home directory has no such file. Name the identity in ~/.ssh/config, or export the whole URI as LIBVIRT_DEFAULT_URI there"})
 	}
 	return out
 }

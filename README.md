@@ -98,16 +98,16 @@ prints the usage block, which is the same list.
 Env: `LINODE_TOKEN` (shared with the pulumi provider) and the stack's
 `PULUMI_CONFIG_PASSPHRASE` — taken from the environment when set, else
 sops-decrypted from `provisioning/secrets.yaml` by every cloud command.
-The libvirt backend needs neither: `LIBVIRT_DEFAULT_URI` defaults to
-soundship over ssh with `~/.ssh/id_ed25519` in the URI (the provider
-carries its own ssh client — no `~/.ssh/config`, no agent unless asked),
-and `xsltproc` / `mkisofs` / `qemu-img` ride on the `fort` package's own
-PATH (docs/README.md, "The tool set").
+The libvirt backend needs neither: the fort names its hypervisor in the
+manifest (`[libvirt] uri`, #27) and `LIBVIRT_DEFAULT_URI` overrides it
+per machine, while `xsltproc` / `mkisofs` / `qemu-img` ride on the
+`fort` package's own PATH (docs/README.md, "The tool set").
 
 ## The lab backend (`provider: libvirt`)
 
 The lab VM as resources (what the create-nixos playbook's VM half used to
-define): a qcow2 volume in soundship's `images` pool and a domain
+define): a qcow2 volume in the `[libvirt] pool` of the hypervisor the
+manifest names (`images` when the table names none) and a domain
 with the lab's fixed shape (host-passthrough, virtio disk, br0, serial +
 VNC, autostart). No firewall, no DNS — the LAN bridge and the lab
 dnsmasq are the hypervisor's. Three provider facts shaped it (all found

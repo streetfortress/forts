@@ -7,4 +7,5 @@ mesh_ip = "10.1.0.99"
 [cluster]                    # a flux cluster; datastore unset = sqlite, the default
 
 [libvirt]
+uri = "qemu+ssh://soundship/system"
 ip = "10.0.0.99"

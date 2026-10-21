@@ -95,7 +95,7 @@ func preview(args []string) error {
 	failed := 0
 	results := make([]string, 0, len(targets))
 	for _, name := range targets {
-		if err := cloudEnv(root, hosts[name].Provider); err != nil {
+		if err := cloudEnv(root, hosts[name].Provider, hosts[name].LibvirtURI()); err != nil {
 			return err
 		}
 		err := runPulumi(filepath.Join(root, "provisioning", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)

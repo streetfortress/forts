@@ -336,5 +336,6 @@ func usage() {
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.
-  [libvirt] hosts reach the hypervisor over ssh: LIBVIRT_DEFAULT_URI names it.`)
+  [libvirt] hosts reach the hypervisor their manifest names ([libvirt] uri)
+  over ssh; LIBVIRT_DEFAULT_URI overrides it for one machine.`)
 }

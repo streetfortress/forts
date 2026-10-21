@@ -10,8 +10,9 @@ fort adopt    <host> [--yes]
 image upload and seed handled for you, and nothing hidden: the stock CLI runs
 with inherited stdio, you read the preview and type `yes`. The program
 (`forts/pulumi`) realises the [manifest](manifest.md) through a per-provider
-backend — `linode` for cloud forts, `libvirt` for the lab (soundship's
-`images` pool) — and the stack is named after the host, so `pulumi
+backend — `linode` for cloud forts, `libvirt` for the lab (the
+hypervisor and the pool the manifest names, #27) — and the stack is
+named after the host, so `pulumi
 <anything> -s <host>` from `provisioning/pulumi` under the same environment is
 always a first-class escape hatch. A `[baremetal]` host has no backend
 and is refused here: its image is written by hand
@@ -124,8 +125,8 @@ NoCloud datasource defines — an ISO 9660 image labelled `cidata` with a
 `user-data` and a `meta-data` file — borrowed for its reader, because no
 cloud-init runs on a fort. When a libvirt apply of `fort provision`
 creates the domain, the program (`cmd/fort-pulumi/libvirt.go`) declares the
-provider's cloud-init disk resource: `<host>-seed.iso` in soundship's
-`images` pool, `user_data` the seed text itself (no base64 on this
+provider's cloud-init disk resource: `<host>-seed.iso` in the host's
+`[libvirt] pool`, `user_data` the seed text itself (no base64 on this
 channel; the program decodes the environment value), `meta_data` the one
 required line, `instance-id: <host>`. The domain attaches it through its
 `cloudinit` input, which the provider renders as a CD-ROM — `hdd` on the
@@ -367,8 +368,9 @@ boots it, a firewall (default-deny in, 80/443 + wireguard), the A record
 and a wildcard `*.<dns.name>` in the zone. `fort destroy` powers the
 instance off first: Linode refuses disk deletion on a running instance.
 
-**libvirt** (`[libvirt]` `ip`, `[shape]` `vcpus` / `memory` / `disk`): a
-qcow2 volume in soundship's `images` pool streamed from the bootstrap
+**libvirt** (`[libvirt]` `uri` / `ip` / `pool`, `[shape]` `vcpus` /
+`memory` / `disk`): a
+qcow2 volume in that pool on that hypervisor, streamed from the bootstrap
 image through the libvirt API (no root hop); for a host provisioned with
 the channel, the seed volume `<host>-seed.iso` in the same pool ([the
 seed](#the-seed-the-host-key-arrives-through-the-platforms-channel)); and
@@ -427,9 +429,14 @@ Every verb here forces `PULUMI_BACKEND_URL` to this checkout's
 nixpkgs bundle's ambient providers mis-shape outputs against the pinned
 SDK). `PULUMI_CONFIG_PASSPHRASE` and `LINODE_TOKEN` come from the
 environment, else sops-decrypted from `provisioning/secrets.yaml`.
-`LIBVIRT_DEFAULT_URI` defaults to soundship over ssh with
-`~/.ssh/id_ed25519` in the URI — the provider carries its own ssh client
-and reads neither `~/.ssh/config` nor an agent.
+The hypervisor comes from the fort: `[libvirt] uri` in its manifest
+(#27), which the CLI hands to the provider as it stands.
+`LIBVIRT_DEFAULT_URI` in the environment wins over it — the escape
+hatch, and the one place a URI with a credential path in it belongs.
+`fort provision` and `fort adopt` also record the URI on the stack as
+`forts:libvirtUri`, because `fort destroy` runs after the dismantle PR
+deletes the manifest and nothing else can say which machine holds the
+domain.
 
 `--yes` passes pulumi's `--yes --non-interactive` through: the apply
 runs unprompted (an agent, a script, CI). Without a TTY and without

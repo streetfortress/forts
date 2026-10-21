@@ -36,7 +36,9 @@ memory = 4
 disk = "80G"
 
 [libvirt]
+uri = "qemu+ssh://soundship/system"   # the hypervisor that raises it
 ip = "10.0.0.40"             # the static LAN address baked into the image
+# pool = "images"            # the storage pool; the default when unset
 ```
 
 ```toml
@@ -64,6 +66,7 @@ memory = 8
 disk = "80G"
 
 [libvirt]
+uri = "qemu+ssh://soundship/system"
 ip = "10.0.0.61"
 ```
 
@@ -130,6 +133,22 @@ realizes (`Realized()` is false): `provision` refuses it by name,
 identities without a stack. `mac` is the one field with no VM analogue
 — the NIC's burned-in address, matched instead of a name that a dock
 or USB port rewrites.
+
+**`[libvirt] uri` is the hypervisor** (#27). Which machine raises a lab
+fort is the estate's fact, as much as `[linode] region` is a cloud
+host's, and the environment variable it replaces recorded it nowhere:
+a second estate on a second hypervisor had to export
+`LIBVIRT_DEFAULT_URI` before every apply. The CLI gives the URI to the
+provider as it stands and appends nothing to it, so the table names the
+machine and no credential: one manifest is read by every operator
+machine, and a key path is one machine's (`/Users` against `/home`).
+Each machine's `~/.ssh/config` supplies the user, the address and the
+identity — the same split as the estate's `operator_keys`.
+`LIBVIRT_DEFAULT_URI` wins where an operator sets it, which is where a
+URI with a credential in it belongs. The key is optional: a fort that
+names none needs that variable in the environment of every apply, and
+`fort check` warns. `pool` is the storage pool of the host's volumes,
+`images` when unset.
 
 **Strict.** An unknown key anywhere — `productoin`, `ansible_host`, a
 second provider table, none at all — is an error naming the file. A typo'd

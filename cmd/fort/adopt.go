@@ -51,14 +51,18 @@ func adopt(args []string) error {
 	if hasStack(pulumiDir, host) {
 		return fmt.Errorf("host %q already has a stack — nothing to adopt", host)
 	}
-	if err := cloudEnv(root, entry.Provider); err != nil {
+	if err := cloudEnv(root, entry.Provider, entry.LibvirtURI()); err != nil {
 		return err
 	}
 	runVirsh, err := tools.Runner("virsh")
 	if err != nil {
 		return err
 	}
+	// cloudEnv resolved the hypervisor (the manifest's [libvirt] uri, or
+	// the environment where it wins): virsh dials the same one the
+	// provider will.
 	uri := os.Getenv("LIBVIRT_DEFAULT_URI")
+	pool := entry.Libvirt().PoolName()
 	virsh := func(args ...string) (string, error) {
 		out, err := runVirsh(append([]string{"-c", uri}, args...)...).Output()
 		return strings.TrimSpace(string(out)), err
@@ -66,16 +70,16 @@ func adopt(args []string) error {
 
 	// The playbook copied images into the pool's directory behind
 	// libvirt's back; a rescan makes the volume addressable.
-	if _, err := virsh("pool-refresh", libvirtPoolName); err != nil {
-		return fmt.Errorf("pool-refresh %s: %w", libvirtPoolName, err)
+	if _, err := virsh("pool-refresh", pool); err != nil {
+		return fmt.Errorf("pool-refresh %s: %w", pool, err)
 	}
 	uuid, err := virsh("domuuid", host)
 	if err != nil || uuid == "" {
 		return fmt.Errorf("no domain %q on the hypervisor (virsh domuuid): %v", host, err)
 	}
-	key, err := virsh("vol-key", "--pool", libvirtPoolName, host+".qcow2")
+	key, err := virsh("vol-key", "--pool", pool, host+".qcow2")
 	if err != nil || key == "" {
-		return fmt.Errorf("no volume %s.qcow2 in pool %s (virsh vol-key): %v", host, libvirtPoolName, err)
+		return fmt.Errorf("no volume %s.qcow2 in pool %s (virsh vol-key): %v", host, pool, err)
 	}
 	fmt.Printf("%s   domain %s, volume %s\n", host, uuid, key)
 
@@ -83,6 +87,9 @@ func adopt(args []string) error {
 		return err
 	}
 	if err := runPulumi(pulumiDir, "config", "set", "imageId", "adopted-"+time.Now().UTC().Format("2006-01-02"), "--stack", host); err != nil {
+		return err
+	}
+	if err := recordLibvirtURI(pulumiDir, host, entry); err != nil {
 		return err
 	}
 	const protect = "--protect=true" // every fort

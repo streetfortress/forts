@@ -9,4 +9,5 @@ memory = 8
 disk = "80G"
 
 [libvirt]
+uri = "qemu+ssh://hypervisor.invalid/system"   # the machine that raises it
 ip = "10.0.0.96"

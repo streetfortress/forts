@@ -17,10 +17,11 @@ import (
 // provisioning/secrets.yaml, the same home as the forge's provisioning
 // token: repo-driven, no per-machine env setup, and the values are
 // never printed.
-// libvirtPoolName mirrors pulumi/libvirt.go (one lab, one pool).
-const libvirtPoolName = "images"
-
-func cloudEnv(root string, provider string) error {
+//
+// libvirtURI is the hypervisor the fort records — its manifest's
+// [libvirt] uri, or, for a destroy, the value the stack recorded at the
+// provision (the manifest is gone by then). "" for every other provider.
+func cloudEnv(root string, provider string, libvirtURI string) error {
 	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
 	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
 	// against v4-generated SDK code, which mis-shapes outputs (specs as
@@ -46,15 +47,17 @@ func cloudEnv(root string, provider string) error {
 	// in forts/README.md becomes unnecessary for fort commands.
 	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "provisioning", "pulumi", "state"))
 
-	// The lab hypervisor, reached over ssh from wherever fort runs. The
-	// provider carries its own ssh client (no ~/.ssh/config, no agent
-	// unless asked): the key file goes in the URI. The operator names it
-	// (forts#139); the manifest's [libvirt] table is where it moves to
-	// (forts#27, a `uri` key).
+	// The hypervisor, reached over ssh from wherever fort runs. The fort
+	// names it in its manifest ([libvirt] uri, forts#27) and the CLI
+	// passes that value to the provider as it stands — the manifest
+	// records the machine, never a credential. The environment still
+	// wins, as the escape hatch for a machine whose URI must carry one.
 	if provider == "libvirt" {
-		if os.Getenv("LIBVIRT_DEFAULT_URI") == "" {
-			return fmt.Errorf("LIBVIRT_DEFAULT_URI is not set — the hypervisor a [libvirt] fort lives on, as the provider dials it: qemu+ssh://<user>@<host>/system?sshauth=privkey&keyfile=<path to the key> (forts#27 moves it into the manifest)")
+		uri, err := resolveLibvirtURI(libvirtURIOverride, libvirtURI)
+		if err != nil {
+			return err
 		}
+		os.Setenv("LIBVIRT_DEFAULT_URI", uri)
 		// The provider applies the domain's XSLT (the qcow2 driver fix,
 		// pulumi/libvirt.go) by exec'ing xsltproc; the plugin inherits
 		// our PATH, so the tool has to be resolved before pulumi starts.
@@ -79,6 +82,32 @@ func cloudEnv(root string, provider string) error {
 		os.Setenv("PULUMI_CONFIG_PASSPHRASE", v)
 	}
 	return nil
+}
+
+// libvirtURIOverride is LIBVIRT_DEFAULT_URI as the operator set it,
+// read once at startup. cloudEnv WRITES that variable — it is how the
+// pulumi child and its provider learn the hypervisor — and `fort
+// preview --all` calls cloudEnv once per fort: a later fort must read
+// its own manifest, never the value an earlier fort left in the
+// environment. Two forts on two hypervisors is the case forts#27 exists
+// for.
+var libvirtURIOverride = os.Getenv("LIBVIRT_DEFAULT_URI")
+
+// resolveLibvirtURI picks the hypervisor the provider dials. The
+// operator's LIBVIRT_DEFAULT_URI wins: it is the one place a URI with a
+// credential path in it belongs, and it is how an operator reaches a
+// hypervisor the manifest does not name yet. Otherwise the recorded URI
+// stands — the fort's [libvirt] uri, or the stack's for a destroy.
+// Neither one is a refusal the verb can work around: nothing says which
+// machine to dial.
+func resolveLibvirtURI(override, recorded string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	if recorded == "" {
+		return "", fmt.Errorf("no hypervisor for this fort: its [libvirt] table names no uri, and LIBVIRT_DEFAULT_URI is not set. Add uri = \"qemu+ssh://<hypervisor>/system\" to the manifest (forts#27), or export LIBVIRT_DEFAULT_URI for this run")
+	}
+	return recorded, nil
 }
 
 func secret(root, key string) (string, error) {

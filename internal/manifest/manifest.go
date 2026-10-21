@@ -202,6 +202,17 @@ func (h Host) Linode() *LinodeSpec { s, _ := h.Spec.(*LinodeSpec); return s }
 // Libvirt is the decoded [libvirt] table, nil for any other provider.
 func (h Host) Libvirt() *LibvirtSpec { s, _ := h.Spec.(*LibvirtSpec); return s }
 
+// LibvirtURI is the hypervisor a [libvirt] fort lives on ([libvirt]
+// uri, forts#27) — "" for any other provider, and for a table that
+// names none. The apply verbs hand it to the libvirt provider;
+// LIBVIRT_DEFAULT_URI in the environment wins over it (cmd/fort/env.go).
+func (h Host) LibvirtURI() string {
+	if s := h.Libvirt(); s != nil {
+		return s.URI
+	}
+	return ""
+}
+
 // Baremetal is the decoded [baremetal] table, nil for any other provider.
 func (h Host) Baremetal() *BaremetalSpec { s, _ := h.Spec.(*BaremetalSpec); return s }
 

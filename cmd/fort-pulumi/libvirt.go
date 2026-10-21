@@ -11,9 +11,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
-// Libvirt realizes a host on the lab hypervisor (soundship) — the lab VM
-// the create-nixos playbook used to define, as
-// resources: a qcow2 volume in the `images` pool streamed from the
+// Libvirt realizes a host on the hypervisor its manifest names
+// ([libvirt] uri, forts#27; the CLI hands it to the provider) — the lab
+// VM the create-nixos playbook used to define, as
+// resources: a qcow2 volume in the [libvirt] pool streamed from the
 // bootstrap image through the libvirt API (no root hop — libvirtd writes
 // it), and a domain from that volume with the lab's fixed shape
 // (host-passthrough CPU, virtio disk, br0 bridge, serial + VNC console,
@@ -57,12 +58,13 @@ import (
 // `source` (the volume takes the image's virtual size), so `fort
 // provision` grows the qcow2 to disk_size with qemu-img BEFORE the
 // upload — the playbook's order — and the qcow's autoResize grows the
-// root fs into it on first boot. The [libvirt] table is the static LAN
-// address (baked into the image; exported for `fort provision`).
+// root fs into it on first boot. The [libvirt] table is the hypervisor
+// (uri), the storage pool (pool, DefaultLibvirtPool when unset) and the
+// static LAN address (ip — baked into the image; exported for `fort
+// provision`).
 type Libvirt struct{}
 
 const (
-	libvirtPool   = "images"
 	libvirtBridge = "br0"
 	// seedChannel is the value of the stack's `forts:seed` config that
 	// says the host was provisioned with the cidata volume (#657). `fort
@@ -78,6 +80,9 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 	}
 	shape := host.Shape.WithLabDefaults()
 	vcpus, memory := shape.Vcpus, shape.Memory
+	// The storage pool both volumes live in: the manifest's, which
+	// defaults to the pool every lab hypervisor carries.
+	pool := spec.PoolName()
 
 	// The bootstrap qcow2, set by `fort provision --image` — read at
 	// creation only (ignoreChanges below).
@@ -88,7 +93,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 
 	vol, err := libvirt.NewVolume(ctx, name+"-disk", &libvirt.VolumeArgs{
 		Name:   pulumi.String(name + ".qcow2"),
-		Pool:   pulumi.String(libvirtPool),
+		Pool:   pulumi.String(pool),
 		Source: pulumi.String(image),
 		Format: pulumi.String("qcow2"),
 	}, append(opts, pulumi.IgnoreChanges([]string{"source"}))...)
@@ -115,7 +120,7 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		}
 		iso, err := libvirt.NewCloudInitDisk(ctx, name+"-seed", &libvirt.CloudInitDiskArgs{
 			Name:     pulumi.String(name + "-seed.iso"),
-			Pool:     pulumi.String(libvirtPool),
+			Pool:     pulumi.String(pool),
 			MetaData: pulumi.String("instance-id: " + name + "\n"),
 			UserData: userData,
 		}, append(opts,
