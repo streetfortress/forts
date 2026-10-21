@@ -5,7 +5,7 @@
 # The forge is the one exception to <host>.<zone>: its name is an
 # identity, not a location — it is in every git remote, every OCI
 # reference, every flux source and the registry certificate, and one
-# gitea is on several meshes. So the forge keeps its one name on every
+# forge is on several meshes. So the forge keeps its one name on every
 # mesh, and this module pins that name to the forge's address on THIS
 # mesh. The address is an estate fact, derived, not written here
 # (forts#26): estate.toml's `[hubs.forge]` names the forge HOST
@@ -16,8 +16,10 @@
 # moves, or an estate on a second mesh, changes one line in one file and
 # every fort rebuilds. An estate that names no forge host gets no pin:
 # `giteaAddress` is null, nothing is rendered, and `fort check` says so.
-# The forge's NAME is still the constant below; forts#1 makes it an
-# estate fact too (`[hubs.forge] name`).
+# The forge's NAME is an estate fact too: `[hubs.forge] name`, read
+# below. An estate whose forge is a hosted one with a public name
+# (github.com, forts#1) declares no [hubs.forge] and gets no pin: the
+# name resolves by public DNS, as every other public name does.
 #
 # The pin is in /etc/hosts and in the cluster DNS, as a hosts line of
 # the .lofi block: not a record of the zone file, because the .lofi

@@ -87,6 +87,7 @@ func check(args []string) error {
 		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, knownHostsFindings(est)...)
+		shared.findings = append(shared.findings, sourceFindings(est)...)
 		shared.findings = append(shared.findings, linkFindings(root, est, parsed, sopsCLI{root: root})...)
 		shared.findings = append(shared.findings, layerFindings(root)...)
 	}
@@ -190,6 +191,29 @@ func knownHostsFindings(est estate.Estate) []finding {
 		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
 	}
 	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.Source.KnownHosts)[0] + ")"}}
+}
+
+// sourceFindings (forts#1): the forge's kind — declared in [source]
+// forge, else derived from the host of repo — and so which API fort
+// mint and fort destroy speak and which token they read. An estate with
+// no [hubs.forge] on a forge the core knows only as a hosted one
+// (github) is tier one: the gate says where the deploy key goes, so an
+// operator reads the token's name before the first mint asks for it.
+func sourceFindings(est estate.Estate) []finding {
+	host, _, _, err := est.Forge()
+	if err != nil {
+		return []finding{{"error", estate.Path, err.Error()}}
+	}
+	kind := est.ForgeKind()
+	how := "derived from the host of repo"
+	if est.Source.Forge != "" {
+		how = "[source] forge"
+	}
+	api := "https://" + host + "/api/v1"
+	if kind == estate.ForgeGitHub {
+		api = "https://api.github.com"
+	}
+	return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s): fort mint registers the deploy key through %s with %s in provisioning/secrets.yaml, and fort destroy revokes it", kind, how, api, forgeTokenKey(kind))}}
 }
 
 type checkOpts struct {

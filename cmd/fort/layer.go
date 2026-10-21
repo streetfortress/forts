@@ -67,7 +67,7 @@ type layerRef struct {
 func parseLayerRef(s string) (layerRef, error) {
 	url, role, ok := strings.Cut(s, "#")
 	if !ok || url == "" || role == "" {
-		return layerRef{}, fmt.Errorf("want <flake url>#<role> (git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring), got %q", s)
+		return layerRef{}, fmt.Errorf("want <flake url>#<role> (git+ssh://git@forge.example:22/acme/fort-layers#monitoring), got %q", s)
 	}
 	if !nameOK(role) {
 		return layerRef{}, fmt.Errorf("role %q — want lowercase labels and dashes: the binary is fort-%s", role, role)

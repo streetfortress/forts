@@ -127,7 +127,7 @@ func usage() {
   mint <host> [--write]
       mint the host's identity: its ssh host key (which doubles as its
       age identity), wireguard key + mesh peer, k3s token, the cluster age key, the flux deploy key (registered
-      read-only on gitea — the one call outside the tree) and the sops
+      read-only on the forge — the one call outside the tree) and the sops
       canary; the console password where the host file enables the door
       (every scaffolded host does, sfi/forts#24: the hash beside the
       keys, the passphrase in provisioning/console-passwords.yaml); the
@@ -307,7 +307,7 @@ func usage() {
       off (linode), pulumi refresh, state unprotect --all (only ever
       right before the destroy), destroy, stack rm; clears the file
       backend's residue (.bak, history, backups), revokes the flux-<host>
-      deploy key on gitea, stages the state removal for its own PR. A
+      deploy key on the forge, stages the state removal for its own PR. A
       failure mid-way leaves the unprotected state in the tree and says
       "rerun". Provider comes from the checkpoint, not the manifest.
       --no-stack is for a [baremetal] host, which has no stack by design:

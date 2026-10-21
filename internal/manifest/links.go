@@ -111,7 +111,7 @@ func (h Host) ValidateLinks() error {
 		l := h.Links[name]
 		at := fmt.Sprintf("[links.%s]", name)
 		if !estate.ValidRepoURL(l.Estate) {
-			return fmt.Errorf("%s estate %q — want the other estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", at, l.Estate)
+			return fmt.Errorf("%s estate %q — want the other estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>, or https://)", at, l.Estate)
 		}
 		if want := estate.ShortName(l.Estate); want != name {
 			return fmt.Errorf("%s names an estate whose last label is %s — a link is named after the estate it reaches (sfi.links.%s, modules/links.nix)", at, want, want)

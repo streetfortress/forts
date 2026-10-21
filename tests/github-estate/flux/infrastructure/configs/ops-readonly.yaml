@@ -1,0 +1,113 @@
+# Read-only ops identity (#90): the everyday kubeconfig is view-shaped by
+# construction — anything write-shaped goes through git, and cluster-admin
+# is break-glass (README Key decisions).
+#
+# Scope: the built-in `view` ClusterRole carries pods/log and the CRDs
+# whose charts ship aggregate-to-view roles — flux, flux-operator,
+# cert-manager. The ones that DON'T are granted read explicitly below
+# (verified with `kubectl auth can-i`, 2026-09-13):
+# Gateway API (vendored CRDs, no roles at all), traefik Middlewares, and
+# the prometheus-operator kinds. A layer's CRDs are the layer's rule. What it deliberately lacks: Secrets (helm
+# release state is inspected via HelmRelease status / `flux` CLI, NOT a
+# secret carve-out — "the RO config cannot read any Secret" stays an
+# absolute), and cluster-scoped objects, added narrowly below (nodes,
+# PVs, CRD listing, kubectl-top metrics).
+#
+# The long-lived token Secret is populated by kubernetes from the
+# annotation; modules/ops/ops-kubeconfig.nix renders it into
+# /var/lib/sfi/kubeconfig-ro on each node for local use and
+# `just fetch-kubeconfig`.
+#
+# THE HOST APPLIES THIS FILE TOO (#185). ops-kubeconfig.nix hands it to
+# k3s's own add-on directory, so k3s applies it at start — before flux
+# exists. The observe rung of the ops ladder therefore exists from first
+# boot, which is what the drill fort's flux deadlock needed and did not
+# have. Every object carries `kustomize.toolkit.fluxcd.io/prune: disabled`
+# so the fleet can stop listing the file without kustomize-controller
+# garbage-collecting the host's copy (mesh-dns.nix's coredns override is
+# the precedent). The fleet still lists it until every fort has
+# reconciled that annotation.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ops-ro
+  namespace: kube-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ops-ro-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: ops-ro
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-ro-cluster-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+rules:
+  # Cluster-scoped reads the namespaced-shaped `view` role does not carry.
+  - apiGroups: [""]
+    resources: [nodes, namespaces, persistentvolumes]
+    verbs: [get, list, watch]
+  # ClusterIssuers are cluster-scoped and outside cert-manager's
+  # aggregate-to-view role — first real-world RO gap (2026-09-11).
+  - apiGroups: [cert-manager.io]
+    resources: [clusterissuers]
+    verbs: [get, list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+  # kubectl top
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+  # CRDs without an aggregate-to-view role (read-only, no Secrets).
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, httproutes, grpcroutes, referencegrants]
+    verbs: [get, list, watch]
+  - apiGroups: [traefik.io]
+    resources: [middlewares]
+    verbs: [get, list, watch]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [podmonitors, servicemonitors, probes, scrapeconfigs, prometheusrules, prometheuses, alertmanagers, alertmanagerconfigs]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-ro-view
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: ops-ro
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-ro-cluster-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-ro-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: ops-ro
+    namespace: kube-system

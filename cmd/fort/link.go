@@ -120,7 +120,7 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 		return nil, err
 	}
 	if !estate.ValidRepoURL(repo) {
-		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", repo)
+		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>, or https://)", repo)
 	}
 	if estate.SameRepo(repo, est.Source.Repo) {
 		return nil, fmt.Errorf("%s is this estate — a fort is on its own mesh by its manifest's mesh_ip; a link reaches ANOTHER estate's mesh", estate.Ref(repo))

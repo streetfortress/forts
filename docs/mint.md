@@ -8,7 +8,7 @@ fort mint <host> [--write]
 systems will recognise it by, the sops rules that let it read its own
 secrets, the mesh peer entry, the console password where the host file
 enables the door, and — for a flux cluster — the cluster's
-age key, the deploy key gitea trusts, and the canary that proves the
+age key, the deploy key the forge trusts, and the canary that proves the
 whole chain works. It runs after [`scaffold --write`](scaffold.md) and
 before a layer's verbs over the fort's tree; [`dismantle`](dismantle.md) is its exact inverse.
 
@@ -52,7 +52,7 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
-| · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `[source] repo`) | always; registered under `--write` only |
+| · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | always; registered under `--write` only |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
@@ -73,9 +73,12 @@ from the registry mint says so and names `console-password <host>
 hold. A host whose `default.nix` does not enable the module gets no
 console half at all.
 
-**The call outside the tree** is the gitea deploy key, registered only
-under `--write`, reported without printing a value, and revoked by `fort
-destroy`. A layer's credentials (a backup store's identities) are the
+**The call outside the tree** is the deploy key on the forge — gitea or
+GitHub, the kind the host of `repo` derives and `[source] forge`
+overrides (forts#1) — registered only under `--write`, reported without
+printing a value, and revoked by `fort destroy`. The two forges answer
+the same three calls (list, register, revoke) at different roots with
+different tokens; `cmd/fort/forge.go` is both. A layer's credentials (a backup store's identities) are the
 layer's mint to make and its dismantle to withdraw ([layers](layers.md)).
 
 **The shared admin set is read from the configs, not hardcoded**: the
@@ -92,7 +95,7 @@ identity and nothing cluster-shaped: `wireguard-private-key`,
 `ssh-host-key` + `.pub` and `flux-git-deploy-key` (auto-rebuild's pull
 credential — every fort's) into the secrets file, the console password
 (the plain shape enables the door too), the `nixos/.sops.yaml`
-rule, the peer, the deploy key on gitea. No `k3s-token`, no
+rule, the peer, the deploy key on the forge. No `k3s-token`, no
 `flux-sops-age-key`, no fleet rule or infra recipient (nothing to re-key),
 no canary. The gate wants only `nixos/hosts/<host>/default.nix`.
 
@@ -147,9 +150,14 @@ check after importing a key by hand.
 
 ## Needs
 
-The admin age key (to encrypt and to read the existing file), and for a
-flux cluster the `gitea-token` in `provisioning/secrets.yaml` (every
-fort, for the deploy key). `jq` (the peers file is edited through it
+The admin age key (to encrypt and to read the existing file), and the
+forge's token in `provisioning/secrets.yaml`, named by the forge's kind:
+`gitea-token` or `github-token` (every fort, for the deploy key; `fort
+check --all` names the one this estate reads). On GitHub it is a token
+that administers the repository — a fine-grained token with
+*Administration: read and write* on that repository, or a classic token
+with the `repo` scope — because deploy keys hang off the repository's
+settings. `jq` (the peers file is edited through it
 so the formatting and key order stay byte-for-byte, as dismantle removes
 it). `mkpasswd` for the console password hash, when the host enables the
 door and the file has no hash — one of the CLI's declared tools, as

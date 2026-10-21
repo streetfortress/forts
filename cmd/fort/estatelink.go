@@ -101,7 +101,7 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 		return nil, err
 	}
 	if !estate.ValidRepoURL(repo) {
-		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", repo)
+		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>, or https://)", repo)
 	}
 	if estate.SameRepo(repo, est.Source.Repo) {
 		return nil, fmt.Errorf("%s is this estate — its own forts are peers by fort mint; a link comes from ANOTHER estate's host", estate.Ref(repo))

@@ -1,0 +1,4 @@
+# SSH host keys of the forts — rendered by fort mint (the key it minted or
+# restored) and fort ssh-config (the key sops-decrypted from
+# nixos/secrets/<host>.yaml); fort dismantle removes a line. Do not edit.
+# Keyed by fort name (ssh_config sets HostKeyAlias) and mesh address.

@@ -56,7 +56,7 @@ operator_keys = [            # the devices that hold `deployer` on every fort of
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
 known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
 # forge = "gitea"            # the forge's kind; absent, the host of repo derives it (github.com: github)
-# auth = "ssh"               # the clone route; absent, the scheme of repo derives it. ssh is the one route today (forts#1)
+# auth = "ssh"               # the clone route; absent, the scheme of repo derives it. ssh is the one route today
 
 [mesh]                       # the estate's WireGuard mesh (mesh.md)
 cidr = "10.2.0.0/24"   # the subnet; fort check keeps every mesh address in it, and its prefix is what the interfaces render
@@ -90,6 +90,15 @@ renders for. Any other role is a name a layer or the estate serves: the
 core writes the table and nothing else, and the layer's init renders
 what the role asks of each fort ([layers](layers.md)). The
 `[[serves.<role>]]` tables of a hub's estate are a hand edit after init.
+
+The forge's kind derives from the host of `repo` — github.com is
+`github`, every other host is `gitea` — and `forge` overrides it
+(forts#1). The kind picks the deploy-key API `fort mint` and `fort
+destroy` speak and the token they read from `provisioning/secrets.yaml`
+(`gitea-token`, `github-token`); `fort check --all` names both. A hosted
+forge with a public name is the whole declaration: no `[hubs.forge]`, no
+mesh pin, no lab CA — `tests/github-estate` is that estate. A
+fort-hosted forge is `[hubs.forge]` ([hub.md](hub.md)).
 
 `--forts` is required: the framework's flake URL the estate pins, at a
 release tag. `--known-hosts` is the forge's SSH host key as one

@@ -1,0 +1,14 @@
+# Fixture: the edge Alertmanager's webhook, the one file of the shared
+# layer an estate provides by hand, in the shape sops leaves. Nothing
+# here decrypts.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: alertmanager-edge-config
+    namespace: monitoring
+type: Opaque
+stringData:
+    alertmanager.yaml: ENC[AES256_GCM,data:fixture,iv:fixture,tag:fixture,type:str]
+sops:
+    age: []
+    version: 3.9.0

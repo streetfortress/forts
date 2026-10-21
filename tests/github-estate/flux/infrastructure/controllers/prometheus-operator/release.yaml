@@ -1,0 +1,83 @@
+# Prometheus operator only — kube-prometheus-stack with every subchart and
+# bundled component switched off (#53). The Prometheus/Alertmanager CRs it
+# manages live in ../../configs/monitoring (edge stack, every cluster) and
+# a monitoring hub (the central stack, a layer's). CRDs come from
+# ../prometheus-operator-crds so this release never owns them.
+# Chart defaults: https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: prometheus-operator
+  namespace: monitoring
+spec:
+  interval: 1h
+  dependsOn:
+    - name: prometheus-operator-crds
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 88.6.5 # operator v0.93.1
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  values:
+    fullnameOverride: prometheus-operator
+
+    crds:
+      enabled: false
+    defaultRules:
+      create: false
+
+    # Bundled components off — the edge Prometheus/Alertmanager are our own
+    # CRs, node_exporter stays a NixOS host service, and kube-state-metrics
+    # already ships from ../kube-state-metrics.
+    alertmanager:
+      enabled: false
+    grafana:
+      enabled: false
+    prometheus:
+      enabled: false
+    thanosRuler:
+      enabled: false
+    nodeExporter:
+      enabled: false
+    kubeStateMetrics:
+      enabled: false
+
+    # Control-plane scrape targets off: single-node k3s embeds these in the
+    # k3s process; kubelet/cadvisor get a hand-written ServiceMonitor in
+    # configs/monitoring instead of the chart-templated one.
+    kubeApiServer:
+      enabled: false
+    kubelet:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    coreDns:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+
+    prometheusOperator:
+      # No cert-generation jobs / validating webhooks — one less moving part
+      # per cluster; the operator still rejects malformed rules at reload.
+      admissionWebhooks:
+        enabled: false
+      tls:
+        enabled: false
+      # The operator maintains a kube-system/kubelet Service tracking node
+      # endpoints; the kubelet ServiceMonitor in configs/monitoring selects it.
+      kubeletService:
+        enabled: true
+        name: kubelet
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi

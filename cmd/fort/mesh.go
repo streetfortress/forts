@@ -438,7 +438,7 @@ func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, 
 	}
 	// A linked host of another estate: dialed at the endpoint and port
 	// the link gave it, kept alive like a peer. Every member dials it,
-	// a roaming client too — it is the gitea or the hub this mesh reaches.
+	// a roaming client too — it is the forge or the hub this mesh reaches.
 	for _, name := range sortedNames(m.Remotes) {
 		r := m.Remotes[name]
 		fmt.Fprintf(&sb, "\n[Peer]\n# %s (linked from another estate)\n", name)

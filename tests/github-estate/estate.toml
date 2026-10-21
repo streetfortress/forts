@@ -1,0 +1,21 @@
+# The github.com fixture estate (tests/github-estate/README.md): one
+# cloud cluster fort, the repo on github.com, no hub, no lab CA. The
+# forge is the hosted kind — tier one of forts#1 — so nothing here names
+# a forge: no [hubs.forge], no mesh pin, no .lofi name. The deploy key
+# goes through api.github.com with `github-token`.
+name = "github-estate"
+
+# The operators (forts#81): a throwaway key, like everything else here.
+operator_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL fixture-operator",
+]
+
+[source]
+repo = "ssh://git@github.com/acme/github-estate"
+# github.com's own ed25519 host key (ssh-keyscan github.com): the one
+# real value in this fixture, because a fort's clone pins it.
+known_hosts = "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+[mesh]
+cidr = "10.4.0.0/24"
+interface = "wg-github"

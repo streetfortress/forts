@@ -35,7 +35,7 @@ const Path = "estate.toml"
 // default, like a host manifest's. The loose keys (name, operator_keys)
 // come before the first table — TOML's rule, which the template keeps.
 type Estate struct {
-	// Name is the estate's name: the gitea repo's, by convention.
+	// Name is the estate's name: the repo's, by convention.
 	Name string `toml:"name"`
 	// Source is the [source] table: where the estate's tree comes from
 	// and how a fort reaches it (forts#161).
@@ -85,17 +85,18 @@ type Estate struct {
 // everything about where the tree comes from (forts#161, forts#1).
 type Source struct {
 	// Repo is the estate's git URL as flux and auto-rebuild reach it
-	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
+	// (ssh://git@<forge>:<port>/<owner>/<name>, with or without .git).
 	// Both clone it with the deploy key fort mint registers.
 	Repo string `toml:"repo"`
 	// Forge is the forge's kind: "gitea" or "github". Optional — the
 	// host of Repo derives it (github.com is github, every other host
-	// is gitea). fort mint speaks the kind's deploy-key API; the github
-	// client comes with forts#1.
+	// is gitea). fort mint and fort destroy speak the kind's deploy-key
+	// API (cmd/fort/forge.go, forts#1), with the kind's token
+	// (`<kind>-token` in provisioning/secrets.yaml).
 	Forge string `toml:"forge"`
 	// Auth is the clone route: "ssh" (the deploy key fort mint
 	// registers), "none" (an anonymous https clone of a public repo;
-	// comes with forts#1) or "token" (an https token; no route yet).
+	// no route yet) or "token" (an https token; no route yet).
 	// Optional — the scheme of Repo derives it: ssh:// is "ssh".
 	Auth string `toml:"auth"`
 	// KnownHosts is the forge's SSH host key as a known_hosts line
@@ -326,14 +327,14 @@ func (e Estate) Validate() error {
 
 // validateSource is the [source] matrix (forts#161): an ssh:// repo on
 // the ssh route with the forge's host key; an https:// repo refused
-// until the anonymous route exists (forts#1, absorbs #159); a token
-// named as a route that does not exist; a forge kind the core knows.
+// until an anonymous route exists (#159); a token named as a route
+// that does not exist; a forge kind the core knows.
 func (e Estate) validateSource() error {
 	repo := e.Source.Repo
 	switch {
 	case strings.HasPrefix(repo, "ssh://"):
 	case strings.HasPrefix(repo, "https://"):
-		return fmt.Errorf("[source] repo %q — the clone route is SSH only today: auto-rebuild and flux clone with the deploy key fort mint registers. The anonymous route (auth = %q) comes with forts#1", repo, AuthNone)
+		return fmt.Errorf("[source] repo %q — the clone route is SSH only today: auto-rebuild and flux clone with the deploy key fort mint registers. No anonymous route (auth = %q) exists yet", repo, AuthNone)
 	default:
 		return fmt.Errorf("[source] repo %q — want the estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>)", repo)
 	}
@@ -342,9 +343,9 @@ func (e Estate) validateSource() error {
 	case AuthToken:
 		return fmt.Errorf("[source] auth %q — no token route exists yet: the deploy key is the one credential fort mints and revokes itself. Use auth = %q", AuthToken, AuthSSH)
 	case AuthNone:
-		return fmt.Errorf("[source] auth %q — an ssh:// repo clones with the deploy key; the anonymous route is https only (forts#1)", AuthNone)
+		return fmt.Errorf("[source] auth %q — an ssh:// repo clones with the deploy key; an anonymous route would be https only, and none exists yet", AuthNone)
 	default:
-		return fmt.Errorf("[source] auth %q — want %q (an https route comes with forts#1)", e.Source.Auth, AuthSSH)
+		return fmt.Errorf("[source] auth %q — want %q, the one route that exists", e.Source.Auth, AuthSSH)
 	}
 	switch e.Source.Forge {
 	case "", ForgeGitea, ForgeGitHub:
@@ -405,25 +406,6 @@ func parseRepo(repo string) (host, owner, name string, err error) {
 		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name>", repo)
 	}
 	return host, parts[0], strings.TrimSuffix(parts[1], ".git"), nil
-}
-
-// APIBase is the forge's API root, https://<host>/api/v1 — gitea's.
-func (e Estate) APIBase() (string, error) {
-	host, _, _, err := e.Forge()
-	if err != nil {
-		return "", err
-	}
-	return "https://" + host + "/api/v1", nil
-}
-
-// RepoAPI is the estate repo's API route, <APIBase>/repos/<owner>/<name>:
-// the deploy keys hang off it.
-func (e Estate) RepoAPI() (string, error) {
-	host, owner, name, err := e.Forge()
-	if err != nil {
-		return "", err
-	}
-	return "https://" + host + "/api/v1/repos/" + owner + "/" + name, nil
 }
 
 // --- the operators (forts#81)
@@ -623,7 +605,7 @@ func (e Estate) validateHubs() error {
 			return fmt.Errorf("[hubs.%s] — want a role name of lowercase labels and dashes (forge, or one the estate chooses; docs/hub.md)", role)
 		}
 		if !ValidRepoURL(h.Estate) {
-			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Source.Repo)
+			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<forge>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Source.Repo)
 		}
 		if !nameRE.MatchString(h.Fort) {
 			return fmt.Errorf("[hubs.%s] fort %q — want the hub fort's name (%s)", role, h.Fort, nameRE)
@@ -666,7 +648,7 @@ func (e Estate) validateHubs() error {
 			}
 			for _, url := range s.Estates {
 				if !ValidRepoURL(url) {
-					return fmt.Errorf("%s estates: %q — want a served estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", at, url)
+					return fmt.Errorf("%s estates: %q — want a served estate by its git URL (ssh://git@<forge>:<port>/<owner>/<name>, or https://)", at, url)
 				}
 				if SameRepo(url, e.Source.Repo) {
 					return fmt.Errorf("%s estates: %q is this estate — an estate serves itself through its own [hubs.*] tables, not a serves entry", at, url)

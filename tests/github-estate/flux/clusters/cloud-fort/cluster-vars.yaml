@@ -1,0 +1,19 @@
+# Per-cluster identity for the shared flux/infrastructure layer (#99).
+# Applied by the flux-system root sync (this dir is the FluxInstance sync
+# path) and referenced via postBuild.substituteFrom on the infra-controllers,
+# infrastructure and apps Kustomizations. CLUSTER_NAME and ESTATE_NAME are
+# the two identity labels every metric and log line leaves the fort with
+# (forts#50): the fort's name, and the name of the estate it belongs to
+# (estate.toml `name`), so a hub that serves several estates can group
+# what it receives by estate. MESH_IP must stay in sync with
+# mesh/peers.json. A layer that pushes somewhere (a monitoring hub) adds
+# the variable its wiring reads, beside these (docs/layers.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-vars
+  namespace: flux-system
+data:
+  CLUSTER_NAME: cloud-fort
+  ESTATE_NAME: github-estate
+  MESH_IP: 10.4.0.2

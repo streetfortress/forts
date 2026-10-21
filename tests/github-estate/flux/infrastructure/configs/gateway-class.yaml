@@ -1,0 +1,9 @@
+# Cluster-scoped, identical on every cluster: "traefik is a gateway
+# implementation". The Gateway (listeners, certs) is per-cluster and lives
+# in flux/apps/<cluster>/gateway/.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: traefik
+spec:
+  controllerName: traefik.io/gateway-controller

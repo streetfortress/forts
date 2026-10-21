@@ -1,0 +1,13 @@
+# Fixture: the canary fort mint writes, in the shape sops leaves — a
+# Secret whose value is opaque. Nothing here decrypts.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: sops-canary
+    namespace: default
+type: Opaque
+stringData:
+    canary: ENC[AES256_GCM,data:fixture,iv:fixture,tag:fixture,type:str]
+sops:
+    age: []
+    version: 3.9.0

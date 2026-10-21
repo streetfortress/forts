@@ -161,7 +161,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if !entry.Realized() {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
 	}
-	p.notes = append(p.notes, "the gitea deploy key `flux-"+host+"` stays registered until fort destroy revokes it.")
+	p.notes = append(p.notes, "the deploy key `flux-"+host+"` stays registered on the forge until fort destroy revokes it.")
 	sort.Strings(p.removes)
 	return p, nil
 }

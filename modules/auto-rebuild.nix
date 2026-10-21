@@ -37,7 +37,7 @@
 #   - Gating on last-attempted (not last-succeeded) rev means a failing
 #     commit gets exactly one try — no eval-crash loop across ticks — and
 #     the NixosUpgradeFailed alert fires once. The next push to main (or
-#     `nixos-pull`) retries. If gitea is unreachable the gate lets
+#     `nixos-pull`) retries. If the forge is unreachable the gate lets
 #     the run proceed and fail loudly rather than skipping silently
 #     forever.
 #   - The way back: `sudo nixos-rollback <generation>` (ops/nixos-
@@ -55,12 +55,12 @@
 #     collision silently (forts#151).
 #   - Auth reuses the host's flux-git-deploy-key (read-only deploy key,
 #     already in every flux host's sops file) via GIT_SSH_COMMAND; the
-#     pinned gitea host key matches flux-bootstrap.nix.
+#     pinned forge host key matches flux-bootstrap.nix.
 #   - allowReboot off: kernel/major bumps go through the re-provision
 #     path. This module is the hybrid's "patch" leg — routine changes land
 #     within a minute or two of merging; majors are deliberate.
 #   - A failed switch fails nixos-upgrade.service and stays on the old
-#     generation (atomic) — and so does an unreachable gitea (gate exit
+#     generation (atomic) — and so does an unreachable forge (gate exit
 #     255; nix would otherwise rebuild the cached clone and report
 #     success); the failure is visible in journald (and a log shipper's stream)
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
@@ -78,11 +78,11 @@ let
   # repoUrl, read apart (#77). `--from <ip>` (the verb, below) replaces
   # the ADDRESS of the forge and nothing else, so the user, the port, the
   # repo path and the known_hosts alias all have to come from the same
-  # option the timer builds flakeRef from. They were literals —
-  # /sfi/deployments and [gitea.zen.lofi]:30022 — which made the
-  # recovery hatch of EVERY estate pull sfi/deployments and check a host
-  # key that is not its own forge's. The fixture estate
-  # (tests/estate, sfi/fixture-estate) already names a second repo.
+  # option the timer builds flakeRef from. They were literals — the
+  # first estate's repo path and its forge's known_hosts alias — which
+  # made the recovery hatch of EVERY estate pull the first estate's
+  # repo and check a host key that is not its own forge's. The fixture
+  # estates (tests/estate, tests/github-estate) name other repos.
   #
   # This module is ssh-only by construction: gitKnownHosts is an ssh
   # known_hosts line and GIT_SSH_COMMAND carries the deploy key. So a
@@ -114,10 +114,10 @@ let
   # Echoes land in the unit's journal so gate decisions are
   # visible next to the rebuild output they explain.
   #
-  # An unreachable gitea is a unit FAILURE, not a pass-through: nix's git
+  # An unreachable forge is a unit FAILURE, not a pass-through: nix's git
   # fetcher only warns ("could not update local clone …; continuing with
   # the most recent version") and rebuilds the cached clone, so a host
-  # that cannot reach gitea would otherwise report a green "Finished NixOS
+  # that cannot reach the forge would otherwise report a green "Finished NixOS
   # Upgrade" forever while silently frozen — a hub did exactly that for
   # 12h+ on 2026-09-13 (resolver stuck, the forge's name NXDOMAIN). Exit 255
   # trips a hub's NixosUpgradeFailed rule the same as a failed switch.
@@ -267,7 +267,7 @@ in
     randomizedDelaySec = lib.mkOption {
       type = lib.types.str;
       default = "15s";
-      description = "Jitter so the fleet's ticks (and their ls-remotes against gitea) don't line up.";
+      description = "Jitter so the fleet's ticks (and their ls-remotes against the forge) don't line up.";
     };
 
     # Retention (#423). The loop makes a generation per closure-relevant
@@ -403,8 +403,8 @@ in
     # success even when the unit failed).
     #
     # `--from <ip>` is the hatch under the hatch: pull and switch from a
-    # gitea reached BY ADDRESS, bypassing the name. The name is pinned in
-    # /etc/hosts (lab-dns.nix, the forge pin) and moves with gitea; a fort pinned to a
+    # forge reached BY ADDRESS, bypassing the name. The name is pinned in
+    # /etc/hosts (lab-dns.nix, the forge pin) and moves with the forge; a fort pinned to a
     # host that is gone — the interim never came up, or the flip has to
     # be rolled back to the previous host — cannot fetch the config that would
     # re-pin it, and without this verb the only way forward is the

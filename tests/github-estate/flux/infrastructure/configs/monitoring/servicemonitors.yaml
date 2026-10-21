@@ -1,0 +1,61 @@
+# Cluster-component scrape wiring (#53). Replaces the hypervisor pull-model
+# static jobs (KSM NodePort 30080, kubelet read-only 10255) — those firewall
+# openings are removed once this stack is verified on an edge cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [kube-state-metrics]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  endpoints:
+    - port: http
+      # KSM's own labels describe the objects it reports on; keep them.
+      honorLabels: true
+      # And drop the scrape-target identity the operator stamps on every
+      # series (the KSM pod's own namespace/pod/service/endpoint/container):
+      # it says nothing about the reported object and, worse, lands
+      # namespace="kube-state-metrics" on metrics that have no namespace
+      # of their own (kube_node_*, the flux gotk_resource_info set, which
+      # carries the CR's namespace as exported_namespace by flux's KSM
+      # convention). Same labeldrop kube-prometheus applies. job/instance
+      # stay so `up` and TargetDown keep identifying the target.
+      relabelings:
+        - action: labeldrop
+          regex: (namespace|pod|service|endpoint|container)
+---
+# Kubelet + cadvisor over the authenticated 10250 port, via the
+# operator-maintained kube-system/kubelet Service (kubeletService.name in
+# the prometheus-operator HelmRelease).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubelet
+  namespace: monitoring
+spec:
+  jobLabel: k8s-app
+  namespaceSelector:
+    matchNames: [kube-system]
+  selector:
+    matchLabels:
+      k8s-app: kubelet
+  endpoints:
+    - port: https-metrics
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        # k3s kubelet serving cert is signed for the node name, not the
+        # cluster-internal service path prometheus scrapes through.
+        insecureSkipVerify: true
+      honorLabels: true
+    - port: https-metrics
+      path: /metrics/cadvisor
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+      honorLabels: true

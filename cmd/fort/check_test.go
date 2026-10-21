@@ -84,3 +84,19 @@ func TestOperatorFindings(t *testing.T) {
 		t.Errorf("every host overrides: %+v", fs)
 	}
 }
+
+// The forge kind (forts#1): derived from the host of repo, or declared;
+// the finding names the API and the token the two verbs use.
+func TestSourceFindings(t *testing.T) {
+	fs := sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate"}})
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge github (derived from the host of repo)") || !strings.Contains(fs[0].msg, "https://api.github.com") || !strings.Contains(fs[0].msg, "github-token") {
+		t.Errorf("github: %+v", fs)
+	}
+	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@forge.example:30022/acme/estate", Forge: "gitea"}})
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge gitea ([source] forge)") || !strings.Contains(fs[0].msg, "https://forge.example/api/v1") || !strings.Contains(fs[0].msg, "gitea-token") {
+		t.Errorf("gitea: %+v", fs)
+	}
+	if fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://forge.example/"}}); len(fs) != 1 || fs[0].level != "error" {
+		t.Errorf("bad repo: %+v", fs)
+	}
+}

@@ -14,7 +14,7 @@ import (
 // checkpoint records: the manifest is gone by then)
 // of this process — and so of the pulumi (and its provider) we exec.
 // Explicit env wins; otherwise each value is sops-decrypted from
-// provisioning/secrets.yaml, the same home as the gitea provisioning
+// provisioning/secrets.yaml, the same home as the forge's provisioning
 // token: repo-driven, no per-machine env setup, and the values are
 // never printed.
 // libvirtPoolName mirrors pulumi/libvirt.go (one lab, one pool).

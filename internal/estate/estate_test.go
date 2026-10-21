@@ -158,8 +158,8 @@ func TestMovedKeys(t *testing.T) {
 	}
 }
 
-// The [source] matrix (forts#161): https refused until the anonymous
-// route exists (#1, absorbs #159); a token named as a missing route; a
+// The [source] matrix (forts#161): https refused until an anonymous
+// route exists (#159); a token named as a missing route; a
 // forge kind the core knows; auth consistent with the scheme.
 func TestSourceMatrix(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
@@ -182,8 +182,8 @@ func TestSourceMatrix(t *testing.T) {
 }
 
 // The derivations: the host of repo gives the forge kind, the scheme
-// gives the auth route. github.com with forge = "github" parses — the
-// refusal of the missing client is fort mint's, not the schema's.
+// gives the auth route. github.com derives "github", the kind
+// cmd/fort/forge.go speaks to at api.github.com.
 func TestForgeKindAndAuthRoute(t *testing.T) {
 	e := Estate{Source: Source{Repo: "ssh://git@gitea.zen.lofi:30022/sfi/infra"}}
 	if e.ForgeKind() != ForgeGitea || e.AuthRoute() != AuthSSH {
@@ -210,13 +210,6 @@ func TestForge(t *testing.T) {
 		if err != nil || host != want[0] || owner != want[1] || name != want[2] {
 			t.Errorf("%s: got %s %s %s %v, want %v", repo, host, owner, name, err, want)
 		}
-	}
-	e := Estate{Name: "second-estate", Source: Source{Repo: "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"}}
-	if api, _ := e.RepoAPI(); api != "https://gitea.zen.lofi/api/v1/repos/sfi/second-estate" {
-		t.Errorf("RepoAPI: %s", api)
-	}
-	if base, _ := e.APIBase(); base != "https://gitea.zen.lofi/api/v1" {
-		t.Errorf("APIBase: %s", base)
 	}
 	for _, bad := range []string{"ssh://git@gitea.zen.lofi:30022/sfi", "ssh://git@gitea.zen.lofi:30022/a/b/c", "ssh://gitea.zen.lofi/"} {
 		if _, _, _, err := (Estate{Source: Source{Repo: bad}}).Forge(); err == nil {

@@ -1,0 +1,168 @@
+# Traefik as the cluster's edge: DaemonSet with hostPorts 80/443, routing
+# via Gateway API only (no Ingress). Gateway API CRDs are vendored in
+# ../gateway-api (the chart stopped shipping them). The Gateway itself is
+# per-cluster (hostname listeners grow one service at a time) and lives in
+# flux/apps/<cluster>/gateway/.
+# Chart defaults: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: traefik
+      version: 41.6.0 # app v3.7.6
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+        namespace: flux-system
+  # The traefik chart ships its 25 CRDs in the chart's crds/ directory, which
+  # helm installs once and never touches again. Flux makes that worse by
+  # default: spec.install.crds defaults to Create and spec.upgrade.crds
+  # defaults to Skip, so an upgrade neither replaces an existing CRD nor
+  # installs a new one — a fort keeps the schema of the chart version that
+  # built it, and the chart version in this file stops describing the cluster
+  # after the first bump (sfi/forts#116). CreateReplace on both actions gives
+  # the chart version its meaning back: flux applies all 25 CRDs on every
+  # upgrade. CreateReplace never deletes, so a CRD that the chart drops stays
+  # in the cluster.
+  #
+  # Traefik is the only chart this tree pins that ships a crds/ directory.
+  # Every other chart here renders its CRDs as templates (cert-manager,
+  # flux-operator), or takes them from a
+  # CRD-only release (prometheus-operator-crds, with crds.enabled=false on
+  # the stack chart), or ships none. The Gateway API CRDs have no upstream
+  # chart, so ../gateway-api keeps the vendored bundle. The test is two
+  # commands: `helm template <r> <chart> --version <v>` against the same
+  # command with --include-crds; a larger second count means the chart needs
+  # these two keys. sfi/knowledge config-management/crd-schema-ownership.md
+  # says why.
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+  values:
+    providers:
+      kubernetesGateway:
+        enabled: true
+      kubernetesIngress:
+        enabled: false
+
+    # Don't auto-create Gateway API resources — the Gateway is a per-cluster
+    # manifest in flux/apps/<cluster>/gateway/.
+    gateway:
+      enabled: false
+
+    deployment:
+      kind: DaemonSet
+
+    # The chart default (maxUnavailable 0, maxSurge 1) deadlocks a hostPort
+    # DaemonSet on a single node: the surge pod can never schedule while the
+    # old pod holds 80/443 ("didn't have free ports"). Kill-then-create is
+    # the only rollout a single-node hostPort setup can do; the seconds of
+    # edge downtime per upgrade are accepted.
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
+
+    ports:
+      web:
+        port: 8000
+        expose:
+          default: true
+        exposedPort: 80
+        hostPort: 80
+        protocol: TCP
+      websecure:
+        port: 8443
+        expose:
+          default: true
+        exposedPort: 443
+        hostPort: 443
+        protocol: TCP
+        http:
+          # Response compression for every https route on every cluster —
+          # edge posture, not an app fact (#226: 4x wire cut on an app's
+          # pages, knee unharmed, validated on staging). An
+          # entrypoint middleware applies to all routers on the entrypoint
+          # whatever provider made them, so Gateway API routes need no
+          # per-app Middleware + ExtensionRef (the shape #227 first used).
+          # The Middleware itself is the extraObjects entry below, so it
+          # lands in the same reconcile as this reference — a reference to
+          # a missing middleware disables every router on the entrypoint.
+          middlewares:
+            - traefik-compress@kubernetescrd
+
+    service:
+      spec:
+        type: ClusterIP # hostPort handles external access; LoadBalancer would
+        # summon k3s's klipper svclb, which grabs node ports 80/443 first
+
+    log:
+      level: INFO
+    # JSON so a log shipper's kubernetes filter (Merge_Log) lifts the access
+    # log fields — the caddy-log-pipeline equivalent as ingress moves to
+    # traefik (#54).
+    #
+    # Filtered: a line is written when ANY filter matches (error status,
+    # retried, or slower than the knee), so the happy path is dropped.
+    # Unfiltered, every 200 cost ~1.1 KiB of JSON — about a third of the
+    # compressed response bytes it described — shipped again over the mesh
+    # to a hub's log store, where nothing reads it: an app dashboard's
+    # request layer is traefik's Prometheus metrics (podmonitors.yaml),
+    # and a rule on this stream wants 5xx, which the filter keeps. Found
+    # on a staging fort's capacity run (2026-09-26): traefik was the
+    # fort's whole log volume. 1s is the knee the k6 runs settled on, so a
+    # slow 200 still lands. statusCodes is a string in the chart (rendered
+    # as --accesslog.filters.statuscodes), not a list.
+    accessLog:
+      enabled: true
+      format: json
+      filters:
+        statusCodes: "400-599"
+        retryAttempts: true
+        minDuration: "1s"
+
+    ingressRoute:
+      dashboard:
+        enabled: false
+
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 1000m
+
+    # The compress middleware the websecure entrypoint references (above).
+    # Shipped through the chart so the reference and the object are one
+    # helm release. gzip only: traefik 3's default set adds brotli + zstd,
+    # and the validated CPU trade (2 vCPU nodes at 90% on the knee) was
+    # gzip's. Restricted to text types so a hub's edge never re-compresses
+    # git packs or object downloads (already compressed —
+    # pure CPU waste); everything else passes through untouched. The 1 KiB
+    # minimum body is the default.
+    extraObjects:
+      - apiVersion: traefik.io/v1alpha1
+        kind: Middleware
+        metadata:
+          name: compress
+          namespace: traefik
+        spec:
+          compress:
+            encodings:
+              - gzip
+            includedContentTypes:
+              - text/html
+              - text/plain
+              - text/css
+              - text/javascript
+              - application/javascript
+              - application/json
+              - image/svg+xml

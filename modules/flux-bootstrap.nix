@@ -29,7 +29,7 @@
 #
 # Consumers declare the two extra host secrets in nixos/secrets/<host>.yaml
 # (flux-sops-age-key = the cluster's age key, flux-git-deploy-key = a
-# read-only gitea deploy key for this repo) and set:
+# read-only deploy key for this repo on the forge) and set:
 #
 #   sfi.flux-bootstrap = {
 #     enable = true;
@@ -97,7 +97,7 @@ in
         RemainAfterExit = true;
         # First boot pulls the operator image over WAN.
         TimeoutStartSec = "20min";
-        # Ride out a flapping k3s / unreachable gitea on first boot rather
+        # Ride out a flapping k3s / unreachable forge on first boot rather
         # than sit `failed` until someone reboots (#408).
         Restart = "on-failure";
         RestartSec = "60s";

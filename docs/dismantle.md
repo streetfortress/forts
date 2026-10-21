@@ -31,7 +31,7 @@ dismantle sfi-x   (cloud: linode)
     README.md: 2   (doc)
     flux/apps/luxor/monitoring/s3-exporter-targets.yaml: 3   (central monitoring — anything here naming the host is hand-written and usually goes)
     cmd/fort/testdata/forts/sfi-x/…   (CLI test fixture / golden — keep)
-· the gitea deploy key `flux-sfi-x` stays registered until fort destroy revokes it.
+· the deploy key `flux-sfi-x` stays registered on the forge until fort destroy revokes it.
 
 Dismantle staged. Merge, then run `fort destroy sfi-x` to delete the pulumi stack.
 ```
@@ -79,7 +79,7 @@ planned only where the host's rule block exists.
   as `PENDING` until then. `just iac-drift` is red for the host between
   the merge and the destroy, which is the correct signal. The last line
   of the report is that one next step.
-- **The gitea deploy key**, revoked by `destroy`.
+- **The deploy key on the forge**, revoked by `destroy`.
 - **A layer's identities** (a backup store's keys), withdrawn by the
   layer's own dismantle, which runs before this one ([layers](layers.md)).
 - **The `.files` wireguard copy** for the ubuntu mesh members (#183) —

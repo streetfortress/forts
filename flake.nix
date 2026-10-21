@@ -175,13 +175,29 @@
           self.nixosModules.links
           {
             sfi.links.other-estate = {
-              repo = "https://gitea.zen.lofi/sfi/other-estate.git";
+              repo = "https://forge.example/acme/other-estate.git";
               interface = "wg-other";
               port = 51821;
               address = "10.3.0.96";
               roles = [ "forge" ];
             };
           }
+        ];
+      };
+
+      # The github.com fixture estate (tests/github-estate, forts#1): a
+      # cloud cluster fort — k3s, flux, the Linode runtime — on an estate
+      # whose repo is on github.com and that declares no hub, no lab CA
+      # and no forge name. CI evaluates it so the modules that pin the
+      # forge's host key (flux-bootstrap.nix, auto-rebuild.nix) compose
+      # with a forge that is not the lab's, from the estate's own line.
+      nixosConfigurations.cloud-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/github-estate/nixos/hosts/cloud-fort
+          sops-nix.nixosModules.sops
         ];
       };
     };

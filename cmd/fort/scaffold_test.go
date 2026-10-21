@@ -295,3 +295,37 @@ func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 		}
 	}
 }
+
+// The github.com fixture (tests/github-estate, forts#1): a cloud cluster
+// fort on an estate with no hub, whose repo is on github.com. The host
+// dir and the flux tree are the scaffold's render, and the estate names
+// no forge anywhere but repo.
+func TestGitHubFixtureEstateIsScaffoldOutput(t *testing.T) {
+	const dir = "../../tests/github-estate"
+	est, err := estate.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if est.ForgeKind() != estate.ForgeGitHub || est.Source.Forge != "" || len(est.Hubs) != 0 || !strings.HasPrefix(est.Source.KnownHosts, "github.com ") {
+		t.Fatalf("the fixture is tier one: github derived, no hub, github.com's host key; got %+v", est.Source)
+	}
+	hosts, problems, err := manifest.LoadAll(dir)
+	if err != nil || len(problems) > 0 || len(hosts) != 1 {
+		t.Fatal(err, problems, hosts)
+	}
+	files, err := renderScaffold("cloud-fort", hosts["cloud-fort"], est)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 9 {
+		t.Fatalf("a cluster fort: the host dir (2) and the flux tree (7), got %d", len(files))
+	}
+	for _, f := range files {
+		if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
+			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold cloud-fort --write in tests/github-estate", f.path)
+		}
+		if strings.Contains(string(f.content), "gitea") {
+			t.Errorf("%s: a github.com estate renders no lab forge", f.path)
+		}
+	}
+}

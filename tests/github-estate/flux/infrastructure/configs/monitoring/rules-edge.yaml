@@ -1,0 +1,155 @@
+# Edge rule set (#53): "this cluster is unhealthy", nothing else. These must
+# evaluate and page locally with the mesh down. Cross-cluster rules and the
+# dead man's switch live ONLY on a monitoring hub's ruler (a layer's)
+# so nothing pages twice.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: edge-cluster-health
+  namespace: monitoring
+spec:
+  groups:
+    - name: cluster-health
+      rules:
+        - alert: TargetDown
+          expr: up == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.job }}/{{ $labels.instance }} scrape target down"
+
+        - alert: NodeMemoryPressure
+          expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} has <10% memory available"
+
+        - alert: NodeDiskFillingUp
+          expr: >-
+            node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} /
+            node_filesystem_size_bytes < 0.15
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} {{ $labels.mountpoint }} has <15% disk left"
+
+        - alert: KubePodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total[15m]) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} is crashlooping"
+
+        # Init containers restart under a separate KSM metric — the
+        # grafana init-chown crashloop (2026-09-10) was invisible to the
+        # rule above.
+        - alert: KubeInitContainerCrashLooping
+          expr: increase(kube_pod_init_container_status_restarts_total[15m]) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} init container {{ $labels.container }} is crashlooping"
+
+        # A pod that never starts restarts nothing, so the two rules above
+        # are blind to it: rustfs-bucket-init sat in ImagePullBackOff for
+        # 28h (minio/mc left Docker Hub, 2026-09-13) with no alert. KSM's
+        # waiting-reason gauge covers the image-pull family — sparse since
+        # KSM v2: the series only exists while a container is waiting, so
+        # an absent metric is the healthy state, not a broken scrape. The
+        # `for` rides out a registry hiccup and a first pull of a big image.
+        - alert: KubePodImagePullFailing
+          expr: >-
+            max by (namespace, pod, container, reason) (
+              kube_pod_container_status_waiting_reason{reason=~"ImagePullBackOff|ErrImagePull|InvalidImageName"}
+            ) == 1
+          for: 20m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} cannot pull its image ({{ $labels.reason }}, container {{ $labels.container }})"
+
+        # Flux CR status via the #135 KSM customResourceState wiring: a
+        # HelmRelease stalled on a rejected manifest, or a Kustomization
+        # pinned by a failing health check, sits at ready=False with no
+        # pod-level symptom this rule set would otherwise see. Suspended
+        # resources are deliberately not-ready; don't page on them.
+        - alert: FluxResourceNotReady
+          expr: gotk_resource_info{ready="False", suspended!="true"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.customresource_kind }} {{ $labels.exported_namespace }}/{{ $labels.name }} not Ready for 15m"
+
+        - alert: CertificateExpiringSoon
+          expr: >-
+            certmanager_certificate_expiration_timestamp_seconds - time()
+            < 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.name }} expires in under 14 days"
+
+        # Guards the whole textfile-collector pattern (wireguard, disk
+        # usage, nixos revisions): an unreadable or malformed .prom file
+        # silently drops every metric in it — this alert would have caught
+        # the #127 mktemp-0600 bug the moment it rolled out.
+        - alert: TextfileCollectorBroken
+          expr: node_textfile_scrape_error == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: node_exporter textfile collector failing — a .prom file is unreadable or malformed"
+
+        # nixos-rollback (modules/ops/nixos-rollback.nix) pins
+        # the pull loop to a prior generation; the metric IS the pin. A
+        # hold is deliberate for hours, not days — a forgotten one is the
+        # 2026-09-03 drift incident again (a host quietly off main), so
+        # this nags until `sudo nixos-pull` lifts it.
+        - alert: NixosGenerationPinned
+          expr: node_nixos_pinned_generation_info == 1
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} pinned to NixOS generation {{ $labels.generation }} for >6h (nixos-rollback) — main is not being applied; sudo nixos-pull lifts it"
+
+    # Mesh health (#121): metrics come from the wireguard-metrics timer on
+    # each host (modules/wireguard.nix) via the node_exporter
+    # textfile collector. Edge-local on purpose — a dead tunnel must page
+    # from whichever side still has a path out. Keepalive-gated so roaming
+    # clients (laptops, phones) going quiet never page; mesh peers all
+    # carry persistentKeepalive and handshake at least every ~2-3min, so
+    # >300s is drift/death, not jitter. The 2026-09-03 incident (a hub's
+    # stale peer set silently killing the production-test tunnel) would
+    # have fired this from production-test's side within minutes.
+    - name: mesh-health
+      rules:
+        - alert: WireGuardPeerSilent
+          expr: >-
+            (time() - node_wireguard_latest_handshake_seconds > 300)
+            and on (instance, peer) node_wireguard_peer_keepalive_seconds > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.instance }}: no WireGuard handshake from mesh peer {{ $labels.peer }} in >5m"
+
+        # A frozen textfile means the collector timer died, not the mesh —
+        # without this, WireGuardPeerSilent would keep evaluating stale
+        # handshake ages and eventually fire with fiction.
+        - alert: WireGuardMetricsStale
+          expr: time() - node_textfile_mtime_seconds{file="wireguard.prom"} > 900
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }}: wireguard.prom not updated for >15m — wireguard-metrics timer dead"

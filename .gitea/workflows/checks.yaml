@@ -69,6 +69,7 @@ jobs:
           nix eval --raw .#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
       - name: sshd refuses a password on both of its paths
@@ -131,7 +132,11 @@ jobs:
             > verb.sh
           grep -q 'ref=main&dir=nixos' verb.sh
           grep -q '/sfi/fixture-estate.git' verb.sh
-          grep -q 'HostKeyAlias=\[gitea.zen.lofi\]:30022' verb.sh
+          # The alias is the fixture's known_hosts line, read from the
+          # fixture: the framework names no forge of its own (forts#1).
+          alias=$(sed -n 's/^known_hosts = "\(\[[^]]*\]:[0-9]*\) .*/\1/p' tests/estate/estate.toml)
+          test -n "$alias"
+          grep -qF "HostKeyAlias=$alias" verb.sh
           ! grep -q 'ref=\$ref' verb.sh
           ! grep -q '/sfi/deployments' verb.sh
 
@@ -155,6 +160,14 @@ jobs:
 
       - name: An estate that fort init created evaluates against this checkout
         run: tests/init-estate.sh
+
+      - name: The github.com fixture estate passes the gate
+        # `fort check --all` on tests/github-estate (forts#1): the repo on
+        # github.com, no hub, no lab CA — tier one of the two tiers of
+        # forge. The nix eval above proves the host composes; this proves
+        # the tree passes the gate an estate's own CI runs, and that the
+        # gate assumes no lab forge, no .lofi name and no mesh pin.
+        run: tests/check-github-estate.sh
 
       - name: Refill the cache with what this run used
         # An exact hit refills nothing: the bulk is nixpkgs, and nixpkgs

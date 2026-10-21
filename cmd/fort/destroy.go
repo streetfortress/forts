@@ -2,19 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"github.com/linode/linodego"
@@ -280,91 +274,32 @@ func linodePowerOff(ctx context.Context, host string) error {
 	return nil
 }
 
-// giteaClient is the deploy-key API as fort mint (register) and fort
-// destroy (revoke) reach it: the provisioning token, the lab CA, and the
-// repo — the estate's own (estate.toml `[source] repo`), because the deploy key
-// is what flux clones that repo with. The route was a constant naming
-// sfi/deployments until sfi/deployments#673: the second estate's first
-// mint would have put its key on the first estate's repo.
-func giteaClient(root string) (*giteaDeployKeys, error) {
-	est, err := estate.Load(root)
-	if err != nil {
-		return nil, err
-	}
-	if kind := est.ForgeKind(); kind != estate.ForgeGitea {
-		return nil, fmt.Errorf("the forge of %s is %s, and this client speaks gitea's deploy-key API only — the %s client comes with forts#1", est.Ref(), kind, kind)
-	}
-	api, err := est.RepoAPI()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", estate.Path, err)
-	}
-	base, _ := est.APIBase()
-	token, err := secret(root, "gitea-token")
-	if err != nil {
-		return nil, fmt.Errorf("no gitea-token in provisioning/secrets.yaml: %w", err)
-	}
-	// The estate's CA root, when it carries one (nixos/certs/ca-root.pem,
-	// the file estate.nix trusts): a forge behind a private CA answers the
-	// API under it. No file, the system roots.
-	client := &http.Client{Timeout: 30 * time.Second}
-	if ca, err := os.ReadFile(filepath.Join(root, "nixos/certs/ca-root.pem")); err == nil {
-		pool := x509.NewCertPool()
-		pool.AppendCertsFromPEM(ca)
-		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}
-	}
-	return &giteaDeployKeys{client: client, api: api, base: base, token: token}, nil
-}
-
 // revokeDeployKey deletes the read-only key fort mint registered (title
-// flux-<host>). Not found is not an error: the key may never have
-// existed (no flux cluster) or was removed by hand.
+// flux-<host>) on the estate's forge (forge.go). Not found is not an
+// error: the key may never have existed (no flux cluster) or was
+// removed by hand.
 func revokeDeployKey(root, host string) (string, error) {
-	g, err := giteaClient(root)
+	f, err := forgeClient(root)
 	if err != nil {
 		return "", err
 	}
-	return revokeDeployKeyAt(g.client, g.api, g.token, host)
+	return revokeDeployKeyAt(f, host)
 }
 
-func revokeDeployKeyAt(client *http.Client, api, token, host string) (string, error) {
-	do := func(method, url string) (*http.Response, error) {
-		req, err := http.NewRequest(method, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Authorization", "token "+token)
-		return client.Do(req)
-	}
-	resp, err := do("GET", api+"/keys")
+func revokeDeployKeyAt(f forge, host string) (string, error) {
+	keys, err := f.List()
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("listing deploy keys: %s", resp.Status)
-	}
-	var keys []struct {
-		ID    int    `json:"id"`
-		Title string `json:"title"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
-		return "", err
-	}
-	// Every key under the title (a timed-out POST that gitea recorded
-	// anyway leaves duplicates; mint reports them).
+	// Every key under the title (a timed-out POST that the forge
+	// recorded anyway leaves duplicates; mint reports them).
 	var revoked []string
 	for _, k := range keys {
 		if k.Title != "flux-"+host {
 			continue
 		}
-		del, err := do("DELETE", fmt.Sprintf("%s/keys/%d", api, k.ID))
-		if err != nil {
-			return "", err
-		}
-		io.Copy(io.Discard, del.Body)
-		del.Body.Close()
-		if del.StatusCode/100 != 2 {
-			return "", fmt.Errorf("deleting flux-%s (id %d): %s", host, k.ID, del.Status)
+		if err := f.Revoke(k.ID); err != nil {
+			return "", fmt.Errorf("flux-%s: %w", host, err)
 		}
 		revoked = append(revoked, fmt.Sprint(k.ID))
 	}

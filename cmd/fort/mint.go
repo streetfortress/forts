@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +20,7 @@ import (
 // (create-nixos's Phase A + cluster-init) did, as a verb: the host's
 // ssh key (which doubles as its age identity), its wireguard key and
 // mesh peer, the k3s token, and for a flux cluster the cluster age key,
-// the flux deploy key registered read-only on gitea, and the sops
+// the flux deploy key registered read-only on the forge, and the sops
 // canary; and, where the host file enables the console door, the
 // console password in its two halves (console.go, sfi/forts#24). A pure
 // repo mutation plus that one API call.
@@ -54,17 +53,18 @@ func mint(args []string) error {
 		return err
 	}
 	tool := sopsCLI{root: root}
-	// The flux deploy key is registered on gitea (the token lives in sops).
-	gitea, err := giteaClient(root)
+	// The flux deploy key is registered on the forge (forge.go; the
+	// token lives in sops).
+	f, err := forgeClient(root)
 	if err != nil {
 		return err
 	}
-	p, err := planMint(root, host, tool, gitea, *write)
+	p, err := planMint(root, host, tool, f, *write)
 	if err != nil {
 		return err
 	}
 	if *write {
-		if err := p.apply(tool, gitea); err != nil {
+		if err := p.apply(tool, f); err != nil {
 			return err
 		}
 	}
@@ -108,7 +108,8 @@ type mintPlan struct {
 	rekey      []string // flux/infrastructure sops files that gain the cluster recipient
 	canaryPath string   // "" = not a flux cluster or already there
 	admins     map[string][]string
-	deployKey  string // gitea status line; "" = not a flux cluster
+	forge      string // the forge's kind (estate.ForgeKind), for the report
+	deployKey  string // the deploy key's standing on the forge
 	registerOn bool   // apply must POST the deploy key
 
 	write bool // --write: the plan may be applied, so a missing credential is fatal now rather than later
@@ -125,30 +126,22 @@ type mintPlan struct {
 
 }
 
-// giteaDeployKeys is the gitea client shared with fort destroy: the
-// deploy-key routes (api = the repo; base = the API root). Every plan
-// needs one.
-type giteaDeployKeys struct {
-	client *http.Client
-	api    string // …/repos/sfi/deployments
-	base   string // …/api/v1
-	token  string
-	admin  string // the token's owner, resolved on first basic-auth use
-}
-
-func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write bool) (*mintPlan, error) {
+// planMint reads the plan: f is the estate's forge (forge.go), shared
+// with fort destroy. Every plan needs one — the deploy key's standing
+// is read before anything is written.
+func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPlan, error) {
 	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
 	}
-	if gitea == nil {
-		return nil, fmt.Errorf("host %q: the flux deploy key needs the gitea client", host)
+	if f == nil {
+		return nil, fmt.Errorf("host %q: the flux deploy key needs the forge client", host)
 	}
 	est, err := estate.Load(root)
 	if err != nil {
 		return nil, err
 	}
-	p := &mintPlan{root: root, host: host, entry: entry, est: est, write: write, have: map[string]string{}, admins: map[string][]string{}}
+	p := &mintPlan{root: root, host: host, entry: entry, est: est, forge: f.Kind(), write: write, have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
@@ -308,7 +301,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	if !entry.IsCluster() {
 		// No fleet rule, no infra recipient, no canary; the deploy key
 		// still — auto-rebuild.nix pulls main with it.
-		status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
+		status, register, err := deployKeyStatus(f, host, p.deploy.public)
 		if err != nil {
 			return nil, err
 		}
@@ -352,9 +345,9 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 		p.canaryPath = rel
 	}
 
-	// 4. the deploy key on gitea — checked now (read-only) so a mismatch
-	// refuses before anything is written; registered by apply.
-	status, register, err := deployKeyStatus(gitea, host, p.deploy.public)
+	// 4. the deploy key on the forge — checked now (read-only) so a
+	// mismatch refuses before anything is written; registered by apply.
+	status, register, err := deployKeyStatus(f, host, p.deploy.public)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +355,7 @@ func planMint(root, host string, tool secretsTool, gitea *giteaDeployKeys, write
 	return p, nil
 }
 
-func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
+func (p *mintPlan) apply(tool secretsTool, f forge) error {
 	// Rules first: the secrets file and the canary encrypt under them.
 	for _, e := range p.edits {
 		full := filepath.Join(p.root, e.path)
@@ -452,7 +445,7 @@ func (p *mintPlan) apply(tool secretsTool, gitea *giteaDeployKeys) error {
 		}
 	}
 	if p.registerOn {
-		status, err := registerDeployKey(gitea, p.host, p.deploy.public)
+		status, err := registerDeployKey(f, p.host, p.deploy.public)
 		if err != nil {
 			return err
 		}
@@ -560,7 +553,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "◆ %-36s encrypted under the new rule\n", p.canaryPath)
 	}
 	if p.deployKey != "" {
-		fmt.Fprintf(w, "· gitea deploy key flux-%s: %s\n", p.host, p.deployKey)
+		fmt.Fprintf(w, "· %s deploy key flux-%s: %s\n", p.forge, p.host, p.deployKey)
 	}
 	fmt.Fprintln(w)
 	if !written {
@@ -795,37 +788,14 @@ func addPeer(text, host, ip, endpoint, pub string) (string, error) {
 	return string(out), nil
 }
 
-// --- gitea deploy key (the write side; destroy has the revoke)
-
-type giteaKey struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Key   string `json:"key"`
-}
-
-func (g *giteaDeployKeys) list() ([]giteaKey, error) {
-	req, err := http.NewRequest("GET", g.api+"/keys", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "token "+g.token)
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("listing deploy keys: %s", resp.Status)
-	}
-	var keys []giteaKey
-	return keys, json.NewDecoder(resp.Body).Decode(&keys)
-}
+// --- the deploy key (the write side; destroy has the revoke)
 
 // keyStanding is deployKeyStatus's rule for any titled key list: every
 // key under the title must match the local public half (a timed-out
-// POST that gitea recorded anyway leaves duplicates; a stale one among
-// them is a foreign key with our name on it), absent means register.
-func keyStanding(keys []giteaKey, title, pub, what, secretsPath, secretKey string) (status string, register bool, err error) {
+// POST that the forge recorded anyway leaves duplicates; a stale one
+// among them is a foreign key with our name on it), absent means
+// register.
+func keyStanding(keys []deployKey, title, pub, what, secretsPath, secretKey string) (status string, register bool, err error) {
 	local := strings.Join(strings.Fields(pub)[:2], " ")
 	var ids, stale []string
 	for _, k := range keys {
@@ -839,7 +809,7 @@ func keyStanding(keys []giteaKey, title, pub, what, secretsPath, secretKey strin
 	}
 	switch {
 	case len(stale) > 0:
-		return "", false, fmt.Errorf("%s %s on gitea (id %s) differs from the one in %s (%s) — delete the stale key deliberately, then re-run", what, title, strings.Join(stale, ", "), secretsPath, secretKey)
+		return "", false, fmt.Errorf("%s %s on the forge (id %s) differs from the one in %s (%s) — delete the stale key deliberately, then re-run", what, title, strings.Join(stale, ", "), secretsPath, secretKey)
 	case len(ids) > 1:
 		return fmt.Sprintf("registered %d× (ids %s — duplicates, all verified match; fort destroy revokes every one)", len(ids), strings.Join(ids, ", ")), false, nil
 	case len(ids) == 1:
@@ -848,34 +818,21 @@ func keyStanding(keys []giteaKey, title, pub, what, secretsPath, secretKey strin
 	return "would register", true, nil
 }
 
-// deployKeyStatus reports the key's standing on gitea without writing:
-// registered and matching the local one, absent (register = true), or
-// registered with a DIFFERENT key — refused, so a stale key is deleted
-// deliberately rather than silently replaced.
-func deployKeyStatus(g *giteaDeployKeys, host, pub string) (status string, register bool, err error) {
-	keys, err := g.list()
+// deployKeyStatus reports the key's standing on the forge without
+// writing: registered and matching the local one, absent (register =
+// true), or registered with a DIFFERENT key — refused, so a stale key
+// is deleted deliberately rather than silently replaced.
+func deployKeyStatus(f forge, host, pub string) (status string, register bool, err error) {
+	keys, err := f.List()
 	if err != nil {
 		return "", false, err
 	}
 	return keyStanding(keys, "flux-"+host, pub, "deploy key", filepath.Join("nixos/secrets", host+".yaml"), keyDeploy)
 }
 
-func registerDeployKey(g *giteaDeployKeys, host, pub string) (string, error) {
-	body, _ := json.Marshal(map[string]any{"title": "flux-" + host, "key": strings.TrimSpace(pub), "read_only": true})
-	req, err := http.NewRequest("POST", g.api+"/keys", bytes.NewReader(body))
-	if err != nil {
+func registerDeployKey(f forge, host, pub string) (string, error) {
+	if err := f.Register("flux-"+host, pub); err != nil {
 		return "", err
-	}
-	req.Header.Set("Authorization", "token "+g.token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("registering flux-%s: %s", host, resp.Status)
 	}
 	return "registered flux-" + host + " (read-only)", nil
 }

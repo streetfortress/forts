@@ -1,0 +1,13 @@
+# Test fixture: a cloud cluster fort on a github.com estate — a Linode
+# with k3s and flux, no hub, no lab CA, no mesh pin for a forge.
+mesh_ip = "10.4.0.2"
+
+[cluster]
+
+[dns]
+zone = "example.cloud"
+name = "cloud-fort"
+
+[linode]
+region = "us-sea"
+type = "g6-standard-2"

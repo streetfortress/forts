@@ -33,7 +33,8 @@ refusing: 2 gate(s) not met
 ## Needs
 
 Everything is on file: the provider token and the pulumi passphrase, and
-the `gitea-token` the revocation runs with. A layer's keys (a backup
+the forge's token the revocation runs with (`gitea-token` or
+`github-token`, by the kind of `estate.toml`'s `repo`). A layer's keys (a backup
 store's) are the layer's dismantle to revoke, before this
 ([layers](layers.md)).
 
@@ -60,7 +61,7 @@ missing manifest is no obstacle.
 6. **Clear the file backend's residue** `stack rm` does not touch: the
    stack's history, backups, `.bak` and `.attrs`, `Pulumi.<host>.yaml`
    (the image-id provenance lives on in git history).
-7. **Revoke the deploy key** `flux-<host>` on gitea — every key under
+7. **Revoke the deploy key** `flux-<host>` on the forge — every key under
    that title. Not found is fine (no flux cluster, or removed by hand).
    An identity the estate minted for an account of its own on the fort is
    the estate's to revoke; destroy knows only the fort's.

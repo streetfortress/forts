@@ -10,11 +10,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fakeGitea is the fake instance (gitea_test.go) with deploy keys
-// preloaded: a list that POST appends to.
-func fakeGitea(t *testing.T, keys []giteaKey) (*giteaDeployKeys, *[]giteaKey) {
-	st := &fakeGiteaState{deploy: keys}
-	return newFakeGitea(t, st), &st.deploy
+// fakeGitea is the fake forge (forge_test.go), gitea's kind, with
+// deploy keys preloaded: a list that POST appends to.
+func fakeGitea(t *testing.T, keys []deployKey) (forge, *[]deployKey) {
+	st := &fakeForgeState{deploy: keys}
+	return newFakeForge(t, st, "gitea"), &st.deploy
 }
 
 // Mints a new cloud fort on a copy of the real tree's identity files,
@@ -45,8 +45,8 @@ func TestMint(t *testing.T) {
 
 	// gate: scaffold has not run
 	tool := &fakeTool{}
-	st := &fakeGiteaState{}
-	gitea, registered := newFakeGitea(t, st), &st.deploy
+	st := &fakeForgeState{}
+	gitea, registered := newFakeForge(t, st, "gitea"), &st.deploy
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
@@ -233,7 +233,7 @@ func TestMintNeedsGitea(t *testing.T) {
 	repo := estateRoot(t)
 	tmp := t.TempDir()
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
-	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the gitea client") {
+	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
 		t.Errorf("without a client: want refusal, got %v", err)
 	}
 }
@@ -288,8 +288,8 @@ func TestMintPlainFort(t *testing.T) {
 	write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
-	st := &fakeGiteaState{}
-	gitea, registered := newFakeGitea(t, st), &st.deploy
+	st := &fakeForgeState{}
+	gitea, registered := newFakeForge(t, st, "gitea"), &st.deploy
 	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}

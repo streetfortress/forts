@@ -100,7 +100,7 @@ name = "{{ .Name }}"           # the forge's one name on every mesh
 {{- end }}
 {{- if not .Forge }}
 
-# [hubs.forge]                 # the forge: the gitea every fort clones from, by its one
+# [hubs.forge]                 # a fort-hosted forge, the one every fort clones from, by its one
 # estate = "ssh://git@forge.example:22/acme/hub"   # name on every mesh. lab-dns.nix pins
 # fort = "forge"               # that name to the address `fort` has in mesh/peers.json
 # name = "forge.example"       # (forts#26). No forge host, no pin.

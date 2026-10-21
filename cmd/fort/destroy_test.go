@@ -2,8 +2,6 @@ package main
 
 import (
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,32 +53,19 @@ func TestDestroyGates(t *testing.T) {
 }
 
 func TestRevokeDeployKey(t *testing.T) {
-	var deleted string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "token t" {
-			w.WriteHeader(401)
-			return
-		}
-		switch {
-		case r.Method == "GET" && r.URL.Path == "/keys":
-			w.Write([]byte(`[{"id":7,"title":"flux-other"},{"id":9,"title":"flux-gone"},{"id":11,"title":"flux-gone"}]`))
-		case r.Method == "DELETE":
-			deleted += r.URL.Path
-			w.WriteHeader(204)
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer srv.Close()
-	msg, err := revokeDeployKeyAt(srv.Client(), srv.URL, "t", "gone")
-	if err != nil || deleted != "/keys/9/keys/11" || !strings.Contains(msg, "revoked flux-gone (id 9, 11)") {
-		t.Errorf("revoke: %q %v (deleted %q)", msg, err, deleted)
+	st := &fakeForgeState{deploy: []deployKey{{ID: 7, Title: "flux-other"}, {ID: 9, Title: "flux-gone"}, {ID: 11, Title: "flux-gone"}}}
+	f := newFakeForge(t, st, "gitea")
+	msg, err := revokeDeployKeyAt(f, "gone")
+	if err != nil || len(st.deploy) != 1 || st.deploy[0].ID != 7 || !strings.Contains(msg, "revoked flux-gone (id 9, 11)") {
+		t.Errorf("revoke: %q %v (left %+v)", msg, err, st.deploy)
 	}
-	msg, err = revokeDeployKeyAt(srv.Client(), srv.URL, "t", "never")
+	msg, err = revokeDeployKeyAt(f, "never")
 	if err != nil || !strings.Contains(msg, "not registered") {
 		t.Errorf("absent key: %q %v", msg, err)
 	}
-	if _, err := revokeDeployKeyAt(srv.Client(), srv.URL, "wrong", "gone"); err == nil {
+	bad, _ := newForge("gitea", "forge.example", "acme", "estate", "wrong", f.(*restForge).client)
+	bad.(*restForge).keys = f.(*restForge).keys
+	if _, err := revokeDeployKeyAt(bad, "gone"); err == nil {
 		t.Error("bad token should error")
 	}
 }

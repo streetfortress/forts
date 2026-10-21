@@ -1,0 +1,22 @@
+# Gateway API CRDs, standard channel. Vendored because the traefik helm
+# chart stopped shipping them (v38+); crds.yaml is the unmodified
+# standard-install.yaml from the upstream release. Flux applies the file
+# on every reconcile, so the file in the tree *is* the schema on every
+# fort — the thing that ages is the pin, not the apply.
+#
+# The framework's renovate.json watches the marker line below with a
+# customManager (github-releases, stable tags only) and proposes the new
+# version in sfi/forts (forts#118). Renovate moves the marker and
+# nothing else: it cannot fetch standard-install.yaml, so the curl stays
+# a person's step in the same PR. `go test ./cmd/fort`
+# (TestGatewayAPIBundlePin) compares the marker with the
+# gateway.networking.k8s.io/bundle-version stamp on every object of
+# crds.yaml, so a PR that moves one without the other goes red.
+#
+# To upgrade:
+#   curl -sL -o crds.yaml https://github.com/kubernetes-sigs/gateway-api/releases/download/<version>/standard-install.yaml
+# Current version: v1.6.3
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - crds.yaml
