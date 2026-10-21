@@ -70,6 +70,20 @@ uri = "qemu+ssh://soundship/system"
 ip = "10.0.0.61"
 ```
 
+```toml
+# celld-sea — a plain fort on a linode. The same baseline host, raised by
+# the cloud backend instead of the hypervisor; what it serves is its host file.
+mesh_ip = "10.1.0.62"
+
+[dns]
+zone = "streetfortress.cloud"
+name = "celld-sea"
+
+[linode]
+region = "us-sea"
+type = "g6-nanode-1"
+```
+
 **The neutral top level is the contract.** `mesh_ip`, the optional `mesh_endpoint` /
 `nixos_state_version`, `[shape]`, `[dns]` — this is what scaffold, mint,
 check, the pulumi program and the mesh read. Every consumer reads the
@@ -96,8 +110,13 @@ fleet tree, no cluster age key. Ideally nobody logs in; the prescribed
 access is `deployer` over the mesh and the console password. What a plain
 fort does beyond that — accounts, services, a role — is plain NixOS in its
 host file, the estate's to write; the manifest names no user and no role.
-A plain fort is `[libvirt]`-only for now (a lab VM on the hypervisor; a
-cloud or hardware plain fort is forts#142).
+**The two tables decide two things, and they do not depend on each other**
+(forts#142). `[cluster]` decides k3s and flux. The provider table decides
+the runtime module and the backend that raises the host. A plain fort goes
+where a cluster fort goes: a lab VM, a linode, a machine on the LAN. The
+three shapes of the plain host file differ only in the runtime import and
+the LAN block — `runtime-qemu` with a static LAN block, `runtime-linode`
+with none, `runtime-baremetal` with the block matched by MAC.
 
 **`[cluster] datastore` is k3s's datastore**, and a positive word rather
 than a negated boolean: the reader asks *which datastore*, not *was

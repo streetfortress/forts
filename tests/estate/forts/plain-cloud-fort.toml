@@ -1,0 +1,13 @@
+# Test fixture: a plain fort on a cloud backend (forts#142) — a linode
+# with no [cluster] table. The two tables are independent: [linode] picks
+# the runtime module and the backend, the absent [cluster] drops k3s and
+# flux. The celld shape of forts#141.
+mesh_ip = "10.1.0.95"
+
+[dns]
+zone = "example.cloud"
+name = "plain-cloud-fort"
+
+[linode]
+region = "us-sea"
+type = "g6-nanode-1"

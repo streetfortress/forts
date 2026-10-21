@@ -1,0 +1,9 @@
+# Test fixture: a plain fort on lab hardware (forts#142) — [baremetal]
+# with no [cluster] table. No backend raises it: the image is written to
+# the disk by hand (docs/baremetal.md).
+mesh_ip = "10.1.0.94"
+
+[baremetal]
+ip = "10.0.0.94"
+mac = "f8:ce:72:02:05:08"
+disk = "/dev/nvme0n1"

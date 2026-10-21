@@ -268,25 +268,40 @@ func yamlUnmarshalFile(path string, v any) error {
 // — k3s token, cluster age key, fleet rule, infra recipient, canary — is
 // not, and mint's gate wants only the host dir. Dismantle round-trips
 // without a fleet rule to remove.
+//
+// The provider decides nothing here (forts#142): the plain fort on the
+// hypervisor and the plain fort on a linode get the same identities, so
+// the case runs once per provider table.
 func TestMintPlainFort(t *testing.T) {
-	repo := estateRoot(t)
+	for _, tc := range []struct{ name, provider, table, endpoint string }{
+		{"libvirt", "libvirt", "[libvirt]\nip = \"10.0.0.96\"\n", "10.0.0.96"},
+		{"linode", "linode", "[dns]\nzone = \"example.cloud\"\nname = \"mint-plain\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-nanode-1\"\n", "mint-plain.example.cloud"},
+	} {
+		t.Run(tc.name, func(t *testing.T) { mintPlainFort(t, tc.provider, tc.table, tc.endpoint) })
+	}
+}
+
+// mintPlainFort runs the case on its own fixtures, so it runs outside an
+// estate checkout too — this repo's CI is one (helpers_test.go's
+// estateRoot skips there).
+func mintPlainFort(t *testing.T, provider, table, endpoint string) {
 	const host = "mint-plain"
 	tmp := t.TempDir()
-	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
-		"flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
-	for _, rel := range files {
-		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
-	}
-	original := map[string]string{}
-	for _, rel := range files {
-		original[rel] = readFile(t, filepath.Join(tmp, rel))
-	}
 	write := func(rel, content string) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
-	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
+	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
+	write("estate.toml", "name = \"fixture\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
+	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json"}
+	original := map[string]string{}
+	for _, rel := range files {
+		original[rel] = readFile(t, filepath.Join(tmp, rel))
+	}
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n"+table)
 	tool := &fakeTool{}
 	st := &fakeForgeState{}
 	gitea, registered := newFakeForge(t, st, "gitea"), &st.deploy
@@ -324,10 +339,16 @@ func TestMintPlainFort(t *testing.T) {
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
 		t.Error("a plain fort must not touch the fleet .sops.yaml")
 	}
-	// The fort answers as deployer, like every fort.
+	// The fort answers as deployer, like every fort, and the comment
+	// names the provider the manifest carries.
 	sc := readFile(t, filepath.Join(tmp, sshConfigPath))
-	if !strings.Contains(sc, "# plain fort, libvirt\nHost "+host+"\n  Hostname 10.1.0.96\n  User deployer\n") {
+	if !strings.Contains(sc, "# plain fort, "+provider+"\nHost "+host+"\n  Hostname 10.1.0.96\n  User deployer\n") {
 		t.Errorf("a plain fort answers as deployer:\n%s", sc)
+	}
+	// The peer's endpoint is the provider's: the lab host's static LAN
+	// address, the cloud host's public name.
+	if !strings.Contains(readFile(t, filepath.Join(tmp, "mesh/peers.json")), `"wg_endpoint_ip": "`+endpoint+`"`) {
+		t.Errorf("peer endpoint is not %s:\n%s", endpoint, readFile(t, filepath.Join(tmp, "mesh/peers.json")))
 	}
 	if markerBlock(readFile(t, filepath.Join(tmp, "nixos/.sops.yaml")), host) == "" {
 		t.Error("nixos rule missing")

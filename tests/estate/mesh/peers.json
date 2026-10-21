@@ -1,5 +1,6 @@
 {
   "peers": {
+    "plain-cloud-fort": {"wg_vpn_ip": "10.1.0.95", "wg_endpoint_ip": "plain-cloud-fort.example.cloud", "public_key": "cGxhaW4tY2xvdWQtZm9ydC1maXh0dXJlLWtleT09PT0="},
     "plain-fort": {"wg_vpn_ip": "10.1.0.96", "wg_endpoint_ip": "10.0.0.96", "public_key": "cGxhaW4tZm9ydC1maXh0dXJlLXB1YmxpYy1rZXk9PT09PT0="}
   },
   "clients": {},

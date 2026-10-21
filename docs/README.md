@@ -20,8 +20,11 @@ the same `deployer` with the ops verbs (#647, [ops.md](ops.md)), and no cluster.
 framework stops there on purpose: ideally nobody logs in, and the
 prescribed access is `deployer` over the mesh and the console password.
 What a plain fort does beyond that is plain NixOS in its host file, the
-estate's. The verbs know the difference from the manifest; nothing else
-changes hands ([manifest.md](manifest.md)).
+estate's. A plain fort goes where a cluster fort goes — a lab VM, a
+linode, a machine on the LAN: the provider table decides the runtime and
+the backend, the `[cluster]` table decides k3s and flux, and the two do
+not depend on each other (forts#142). The verbs know the difference from
+the manifest; nothing else changes hands ([manifest.md](manifest.md)).
 
 ## Verbs by intent
 

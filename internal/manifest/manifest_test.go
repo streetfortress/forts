@@ -145,8 +145,6 @@ func TestParseRefuses(t *testing.T) {
 		// The shape table (#426) is handled like the provider tables:
 		// strict keys, and the retired top-level k3s_cluster_init is an
 		// unknown key like any other — the loader special-cases nothing.
-		// No [cluster] is a plain fort, which has nothing to back up.
-		{"plain in the cloud", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\nname = \"n\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n", "is a lab VM for now"},
 		{"retired dev table", "mesh_ip = \"10.1.0.1\"\n[dev]\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key dev"},
 		{"retired k3s_cluster_init", "k3s_cluster_init = false\nmesh_ip = \"10.1.0.1\"\n[cluster]\n[libvirt]\nip = \"10.0.0.1\"\n", "unknown key k3s_cluster_init"},
 		{"bad datastore", "mesh_ip = \"10.1.0.1\"\n[cluster]\ndatastore = \"postgres\"\n[libvirt]\nip = \"10.0.0.1\"\n", "[cluster] datastore \"postgres\": want one of sqlite, etcd"},
@@ -169,6 +167,34 @@ func TestParseRefuses(t *testing.T) {
 		if err != nil && !strings.HasPrefix(err.Error(), "forts/h.toml: ") {
 			t.Errorf("%s: error names the file: %v", tc.name, err)
 		}
+	}
+}
+
+// A plain fort is a provider decision and a cluster decision, and the
+// two do not depend on each other (forts#142): no [cluster] table on
+// any of the three provider tables parses. The refusal that made a
+// plain fort a lab VM is gone.
+func TestParsePlainOnEveryProvider(t *testing.T) {
+	for _, tc := range []struct{ name, text, provider string }{
+		{"libvirt", "mesh_ip = \"10.1.0.1\"\n[libvirt]\nip = \"10.0.0.1\"\n", "libvirt"},
+		{"linode", "mesh_ip = \"10.1.0.1\"\n[dns]\nzone = \"z\"\nname = \"n\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-nanode-1\"\n", "linode"},
+		{"baremetal", "mesh_ip = \"10.1.0.1\"\n[baremetal]\nip = \"10.0.0.1\"\n", "baremetal"},
+	} {
+		h, err := Parse("h", []byte(tc.text))
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if h.Provider != tc.provider || h.IsCluster() || h.Datastore() != "" || h.AuditLogging() {
+			t.Errorf("%s: %+v", tc.name, h)
+		}
+	}
+	// The provider table still decides the backend and the runtime: a
+	// plain linode is realized, a plain machine on the LAN is not.
+	cloud, _ := Parse("h", []byte("mesh_ip = \"10.1.0.1\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-nanode-1\"\n"))
+	metal, _ := Parse("h", []byte("mesh_ip = \"10.1.0.1\"\n[baremetal]\nip = \"10.0.0.1\"\n"))
+	if !cloud.Cloud() || !cloud.Realized() || metal.Cloud() || metal.Realized() || metal.LanIP() != "10.0.0.1" {
+		t.Errorf("cloud %+v metal %+v", cloud, metal)
 	}
 }
 

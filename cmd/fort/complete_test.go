@@ -14,8 +14,8 @@ import (
 	"testing"
 )
 
-// The candidate sets, per verb, on a fixture estate: five manifests of
-// five shapes, a mesh with a member that has no manifest, one stack with
+// The candidate sets, per verb, on a fixture estate: seven manifests of
+// seven shapes, a mesh with a member that has no manifest, one stack with
 // a manifest and one without, and one fort's apps tree. What each verb
 // offers is the point of #113 — `destroy` and `wg-conf` are the inverse
 // of the manifest list, and this is where that stays true.
@@ -33,13 +33,15 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"nope", ""}},               // an unknown verb offers nothing, not everything
 
 		// Every manifest.
-		{line: []string{"scaffold", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
-		{line: []string{"mint", "--write", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
-		{line: []string{"console-password", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"scaffold", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"mint", "--write", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"console-password", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 
-		// The verbs a backend raises: [baremetal] has no stack by design.
-		{line: []string{"provision", ""}, want: []string{"cloud-fort", "lab-fort", "plain-fort", "sfi-fort-e33e2d5"}},
-		{line: []string{"preview", ""}, want: []string{"cloud-fort", "lab-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		// The verbs a backend raises: [baremetal] has no stack by design,
+		// and a plain fort on a backend is raised like any other fort
+		// (forts#142) — plain-cloud-fort is offered, plain-metal-fort is not.
+		{line: []string{"provision", ""}, want: []string{"cloud-fort", "lab-fort", "plain-cloud-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"preview", ""}, want: []string{"cloud-fort", "lab-fort", "plain-cloud-fort", "plain-fort", "sfi-fort-e33e2d5"}},
 
 		// A [libvirt] manifest with no stack yet. lab-fort has one.
 		{line: []string{"adopt", ""}, want: []string{"plain-fort", "sfi-fort-e33e2d5"}},
@@ -58,12 +60,12 @@ func TestCompleteCandidates(t *testing.T) {
 		// ships no contract and is not one.
 
 		// Repeatable, and never twice.
-		{line: []string{"check", "lab-fort", ""}, want: []string{"cloud-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"check", "lab-fort", ""}, want: []string{"cloud-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 
 		// The link verbs (#55): the sub-verb word, the fort, and a URL
 		// nothing in the tree can offer.
 		{line: []string{"link", ""}, want: []string{"add"}},
-		{line: []string{"link", "add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"link", "add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 		{line: []string{"link", "add", "lab-fort", ""}},
 		{line: []string{"link", "add", "lab-fort", "ssh://x/y/z", "--"}, want: []string{"--address", "--port", "--write"}},
 		{line: []string{"estate", ""}, want: []string{"link"}},
@@ -301,7 +303,7 @@ func parseFortPkg(t *testing.T) map[string]*ast.File {
 	return files
 }
 
-// completionEstate lays down the estate the candidate sets read: the five
+// completionEstate lays down the estate the candidate sets read: the seven
 // manifest shapes from testdata, a mesh whose members are not the
 // manifests, two stacks (one declared, one not), and one fort's apps
 // tree. It is a git checkout because repoRoot walks up to a .git.

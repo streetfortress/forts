@@ -27,10 +27,11 @@ From `forts/<host>.toml`:
 
 ```
 nixos/hosts/<host>/
-● default.nix        lab shape (qcow runtime, static LAN block) when the entry
-                     has provider: libvirt or none; cloud shape (linode runtime,
-                     no LAN block, zram, Lish break-glass) when it
-                     names a cloud provider; every shape imports shell.nix and
+● default.nix        the provider table picks the runtime and the LAN block —
+                     qcow + static LAN for libvirt, linode + no LAN block for a
+                     cloud provider, baremetal + the LAN block by MAC; the
+                     [cluster] table picks the cluster shape or the plain shape
+                     (below); every shape imports shell.nix and
                      ops/console.nix and enables both (the operator defaults,
                      below)
 ● secrets.nix        sops-nix wiring: the host's age identity is derived from
@@ -82,11 +83,27 @@ A manifest with no `[cluster]` table renders the host dir alone:
 `flux-bootstrap.nix`: `hardened.nix`,
 `ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with the four
 modules a role names — `estate.nix`, `wireguard.nix`, `metrics.nix`,
-`lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the LAN and zram
-blocks of the lab VM. Nothing under `flux/`: there is no cluster to sync and no canary to
+`lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the zram block.
+Nothing under `flux/`: there is no cluster to sync and no canary to
 prove decryption. `secrets.nix` declares no `k3s-token`. The file is the
 estate's from then on: an account, a service, a role is plain NixOS
 written below the imports, and the framework names none of it.
+
+**The plain shape renders on every provider** (forts#142). The
+`[cluster]` table decides k3s and flux; the provider table decides the
+runtime module and the backend. One template serves the three, and the
+note says which runtime you got:
+
+| provider table | runtime import | the rest of the difference |
+|---|---|---|
+| `[libvirt]` | `runtime-qemu` | the static LAN block, `en*` by name; the NoCloud channel for the host key (#657) |
+| `[linode]` | `runtime-linode` | no LAN block; `resolved`; `PermitRootLogin` forced to `no` over upstream's `linode-config.nix`; Lish as the break-glass; the Metadata channel (#606) |
+| `[baremetal]` | `runtime-baremetal` | the static LAN block, by MAC where `[baremetal] mac` names one; no backend raises it, and the host key's channel is #658 |
+
+`lab-dns.nix` is imported on all three, as `k3s-server.nix` imports it
+on all three: the module forwards `.lofi` to the host's own static
+resolvers, which a cloud host has none of, so there it pins the forge's
+name and forwards nothing.
 
 ## The operator defaults
 

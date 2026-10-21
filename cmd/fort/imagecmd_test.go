@@ -34,6 +34,19 @@ func TestImageVariant(t *testing.T) {
 	if cloud.channel() != "linode-metadata" || lab.channel() != "nocloud" || metal.channel() != "" {
 		t.Errorf("channels: cloud=%q lab=%q metal=%q", cloud.channel(), lab.channel(), metal.channel())
 	}
+	// The variant is the provider table's, not the [cluster] table's
+	// (forts#142): a plain fort on a linode builds the linode image and
+	// seeds it through the Metadata channel, as a cluster fort does.
+	for _, tc := range []struct{ host, variant, attr, ext, channel string }{
+		{"plain-fort", "qcow", "./nixos#plain-fort-qcow", ".qcow2", "nocloud"},
+		{"plain-cloud-fort", "linode", "./nixos#plain-cloud-fort-linode", ".img.gz", "linode-metadata"},
+		{"plain-metal-fort", "baremetal", "./nixos#plain-metal-fort-baremetal", ".img", ""},
+	} {
+		v := imageVariant(tc.host, hosts[tc.host])
+		if v.variant != tc.variant || v.attr != tc.attr || v.ext() != tc.ext || v.channel() != tc.channel {
+			t.Errorf("%s: %+v ext %q channel %q", tc.host, v, v.ext(), v.channel())
+		}
+	}
 }
 
 // TestPlainImage: the artifact is a 0600 copy of the build output, byte

@@ -423,16 +423,14 @@ func (h Host) Validate(host string) error {
 	// The shape (#426): [cluster] makes a flux cluster, and its keys are
 	// strict like a provider table's. No [cluster] table makes a plain
 	// fort — the baseline host and nothing else the framework names.
+	//
+	// The two tables are independent (forts#142): [cluster] decides k3s
+	// and flux, the provider table decides the runtime module and the
+	// backend that raises the host. A plain fort goes where a cluster
+	// fort goes — a lab VM, a linode, a machine on the LAN.
 	if h.IsCluster() {
 		if err := h.Cluster.Validate(); err != nil {
 			return fail("%v", err)
-		}
-	} else {
-		// A plain fort is a lab VM for now: the shape is a libvirt domain
-		// on the hypervisor, and a cloud or hardware plain fort is its own
-		// host template (forts#142).
-		if h.Libvirt() == nil {
-			return fail("a fort with no [cluster] table is a lab VM for now — add the [libvirt] table, or add [cluster]")
 		}
 	}
 	if err := h.Spec.Validate(host, h); err != nil {

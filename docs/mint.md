@@ -99,6 +99,11 @@ rule, the peer, the deploy key on the forge. No `k3s-token`, no
 `flux-sops-age-key`, no fleet rule or infra recipient (nothing to re-key),
 no canary. The gate wants only `nixos/hosts/<host>/default.nix`.
 
+The provider makes no difference here (forts#142): a plain fort on a
+linode and a plain fort on the hypervisor get the same identities, and
+each one reaches its host through the channel of its own platform — the
+Metadata service, or the NoCloud volume.
+
 Mint knows no account but the fort's own. An identity for a user the
 estate adds to a fort — a coding agent's git key, token and signing key —
 is the estate's to mint, into the same secrets file, beside what mint

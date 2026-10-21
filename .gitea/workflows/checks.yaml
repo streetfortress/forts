@@ -67,6 +67,7 @@ jobs:
           set -euo pipefail
           nix eval --json .#nixosModules --apply builtins.attrNames
           nix eval --raw .#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.plain-cloud-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
@@ -151,6 +152,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(nix eval --json .#nixosConfigurations.plain-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
+            = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
+          test "$(nix eval --json .#nixosConfigurations.plain-cloud-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
             = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
           test "$(nix eval --json .#nixosConfigurations.admin-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
             = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'

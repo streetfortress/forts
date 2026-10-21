@@ -128,7 +128,7 @@
         };
       });
 
-      # The fixture estate (tests/estate: one plain fort, rendered there by
+      # The fixture estate (tests/estate: two plain forts, rendered there by
       # `fort scaffold`) evaluated the way an estate's flake evaluates a
       # host: the common base, the host dir, sops-nix, and this flake as
       # `inputs.forts`. CI evaluates its toplevel derivation — the proof
@@ -139,6 +139,21 @@
         modules = [
           self.nixosModules.common
           ./tests/estate/nixos/hosts/plain-fort
+          sops-nix.nixosModules.sops
+        ];
+      };
+
+      # The plain shape on a cloud backend (forts#142): the same baseline
+      # on runtime-linode, with no LAN block and no cluster. CI evaluates
+      # it because the two tables of a manifest decide two things — a
+      # plain fort that only ever ran on the hypervisor proves one of
+      # them. The celld forts of forts#141 are this host.
+      nixosConfigurations.plain-cloud-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/estate/nixos/hosts/plain-cloud-fort
           sops-nix.nixosModules.sops
         ];
       };

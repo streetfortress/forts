@@ -254,10 +254,10 @@ func scaffold(args []string) error {
 	return nil
 }
 
+// scaffoldShape names the two decisions of a manifest, in the order
+// the reader makes them (forts#142): the provider table says where the
+// fort runs, the [cluster] table says whether it is a flux cluster.
 func scaffoldShape(e manifest.Host) string {
-	if !e.IsCluster() {
-		return "plain fort: lab VM, no cluster"
-	}
 	s := "lab VM"
 	if e.Baremetal() != nil {
 		s = "lab hardware"
@@ -267,6 +267,9 @@ func scaffoldShape(e manifest.Host) string {
 		if l := e.Linode(); l != nil {
 			s += " " + l.Region + " " + l.Type
 		}
+	}
+	if !e.IsCluster() {
+		return s + ", plain fort: no cluster"
 	}
 	return s + ", k3s on " + e.Datastore()
 }
@@ -346,7 +349,20 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 		hostTpl, hostNote = "host-cloud.nix.gotpl", "cloud shape (linode runtime, no LAN, zram)"
 	}
 	if view.Plain {
-		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)"
+		// The plain shape on every provider (forts#142): one template,
+		// the runtime import and the LAN block branched on the provider
+		// table, exactly as the cluster shapes branch.
+		runtime := "qcow runtime, static LAN"
+		switch {
+		case view.Cloud:
+			runtime = "linode runtime, no LAN"
+		case view.Baremetal:
+			runtime = "baremetal runtime, static LAN"
+			if view.MAC != "" {
+				runtime += " by MAC"
+			}
+		}
+		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape ("+runtime+", deployer + the ops verbs; no k3s/flux)"
 	}
 	hostDir := filepath.Join("nixos/hosts", host)
 	plan := []struct{ path, tpl, note string }{

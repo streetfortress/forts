@@ -235,40 +235,114 @@ func keys(m map[string]string) []string {
 }
 
 // A plain fort (no [cluster] table) renders the host dir — the baseline
-// shape, no fleet surface — plus its pull-shaped file on the hub and the
-// kustomization line that applies it.
+// shape, no fleet surface — on every provider table (forts#142). The two
+// tables decide two things and do not depend on each other: [cluster]
+// decides k3s and flux, the provider table decides the runtime module
+// and the backend.
 func TestRenderScaffoldPlain(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
 		t.Fatal(err, problems)
 	}
-	files := render(t, "plain-fort", hosts["plain-fort"])
-	if len(files) != 2 {
-		t.Fatalf("want 2 files (default.nix, secrets.nix), got %d", len(files))
+	byPath := func(files []scaffoldFile) map[string]string {
+		m := map[string]string{}
+		for _, f := range files {
+			m[f.path] = string(f.content)
+		}
+		return m
 	}
-	m := map[string]string{}
-	for _, f := range files {
-		m[f.path] = string(f.content)
-	}
-	d := m["nixos/hosts/plain-fort/default.nix"]
-	// The baseline and nothing else: the hardened profile, the mesh,
-	// deployer with the ops verbs (#647), the shell, the rebuild loop.
-	for _, s := range append([]string{"inputs.forts.nixosModules.runtime-qemu", "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", "deployer@10.1.0.96", `address = [ "10.0.0.96/24" ]`, `networking.hostName = "plain-fort"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
-		if !strings.Contains(d, s) {
-			t.Errorf("plain default.nix lacks %q", s)
+	// Every plain shape, whatever its provider: the baseline and nothing
+	// else — the hardened profile, the mesh, deployer with the ops verbs
+	// (#647), the shell, the rebuild loop; no k3s, no flux, no fleet dir.
+	plain := map[string]string{}
+	for _, name := range []string{"plain-fort", "plain-cloud-fort", "plain-metal-fort"} {
+		files := render(t, name, hosts[name])
+		if len(files) != 2 {
+			t.Fatalf("%s: want 2 files (default.nix, secrets.nix), got %d", name, len(files))
+		}
+		m := byPath(files)
+		d := m["nixos/hosts/"+name+"/default.nix"]
+		plain[name] = d
+		for _, s := range append([]string{"inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", `networking.hostName = "` + name + `"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
+			if !strings.Contains(d, s) {
+				t.Errorf("%s default.nix lacks %q", name, s)
+			}
+		}
+		for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "sfi.k3s", "interactive.nix", "dotfiles.nix", "dev-fort.nix", "lab-host"} {
+			if strings.Contains(d, s) {
+				t.Errorf("%s default.nix should not carry %q", name, s)
+			}
+		}
+		sec := m["nixos/hosts/"+name+"/secrets.nix"]
+		if !strings.Contains(sec, "secrets/"+name+".yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
+			t.Errorf("%s secrets.nix wrong:\n%s", name, sec)
 		}
 	}
-	for _, s := range []string{"k3s-server", "production.nix", "flux-bootstrap", "sfi.k3s", "interactive.nix", "dotfiles.nix", "dev-fort.nix", "lab-host"} {
-		if strings.Contains(d, s) {
-			t.Errorf("plain default.nix should not carry %q", s)
+	// The lab VM: the qcow runtime and the static LAN block.
+	lab := plain["plain-fort"]
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-qemu", "plain-fort-qcow", "deployer@10.1.0.96", `matchConfig.Name = "en*"`, `address = [ "10.0.0.96/24" ]`, "NoCloud cidata"} {
+		if !strings.Contains(lab, s) {
+			t.Errorf("plain lab default.nix lacks %q", s)
 		}
 	}
-	sec := m["nixos/hosts/plain-fort/secrets.nix"]
-	if !strings.Contains(sec, "secrets/plain-fort.yaml") || !strings.Contains(sec, "secrets.wireguard-private-key") || !strings.Contains(sec, "No k3s-token") {
-		t.Errorf("plain secrets.nix wrong:\n%s", sec)
+	// The linode: the linode runtime, no LAN block, Lish as the
+	// break-glass, and the root-login force upstream linode-config.nix
+	// needs. The lab-dns import stays — on a cloud fort it pins the
+	// forge's name and forwards nothing (modules/lab-dns.nix).
+	cloud := plain["plain-cloud-fort"]
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-linode", "plain-cloud-fort-linode", "deployer@10.1.0.95", "{ inputs, lib, ... }:", `services.openssh.settings.PermitRootLogin = lib.mkForce "no";`, "services.resolved.enable = true;", "Lish in the Linode console", "Linode Metadata"} {
+		if !strings.Contains(cloud, s) {
+			t.Errorf("plain cloud default.nix lacks %q", s)
+		}
+	}
+	for _, s := range []string{"runtime-qemu", "runtime-baremetal", "-qcow", "systemd.network.networks", "matchConfig", "NoCloud"} {
+		if strings.Contains(cloud, s) {
+			t.Errorf("plain cloud default.nix should not carry %q", s)
+		}
+	}
+	// The machine on the LAN: the baremetal runtime, the LAN block
+	// matched by MAC, and no key in the image (#658).
+	metal := plain["plain-metal-fort"]
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-baremetal", "plain-metal-fort-baremetal", "deployer@10.1.0.94", "{ inputs, ... }:", `matchConfig.MACAddress = "f8:ce:72:02:05:08"`, `address = [ "10.0.0.94/24" ]`, "docs/baremetal.md", "the image carries no key"} {
+		if !strings.Contains(metal, s) {
+			t.Errorf("plain metal default.nix lacks %q", s)
+		}
+	}
+	for _, s := range []string{"runtime-qemu", "runtime-linode", "-qcow", "linode", "hypervisor's LAN bridge", "lib.mkForce"} {
+		if strings.Contains(metal, s) {
+			t.Errorf("plain metal default.nix should not carry %q", s)
+		}
+	}
+	// The note `fort scaffold` prints names the provider, so the two
+	// decisions are both readable in the dry run.
+	for name, want := range map[string]string{
+		"plain-fort":       "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)",
+		"plain-cloud-fort": "plain fort shape (linode runtime, no LAN, deployer + the ops verbs; no k3s/flux)",
+		"plain-metal-fort": "plain fort shape (baremetal runtime, static LAN by MAC, deployer + the ops verbs; no k3s/flux)",
+	} {
+		files := render(t, name, hosts[name])
+		if files[0].note != want {
+			t.Errorf("%s note = %q, want %q", name, files[0].note, want)
+		}
+	}
+	// scaffoldShape names the provider first and the cluster decision
+	// second, on a plain fort as on a cluster fort.
+	for name, want := range map[string]string{
+		"plain-fort":       "lab VM, plain fort: no cluster",
+		"plain-cloud-fort": "linode us-sea g6-nanode-1, plain fort: no cluster",
+		"plain-metal-fort": "lab hardware, plain fort: no cluster",
+		"lab-fort":         "lab VM, k3s on sqlite",
+	} {
+		if got := scaffoldShape(hosts[name]); got != want {
+			t.Errorf("%s shape = %q, want %q", name, got, want)
+		}
 	}
 }
 
+// The fixture estate the flake evaluates is scaffold output, host for
+// host: the lab VM and the linode of forts#142. Each manifest is the
+// testdata manifest of the same name, so the render tests above and the
+// nix eval in CI read one fort.
 func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 	hosts, problems, err := manifest.LoadAll("testdata")
 	if err != nil || len(problems) > 0 {
@@ -279,19 +353,28 @@ func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if readFile(t, filepath.Join(dir, manifest.Path("plain-fort"))) != readFile(t, filepath.Join("testdata", manifest.Path("plain-fort"))) {
-		t.Fatal("the fixture estate's manifest differs from testdata's")
-	}
-	files, err := renderScaffold("plain-fort", hosts["plain-fort"], est)
+	fixtures, err := manifest.Names(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 2 {
-		t.Fatalf("no hub: want the host dir alone (2 files), got %d", len(files))
+	if strings.Join(fixtures, ",") != "plain-cloud-fort,plain-fort" {
+		t.Fatalf("the fixture estate declares %v — add the new fort to flake.nix and to the nix job of .gitea/workflows/checks.yaml, then name it here", fixtures)
 	}
-	for _, f := range files {
-		if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
-			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold plain-fort --write in tests/estate", f.path)
+	for _, host := range fixtures {
+		if readFile(t, filepath.Join(dir, manifest.Path(host))) != readFile(t, filepath.Join("testdata", manifest.Path(host))) {
+			t.Fatalf("%s: the fixture estate's manifest differs from testdata's", host)
+		}
+		files, err := renderScaffold(host, hosts[host], est)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 2 {
+			t.Fatalf("%s: a plain fort is the host dir alone (2 files), got %d", host, len(files))
+		}
+		for _, f := range files {
+			if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
+				t.Errorf("%s: the fixture differs from the render — re-run fort scaffold %s --write in tests/estate", f.path, host)
+			}
 		}
 	}
 }
