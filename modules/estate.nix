@@ -12,6 +12,11 @@
 let
   tomlPath = config.sfi.estate.root + "/estate.toml";
   estateToml = if builtins.pathExists tomlPath then builtins.fromTOML (builtins.readFile tomlPath) else { };
+  # The tables of estate.toml (forts#161): [source] is where the tree
+  # comes from, [mesh] is the WireGuard mesh. Absent tables read as
+  # empty — each option below says what absence means.
+  sourceToml = estateToml.source or { };
+  meshToml = estateToml.mesh or { };
 in
 {
   options.sfi.estate.root = lib.mkOption {
@@ -23,19 +28,33 @@ in
     '';
   };
 
-  # The three estate facts a module reads from estate.toml itself: the
-  # name of the mesh interface (deployments#674), the zone of the mesh
-  # (forts#45) and the operator keys (forts#81). One name per mesh, on
-  # every host on it — this host's own
-  # (wireguard.nix) and a linked host's link interface (links.nix) — so
-  # `wg show <name>` means the same thing everywhere, and hardened.nix /
-  # k3s-server.nix open the admin ports on it by that name. An estate
-  # that names none is on wg0, as before.
+  # The estate facts a module reads from estate.toml itself: the mesh
+  # interface's name (deployments#674), the mesh's prefix length
+  # (forts#161), the zone of the mesh (forts#45) and the operator keys
+  # (forts#81). One interface name per mesh, on every host on it — this
+  # host's own (wireguard.nix) and a linked host's link interface
+  # (links.nix) — so `wg show <name>` means the same thing everywhere,
+  # and hardened.nix / k3s-server.nix open the admin ports on it by that
+  # name. An estate that names none is on wg0, as before.
   options.sfi.mesh.interface = lib.mkOption {
     type = lib.types.strMatching "^[A-Za-z0-9_=+.-]{1,15}$";
-    default = estateToml.interface or "wg0";
-    defaultText = "estate.toml's `interface`, else wg0";
+    default = meshToml.interface or "wg0";
+    defaultText = "estate.toml's `[mesh] interface`, else wg0";
     description = "The WireGuard interface of this estate's mesh on this host.";
+  };
+
+  # The prefix length of the mesh: what the interface's address renders
+  # with (wireguard.nix), read off the cidr of [mesh]. /24 was a literal
+  # in three places until forts#161; an estate that declares no cidr
+  # keeps it.
+  options.sfi.mesh.prefixLength = lib.mkOption {
+    type = lib.types.ints.between 0 32;
+    default =
+      if meshToml ? cidr
+      then lib.toInt (lib.last (lib.splitString "/" meshToml.cidr))
+      else 24;
+    defaultText = "the prefix of estate.toml's `[mesh] cidr`, else 24";
+    description = "The prefix length of this estate's mesh: the interface address is <mesh_ip>/<this>.";
   };
 
   # The zone: every host on the mesh is <host>.<zone> (mesh-dns.nix), and
@@ -45,11 +64,11 @@ in
   # mesh it is on. .mesh is the fleet's one private TLD.
   options.sfi.mesh.zone = lib.mkOption {
     type = lib.types.strMatching "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
-    default = estateToml.zone or (
+    default = meshToml.zone or (
       if estateToml ? name then "${estateToml.name}.mesh"
       else throw "sfi.mesh.zone: ${toString tomlPath} names no estate (`name`) — fort init renders estate.toml; or set the zone in the host file"
     );
-    defaultText = "estate.toml's `zone`, else <name>.mesh";
+    defaultText = "estate.toml's `[mesh] zone`, else <name>.mesh";
     description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
   };
 
@@ -85,14 +104,14 @@ in
   };
 
   # The forge's host key (forts#139): what flux's git-auth secret and the
-  # rebuild loop pin their clones to. estate.toml's `known_hosts`, which
-  # `fort init --known-hosts` writes. The framework shipped its own
+  # rebuild loop pin their clones to. estate.toml's `[source] known_hosts`,
+  # which `fort init --known-hosts` writes. The framework shipped its own
   # forge's key as the default until the first public release; it ships
   # none now, and a host of an estate that names none does not evaluate.
   options.sfi.estate.knownHosts = lib.mkOption {
     type = lib.types.str;
-    default = estateToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
-    defaultText = "estate.toml's `known_hosts`";
+    default = sourceToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `[source] known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
+    defaultText = "estate.toml's `[source] known_hosts`";
     description = "The forge's SSH host key, one known_hosts line, pinned by every clone a fort makes of the estate.";
   };
 

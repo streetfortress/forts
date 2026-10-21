@@ -31,8 +31,8 @@ var initTemplates embed.FS
 
 // initView is what the templates see.
 type initView struct {
-	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, KnownHosts, ACMEEmail string
-	Admins                                                                   []string
+	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, KnownHosts, ACMEEmail, ACMEDirectory string
+	Admins                                                                                  []string
 	// OperatorKeys: the devices that hold `deployer` on every fort of
 	// the estate (estate.toml operator_keys, forts#81). Empty renders
 	// the commented example, and no fort of the estate evaluates until
@@ -120,7 +120,13 @@ func initCmd(args []string) error {
 			return fmt.Errorf("--admin %q: want an age recipient (age1…)", a)
 		}
 	}
-	est := estate.Estate{Name: *name, Repo: *repo, Mesh: *meshNet, Interface: *iface, Zone: *zone, OperatorKeys: operatorKeys, KnownHosts: *knownHosts, ACMEEmail: *acmeEmail}
+	est := estate.Estate{
+		Name:         *name,
+		Source:       estate.Source{Repo: *repo, KnownHosts: *knownHosts},
+		Mesh:         estate.Mesh{CIDR: *meshNet, Interface: *iface, Zone: *zone},
+		ACME:         estate.ACME{Email: *acmeEmail},
+		OperatorKeys: operatorKeys,
+	}
 	for _, v := range hubs {
 		role, h, err := parseHubFlag(v)
 		if err != nil {
@@ -152,7 +158,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh, Interface: est.Interface, Zone: est.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.KnownHosts, ACMEEmail: est.ACMEEmail, Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -194,8 +200,8 @@ func initCmd(args []string) error {
 		fmt.Printf("· %-44s operator_keys — the devices that hold `deployer` on every fort of this estate. No\n", estate.Path)
 		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
 	}
-	if est.KnownHosts == "" {
-		fmt.Printf("· %-44s known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
+	if est.Source.KnownHosts == "" {
+		fmt.Printf("· %-44s [source] known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
 		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort init --known-hosts, or this file).\n", "")
 	}
 	if !*write {
@@ -210,7 +216,7 @@ func initCmd(args []string) error {
 // a .gotpl rendered and the suffix dropped, anything else copied as is.
 func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
-		"estate.toml":                     "the estate: name, repo, mesh, interface, zone, the operator keys, hubs",
+		"estate.toml":                     "the estate: name and the operator keys, then [source], [mesh], [acme], the hubs",
 		"README.md":                       "the estate's README: the layout, the first fort",
 		"justfile":                        "the estate's own verbs, which are not the CLI: fetch-kubeconfig, updatekeys",
 		".gitignore":                      "",

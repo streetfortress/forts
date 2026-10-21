@@ -48,6 +48,10 @@ type Link struct {
 	Interface string `toml:"interface"`
 	// Zone is the other mesh's DNS zone (forts#45). Default <name>.mesh.
 	Zone string `toml:"zone"`
+	// Prefix is the other mesh's prefix length: the prefix of its
+	// estate.toml's [mesh] cidr, which `fort link add` writes when it is
+	// not the default (forts#161). Default 24, the fleet's convention.
+	Prefix int `toml:"prefix"`
 	// PublicKey is the public half of the link's WireGuard key.
 	PublicKey string `toml:"public_key"`
 
@@ -74,6 +78,15 @@ func (l Link) ZoneName() string {
 		return l.Name + estate.DefaultZoneSuffix
 	}
 	return l.Zone
+}
+
+// PrefixBits is the other mesh's prefix length, 24 when the table
+// names none.
+func (l Link) PrefixBits() int {
+	if l.Prefix == 0 {
+		return estate.DefaultMeshPrefixBits
+	}
+	return l.Prefix
 }
 
 // Ref is the other estate as <owner>/<name>.

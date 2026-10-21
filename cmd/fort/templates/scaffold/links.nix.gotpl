@@ -14,5 +14,8 @@
     zone = "{{ .Zone }}";
     port = {{ .Port }};
     address = "{{ .Address }}";
+{{- if .Prefix }}
+    prefixLength = {{ .Prefix }};
+{{- end }}
   };
 {{ end -}}

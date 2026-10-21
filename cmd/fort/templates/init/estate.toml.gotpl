@@ -1,40 +1,8 @@
 # {{ .Name }} — an estate: the forts declared here, built on sfi/forts.
 # Rendered by `fort init`; every verb reads it (docs/init.md in sfi/forts).
+# TOML reads a loose key after a [table] header as that table's, so the
+# loose keys (name, operator_keys) stay above the first table.
 name = "{{ .Name }}"
-repo = "{{ .Repo }}"
-{{- if .Mesh }}
-mesh = "{{ .Mesh }}"          # the WireGuard subnet; every mesh_ip and every peers.json address lies in it
-{{- else }}
-# mesh = "10.2.0.0/24"       # the WireGuard subnet of this estate; fort check keeps every
-                             # mesh_ip and every peers.json address inside it. Two estates
-                             # link only when their meshes do not overlap (deployments#674).
-{{- end }}
-{{- if .Interface }}
-interface = "{{ .Interface }}"   # the WireGuard interface every host gives this mesh (≤ 15 characters)
-{{- else }}
-# interface = "wg-second"    # the WireGuard interface every host on this mesh gives it: a fort's
-                             # own, and a linked host's link interface. ≤ 15 characters. Absent: wg0.
-{{- end }}
-{{- if .KnownHosts }}
-known_hosts = "{{ .KnownHosts }}"   # the forge's SSH host key: every clone a fort makes pins it
-{{- else }}
-# known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key, one known_hosts line
-                             # (ssh-keyscan -p <port> <forge>): flux's clone and the rebuild loop pin
-                             # it, and no fort evaluates until the estate names it.
-{{- end }}
-{{- if .ACMEEmail }}
-acme_email = "{{ .ACMEEmail }}"   # the public ACME account's contact: the shared layer carries a Let's Encrypt issuer
-{{- else }}
-# acme_email = "ops@example"  # set, and the shared layer carries a Let's Encrypt ClusterIssuer
-                             # for the estate's public names; absent, no public issuer.
-{{- end }}
-{{- if .Zone }}
-zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <host>.{{ .Zone }}
-{{- else }}
-# zone = "{{ .Name }}.mesh"    # the DNS zone of the mesh (docs/mesh.md): every peer and remote
-                             # of peers.json is <host>.<zone> at its mesh address, on every fort
-                             # and in its cluster DNS. Absent: <name>.mesh, i.e. {{ .Name }}.mesh.
-{{- end }}
 
 # The operators (docs/init.md): the devices that hold `deployer`, the
 # operator account of every fort of this estate (ops/deployer.nix). The
@@ -54,6 +22,60 @@ operator_keys = [
 # operator_keys = [
 #   "ssh-ed25519 AAAAC3Nza… macbook-air",
 # ]
+{{- end }}
+
+# The source (docs/init.md): where this estate's tree comes from and how
+# a fort reaches it. The clone route is SSH: flux and the rebuild loop
+# clone `repo` with the deploy key `fort mint` registers, and both pin
+# the forge's host key. `forge` and `auth` derive from `repo` when
+# absent (gitea; ssh).
+[source]
+repo = "{{ .Repo }}"
+{{- if .KnownHosts }}
+known_hosts = "{{ .KnownHosts }}"   # the forge's SSH host key: every clone a fort makes pins it
+{{- else }}
+# known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key, one known_hosts line
+                             # (ssh-keyscan -p <port> <forge>): flux's clone and the rebuild loop pin
+                             # it, and no fort evaluates until the estate names it.
+{{- end }}
+{{- if or .Mesh .Interface .Zone }}
+
+[mesh]
+{{- if .Mesh }}
+cidr = "{{ .Mesh }}"          # the WireGuard subnet; every mesh_ip and every peers.json address lies
+                             # in it, and its prefix is what the interfaces render. Two estates link
+                             # only when their meshes do not overlap (deployments#674).
+{{- end }}
+{{- if .Interface }}
+interface = "{{ .Interface }}"   # the WireGuard interface every host gives this mesh (≤ 15 characters)
+{{- end }}
+{{- if .Zone }}
+zone = "{{ .Zone }}"          # the DNS zone of the mesh: every host on it is <host>.{{ .Zone }}
+{{- end }}
+{{- else }}
+
+# [mesh]                      # the estate's WireGuard mesh (docs/mesh.md)
+# cidr = "10.2.0.0/24"        # the subnet; fort check keeps every mesh_ip and every peers.json
+                             # address inside it, and its prefix is what the interfaces render.
+# interface = "wg-second"     # the interface every host on this mesh gives it: a fort's own, and a
+                             # linked host's link interface. ≤ 15 characters. Absent: wg0.
+# zone = "{{ .Name }}.mesh"    # the zone (docs/mesh.md): every peer and remote of peers.json is
+                             # <host>.<zone> at its mesh address. Absent: <name>.mesh.
+{{- end }}
+{{- if .ACMEEmail }}
+
+[acme]
+email = "{{ .ACMEEmail }}"    # the public ACME account's contact: the shared layer carries an issuer
+# directory = "{{ .ACMEDirectory }}"
+                             # the ACME directory the issuer speaks to; absent, Let's Encrypt. A
+                             # private directory (a step-ca) goes with the estate's CA file
+                             # (nixos/certs/ca-root.pem), which every host of the estate trusts.
+{{- else }}
+
+# [acme]                      # set, and the shared layer carries an ACME ClusterIssuer for the
+# email = "ops@example"       # estate's public names; absent, no public issuer.
+# directory = "{{ .ACMEDirectory }}"
+                             # the ACME directory the issuer speaks to; absent, Let's Encrypt.
 {{- end }}
 
 # The hubs (docs/hub.md): the roles another fort serves this estate. The

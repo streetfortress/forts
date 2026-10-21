@@ -122,7 +122,7 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 	if !estate.ValidRepoURL(repo) {
 		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", repo)
 	}
-	if estate.SameRepo(repo, est.Repo) {
+	if estate.SameRepo(repo, est.Source.Repo) {
 		return nil, fmt.Errorf("%s is this estate — a fort is on its own mesh by its manifest's mesh_ip; a link reaches ANOTHER estate's mesh", estate.Ref(repo))
 	}
 	name := estate.ShortName(repo)
@@ -146,8 +146,8 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 	}
 	defer cleanup()
 	p.remote = remote
-	if remote.est.Mesh == "" && o.address == "" {
-		return nil, fmt.Errorf("%s's %s declares no mesh — add `mesh = \"10.x.0.0/24\"` there (fort init --mesh), or pass --address", remote.est.Ref(), estate.Path)
+	if remote.est.Mesh.CIDR == "" && o.address == "" {
+		return nil, fmt.Errorf("%s's %s declares no mesh — add a `[mesh]` table with `cidr = \"10.x.0.0/24\"` there (fort init --mesh), or pass --address", remote.est.Ref(), estate.Path)
 	}
 	taken := p.takenOn(remote)
 	for h, l := range p.otherClaims(root) {
@@ -198,6 +198,11 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 		iface = "wg-" + name
 	}
 	p.link = manifest.Link{Name: name, Estate: repo, Interface: iface, Zone: remote.est.ZoneName(), PublicKey: p.wg.public}
+	if bits := remote.est.MeshPrefixBits(); bits != estate.DefaultMeshPrefixBits {
+		// The other mesh is not a /24: the table carries its prefix, and
+		// links.nix renders it (the option's default stays 24).
+		p.link.Prefix = bits
+	}
 	if p.had != nil {
 		p.link.Estate = p.had.Estate
 		if !estate.SameRepo(p.had.Estate, repo) {
@@ -335,7 +340,7 @@ func (p *linkPlan) otherClaims(root string) map[string]manifest.Link {
 		if h == p.host {
 			continue
 		}
-		if l, ok := e.LinkTo(p.remote.est.Repo); ok {
+		if l, ok := e.LinkTo(p.remote.est.Source.Repo); ok {
 			out[manifest.Path(h)+" [links."+l.Name+"]"] = l
 		}
 	}
@@ -353,7 +358,7 @@ func (p *linkPlan) chooseAddress(flag string, taken map[string]string) (string, 
 			return "", "", fmt.Errorf("--address %q: want an IPv4 address on %s's mesh", flag, mesh.Ref())
 		}
 		if !mesh.Contains(flag) {
-			return "", "", fmt.Errorf("--address %s is outside %s's mesh %s", flag, mesh.Ref(), mesh.Mesh)
+			return "", "", fmt.Errorf("--address %s is outside %s's mesh %s", flag, mesh.Ref(), mesh.Mesh.CIDR)
 		}
 		if holder, ok := taken[flag]; ok {
 			return "", "", fmt.Errorf("--address %s is %s's on %s's mesh", flag, holder, mesh.Ref())
@@ -375,15 +380,15 @@ func (p *linkPlan) chooseAddress(flag string, taken map[string]string) (string, 
 	if err != nil {
 		return "", "", err
 	}
-	return next, fmt.Sprintf("picked: the highest free address of %s (%d taken)", mesh.Mesh, len(taken)), nil
+	return next, fmt.Sprintf("picked: the highest free address of %s (%d taken)", mesh.Mesh.CIDR, len(taken)), nil
 }
 
 // pickAddress is the highest host address of the mesh that nothing
 // holds, from the top down (the broadcast address excepted).
 func pickAddress(mesh estate.Estate, taken map[string]string) (string, error) {
-	prefix, err := netip.ParsePrefix(mesh.Mesh)
+	prefix, err := netip.ParsePrefix(mesh.Mesh.CIDR)
 	if err != nil {
-		return "", fmt.Errorf("%s's mesh %q: %w", mesh.Ref(), mesh.Mesh, err)
+		return "", fmt.Errorf("%s's mesh %q: %w", mesh.Ref(), mesh.Mesh.CIDR, err)
 	}
 	// The last address of the prefix: the network address with the host
 	// bits set, which is the broadcast address; the candidates start one
@@ -392,7 +397,7 @@ func pickAddress(mesh estate.Estate, taken map[string]string) (string, error) {
 	a := prefix.Addr().As4()
 	hostBits := 32 - bits
 	if hostBits < 2 {
-		return "", fmt.Errorf("%s's mesh %s has no host addresses to pick from — a mesh is a /30 or wider", mesh.Ref(), mesh.Mesh)
+		return "", fmt.Errorf("%s's mesh %s has no host addresses to pick from — a mesh is a /30 or wider", mesh.Ref(), mesh.Mesh.CIDR)
 	}
 	base := uint32(a[0])<<24 | uint32(a[1])<<16 | uint32(a[2])<<8 | uint32(a[3])
 	size := uint32(1) << hostBits
@@ -403,7 +408,7 @@ func pickAddress(mesh estate.Estate, taken map[string]string) (string, error) {
 			return ip, nil
 		}
 	}
-	return "", fmt.Errorf("%s's mesh %s has no free address", mesh.Ref(), mesh.Mesh)
+	return "", fmt.Errorf("%s's mesh %s has no free address", mesh.Ref(), mesh.Mesh.CIDR)
 }
 
 // choosePort: --port when given (never 51820, not another link's);
@@ -458,6 +463,9 @@ func (p *linkPlan) changed() []string {
 	if p.had.ZoneName() != p.link.Zone {
 		out = append(out, "zone "+p.had.ZoneName()+" → "+p.link.Zone)
 	}
+	if p.had.PrefixBits() != p.link.PrefixBits() {
+		out = append(out, fmt.Sprintf("prefix %d → %d", p.had.PrefixBits(), p.link.PrefixBits()))
+	}
 	if p.had.PublicKey != p.link.PublicKey {
 		out = append(out, "public_key")
 	}
@@ -482,6 +490,9 @@ func (p *linkPlan) manifestText(text string) string {
 		fmt.Fprintf(&b, "port = %d\n", l.Port)
 		fmt.Fprintf(&b, "interface = %s\n", tomlString(l.Interface))
 		fmt.Fprintf(&b, "zone = %s\n", tomlString(l.Zone))
+		if l.Prefix != 0 {
+			fmt.Fprintf(&b, "prefix = %d\n", l.Prefix)
+		}
 		fmt.Fprintf(&b, "public_key = %s   # the public half of %s\n", tomlString(l.PublicKey), linkSecretKey(p.name))
 		return appendBlock(text, b.String())
 	}
@@ -498,6 +509,7 @@ func (p *linkPlan) manifestText(text string) string {
 		{"port", fmt.Sprint(l.Port), had.Port == l.Port},
 		{"interface", tomlString(l.Interface), had.Name != "" && had.InterfaceName() == l.Interface},
 		{"zone", tomlString(l.Zone), had.Name != "" && had.ZoneName() == l.Zone},
+		{"prefix", fmt.Sprint(l.PrefixBits()), had.PrefixBits() == l.PrefixBits()},
 		{"public_key", tomlString(l.PublicKey), had.PublicKey == l.PublicKey},
 	} {
 		if !kv.stays {
@@ -544,7 +556,7 @@ func (p *linkPlan) apply(tool secretsTool) error {
 
 func (p *linkPlan) report(w io.Writer, written bool) {
 	r := p.remote.est
-	fmt.Fprintf(w, "link add %s → %s   (mesh %s · %s · %s)\n", p.host, r.Ref(), orNone(r.Mesh), p.link.Interface, p.link.Zone)
+	fmt.Fprintf(w, "link add %s → %s   (mesh %s · %s · %s)\n", p.host, r.Ref(), orNone(r.Mesh.CIDR), p.link.Interface, p.link.Zone)
 	fmt.Fprintf(w, "  address    %-16s %s\n", p.link.Address, p.addressWhy)
 	fmt.Fprintf(w, "  port       %-16d %s\n", p.link.Port, p.portWhy)
 	fmt.Fprintf(w, "  public key %s\n", p.wg.public)
@@ -584,7 +596,7 @@ func (p *linkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing written (link add --write).")
 		return
 	}
-	fmt.Fprintf(w, "staged. The private half is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then, in a checkout of %s: fort estate link %s --write\n", r.Ref(), p.est.Repo)
+	fmt.Fprintf(w, "staged. The private half is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then, in a checkout of %s: fort estate link %s --write\n", r.Ref(), p.est.Source.Repo)
 }
 
 func orNone(s string) string {

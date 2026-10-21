@@ -57,7 +57,7 @@ func TestRenderInit(t *testing.T) {
 	}
 	// no zone named: the default derives from the name, and the comment
 	// says which (forts#45)
-	if est.Zone != "" || est.ZoneName() != "test-estate.mesh" || !strings.Contains(m["estate.toml"], "# zone = \"test-estate.mesh\"") {
+	if est.Mesh.Zone != "" || est.ZoneName() != "test-estate.mesh" || !strings.Contains(m["estate.toml"], "# zone = \"test-estate.mesh\"") {
 		t.Errorf("estate.toml zone default:\n%s", m["estate.toml"])
 	}
 	// mint's anchors, exactly once each

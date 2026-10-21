@@ -8,10 +8,12 @@ side from it; `fort check --all` keeps it honest.
 
 ## The subnet
 
-An estate's mesh is one IPv4 /24, declared in `estate.toml`:
+An estate's mesh is one IPv4 subnet, declared in `estate.toml`'s
+`[mesh]` table (forts#161):
 
 ```toml
-mesh = "10.2.0.0/24"
+[mesh]
+cidr = "10.2.0.0/24"
 ```
 
 Every `mesh_ip` in a manifest and every address in peers.json lies in it,
@@ -23,11 +25,18 @@ optional for an estate created before it existed; such an estate is checked
 by nothing, as before. The convention in the lab is that a fort's last
 octet follows its LAN address.
 
+The prefix length is the cidr's, not a constant: `wireguard.nix` renders
+the interface address with it (`sfi.mesh.prefixLength`, estate.nix),
+`fort wg-conf` renders a client's the same, and `fort link add` writes
+it into the link table when it is not 24. An estate with no cidr renders
+/24, the fleet's convention.
+
 ## The interface
 
 One name per mesh, on every host that is on it:
 
 ```toml
+[mesh]
 interface = "wg-second"
 ```
 
@@ -48,6 +57,7 @@ estate, not a default.
 Every host on the mesh has a name, and the name says which mesh (forts#45):
 
 ```toml
+[mesh]
 zone = "second-estate.mesh"   # absent: <name>.mesh, the same thing here
 ```
 

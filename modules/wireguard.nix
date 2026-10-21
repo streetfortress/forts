@@ -14,7 +14,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  iface = config.sfi.mesh.interface; # estate.toml's `interface`, else wg0 (estate.nix)
+  iface = config.sfi.mesh.interface; # estate.toml's `[mesh] interface`, else wg0 (estate.nix)
   peersData = builtins.fromJSON (builtins.readFile (config.sfi.estate.root + "/mesh/peers.json"));
   selfName = config.networking.hostName;
   self = peersData.peers.${selfName};
@@ -95,7 +95,10 @@ in
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
   networking.wg-quick.interfaces.${iface} = {
-    address = [ "${self.wg_vpn_ip}/24" ];
+    # The prefix is the mesh's ([mesh] cidr, sfi.mesh.prefixLength;
+    # forts#161): the one place the subnet's width is written on a fort.
+    # `fort wg-conf` renders a client's the same.
+    address = [ "${self.wg_vpn_ip}/${toString config.sfi.mesh.prefixLength}" ];
     listenPort = 51820;
     privateKeyFile = config.sops.secrets.wireguard-private-key.path;
     peers =

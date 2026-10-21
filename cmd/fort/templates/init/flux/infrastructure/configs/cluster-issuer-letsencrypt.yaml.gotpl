@@ -9,9 +9,12 @@ metadata:
   name: letsencrypt
 spec:
   acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
+    # The directory: estate.toml [acme] directory at init; absent, Let's
+    # Encrypt. A private directory (a step-ca) needs the estate's CA file
+    # trusted in-cluster — a layer's concern, not this file's.
+    server: {{ .ACMEDirectory }}
     # ACME account contact (expiry/deprecation notices): estate.toml
-    # acme_email at init. Mutable metadata: an edit here changes it.
+    # [acme] email at init. Mutable metadata: an edit here changes it.
     email: {{ .ACMEEmail }}
     privateKeySecretRef:
       name: letsencrypt-acme-account-key

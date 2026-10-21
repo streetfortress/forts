@@ -32,14 +32,14 @@ import (
 const Path = "estate.toml"
 
 // Estate is estate.toml. Keys are strict: a typo is a refusal, not a
-// default, like a host manifest's.
+// default, like a host manifest's. The loose keys (name, operator_keys)
+// come before the first table — TOML's rule, which the template keeps.
 type Estate struct {
 	// Name is the estate's name: the gitea repo's, by convention.
 	Name string `toml:"name"`
-	// Repo is the estate's git URL as flux and auto-rebuild reach it
-	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
-	// Both clone it with the deploy key fort mint registers.
-	Repo string `toml:"repo"`
+	// Source is the [source] table: where the estate's tree comes from
+	// and how a fort reaches it (forts#161).
+	Source Source `toml:"source"`
 	// OperatorKeys are the SSH public keys that hold `deployer`, the
 	// operator account of every fort of this estate
 	// (modules/ops/deployer.nix): one line per operator device, in
@@ -74,13 +74,51 @@ type Estate struct {
 	// is the one invariant: the served estate names one fort per role.
 	// What this estate consumes itself is its own [hubs.*], never here.
 	Serves map[string][]ServeEntry `toml:"serves"`
-	// Mesh is the estate's WireGuard subnet, CIDR (10.2.0.0/24). Every
+	// Mesh is the [mesh] table: the estate's WireGuard mesh (forts#161).
+	Mesh Mesh `toml:"mesh"`
+	// ACME is the [acme] table: the estate's public ACME issuer (forts#161).
+	ACME ACME `toml:"acme"`
+}
+
+// Source is the [source] table: the estate's git URL, the forge kind,
+// the auth route and the forge's host key. One concern, one table —
+// everything about where the tree comes from (forts#161, forts#1).
+type Source struct {
+	// Repo is the estate's git URL as flux and auto-rebuild reach it
+	// (ssh://git@<gitea>:<port>/<owner>/<name>, with or without .git).
+	// Both clone it with the deploy key fort mint registers.
+	Repo string `toml:"repo"`
+	// Forge is the forge's kind: "gitea" or "github". Optional — the
+	// host of Repo derives it (github.com is github, every other host
+	// is gitea). fort mint speaks the kind's deploy-key API; the github
+	// client comes with forts#1.
+	Forge string `toml:"forge"`
+	// Auth is the clone route: "ssh" (the deploy key fort mint
+	// registers), "none" (an anonymous https clone of a public repo;
+	// comes with forts#1) or "token" (an https token; no route yet).
+	// Optional — the scheme of Repo derives it: ssh:// is "ssh".
+	Auth string `toml:"auth"`
+	// KnownHosts is the forge's SSH host key as a known_hosts line
+	// ("[gitea.example:30022] ssh-ed25519 AAAA…"): what flux's git-auth
+	// and the rebuild loop pin the clone to. The framework ships no
+	// default (forts#139): a host of an estate that names none does not
+	// evaluate. `fort init --known-hosts` writes it; `ssh-keyscan -p
+	// <port> <forge>` prints it.
+	KnownHosts string `toml:"known_hosts"`
+}
+
+// Mesh is the [mesh] table: the subnet, the interface name and the DNS
+// zone — one mesh, three facts (forts#161).
+type Mesh struct {
+	// CIDR is the estate's WireGuard subnet (10.2.0.0/24). Every
 	// address in mesh/peers.json and every manifest's mesh_ip lies in
 	// it; fort check says so. Two estates link only when their meshes
 	// do not overlap (deployments#674), and this is where each one
-	// says what its mesh is. Optional: an estate with no mesh key is
-	// checked by nothing, as before.
-	Mesh string `toml:"mesh"`
+	// says what its mesh is. The prefix length is the mesh's: the
+	// interface address (wireguard.nix, fort wg-conf) and a link's
+	// prefixLength render from it. Optional: an estate with no cidr is
+	// checked by nothing and renders /24, as before.
+	CIDR string `toml:"cidr"`
 	// Interface is the WireGuard interface every host on this mesh gives
 	// it: one name per mesh, on every host that is on it — a fort's own
 	// interface and a linked host's link interface alike (deployments#674).
@@ -95,17 +133,69 @@ type Estate struct {
 	// estate staging is the zone staging.mesh. .mesh is the fleet's one
 	// private TLD; a name under it says which mesh it is on.
 	Zone string `toml:"zone"`
-	// KnownHosts is the forge's SSH host key as a known_hosts line
-	// ("[gitea.example:30022] ssh-ed25519 AAAA…"): what flux's git-auth
-	// and the rebuild loop pin the clone to. The framework ships no
-	// default (forts#139): a host of an estate that names none does not
-	// evaluate. `fort init --known-hosts` writes it; `ssh-keyscan -p
-	// <port> <forge>` prints it.
-	KnownHosts string `toml:"known_hosts"`
-	// ACMEEmail is the contact of the estate's public ACME account. Set,
-	// init renders the Let's Encrypt ClusterIssuer into the shared
-	// layer; absent, no public issuer is rendered.
-	ACMEEmail string `toml:"acme_email"`
+}
+
+// ACME is the [acme] table: the estate's public ACME account (forts#161).
+type ACME struct {
+	// Email is the contact of the estate's public ACME account. Set,
+	// init renders the ClusterIssuer into the shared layer; absent, no
+	// public issuer is rendered.
+	Email string `toml:"email"`
+	// Directory is the ACME directory URL the issuer speaks to. Optional:
+	// the default is Let's Encrypt's production directory. A private
+	// directory (a step-ca) goes here; the estate's CA file
+	// (nixos/certs/ca-root.pem) is what makes the hosts trust it.
+	Directory string `toml:"directory"`
+}
+
+// The forge kinds: whose deploy-key API fort mint speaks (forts#1).
+const (
+	ForgeGitea  = "gitea"
+	ForgeGitHub = "github"
+)
+
+// The auth routes: how a fort's clone authenticates (forts#161, #1).
+const (
+	AuthSSH   = "ssh"
+	AuthNone  = "none"
+	AuthToken = "token"
+)
+
+// ForgeKind is the forge's kind: the forge key, else derived from the
+// host of repo — github.com is github, every other host is gitea.
+func (e Estate) ForgeKind() string {
+	if e.Source.Forge != "" {
+		return e.Source.Forge
+	}
+	if host, _, _, err := parseRepo(e.Source.Repo); err == nil && host == "github.com" {
+		return ForgeGitHub
+	}
+	return ForgeGitea
+}
+
+// AuthRoute is the clone route: the auth key, else derived from the
+// scheme of repo — ssh:// is ssh, https:// is none (anonymous).
+func (e Estate) AuthRoute() string {
+	if e.Source.Auth != "" {
+		return e.Source.Auth
+	}
+	if strings.HasPrefix(e.Source.Repo, "https://") {
+		return AuthNone
+	}
+	return AuthSSH
+}
+
+// DefaultACMEDirectory is the ACME directory of an estate that names
+// none: Let's Encrypt's production directory.
+const DefaultACMEDirectory = "https://acme-v02.api.letsencrypt.org/directory"
+
+// ACMEDirectory is the estate's ACME directory URL, Let's Encrypt's
+// when none is named.
+func (e Estate) ACMEDirectory() string {
+	if e.ACME.Directory == "" {
+		return DefaultACMEDirectory
+	}
+	return e.ACME.Directory
 }
 
 // DefaultInterface is the mesh interface of an estate that names none.
@@ -115,10 +205,25 @@ var interfaceRE = regexp.MustCompile(`^[A-Za-z0-9_=+.-]{1,15}$`)
 
 // InterfaceName is the estate's mesh interface, wg0 when none is named.
 func (e Estate) InterfaceName() string {
-	if e.Interface == "" {
+	if e.Mesh.Interface == "" {
 		return DefaultInterface
 	}
-	return e.Interface
+	return e.Mesh.Interface
+}
+
+// DefaultMeshPrefixBits is the prefix length of an estate that declares
+// no mesh: what the fleet rendered before the cidr carried it.
+const DefaultMeshPrefixBits = 24
+
+// MeshPrefixBits is the prefix length of the estate's mesh: the cidr's,
+// 24 when no cidr is declared. Validate has refused a cidr that does
+// not parse.
+func (e Estate) MeshPrefixBits() int {
+	p, err := netip.ParsePrefix(e.Mesh.CIDR)
+	if err != nil {
+		return DefaultMeshPrefixBits
+	}
+	return p.Bits()
 }
 
 // DefaultZoneSuffix is what the estate's name gains to become its zone
@@ -131,10 +236,10 @@ var zoneRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0
 
 // ZoneName is the estate's mesh zone: the zone key, else <name>.mesh.
 func (e Estate) ZoneName() string {
-	if e.Zone == "" {
+	if e.Mesh.Zone == "" {
 		return e.Name + DefaultZoneSuffix
 	}
-	return e.Zone
+	return e.Mesh.Zone
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -151,6 +256,17 @@ func Load(root string) (Estate, error) {
 	return Parse(raw)
 }
 
+// movedKeys are the loose keys of the flat schema, each with its table
+// home (forts#161): no migration shim, but the refusal names the move.
+var movedKeys = map[string]string{
+	"repo":        "[source] repo",
+	"known_hosts": "[source] known_hosts",
+	"mesh":        "[mesh] cidr",
+	"interface":   "[mesh] interface",
+	"zone":        "[mesh] zone",
+	"acme_email":  "[acme] email",
+}
+
 // Parse decodes the manifest text, strictly, and validates it.
 func Parse(raw []byte) (Estate, error) {
 	var e Estate
@@ -159,6 +275,9 @@ func Parse(raw []byte) (Estate, error) {
 		return Estate{}, fmt.Errorf("%s: %w", Path, err)
 	}
 	for _, k := range md.Undecoded() {
+		if to, moved := movedKeys[k.String()]; moved {
+			return Estate{}, fmt.Errorf("%s: %s moved to %s (forts#161)", Path, k.String(), to)
+		}
 		return Estate{}, fmt.Errorf("%s: unknown key %s", Path, k.String())
 	}
 	if err := e.Validate(); err != nil {
@@ -167,15 +286,16 @@ func Parse(raw []byte) (Estate, error) {
 	return e, nil
 }
 
-// Validate: a name that is a repo name, a repo URL a clone understands,
-// the hubs and the served estates well-formed (validateHubs), the
-// operator keys readable as authorized_keys lines (validateOperatorKeys).
+// Validate: a name that is a repo name, a [source] table the matrix
+// accepts (validateSource), the hubs and the served estates well-formed
+// (validateHubs), the operator keys readable as authorized_keys lines
+// (validateOperatorKeys).
 func (e Estate) Validate() error {
 	if !nameRE.MatchString(e.Name) {
 		return fmt.Errorf("name %q — want a repo name (%s)", e.Name, nameRE)
 	}
-	if !strings.HasPrefix(e.Repo, "ssh://") && !strings.HasPrefix(e.Repo, "https://") {
-		return fmt.Errorf("repo %q — want the estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", e.Repo)
+	if err := e.validateSource(); err != nil {
+		return err
 	}
 	if err := e.validateHubs(); err != nil {
 		return err
@@ -183,34 +303,67 @@ func (e Estate) Validate() error {
 	if err := e.validateOperatorKeys(); err != nil {
 		return err
 	}
-	if e.KnownHosts != "" && len(strings.Fields(e.KnownHosts)) < 3 {
-		return fmt.Errorf("known_hosts %q — want one known_hosts line: <host> <key type> <key> (ssh-keyscan -p <port> <forge>)", e.KnownHosts)
+	if e.ACME.Email != "" && !strings.Contains(e.ACME.Email, "@") {
+		return fmt.Errorf("[acme] email %q — want a mailbox", e.ACME.Email)
 	}
-	if e.ACMEEmail != "" && !strings.Contains(e.ACMEEmail, "@") {
-		return fmt.Errorf("acme_email %q — want a mailbox", e.ACMEEmail)
+	if e.ACME.Directory != "" && !strings.HasPrefix(e.ACME.Directory, "https://") {
+		return fmt.Errorf("[acme] directory %q — want the ACME directory URL, https:// (absent: Let's Encrypt, %s)", e.ACME.Directory, DefaultACMEDirectory)
 	}
-	if e.Interface != "" && !interfaceRE.MatchString(e.Interface) {
-		return fmt.Errorf("interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Interface)
+	if e.Mesh.Interface != "" && !interfaceRE.MatchString(e.Mesh.Interface) {
+		return fmt.Errorf("[mesh] interface %q — want a WireGuard interface name: at most 15 characters from [A-Za-z0-9_=+.-] (the kernel's limit)", e.Mesh.Interface)
 	}
-	if e.Zone != "" && !zoneRE.MatchString(e.Zone) {
-		return fmt.Errorf("zone %q — want a DNS name of lowercase labels (staging.mesh); absent: <name>%s", e.Zone, DefaultZoneSuffix)
+	if e.Mesh.Zone != "" && !zoneRE.MatchString(e.Mesh.Zone) {
+		return fmt.Errorf("[mesh] zone %q — want a DNS name of lowercase labels (staging.mesh); absent: <name>%s", e.Mesh.Zone, DefaultZoneSuffix)
 	}
-	if e.Mesh != "" {
-		p, err := netip.ParsePrefix(e.Mesh)
+	if e.Mesh.CIDR != "" {
+		p, err := netip.ParsePrefix(e.Mesh.CIDR)
 		if err != nil || !p.Addr().Is4() || p != p.Masked() {
-			return fmt.Errorf("mesh %q — want the estate's WireGuard subnet as an IPv4 network address (10.2.0.0/24)", e.Mesh)
+			return fmt.Errorf("[mesh] cidr %q — want the estate's WireGuard subnet as an IPv4 network address (10.2.0.0/24)", e.Mesh.CIDR)
 		}
 	}
 	return nil
 }
 
+// validateSource is the [source] matrix (forts#161): an ssh:// repo on
+// the ssh route with the forge's host key; an https:// repo refused
+// until the anonymous route exists (forts#1, absorbs #159); a token
+// named as a route that does not exist; a forge kind the core knows.
+func (e Estate) validateSource() error {
+	repo := e.Source.Repo
+	switch {
+	case strings.HasPrefix(repo, "ssh://"):
+	case strings.HasPrefix(repo, "https://"):
+		return fmt.Errorf("[source] repo %q — the clone route is SSH only today: auto-rebuild and flux clone with the deploy key fort mint registers. The anonymous route (auth = %q) comes with forts#1", repo, AuthNone)
+	default:
+		return fmt.Errorf("[source] repo %q — want the estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>)", repo)
+	}
+	switch e.Source.Auth {
+	case "", AuthSSH:
+	case AuthToken:
+		return fmt.Errorf("[source] auth %q — no token route exists yet: the deploy key is the one credential fort mints and revokes itself. Use auth = %q", AuthToken, AuthSSH)
+	case AuthNone:
+		return fmt.Errorf("[source] auth %q — an ssh:// repo clones with the deploy key; the anonymous route is https only (forts#1)", AuthNone)
+	default:
+		return fmt.Errorf("[source] auth %q — want %q (an https route comes with forts#1)", e.Source.Auth, AuthSSH)
+	}
+	switch e.Source.Forge {
+	case "", ForgeGitea, ForgeGitHub:
+	default:
+		return fmt.Errorf("[source] forge %q — want %q or %q (absent: the host of repo derives it)", e.Source.Forge, ForgeGitea, ForgeGitHub)
+	}
+	if e.Source.KnownHosts != "" && len(strings.Fields(e.Source.KnownHosts)) < 3 {
+		return fmt.Errorf("[source] known_hosts %q — want one known_hosts line: <host> <key type> <key> (ssh-keyscan -p <port> <forge>)", e.Source.KnownHosts)
+	}
+	return nil
+}
+
 // Contains says whether an address lies in the estate's mesh. With no
-// mesh declared every address does: the key is optional.
+// cidr declared every address does: the key is optional.
 func (e Estate) Contains(ip string) bool {
-	if e.Mesh == "" {
+	if e.Mesh.CIDR == "" {
 		return true
 	}
-	p, err := netip.ParsePrefix(e.Mesh)
+	p, err := netip.ParsePrefix(e.Mesh.CIDR)
 	if err != nil {
 		return false
 	}
@@ -223,7 +376,7 @@ func (e Estate) Contains(ip string) bool {
 
 // RepoGit is the URL with its .git suffix, the form the FluxInstance
 // carries; auto-rebuild clones the same.
-func (e Estate) RepoGit() string { return WithGit(e.Repo) }
+func (e Estate) RepoGit() string { return WithGit(e.Source.Repo) }
 
 // Forge is where the estate's repo lives, read off Repo: the forge host
 // (no port — the ssh port in the URL is git's, the API answers on https),
@@ -235,7 +388,7 @@ func (e Estate) RepoGit() string { return WithGit(e.Repo) }
 // constant naming sfi/deployments, and a second estate's key landed on
 // the first estate's repo).
 func (e Estate) Forge() (host, owner, name string, err error) {
-	return parseRepo(e.Repo)
+	return parseRepo(e.Source.Repo)
 }
 
 // parseRepo reads a repo URL into the forge host, the owner and the
@@ -406,7 +559,7 @@ func Ref(repo string) string {
 }
 
 // Ref is this estate's own <owner>/<name>, read off Repo.
-func (e Estate) Ref() string { return Ref(e.Repo) }
+func (e Estate) Ref() string { return Ref(e.Source.Repo) }
 
 // ShortName is the last label of an estate URL or <owner>/<name> ref
 // (staging): what a link is named after by convention (sfi.links.<name>,
@@ -470,7 +623,7 @@ func (e Estate) validateHubs() error {
 			return fmt.Errorf("[hubs.%s] — want a role name of lowercase labels and dashes (forge, or one the estate chooses; docs/hub.md)", role)
 		}
 		if !ValidRepoURL(h.Estate) {
-			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Repo)
+			return fmt.Errorf("[hubs.%s] estate %q — want the hub's estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://); this estate is %q", role, h.Estate, e.Source.Repo)
 		}
 		if !nameRE.MatchString(h.Fort) {
 			return fmt.Errorf("[hubs.%s] fort %q — want the hub fort's name (%s)", role, h.Fort, nameRE)
@@ -515,7 +668,7 @@ func (e Estate) validateHubs() error {
 				if !ValidRepoURL(url) {
 					return fmt.Errorf("%s estates: %q — want a served estate by its git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", at, url)
 				}
-				if SameRepo(url, e.Repo) {
+				if SameRepo(url, e.Source.Repo) {
 					return fmt.Errorf("%s estates: %q is this estate — an estate serves itself through its own [hubs.*] tables, not a serves entry", at, url)
 				}
 				for _, prev := range seen {
@@ -550,7 +703,7 @@ func (e Estate) Hub(role string) (Hub, bool) {
 // served fort renders for it are applied by this estate's own flux. The
 // URLs are compared as repos (host, owner, name), so a .git suffix or a
 // scheme does not make two spellings of one estate two estates.
-func (h Hub) Local(e Estate) bool { return SameRepo(h.Estate, e.Repo) }
+func (h Hub) Local(e Estate) bool { return SameRepo(h.Estate, e.Source.Repo) }
 
 // Ref is the hub's estate as <owner>/<name>.
 func (h Hub) Ref() string { return Ref(h.Estate) }

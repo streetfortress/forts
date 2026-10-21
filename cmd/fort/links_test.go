@@ -272,11 +272,11 @@ func TestLinkFindings(t *testing.T) {
 	os.WriteFile(nixPath, []byte(nix), 0o644)
 	// the link's names are this mesh's, or the link is to this estate
 	own := est
-	own.Interface, own.Zone = "wg-staging", ""
+	own.Mesh.Interface, own.Mesh.Zone = "wg-staging", ""
 	if fs := only(linkFindings(root, own, hosts, withKey), "error"); len(fs) != 1 || !strings.Contains(fs[0].msg, "own mesh interface") {
 		t.Errorf("own interface: %+v", fs)
 	}
-	own.Interface, own.Zone = "", "staging.mesh"
+	own.Mesh.Interface, own.Mesh.Zone = "", "staging.mesh"
 	if fs := only(linkFindings(root, own, hosts, withKey), "error"); len(fs) != 1 || !strings.Contains(fs[0].msg, "own mesh zone") {
 		t.Errorf("own zone: %+v", fs)
 	}

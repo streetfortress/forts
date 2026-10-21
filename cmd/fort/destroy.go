@@ -282,7 +282,7 @@ func linodePowerOff(ctx context.Context, host string) error {
 
 // giteaClient is the deploy-key API as fort mint (register) and fort
 // destroy (revoke) reach it: the provisioning token, the lab CA, and the
-// repo — the estate's own (estate.toml `repo`), because the deploy key
+// repo — the estate's own (estate.toml `[source] repo`), because the deploy key
 // is what flux clones that repo with. The route was a constant naming
 // sfi/deployments until sfi/deployments#673: the second estate's first
 // mint would have put its key on the first estate's repo.
@@ -290,6 +290,9 @@ func giteaClient(root string) (*giteaDeployKeys, error) {
 	est, err := estate.Load(root)
 	if err != nil {
 		return nil, err
+	}
+	if kind := est.ForgeKind(); kind != estate.ForgeGitea {
+		return nil, fmt.Errorf("the forge of %s is %s, and this client speaks gitea's deploy-key API only — the %s client comes with forts#1", est.Ref(), kind, kind)
 	}
 	api, err := est.RepoAPI()
 	if err != nil {

@@ -47,7 +47,7 @@ func TestOperatorFindings(t *testing.T) {
 	root := testTree(t)
 	hosts := testHosts(t)
 	est := func(keys ...string) estate.Estate {
-		return estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments", OperatorKeys: keys}
+		return estate.Estate{Name: "deployments", Source: estate.Source{Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments"}, OperatorKeys: keys}
 	}
 	// No operator_keys: an error on estate.toml — no fort of the estate
 	// evaluates, and the finding says what to add.

@@ -52,7 +52,7 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
-| · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `repo`) | always; registered under `--write` only |
+| · | gitea deploy key `flux-<host>`, read-only, on the estate's repo (estate.toml `[source] repo`) | always; registered under `--write` only |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.

@@ -311,7 +311,7 @@ in
     gitKnownHosts = lib.mkOption {
       type = lib.types.str;
       default = config.sfi.estate.knownHosts;
-      defaultText = "estate.toml's `known_hosts` (sfi.estate.knownHosts)";
+      defaultText = "estate.toml's `[source] known_hosts` (sfi.estate.knownHosts)";
       description = ''
         SSH known_hosts line(s) for the git host. One line must name the
         host and port of repoUrl, spelled as known_hosts spells them

@@ -50,7 +50,7 @@
 # link cannot be called wg0 — that is this host's own mesh.
 #
 # One zone per mesh, the same way (forts#45): the other estate's names
-# are <host>.<zone> — its estate.toml's `zone`, else <estate>.mesh — on
+# are <host>.<zone> — its estate.toml's `[mesh] zone`, else <estate>.mesh — on
 # every host on that mesh, this one included. A fort renders its own
 # mesh's zone at build time (mesh-dns.nix); a linked host learns the other
 # estate's peers at run time, so the reconciler renders that zone into a
@@ -153,12 +153,12 @@ let
       interface = lib.mkOption {
         type = lib.types.str;
         default = "wg-${name}";
-        description = "The WireGuard interface for this link: the name the other estate's estate.toml gives its mesh (`interface`), which the reconciler checks. At most 15 characters; never this host's own mesh interface.";
+        description = "The WireGuard interface for this link: the name the other estate's estate.toml gives its mesh (`[mesh] interface`), which the reconciler checks. At most 15 characters; never this host's own mesh interface.";
       };
       zone = lib.mkOption {
         type = lib.types.str;
         default = "${name}.mesh";
-        description = "The DNS zone of the other estate's mesh: its estate.toml's `zone`, else <estate>.mesh, which the reconciler checks. Every peer and remote of that estate is <host>.<zone>, served on this host from the reconciler's zone file.";
+        description = "The DNS zone of the other estate's mesh: its estate.toml's `[mesh] zone`, else <estate>.mesh, which the reconciler checks. Every peer and remote of that estate is <host>.<zone>, served on this host from the reconciler's zone file.";
       };
       port = lib.mkOption {
         type = lib.types.port;
@@ -172,7 +172,7 @@ let
       prefixLength = lib.mkOption {
         type = lib.types.int;
         default = 24;
-        description = "The other mesh's prefix length (every estate's mesh is a /24).";
+        description = "The other mesh's prefix length: the prefix of its estate.toml's `[mesh] cidr`, which `fort link add` writes into the link table (`prefix`) when it is not 24 (forts#161).";
       };
       openTCPPorts = lib.mkOption {
         type = lib.types.listOf lib.types.port;

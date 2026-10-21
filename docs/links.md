@@ -240,6 +240,6 @@ An interface name is at most 15 characters from `A-Za-z0-9_=+.-`, and a
 link's is the name the other estate gives its mesh; a link's zone is the
 one the other estate gives its mesh (`zone`, else `<name>.mesh`). One UDP
 port per link. Two links cannot share any of the three, and none can be
-this host's own mesh interface, port or zone. Every estate's mesh is a /24 that no other
-estate's overlaps ([mesh.md](mesh.md), the `mesh` key). All of it is an
+this host's own mesh interface, port or zone. Every estate's mesh is a subnet that no other
+estate's overlaps ([mesh.md](mesh.md), the `[mesh] cidr` key). All of it is an
 eval-time assertion, a `fort check` finding, or the reconciler's refusal.

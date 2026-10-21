@@ -2,6 +2,8 @@
 # its mesh is the default, <name>.mesh (forts#45); luxor is its monitoring
 # hub, a fort of the estate itself (forts#38).
 name = "deployments"
+
+[source]
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
 
 [hubs.monitoring]

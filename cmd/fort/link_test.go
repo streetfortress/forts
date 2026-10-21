@@ -268,7 +268,7 @@ func TestLinkAddRefusals(t *testing.T) {
 	root, tool = linkEstate(t)
 	noMesh := t.TempDir()
 	copyFile(t, filepath.Join(stagingFix, "mesh/peers.json"), filepath.Join(noMesh, "mesh/peers.json"))
-	os.WriteFile(filepath.Join(noMesh, "estate.toml"), []byte("name = \"staging\"\nrepo = \""+stagingURL+"\"\n"), 0o644)
+	os.WriteFile(filepath.Join(noMesh, "estate.toml"), []byte("name = \"staging\"\n[source]\nrepo = \""+stagingURL+"\"\n"), 0o644)
 	if _, err := planLinkAdd(root, "hub", stagingURL, linkAddOpts{}, tool, dirFetcher(noMesh)); err == nil || !strings.Contains(err.Error(), "declares no mesh") {
 		t.Errorf("no mesh: %v", err)
 	}

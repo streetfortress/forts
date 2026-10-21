@@ -1,8 +1,12 @@
 # The fixture for the estate a hub links FROM (fort estate link fetches
 # it): its forts' manifests carry the [links.<name>] tables.
 name = "infra"
+
+[source]
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/infra"
-mesh = "10.1.0.0/24"
+
+[mesh]
+cidr = "10.1.0.0/24"
 
 [[serves.forge]]
 fort = "hub"

@@ -54,7 +54,7 @@ func linkFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 			l := h.Links[name]
 			at := "[links." + name + "]"
 			switch {
-			case estate.SameRepo(l.Estate, est.Repo):
+			case estate.SameRepo(l.Estate, est.Source.Repo):
 				out = append(out, finding{"error", path, at + " names this estate — a fort is on its own mesh by mesh_ip; a link reaches another estate's"})
 			case l.InterfaceName() == est.InterfaceName():
 				out = append(out, finding{"error", path, fmt.Sprintf("%s interface %s is this estate's own mesh interface (%s) — the other mesh needs a name of its own", at, l.InterfaceName(), estate.Path)})

@@ -251,7 +251,7 @@ func wgConf(args []string) error {
 	if err != nil {
 		return err
 	}
-	conf, err := renderWGConf(m, est.InterfaceName(), args[0])
+	conf, err := renderWGConf(m, est.InterfaceName(), est.MeshPrefixBits(), args[0])
 	if err != nil {
 		return err
 	}

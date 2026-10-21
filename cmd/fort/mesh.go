@@ -371,7 +371,7 @@ func readOrEmpty(root, rel string) (string, error) {
 // registered its public half in peers.json; the line the app wrote is
 // the one to keep. A client (roaming) member has no ListenPort — nobody
 // dials it.
-func renderWGConf(m mesh, iface, member string) (string, error) {
+func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, error) {
 	self, isPeer := m.Peers[member]
 	if !isPeer {
 		var ok bool
@@ -386,9 +386,9 @@ func renderWGConf(m mesh, iface, member string) (string, error) {
 	fmt.Fprintf(&sb, "# peers.json carries for %s:\n#   %s\n", member, self.PublicKey)
 	sb.WriteString("# Re-render after any peers.json change; the app has no other way to learn it.\n")
 	sb.WriteString("\n[Interface]\n")
-	// The one place the subnet is written on a fort is its Address /24;
-	// same here.
-	fmt.Fprintf(&sb, "Address = %s/24\n", self.IP)
+	// The one place the subnet is written on a fort is its Address
+	// prefix (wireguard.nix, from the estate's [mesh] cidr); same here.
+	fmt.Fprintf(&sb, "Address = %s/%d\n", self.IP, prefixBits)
 	if isPeer {
 		// A mesh peer is dialed by the peers that know its endpoint and
 		// by the ones that learn it from its keepalives; either way the
@@ -456,7 +456,7 @@ func renderWGConf(m mesh, iface, member string) (string, error) {
 // cannot link (deployments#674); the subnet is where that is caught,
 // before a host is provisioned into it.
 func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifest.Host) []finding {
-	if est.Mesh == "" {
+	if est.Mesh.CIDR == "" {
 		return nil
 	}
 	peersText, err := readOrEmpty(root, peersPath)

@@ -103,7 +103,7 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 	if !estate.ValidRepoURL(repo) {
 		return nil, fmt.Errorf("%q — want the other estate's git URL (ssh://git@<gitea>:<port>/<owner>/<name>, or https://)", repo)
 	}
-	if estate.SameRepo(repo, est.Repo) {
+	if estate.SameRepo(repo, est.Source.Repo) {
 		return nil, fmt.Errorf("%s is this estate — its own forts are peers by fort mint; a link comes from ANOTHER estate's host", estate.Ref(repo))
 	}
 	local, err := loadMesh(root)
@@ -144,7 +144,7 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 	claimed := map[string]string{} // address → host, among this run's claims
 	for _, host := range sortedNames(other.hosts) {
 		h := other.hosts[host]
-		l, ok := h.LinkTo(est.Repo)
+		l, ok := h.LinkTo(est.Source.Repo)
 		if !ok {
 			if _, there := local.Remotes[host]; there {
 				p.stale = append(p.stale, host)
@@ -167,8 +167,8 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 			// one DNS name, nothing else, whatever that repo says (#99).
 			refuse(fmt.Sprintf("%s's endpoint %q is not an IP address or a DNS name — nothing else is written to this mesh", host, c.entry.Endpoint))
 		case !est.Contains(l.Address):
-			refuse(fmt.Sprintf("%s is outside this estate's mesh %s", l.Address, est.Mesh))
-		case est.Interface != "" && l.InterfaceName() != est.InterfaceName():
+			refuse(fmt.Sprintf("%s is outside this estate's mesh %s", l.Address, est.Mesh.CIDR))
+		case est.Mesh.Interface != "" && l.InterfaceName() != est.InterfaceName():
 			refuse(fmt.Sprintf("the link's interface is %s and this mesh is %s (%s) — one name per mesh; fort link add there again reads it", l.InterfaceName(), est.InterfaceName(), estate.Path))
 		case l.ZoneName() != est.ZoneName():
 			refuse(fmt.Sprintf("the link's zone is %s and this mesh's is %s — one zone per mesh; fort link add there again reads it", l.ZoneName(), est.ZoneName()))
@@ -176,7 +176,7 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 			refuse(fmt.Sprintf("%s is also what %s claims in this run — two hosts of %s picked one address; fort link add again for one of them", l.Address, claimed[l.Address], other.est.Ref()))
 		default:
 			if holder, ok := taken[l.Address]; ok && holder != "remotes."+host {
-				refuse(fmt.Sprintf("%s is %s's — the claim collided; in %s: fort link add %s %s again", l.Address, holder, other.est.Ref(), host, est.Repo))
+				refuse(fmt.Sprintf("%s is %s's — the claim collided; in %s: fort link add %s %s again", l.Address, holder, other.est.Ref(), host, est.Source.Repo))
 				break
 			}
 			claimed[l.Address] = host
@@ -272,7 +272,7 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "! %-36s does not parse there: %v\n", fmt.Sprintf("%q", manifest.Path(h)), p.other.problems[h])
 	}
 	if len(p.claims) == 0 {
-		fmt.Fprintf(w, "  no fort of %s links to this estate — in a checkout of it: fort link add <fort> %s --write, then PR, merge, and this verb again\n", o.Ref(), p.est.Repo)
+		fmt.Fprintf(w, "  no fort of %s links to this estate — in a checkout of it: fort link add <fort> %s --write, then PR, merge, and this verb again\n", o.Ref(), p.est.Source.Repo)
 	}
 	for _, c := range p.claims {
 		facts := fmt.Sprintf("%-15s endpoint %s:%d  key %s", c.entry.IP, c.entry.Endpoint, c.entry.endpointPort(), abbrevKey(c.entry.PublicKey))
@@ -312,6 +312,6 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 	case len(writes) == 0:
 		fmt.Fprintln(w, "nothing to write.")
 	default:
-		fmt.Fprintf(w, "staged. next: PR → merge; every fort of this estate dials the host on its next rebuild, and the host's reconciler (wg-link-%s) fills its peer set on its next run.\n", estate.ShortName(p.est.Repo))
+		fmt.Fprintf(w, "staged. next: PR → merge; every fort of this estate dials the host on its next rebuild, and the host's reconciler (wg-link-%s) fills its peer set on its next run.\n", estate.ShortName(p.est.Source.Repo))
 	}
 }

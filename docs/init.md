@@ -13,8 +13,8 @@ every file that exists.
 ## What it renders
 
 ```
-● estate.toml                     the estate: name, repo, mesh, interface and zone (if given), the operator keys
-                                  (if given), the hubs by role (if any)
+● estate.toml                     the estate: name and the operator keys (if given), then [source], [mesh] and
+                                  [acme] (as given), then the hubs by role (if any)
 ● README.md                       the layout and the first fort
 ● justfile                        the estate's own verbs, which are not the CLI: fetch-kubeconfig (one fort's
                                   read-only ops kubeconfig) and updatekeys (re-encrypt every sops file)
@@ -42,19 +42,31 @@ The estate's own, named in the report:
 
 ## estate.toml
 
+The loose keys (`name`, `operator_keys`) come before the first table:
+TOML reads a loose key after a table header as that table's key
+(forts#161).
+
 ```toml
 name = "second-estate"
-repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
-mesh = "10.2.0.0/24"   # the WireGuard subnet; fort check keeps every mesh address in it (mesh.md)
-interface = "wg-second"   # the mesh interface's name on every host; absent: wg0
-zone = "second-estate.mesh"   # every host on the mesh is <host>.<zone> (mesh.md); absent: <name>.mesh
-
-known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
-acme_email = "ops@example"   # set, the shared layer carries a Let's Encrypt ClusterIssuer; absent, no public issuer
-
 operator_keys = [            # the devices that hold `deployer` on every fort of this estate
   "ssh-ed25519 AAAAC3Nza… macbook-air",
 ]
+
+[source]                     # where the estate's tree comes from (forts#161)
+repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
+known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
+# forge = "gitea"            # the forge's kind; absent, the host of repo derives it (github.com: github)
+# auth = "ssh"               # the clone route; absent, the scheme of repo derives it. ssh is the one route today (forts#1)
+
+[mesh]                       # the estate's WireGuard mesh (mesh.md)
+cidr = "10.2.0.0/24"   # the subnet; fort check keeps every mesh address in it, and its prefix is what the interfaces render
+interface = "wg-second"   # the mesh interface's name on every host; absent: wg0
+zone = "second-estate.mesh"   # every host on the mesh is <host>.<zone> (mesh.md); absent: <name>.mesh
+
+[acme]
+email = "ops@example"   # set, the shared layer carries an ACME ClusterIssuer; absent, no public issuer
+# directory = "https://acme-v02.api.letsencrypt.org/directory"   # absent: Let's Encrypt. A private directory
+                             # (a step-ca) goes with the estate's CA file (nixos/certs/ca-root.pem)
 
 [hubs.forge]                  # the roles another fort serves this estate (hub.md)
 estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # the estate that holds the hub, by its git URL
@@ -67,7 +79,10 @@ fort = "central"
 ```
 
 `scaffold` renders the FluxInstance source and `sfi.auto-rebuild.repoUrl`
-from `repo`. The hubs are roles ([hub.md](hub.md)): `--hub
+from `[source] repo`. The clone route is SSH: an https repo URL fails
+validation until the anonymous route lands (forts#1, forts#159), and
+`auth = "token"` names a route that does not exist. The hubs are roles
+([hub.md](hub.md)): `--hub
 <role>=<fort>@<estate git url>` once per role (the fort comes first
 because the URL carries an `@` of its own, and the forge's name is
 `--forge-name gitea.zen.lofi`). The forge is the one role the core
@@ -81,8 +96,10 @@ release tag. `--known-hosts` is the forge's SSH host key as one
 known_hosts line (`ssh-keyscan -p <port> <forge>` prints it); the
 framework ships none (forts#139), so a fort of an estate that names none
 does not evaluate, and `fort check --all` says so. `--acme-email` makes
-the shared layer carry a Let's Encrypt ClusterIssuer for the estate's
-public names; without it, no public issuer is rendered.
+the shared layer carry an ACME ClusterIssuer for the estate's public
+names; without it, no public issuer is rendered. The issuer speaks to
+`[acme] directory`, Let's Encrypt's production directory when the estate
+names none.
 
 `[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
 one name on every mesh (`gitea.zen.lofi`) to the address `fort` has in

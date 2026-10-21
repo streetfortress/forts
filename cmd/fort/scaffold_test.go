@@ -204,7 +204,7 @@ func TestScaffoldMatchesCommittedClusters(t *testing.T) {
 
 // testEstate is the estate the render tests assume: the deployments
 // repo as the source, no hub.
-var testEstate = estate.Estate{Name: "deployments", Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git"}
+var testEstate = estate.Estate{Name: "deployments", Source: estate.Source{Repo: "ssh://git@gitea.zen.lofi:30022/sfi/deployments.git"}}
 
 // operatorDefaults is what every host shape imports and enables, whatever
 // else it is (sfi/forts#24): the shell and the console door. A shape

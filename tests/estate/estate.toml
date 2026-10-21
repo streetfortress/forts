@@ -1,10 +1,6 @@
 # The fixture estate (tests/estate/README.md): one plain fort, a forge
 # hub in another estate, no monitoring hub.
 name = "fixture"
-repo = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate"
-mesh = "10.1.0.0/24"
-interface = "wg-fixture"
-known_hosts = "[gitea.zen.lofi]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL"   # a throwaway key, like everything else here
 
 # The operators (forts#81): the devices that hold `deployer` on every
 # fort of this estate. The framework ships none, so this list is what
@@ -14,6 +10,14 @@ known_hosts = "[gitea.zen.lofi]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXd
 operator_keys = [
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL fixture-operator",
 ]
+
+[source]
+repo = "ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate"
+known_hosts = "[gitea.zen.lofi]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL"   # a throwaway key, like everything else here
+
+[mesh]
+cidr = "10.1.0.0/24"
+interface = "wg-fixture"
 
 # The forge of this estate: a fort of sfi/other-estate, on this mesh
 # through a link, so its address here is remotes.forge of

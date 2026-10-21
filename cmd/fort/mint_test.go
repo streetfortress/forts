@@ -40,7 +40,7 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
+	write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 
 	// gate: scaffold has not run
@@ -285,7 +285,7 @@ func TestMintPlainFort(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
-	write("estate.toml", "name = \"deployments\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
+	write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	tool := &fakeTool{}
 	st := &fakeGiteaState{}
@@ -382,7 +382,7 @@ func TestMintConsole(t *testing.T) {
 		}
 	}
 	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
-	write("estate.toml", "name = \"fixture\"\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
+	write("estate.toml", "name = \"fixture\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/fixture-estate\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.95\"\n[libvirt]\nip = \"10.0.0.95\"\n")
 	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
 	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")

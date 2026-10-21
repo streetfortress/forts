@@ -79,6 +79,9 @@ type hostView struct {
 type linkView struct {
 	Name, Ref, Repo, Interface, Zone, Address string
 	Port                                      int
+	// Prefix: the other mesh's prefix length when not the default 24
+	// (manifest prefix, forts#161); 0 renders nothing.
+	Prefix int
 }
 
 // linkViews is the manifest's links in name order, for the templates.
@@ -86,7 +89,7 @@ func linkViews(entry manifest.Host) []linkView {
 	var out []linkView
 	for _, name := range entry.LinkNames() {
 		l := entry.Links[name]
-		out = append(out, linkView{Name: name, Ref: l.Ref(), Repo: estate.WithGit(l.Estate), Interface: l.InterfaceName(), Zone: l.ZoneName(), Address: l.Address, Port: l.Port})
+		out = append(out, linkView{Name: name, Ref: l.Ref(), Repo: estate.WithGit(l.Estate), Interface: l.InterfaceName(), Zone: l.ZoneName(), Address: l.Address, Port: l.Port, Prefix: l.Prefix})
 	}
 	return out
 }

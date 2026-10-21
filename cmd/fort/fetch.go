@@ -65,8 +65,8 @@ func readEstate(dir, repo string) (*fetchedEstate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", repo, err)
 	}
-	if !estate.SameRepo(est.Repo, repo) {
-		return nil, fmt.Errorf("%s: its %s says repo = %q, not this URL — the wrong repo, or an estate.toml that does not know where it lives", repo, estate.Path, est.Repo)
+	if !estate.SameRepo(est.Source.Repo, repo) {
+		return nil, fmt.Errorf("%s: its %s says repo = %q, not this URL — the wrong repo, or an estate.toml that does not know where it lives", repo, estate.Path, est.Source.Repo)
 	}
 	m, err := loadMesh(dir)
 	if err != nil {

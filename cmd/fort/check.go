@@ -186,10 +186,10 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 // An estate that names none has no fort that evaluates (the throw in
 // modules/estate.nix), and the gate says so where a reader is looking.
 func knownHostsFindings(est estate.Estate) []finding {
-	if est.KnownHosts == "" {
+	if est.Source.KnownHosts == "" {
 		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
 	}
-	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.KnownHosts)[0] + ")"}}
+	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.Source.KnownHosts)[0] + ")"}}
 }
 
 type checkOpts struct {

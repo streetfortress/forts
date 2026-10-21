@@ -168,7 +168,7 @@ func TestRenderWGConf(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a peer with an endpoint: dials the ones with endpoints, is dialed by the rest
-	conf, err := renderWGConf(m, "wg0", "luxor")
+	conf, err := renderWGConf(m, "wg0", 24, "luxor")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,19 +187,19 @@ func TestRenderWGConf(t *testing.T) {
 	if !strings.HasPrefix(conf, "# wg0 for luxor") {
 		t.Errorf("luxor header:\n%s", conf)
 	}
-	if c, _ := renderWGConf(m, "wg-second", "luxor"); !strings.HasPrefix(c, "# wg-second for luxor") {
+	if c, _ := renderWGConf(m, "wg-second", 24, "luxor"); !strings.HasPrefix(c, "# wg-second for luxor") {
 		t.Errorf("named interface header:\n%s", c)
 	}
 	if strings.Contains(conf, "PrivateKey =") || strings.Contains(conf, "PublicKey = LX=") {
 		t.Errorf("luxor: a PrivateKey line, or itself as a peer:\n%s", conf)
 	}
 	// a peer with no endpoint of its own facing another without one
-	conf, _ = renderWGConf(m, "wg0", "devbox")
+	conf, _ = renderWGConf(m, "wg0", 24, "devbox")
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint on either side") {
 		t.Errorf("devbox↔soundship:\n%s", conf)
 	}
 	// a roaming client: no ListenPort, no clients, the DDNS note
-	conf, err = renderWGConf(m, "wg0", "laptop")
+	conf, err = renderWGConf(m, "wg0", 24, "laptop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestRenderWGConf(t *testing.T) {
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint in peers.json: a roaming client") || !strings.Contains(conf, "Endpoint = 10.0.0.5:51820") {
 		t.Errorf("laptop peers:\n%s", conf)
 	}
-	if _, err := renderWGConf(m, "wg0", "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
+	if _, err := renderWGConf(m, "wg0", 24, "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
 		t.Errorf("unknown member: %v", err)
 	}
 	// a roaming client dials the linked hosts too
@@ -228,11 +228,11 @@ func TestMeshSubnetFindings(t *testing.T) {
 	if out := meshSubnetFindings(root, estate.Estate{}, hosts); out != nil {
 		t.Errorf("no mesh declared: want nothing, got %v", out)
 	}
-	out := meshSubnetFindings(root, estate.Estate{Mesh: "10.1.0.0/24"}, hosts)
+	out := meshSubnetFindings(root, estate.Estate{Mesh: estate.Mesh{CIDR: "10.1.0.0/24"}}, hosts)
 	if len(out) != 1 || out[0].level != "ok" || !strings.Contains(out[0].msg, "8 address(es)") {
 		t.Errorf("inside: %+v", out)
 	}
-	out = meshSubnetFindings(root, estate.Estate{Mesh: "10.2.0.0/24"}, hosts)
+	out = meshSubnetFindings(root, estate.Estate{Mesh: estate.Mesh{CIDR: "10.2.0.0/24"}}, hosts)
 	errs := 0
 	for _, f := range out {
 		if f.level == "error" {
@@ -287,7 +287,7 @@ func TestForgeFindings(t *testing.T) {
 	const ownRepo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
 	const otherRepo = "ssh://git@gitea.zen.lofi:30022/sfi/infra"
 	est := func(fort, hubEstate string) estate.Estate {
-		e := estate.Estate{Name: "deployments", Repo: ownRepo}
+		e := estate.Estate{Name: "deployments", Source: estate.Source{Repo: ownRepo}}
 		if fort != "" {
 			e.Hubs = map[string]estate.Hub{estate.RoleForge: {Estate: hubEstate, Fort: fort, Name: "gitea.zen.lofi"}}
 		}

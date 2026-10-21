@@ -27,7 +27,7 @@ estate = "ssh://git@gitea.zen.lofi:30022/sfi/estate-hub"
 fort = "central"
 ```
 
-`estate` is the hub's estate by its git URL — the `repo` its own
+`estate` is the hub's estate by its git URL — the `[source] repo` its own
 `estate.toml` carries, so an estate has one spelling everywhere. This
 estate's own URL is the in-estate case. The hub's address on this mesh
 is its entry in `mesh/peers.json`: its manifest's `mesh_ip` when the hub
