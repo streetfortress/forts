@@ -1,0 +1,23 @@
+# SSH over the SFI mesh — rendered by `fort ssh-config` from
+# mesh/peers.json + forts/*.toml. Do not edit: fort mint
+# and fort dismantle re-render it, and fort check --all fails when it is
+# stale. docs/ssh-config.md.
+#
+# Use it from ~/.ssh/config — anything above the Include wins, which is
+# where a client's own overrides go (an off-mesh machine's ProxyJump, a
+# LAN address for a host it reaches without the tunnel):
+#
+#   Include ~/<estate>/mesh/ssh_config
+#   UserKnownHostsFile ~/.ssh/known_hosts ~/<estate>/mesh/known_hosts
+#
+# Every fort answers as deployer, the operator account the framework
+# gives each host; a peer with no manifest is a hand-managed host, on the
+# account its peers.json entry names. A role alias (dev, prod, …) exists while exactly
+# one fort claims the stem. Other accounts on a fort are the estate's:
+# reach them from the client's own config, above the Include.
+
+# cluster fort, linode
+Host public-fort
+  Hostname 10.5.0.2
+  User deployer
+  HostKeyAlias public-fort

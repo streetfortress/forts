@@ -144,7 +144,7 @@ fort destroy <host>             ← gated on that merge: power off, refresh,
 | need | comes from | verbs |
 |---|---|---|
 | admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) |
+| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md), forts#167) |
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | the hypervisor | the fort's `[libvirt] uri` (#27); `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |

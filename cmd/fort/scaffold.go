@@ -51,6 +51,11 @@ type hostView struct {
 	// RepoURL: the estate's git URL (estate.toml), the FluxInstance's
 	// source and auto-rebuild's pull.
 	RepoURL string
+	// Anonymous: the estate is on the anonymous route (estate.toml
+	// [source], forts#167) — an https clone of a public repo with no
+	// credential. The FluxInstance names no pullSecret, and the host
+	// file's comments name no deploy key, because fort mint mints none.
+	Anonymous bool
 	// MeshInterface: the estate's mesh interface (estate.toml `interface`,
 	// else wg0).
 	MeshInterface string
@@ -278,6 +283,7 @@ func scaffoldShape(e manifest.Host) string {
 func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaffoldFile, error) {
 	view := hostView{
 		RepoURL:       est.RepoGit(),
+		Anonymous:     est.Anonymous(),
 		MeshInterface: est.InterfaceName(),
 		Zone:          est.ZoneName(),
 		Estate:        est.Name,

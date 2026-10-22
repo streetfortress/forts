@@ -100,3 +100,44 @@ func TestSourceFindings(t *testing.T) {
 		t.Errorf("bad repo: %+v", fs)
 	}
 }
+
+// The host-key finding (forts#139, #167): on the ssh route an estate
+// that names none has no fort that evaluates, and the gate says so; on
+// the anonymous route there is no key to pin, and a key named anyway is
+// unread — a warning, not a refusal.
+func TestKnownHostsFindings(t *testing.T) {
+	ssh := estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate"}}
+	if fs := knownHostsFindings(ssh); len(fs) != 1 || fs[0].level != "error" || !strings.Contains(fs[0].msg, "no known_hosts") {
+		t.Errorf("ssh, no pin: %+v", fs)
+	}
+	ssh.Source.KnownHosts = "github.com ssh-ed25519 AAAA"
+	if fs := knownHostsFindings(ssh); len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "pins the forge's host key (github.com)") {
+		t.Errorf("ssh, pinned: %+v", fs)
+	}
+	anon := estate.Estate{Source: estate.Source{Repo: "https://github.com/acme/estate"}}
+	if fs := knownHostsFindings(anon); len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "anonymous route: no host key to pin, TLS from the system roots") {
+		t.Errorf("anonymous: %+v", fs)
+	}
+	anon.Source.KnownHosts = "github.com ssh-ed25519 AAAA"
+	if fs := knownHostsFindings(anon); len(fs) != 1 || fs[0].level != "warning" || !strings.Contains(fs[0].msg, "reads no host key") {
+		t.Errorf("anonymous with a pin: %+v", fs)
+	}
+}
+
+// The source finding on the anonymous route (forts#167): the kind is
+// still named, the route is named, and the line says no deploy key is
+// registered and no token read.
+func TestSourceFindingsAnonymous(t *testing.T) {
+	fs := sourceFindings(estate.Estate{Source: estate.Source{Repo: "https://github.com/acme/estate"}})
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge github (derived from the host of repo), route none (derived from the scheme of repo)") || !strings.Contains(fs[0].msg, "https://github.com/acme/estate.git anonymously") || !strings.Contains(fs[0].msg, "no github-token is read") || strings.Contains(fs[0].msg, "api.github.com") {
+		t.Errorf("anonymous github: %+v", fs)
+	}
+	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "https://forge.example/acme/estate", Auth: "none"}})
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge gitea (derived from the host of repo), route none ([source] auth)") || !strings.Contains(fs[0].msg, "no gitea-token is read") {
+		t.Errorf("anonymous gitea, declared: %+v", fs)
+	}
+	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate", Auth: "ssh"}})
+	if len(fs) != 1 || !strings.Contains(fs[0].msg, "route ssh ([source] auth)") || !strings.Contains(fs[0].msg, "https://api.github.com") {
+		t.Errorf("ssh, declared: %+v", fs)
+	}
+}

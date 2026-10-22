@@ -158,17 +158,20 @@ func TestMovedKeys(t *testing.T) {
 	}
 }
 
-// The [source] matrix (forts#161): https refused until an anonymous
-// route exists (#159); a token named as a missing route; a
-// forge kind the core knows; auth consistent with the scheme.
+// The [source] matrix (forts#161, #167): an ssh:// repo is the ssh
+// route, an https:// repo the anonymous one, derived or declared; the
+// scheme and the route refused when they disagree; a token named as a
+// missing route; a forge kind the core knows; a pin that is not one.
 func TestSourceMatrix(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
-		"https repo":    {"repo = \"https://github.com/acme/estate\"", "SSH only"},
-		"auth token":    {"repo = \"ssh://x/y\"\nauth = \"token\"", "no token route"},
-		"auth none ssh": {"repo = \"ssh://x/y\"\nauth = \"none\"", "https only"},
-		"auth unknown":  {"repo = \"ssh://x/y\"\nauth = \"password\"", "auth"},
-		"forge unknown": {"repo = \"ssh://x/y\"\nforge = \"sourcehut\"", "forge"},
-		"bad pin":       {"repo = \"ssh://x/y\"\nknown_hosts = \"short\"", "known_hosts"},
+		"auth token":       {"repo = \"ssh://x/y\"\nauth = \"token\"", "no token route"},
+		"auth none ssh":    {"repo = \"ssh://x/y\"\nauth = \"none\"", "https only"},
+		"auth ssh https":   {"repo = \"https://github.com/acme/estate\"\nauth = \"ssh\"", "no deploy key"},
+		"auth token https": {"repo = \"https://github.com/acme/estate\"\nauth = \"token\"", "no token route"},
+		"auth unknown":     {"repo = \"ssh://x/y\"\nauth = \"password\"", "auth"},
+		"other scheme":     {"repo = \"git://x/y\"", "want the estate's git URL"},
+		"forge unknown":    {"repo = \"ssh://x/y\"\nforge = \"sourcehut\"", "forge"},
+		"bad pin":          {"repo = \"ssh://x/y\"\nknown_hosts = \"short\"", "known_hosts"},
 	} {
 		_, err := Parse([]byte("name = \"e\"\n[source]\n" + tc.source + "\n"))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -176,8 +179,22 @@ func TestSourceMatrix(t *testing.T) {
 		}
 	}
 	e, err := Parse([]byte("name = \"e\"\n[source]\nrepo = \"ssh://x/y\"\nauth = \"ssh\"\nforge = \"gitea\"\n"))
-	if err != nil || e.AuthRoute() != AuthSSH || e.ForgeKind() != ForgeGitea {
+	if err != nil || e.AuthRoute() != AuthSSH || e.ForgeKind() != ForgeGitea || e.Anonymous() {
 		t.Fatalf("explicit ssh/gitea: %+v %v", e, err)
+	}
+	// The anonymous route (forts#167): https plus none, declared or
+	// derived, with no host key — and with one, which the gate reports
+	// as unread rather than the manifest refusing.
+	for name, source := range map[string]string{
+		"https derived":  "repo = \"https://github.com/acme/estate\"",
+		"https declared": "repo = \"https://github.com/acme/estate.git\"\nauth = \"none\"",
+		"https gitea":    "repo = \"https://forge.example/acme/estate\"\nforge = \"gitea\"",
+		"https with pin": "repo = \"https://github.com/acme/estate\"\nknown_hosts = \"github.com ssh-ed25519 AAAA\"",
+	} {
+		e, err := Parse([]byte("name = \"e\"\n[source]\n" + source + "\n"))
+		if err != nil || e.AuthRoute() != AuthNone || !e.Anonymous() {
+			t.Errorf("%s: want the anonymous route, got %+v %v", name, e.Source, err)
+		}
 	}
 }
 

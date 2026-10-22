@@ -14,6 +14,8 @@ cmd/fort/          the CLI; templates/scaffold and templates/init (an estate's s
 cmd/fort-pulumi/   the pulumi program fort provision execs
 internal/          manifest, estate, seed, tools (the CLI's tool set: internal/tools/tools.json)
 tests/estate/      a two-fort fixture estate the flake evaluates (a plain lab VM, a plain linode); tests/init-estate.sh creates one with fort init
+tests/github-estate/, tests/public-estate/   one cloud cluster fort each, on github.com: the ssh route (a deploy key, a pinned host key) and the
+                   anonymous https route (neither; forts#167). CI evaluates both and gates both with fort check --all
 docs/              the CLI handbook — start at docs/README.md
 ```
 

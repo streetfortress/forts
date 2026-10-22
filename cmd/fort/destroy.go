@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"github.com/linode/linodego"
@@ -311,8 +312,18 @@ func linodePowerOff(ctx context.Context, host string) error {
 // revokeDeployKey deletes the read-only key fort mint registered (title
 // flux-<host>) on the estate's forge (forge.go). Not found is not an
 // error: the key may never have existed (no flux cluster) or was
-// removed by hand.
+// removed by hand. On the anonymous route (forts#167) mint registered
+// none, so nothing is revoked and no forge client — no token — is
+// needed; estate.toml is still in the tree here, the dismantle PR
+// removed the manifest alone.
 func revokeDeployKey(root, host string) (string, error) {
+	est, err := estate.Load(root)
+	if err != nil {
+		return "", err
+	}
+	if est.Anonymous() {
+		return "none on the anonymous route (fort mint registered none; nothing to revoke)", nil
+	}
 	f, err := forgeClient(root)
 	if err != nil {
 		return "", err

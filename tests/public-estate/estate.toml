@@ -1,0 +1,19 @@
+# The public fixture estate (tests/public-estate/README.md): one cloud
+# cluster fort, the repo public on github.com, cloned anonymously over
+# https — the anonymous route of forts#167. Nothing here names a forge
+# credential: no deploy key, no `github-token`, no host key to pin. The
+# forge kind still derives from the host of repo (github), and nothing
+# reads it but the report.
+name = "public-estate"
+
+# The operators (forts#81): a throwaway key, like everything else here.
+operator_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL fixture-operator",
+]
+
+[source]
+repo = "https://github.com/acme/public-estate"   # the anonymous route: a public repo, no deploy key, no host key to pin
+
+[mesh]
+cidr = "10.5.0.0/24"
+interface = "wg-public"

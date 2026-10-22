@@ -8,8 +8,8 @@ fort mint <host> [--write]
 systems will recognise it by, the sops rules that let it read its own
 secrets, the mesh peer entry, the console password where the host file
 enables the door, and — for a flux cluster — the cluster's
-age key, the deploy key the forge trusts, and the canary that proves the
-whole chain works. It runs after [`scaffold --write`](scaffold.md) and
+age key, the deploy key the forge trusts (on the ssh route), and the
+canary that proves the whole chain works. It runs after [`scaffold --write`](scaffold.md) and
 before a layer's verbs over the fort's tree; [`dismantle`](dismantle.md) is its exact inverse.
 
 ## The custody model
@@ -43,7 +43,7 @@ Consequences worth knowing:
 
 | | artifact | when |
 |---|---|---|
-| ● | `nixos/secrets/<host>.yaml` — `k3s-token`, `wireguard-private-key`, `ssh-host-key` + `.pub`, `flux-sops-age-key`, `flux-git-deploy-key` | new file written whole and encrypted once; missing keys added with `sops set` |
+| ● | `nixos/secrets/<host>.yaml` — `k3s-token`, `wireguard-private-key`, `ssh-host-key` + `.pub`, `flux-sops-age-key`, `flux-git-deploy-key` (ssh route only) | new file written whole and encrypted once; missing keys added with `sops set` |
 | ○ | `nixos/.sops.yaml` — a `# BEGIN/END fort sops rule: <host>` block for `secrets/<host>.yaml`, recipients = the shared admin set + the host | always |
 | ○ | `mesh/peers.json` — `.peers.<host>` with `wg_vpn_ip`, `public_key`, and `wg_endpoint_ip` (the manifest's `mesh_endpoint`, else the lab `[libvirt] ip`, else `[dns]` name.zone) | always |
 | ◆ | `mesh/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `deployer`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
@@ -52,7 +52,7 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
-| · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | always; registered under `--write` only |
+| · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | on the ssh route; registered under `--write` only. The anonymous route (an `https://` repo, forts#167) mints none, registers none and needs no forge token — the report says so |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
@@ -78,7 +78,13 @@ GitHub, the kind the host of `repo` derives and `[source] forge`
 overrides (forts#1) — registered only under `--write`, reported without
 printing a value, and revoked by `fort destroy`. The two forges answer
 the same three calls (list, register, revoke) at different roots with
-different tokens; `cmd/fort/forge.go` is both. A layer's credentials (a backup store's identities) are the
+different tokens; `cmd/fort/forge.go` is both. **On the anonymous
+route** (an `https://` repo, a public one; [init.md](init.md), forts#167)
+there is no call at all: flux and the rebuild loop clone with no
+credential, so mint mints no `flux-git-deploy-key`, speaks to no forge
+and reads no token. A deploy key already in the secrets file — the
+estate moved routes — is left where it is and reported as unread, with
+the forge's copy yours to revoke. A layer's credentials (a backup store's identities) are the
 layer's mint to make and its dismantle to withdraw ([layers](layers.md)).
 
 **The shared admin set is read from the configs, not hardcoded**: the
@@ -93,7 +99,7 @@ hosts follow.
 For a manifest with no `[cluster]` table the plan is the host's own
 identity and nothing cluster-shaped: `wireguard-private-key`,
 `ssh-host-key` + `.pub` and `flux-git-deploy-key` (auto-rebuild's pull
-credential — every fort's) into the secrets file, the console password
+credential — every fort's, on the ssh route) into the secrets file, the console password
 (the plain shape enables the door too), the `nixos/.sops.yaml`
 rule, the peer, the deploy key on the forge. No `k3s-token`, no
 `flux-sops-age-key`, no fleet rule or infra recipient (nothing to re-key),
@@ -155,10 +161,11 @@ check after importing a key by hand.
 
 ## Needs
 
-The admin age key (to encrypt and to read the existing file), and the
-forge's token in `provisioning/secrets.yaml`, named by the forge's kind:
-`gitea-token` or `github-token` (every fort, for the deploy key; `fort
-check --all` names the one this estate reads). On GitHub it is a token
+The admin age key (to encrypt and to read the existing file), and — on
+the ssh route — the forge's token in `provisioning/secrets.yaml`, named
+by the forge's kind: `gitea-token` or `github-token` (every fort, for
+the deploy key; `fort check --all` names the one this estate reads, or
+that none is read). On GitHub it is a token
 that administers the repository — a fine-grained token with
 *Administration: read and write* on that repository, or a classic token
 with the `repo` scope — because deploy keys hang off the repository's

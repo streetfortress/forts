@@ -53,9 +53,15 @@
 #     path. The verb is not named `nixos-rebuild`: that is NixOS's own
 #     tool on every host's PATH, and the system path resolves a name
 #     collision silently (forts#151).
-#   - Auth reuses the host's flux-git-deploy-key (read-only deploy key,
-#     already in every flux host's sops file) via GIT_SSH_COMMAND; the
-#     pinned forge host key matches flux-bootstrap.nix.
+#   - Auth is the estate's clone route (sfi.estate.authRoute, estate.nix;
+#     forts#167). On the ssh route it reuses the host's
+#     flux-git-deploy-key (read-only deploy key, already in every flux
+#     host's sops file) via GIT_SSH_COMMAND, and the pinned forge host
+#     key matches flux-bootstrap.nix. On the anonymous route — an
+#     https:// repoUrl, a public repo — there is no deploy key, no
+#     GIT_SSH_COMMAND and no host key: git and nix's fetcher clone with
+#     no credential, and TLS trust is the system roots' (plus the
+#     estate's own CA where it carries one, estate.nix).
 #   - allowReboot off: kernel/major bumps go through the re-provision
 #     path. This module is the hybrid's "patch" leg — routine changes land
 #     within a minute or two of merging; majors are deliberate.
@@ -84,20 +90,26 @@ let
   # repo and check a host key that is not its own forge's. The fixture
   # estates (tests/estate, tests/github-estate) name other repos.
   #
-  # This module is ssh-only by construction: gitKnownHosts is an ssh
-  # known_hosts line and GIT_SSH_COMMAND carries the deploy key. So a
-  # repoUrl this pattern cannot read is a config error, and the eval —
-  # `fort check`, in CI — is where it must appear. The one remaining
-  # verb of a stranded fort is the wrong place to learn it.
+  # Two schemes, two routes (forts#167): ssh:// clones with the deploy
+  # key and pins the forge's host key; https:// clones a public repo
+  # anonymously. The scheme is read here, where the clone is built, and
+  # must agree with the estate's declared route (the assertion below):
+  # gitKnownHosts is an ssh known_hosts line and GIT_SSH_COMMAND carries
+  # the deploy key, both meaningless on an https URL. A repoUrl neither
+  # pattern can read is a config error, and the eval — `fort check`, in
+  # CI — is where it must appear. The one remaining verb of a stranded
+  # fort is the wrong place to learn it.
+  anonymous = config.sfi.estate.authRoute == "none";
   repo =
-    let m = builtins.match "ssh://(([^@/]*)@)?([^@:/]+)(:([0-9]+))?(/.+)" repoUrl;
-    in if m == null then
-      throw "sfi.auto-rebuild.repoUrl: want ssh://[user@]host[:port]/owner/name, got '${repoUrl}'"
-    else rec {
-      user = let u = builtins.elemAt m 1; in if u == null || u == "" then "git" else u;
-      host = builtins.elemAt m 2;
-      port = builtins.elemAt m 4;
-      path = builtins.elemAt m 5;
+    let
+      ssh = builtins.match "ssh://(([^@/]*)@)?([^@:/]+)(:([0-9]+))?(/.+)" repoUrl;
+      https = builtins.match "https://([^@:/]+)(:([0-9]+))?(/.+)" repoUrl;
+    in if ssh != null then rec {
+      scheme = "ssh";
+      user = let u = builtins.elemAt ssh 1; in if u == null || u == "" then "git" else u;
+      host = builtins.elemAt ssh 2;
+      port = builtins.elemAt ssh 4;
+      path = builtins.elemAt ssh 5;
       # known_hosts spells a non-default port as [host]:port, and ssh
       # matches a HostKeyAlias against that text verbatim — brackets and
       # port included (checked against gitea 2026-09-18). The alias has
@@ -105,7 +117,16 @@ let
       hostKeyAlias = if port == null then host else "[${host}]:${port}";
       # The address is the one hole: the verb passes a shell $from.
       urlFor = address: "ssh://${user}@${address}${lib.optionalString (port != null) ":${port}"}${path}";
-    };
+    } else if https != null then {
+      scheme = "https";
+      host = builtins.elemAt https 0;
+      port = builtins.elemAt https 2;
+      path = builtins.elemAt https 3;
+      # No urlFor and no hostKeyAlias: an https clone by address has no
+      # pin to check against — the certificate names the forge, not its
+      # address — so `--from` is refused on this route (below).
+    } else
+      throw "sfi.auto-rebuild.repoUrl: want ssh://[user@]host[:port]/owner/name (the deploy-key route) or https://host[:port]/owner/name (a public repo, cloned anonymously), got '${repoUrl}'";
 
   # ExecCondition: exit 1 = clean "condition failed" skip; exit 0 = run;
   # exit 255 = the UNIT fails (systemd.service(5)). Inherits the service's
@@ -300,12 +321,15 @@ in
       example = "ssh://git@forge.example:22/acme/estate.git";
       description = ''
         The estate's git URL: what the gate reads main's tip from and
-        what the rebuild clones, with the deploy key fort mint
-        registered. The host file sets it; `fort scaffold` renders it
-        from estate.toml. It must be ssh://[user@]host[:port]/owner/name
-        — the module reads the host, the port and the path back out of
-        it for `nixos-pull --from` (#77), and it fails the eval
-        when it cannot.
+        what the rebuild clones. The host file sets it; `fort scaffold`
+        renders it from estate.toml. ssh://[user@]host[:port]/owner/name
+        clones with the deploy key fort mint registered, and the module
+        reads the host, the port and the path back out of it for
+        `nixos-pull --from` (#77). https://host[:port]/owner/name is the
+        anonymous route (forts#167): a public repo, no credential, no
+        host key, and no `--from`. The scheme must agree with the
+        estate's route (sfi.estate.authRoute); the eval fails when it
+        does not, or when neither pattern reads the URL.
       '';
     };
     gitKnownHosts = lib.mkOption {
@@ -313,16 +337,18 @@ in
       default = config.sfi.estate.knownHosts;
       defaultText = "estate.toml's `[source] known_hosts` (sfi.estate.knownHosts)";
       description = ''
-        SSH known_hosts line(s) for the git host. One line must name the
-        host and port of repoUrl, spelled as known_hosts spells them
-        ([host]:port for a port other than 22): `nixos-pull
-        --from <ip>` checks the host key against that line, and a forge
-        the file does not name has no recovery path.
+        SSH known_hosts line(s) for the git host, on the ssh route. One
+        line must name the host and port of repoUrl, spelled as
+        known_hosts spells them ([host]:port for a port other than 22):
+        `nixos-pull --from <ip>` checks the host key against that line,
+        and a forge the file does not name has no recovery path. Unread
+        on the anonymous route.
       '';
     };
   };
 
   imports = [
+    ./estate.nix # sfi.estate.authRoute, sfi.estate.knownHosts
     ./textfile-metrics.nix # nixos-{attempted,applied,effective}.prom
     ./ops/ops-commands.nix # nixos-pull is an ops verb
     ./ops/nixos-rollback.nix # nixos-rollback: prior generation + pin
@@ -330,9 +356,18 @@ in
   ];
 
   config = lib.mkIf cfg.enable {
-    # Also declared by flux-bootstrap.nix on flux hosts; identical empty
-    # definitions merge cleanly, and non-flux hosts get it from here.
-    sops.secrets.flux-git-deploy-key = { };
+    assertions = [
+      {
+        assertion = (repo.scheme == "https") == anonymous;
+        message = "sfi.auto-rebuild.repoUrl = \"${repoUrl}\" is on the ${repo.scheme} scheme, and estate.toml's [source] route is ${config.sfi.estate.authRoute}: the rebuild loop clones the URL the way the estate's route says (ssh:// with the deploy key, https:// anonymously; forts#167). fort scaffold renders repoUrl from estate.toml's [source] repo — set it to that URL";
+      }
+    ];
+
+    # The deploy key, on the ssh route: also declared by flux-bootstrap.nix
+    # on flux hosts; identical empty definitions merge cleanly, and
+    # non-flux hosts get it from here. The anonymous route has none
+    # (forts#167), and fort mint minted none into the host's sops file.
+    sops.secrets = lib.optionalAttrs (!anonymous) { flux-git-deploy-key = { }; };
 
     # Retention — see the gc options above. Collection and optimisation
     # are root's own timers, sudo-free and not verbs: nothing about them
@@ -380,12 +415,17 @@ in
       script = lib.mkForce ''
         ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh --flake ${lib.escapeShellArg flakeRef}
       '';
-      environment.GIT_SSH_COMMAND = lib.concatStringsSep " " [
-        "${pkgs.openssh}/bin/ssh"
-        "-i ${config.sops.secrets.flux-git-deploy-key.path}"
-        "-o UserKnownHostsFile=${knownHostsFile}"
-        "-o IdentitiesOnly=yes"
-      ];
+      # The clone's credential, on the ssh route alone: the anonymous
+      # route sets nothing, and git and nix's fetcher clone the public
+      # repo over https with the system roots.
+      environment = lib.optionalAttrs (!anonymous) {
+        GIT_SSH_COMMAND = lib.concatStringsSep " " [
+          "${pkgs.openssh}/bin/ssh"
+          "-i ${config.sops.secrets.flux-git-deploy-key.path}"
+          "-o UserKnownHostsFile=${knownHostsFile}"
+          "-o IdentitiesOnly=yes"
+        ];
+      };
       serviceConfig = {
         StateDirectory = "sfi-auto-rebuild"; # /var/lib/sfi-auto-rebuild
         ExecCondition = "${gate}";
@@ -414,7 +454,13 @@ in
     # repo. The source is still authenticated: the deploy key dials the
     # address with HostKeyAlias set to the forge's pinned known_hosts
     # entry, so any address may be named but only the real forge's host
-    # key passes. The branch
+    # key passes. On the anonymous route (forts#167) the verb refuses
+    # `--from`: an https clone by address has no host key to check, and
+    # the forge's certificate names the forge, not its address, so the
+    # TLS check fails and nothing can make it pass short of disabling
+    # it — which this verb will not do. A fort on that route that
+    # cannot resolve its forge waits for the name, as any https client
+    # does. The branch
     # is always main — this verb has no way to name another one (#76).
     # It used to take `--ref <branch>`, and that was a path from the
     # deployer key to root: a branch is an unvetted closure that
@@ -424,7 +470,7 @@ in
     # (ops/nixos-rollback.nix) — a menu of generations main already
     # built, not an arbitrary build target.
     sfi.ops.commands.nixos-pull = {
-      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> pulls main from the forge by address (the name is pinned and moves with the forge). Main only — the way back is nixos-rollback";
+      description = "Clear the last-attempted marker and pull/switch to main now via nixos-upgrade.service; --from <ip> pulls main from the forge by address (the name is pinned and moves with the forge)${lib.optionalString anonymous " — refused on this estate's anonymous https route"}. Main only — the way back is nixos-rollback";
       script = ''
         from=""
         while [ $# -gt 0 ]; do
@@ -450,6 +496,10 @@ in
           case "$from" in
             *[!0-9.]*|"") echo "--from: want an IPv4 address, got '$from'" >&2; exit 2 ;;
           esac
+          ${if anonymous then ''
+          echo "--from: this estate clones ${repoUrl} anonymously over https (forts#167); an address in the forge's place fails the certificate check, and there is no host key to pin instead. Fix the name — the resolver, or the forge's own DNS — and run 'sudo nixos-pull' without --from" >&2
+          exit 2
+          '' else ''
           lift_pin
           url="${repo.urlFor "$from"}"
           echo "pulling main from $url (host key checked as ${repo.hostKeyAlias}) and switching..."
@@ -464,6 +514,7 @@ in
             --flake "git+$url?ref=main&dir=nixos#${config.networking.hostName}"
           echo "switched from $from (main); the timer converges back to main from wherever ${repo.host} now points"
           exit 0
+          ''}
         fi
         lift_pin
         marker=/var/lib/sfi-auto-rebuild/last-attempted-rev

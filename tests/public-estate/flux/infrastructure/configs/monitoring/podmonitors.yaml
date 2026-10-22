@@ -1,0 +1,55 @@
+# PodMonitors for components whose charts don't ship a metrics Service:
+# scraping the pod port directly avoids flipping chart values that would
+# couple the controllers layer to the monitoring CRDs.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: traefik
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [traefik]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  podMetricsEndpoints:
+    - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux-controllers
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [flux-system]
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - source-controller
+          - kustomize-controller
+          - helm-controller
+          - notification-controller
+  podMetricsEndpoints:
+    - port: http-prom
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_phase]
+          action: keep
+          regex: Running
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cert-manager
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [cert-manager]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  podMetricsEndpoints:
+    - port: http-metrics

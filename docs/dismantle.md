@@ -79,7 +79,8 @@ planned only where the host's rule block exists.
   as `PENDING` until then. `just iac-drift` is red for the host between
   the merge and the destroy, which is the correct signal. The last line
   of the report is that one next step.
-- **The deploy key on the forge**, revoked by `destroy`.
+- **The deploy key on the forge**, revoked by `destroy` (none on the
+  anonymous route, and the plan's note says so; forts#167).
 - **A layer's identities** (a backup store's keys), withdrawn by the
   layer's own dismantle, which runs before this one ([layers](layers.md)).
 - **The `.files` wireguard copy** for the ubuntu mesh members (#183) —

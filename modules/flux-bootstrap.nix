@@ -8,7 +8,11 @@
 #   3. flux-system namespace
 #   4. `sops-age` secret from the host's flux-sops-age-key (sops-nix)
 #   5. `flux-system` git-auth secret from flux-git-deploy-key (identity.pub is
-#      derived, known_hosts is public and lives here in the module)
+#      derived, known_hosts is the estate's pin) — on the ssh route. On the
+#      anonymous route (sfi.estate.authRoute = "none", forts#167) there is
+#      no secret to make: source-controller clones the public repo over
+#      https with no credential, and the FluxInstance fort scaffold
+#      rendered names no pullSecret.
 #   6. helm install flux-operator (pinned; the fleet HelmRelease adopts the
 #      release — same name + namespace — and reconciles to its own pin after);
 #      a release left `pending-*` by an earlier run that died mid-install
@@ -27,9 +31,10 @@
 # the whole repo, so the module applies the very file flux later owns
 # (flux/clusters/<cluster>/flux-system/flux-instance.yaml).
 #
-# Consumers declare the two extra host secrets in nixos/secrets/<host>.yaml
-# (flux-sops-age-key = the cluster's age key, flux-git-deploy-key = a
-# read-only deploy key for this repo on the forge) and set:
+# Consumers declare the extra host secrets in nixos/secrets/<host>.yaml
+# (flux-sops-age-key = the cluster's age key; on the ssh route also
+# flux-git-deploy-key = a read-only deploy key for this repo on the forge)
+# and set:
 #
 #   sfi.flux-bootstrap = {
 #     enable = true;
@@ -44,6 +49,27 @@ let
     config.sfi.estate.root + "/flux/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
 
   knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
+
+  # The clone route (estate.nix, forts#167): the git-auth secret, the
+  # deploy key it is made from and the host-key pin exist on the ssh
+  # route and nowhere else. The step is chosen here, not in the script:
+  # on the anonymous route the deploy-key secret is not declared, so its
+  # path must not be named at all.
+  anonymous = config.sfi.estate.authRoute == "none";
+  gitAuthStep =
+    if anonymous then ''
+      echo "anonymous route: no git-auth secret — source-controller clones the public repo over https"
+    '' else ''
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      ssh-keygen -y -f ${config.sops.secrets.flux-git-deploy-key.path} > "$tmp/identity.pub"
+      kubectl create secret generic flux-system \
+        --namespace flux-system \
+        --from-file=identity=${config.sops.secrets.flux-git-deploy-key.path} \
+        --from-file=identity.pub="$tmp/identity.pub" \
+        --from-file=known_hosts=${knownHostsFile} \
+        --dry-run=client -o yaml | kubectl apply -f -
+    '';
 in
 {
   imports = [ ./estate.nix ];
@@ -71,15 +97,15 @@ in
       type = lib.types.str;
       default = config.sfi.estate.knownHosts;
       defaultText = "estate.toml's `[source] known_hosts` (sfi.estate.knownHosts)";
-      description = "SSH known_hosts line(s) for the git host, baked into the flux-system git-auth secret.";
+      description = "SSH known_hosts line(s) for the git host, baked into the flux-system git-auth secret on the ssh route. Unread on the anonymous route.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    # Host secrets consumed below; the host's sops file must carry both (the
-    # `fort mint` seeds both, flux-sops-age-key and flux-git-deploy-key).
-    sops.secrets.flux-sops-age-key = { };
-    sops.secrets.flux-git-deploy-key = { };
+    # Host secrets consumed below; the host's sops file must carry what
+    # `fort mint` seeds: flux-sops-age-key always, flux-git-deploy-key on
+    # the ssh route (the anonymous route mints none, forts#167).
+    sops.secrets = { flux-sops-age-key = { }; } // lib.optionalAttrs (!anonymous) { flux-git-deploy-key = { }; };
 
     systemd.services.flux-bootstrap = {
       description = "Day-0 Flux bootstrap (${cfg.cluster})";
@@ -122,16 +148,7 @@ in
           --from-file=age.agekey=${config.sops.secrets.flux-sops-age-key.path} \
           --dry-run=client -o yaml | kubectl apply -f -
 
-        tmp=$(mktemp -d)
-        trap 'rm -rf "$tmp"' EXIT
-        ssh-keygen -y -f ${config.sops.secrets.flux-git-deploy-key.path} > "$tmp/identity.pub"
-        kubectl create secret generic flux-system \
-          --namespace flux-system \
-          --from-file=identity=${config.sops.secrets.flux-git-deploy-key.path} \
-          --from-file=identity.pub="$tmp/identity.pub" \
-          --from-file=known_hosts=${knownHostsFile} \
-          --dry-run=client -o yaml | kubectl apply -f -
-
+        ${gitAuthStep}
         # A helm release stuck pending-* (this run's predecessor died mid
         # install/upgrade) blocks every helm operation. Helm's own remedy
         # is to drop that revision's record: the chart's resources stay,

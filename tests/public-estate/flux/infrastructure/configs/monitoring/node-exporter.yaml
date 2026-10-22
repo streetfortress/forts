@@ -1,0 +1,47 @@
+# Host node_exporter stays a NixOS service; an Endpoints-backed headless
+# Service points at the host's mesh address so the in-cluster edge
+# Prometheus can scrape it. Pod traffic to the host's own wg0 address
+# arrives on cni0 — k3s-server.nix opens 9100 there.
+apiVersion: v1
+kind: Service
+metadata:
+  name: host-node-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: host-node-exporter
+spec:
+  clusterIP: None
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: host-node-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: host-node-exporter
+subsets:
+  - addresses:
+      - ip: ${MESH_IP}
+    ports:
+      - name: metrics
+        port: 9100
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: host-node-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: host-node-exporter
+  endpoints:
+    - port: metrics
+      relabelings:
+        # Dashboards key on instance names, not mesh IP:port pairs.
+        - targetLabel: instance
+          replacement: ${CLUSTER_NAME}

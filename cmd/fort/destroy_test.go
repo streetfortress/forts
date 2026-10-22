@@ -80,3 +80,17 @@ func TestStacksInState(t *testing.T) {
 		t.Errorf("stacks: %s", got)
 	}
 }
+
+// The anonymous route (forts#167): fort mint registered no deploy key,
+// so destroy revokes none, and needs no forge client — the verb reads
+// the route off estate.toml, which the dismantle PR left in the tree.
+func TestRevokeDeployKeyAnonymous(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "estate.toml"), []byte("name = \"public\"\n[source]\nrepo = \"https://github.com/acme/public\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := revokeDeployKey(tmp, "gone")
+	if err != nil || !strings.Contains(msg, "none on the anonymous route") {
+		t.Errorf("anonymous: %q %v", msg, err)
+	}
+}

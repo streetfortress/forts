@@ -1,0 +1,7 @@
+{
+  "peers": {
+    "public-fort": {"wg_vpn_ip": "10.5.0.2", "wg_endpoint_ip": "203.0.113.10", "public_key": "Y2xvdWQtZm9ydC1maXh0dXJlLXB1YmxpYy1rZXk9PT09PT0="}
+  },
+  "clients": {},
+  "remotes": {}
+}

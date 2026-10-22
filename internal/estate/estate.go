@@ -84,27 +84,38 @@ type Estate struct {
 // the auth route and the forge's host key. One concern, one table —
 // everything about where the tree comes from (forts#161, forts#1).
 type Source struct {
-	// Repo is the estate's git URL as flux and auto-rebuild reach it
-	// (ssh://git@<forge>:<port>/<owner>/<name>, with or without .git).
-	// Both clone it with the deploy key fort mint registers.
+	// Repo is the estate's git URL as flux and auto-rebuild reach it,
+	// with or without .git: ssh://git@<forge>:<port>/<owner>/<name> on
+	// the ssh route, which both clone with the deploy key fort mint
+	// registers; https://<forge>/<owner>/<name> on the anonymous route
+	// (forts#167), a public repo both clone with no credential at all.
 	Repo string `toml:"repo"`
 	// Forge is the forge's kind: "gitea" or "github". Optional — the
 	// host of Repo derives it (github.com is github, every other host
 	// is gitea). fort mint and fort destroy speak the kind's deploy-key
 	// API (cmd/fort/forge.go, forts#1), with the kind's token
-	// (`<kind>-token` in provisioning/secrets.yaml).
+	// (`<kind>-token` in provisioning/secrets.yaml) — on the ssh route;
+	// the anonymous route makes no call to the forge.
 	Forge string `toml:"forge"`
 	// Auth is the clone route: "ssh" (the deploy key fort mint
-	// registers), "none" (an anonymous https clone of a public repo;
-	// no route yet) or "token" (an https token; no route yet).
-	// Optional — the scheme of Repo derives it: ssh:// is "ssh".
+	// registers, the forge's host key pinned), "none" (an anonymous
+	// https clone of a public repo: no deploy key, no host key, TLS
+	// from the system roots; forts#167) or "token" (an https token; no
+	// route yet). Optional — the scheme of Repo derives it: ssh:// is
+	// "ssh", https:// is "none". The scheme and the route must agree:
+	// an ssh:// repo cannot be anonymous, an https:// repo carries no
+	// deploy key.
 	Auth string `toml:"auth"`
 	// KnownHosts is the forge's SSH host key as a known_hosts line
 	// ("[gitea.example:30022] ssh-ed25519 AAAA…"): what flux's git-auth
-	// and the rebuild loop pin the clone to. The framework ships no
-	// default (forts#139): a host of an estate that names none does not
-	// evaluate. `fort init --known-hosts` writes it; `ssh-keyscan -p
-	// <port> <forge>` prints it.
+	// and the rebuild loop pin the clone to, on the ssh route. The
+	// framework ships no default (forts#139): a host of an estate on
+	// the ssh route that names none does not evaluate. `fort init
+	// --known-hosts` writes it; `ssh-keyscan -p <port> <forge>` prints
+	// it. The anonymous route reads no host key — an https clone
+	// trusts the forge's TLS certificate through the system roots (and
+	// the estate's own CA under nixos/certs, where it carries one) — so
+	// the key is optional there, and `fort check` says it is unread.
 	KnownHosts string `toml:"known_hosts"`
 }
 
@@ -155,7 +166,10 @@ const (
 	ForgeGitHub = "github"
 )
 
-// The auth routes: how a fort's clone authenticates (forts#161, #1).
+// The auth routes: how a fort's clone authenticates (forts#161, #1,
+// #167). Two exist: ssh (a deploy key and a pinned host key) and none
+// (an anonymous https clone of a public repo). token is named so the
+// refusal can say it does not exist yet.
 const (
 	AuthSSH   = "ssh"
 	AuthNone  = "none"
@@ -185,6 +199,15 @@ func (e Estate) AuthRoute() string {
 	}
 	return AuthSSH
 }
+
+// Anonymous says whether the estate is on the anonymous route
+// (forts#167): an https clone of a public repo with no credential.
+// What that drops, in one place: fort mint mints and registers no
+// deploy key and needs no forge token, fort destroy revokes none, the
+// FluxInstance names no pullSecret, no host key is pinned (TLS comes
+// from the system roots), and `nixos-pull --from <ip>` is refused —
+// an address in the forge's place fails the certificate check.
+func (e Estate) Anonymous() bool { return e.AuthRoute() == AuthNone }
 
 // DefaultACMEDirectory is the ACME directory of an estate that names
 // none: Let's Encrypt's production directory.
@@ -325,27 +348,33 @@ func (e Estate) Validate() error {
 	return nil
 }
 
-// validateSource is the [source] matrix (forts#161): an ssh:// repo on
-// the ssh route with the forge's host key; an https:// repo refused
-// until an anonymous route exists (#159); a token named as a route
-// that does not exist; a forge kind the core knows.
+// validateSource is the [source] matrix (forts#161, #167): an ssh://
+// repo on the ssh route with the forge's host key; an https:// repo on
+// the anonymous route (auth none, derived or declared); the scheme and
+// the route refused when they disagree; a token named as a route that
+// does not exist; a forge kind the core knows.
 func (e Estate) validateSource() error {
 	repo := e.Source.Repo
 	switch {
-	case strings.HasPrefix(repo, "ssh://"):
-	case strings.HasPrefix(repo, "https://"):
-		return fmt.Errorf("[source] repo %q — the clone route is SSH only today: auto-rebuild and flux clone with the deploy key fort mint registers. No anonymous route (auth = %q) exists yet", repo, AuthNone)
+	case strings.HasPrefix(repo, "ssh://"), strings.HasPrefix(repo, "https://"):
 	default:
-		return fmt.Errorf("[source] repo %q — want the estate's git URL (ssh://git@<forge>:<port>/<owner>/<name>)", repo)
+		return fmt.Errorf("[source] repo %q — want the estate's git URL: ssh://git@<forge>:<port>/<owner>/<name> (the deploy key route), or https://<forge>/<owner>/<name> (a public repo, cloned anonymously)", repo)
 	}
+	https := strings.HasPrefix(repo, "https://")
 	switch e.Source.Auth {
-	case "", AuthSSH:
-	case AuthToken:
-		return fmt.Errorf("[source] auth %q — no token route exists yet: the deploy key is the one credential fort mints and revokes itself. Use auth = %q", AuthToken, AuthSSH)
+	case "":
+	case AuthSSH:
+		if https {
+			return fmt.Errorf("[source] auth %q — an https:// repo carries no deploy key: the anonymous route (auth = %q, the default for https) clones a public repo with no credential. For the ssh route, name the repo as ssh://git@<forge>:<port>/<owner>/<name>", AuthSSH, AuthNone)
+		}
 	case AuthNone:
-		return fmt.Errorf("[source] auth %q — an ssh:// repo clones with the deploy key; an anonymous route would be https only, and none exists yet", AuthNone)
+		if !https {
+			return fmt.Errorf("[source] auth %q — an ssh:// repo clones with the deploy key; the anonymous route is https only: name the repo as https://<forge>/<owner>/<name>", AuthNone)
+		}
+	case AuthToken:
+		return fmt.Errorf("[source] auth %q — no token route exists yet: the deploy key is the one credential fort mints and revokes itself. Use auth = %q with an ssh:// repo, or auth = %q with the https:// URL of a public repo", AuthToken, AuthSSH, AuthNone)
 	default:
-		return fmt.Errorf("[source] auth %q — want %q, the one route that exists", e.Source.Auth, AuthSSH)
+		return fmt.Errorf("[source] auth %q — want %q (an ssh:// repo, the deploy key) or %q (an https:// repo, cloned anonymously), the two routes that exist", e.Source.Auth, AuthSSH, AuthNone)
 	}
 	switch e.Source.Forge {
 	case "", ForgeGitea, ForgeGitHub:
@@ -394,7 +423,8 @@ func (e Estate) Forge() (host, owner, name string, err error) {
 
 // parseRepo reads a repo URL into the forge host, the owner and the
 // name, the .git suffix dropped: the shape every estate URL in
-// estate.toml has — this estate's, a hub's, a served estate's.
+// estate.toml has — this estate's, a hub's, a served estate's — on
+// either scheme.
 func parseRepo(repo string) (host, owner, name string, err error) {
 	u, err := url.Parse(repo)
 	if err != nil {
@@ -403,7 +433,7 @@ func parseRepo(repo string) (host, owner, name string, err error) {
 	host = u.Hostname()
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if host == "" || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name>", repo)
+		return "", "", "", fmt.Errorf("repo %q — want ssh://git@<forge>:<port>/<owner>/<name> or https://<forge>/<owner>/<name>", repo)
 	}
 	return host, parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }

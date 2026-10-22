@@ -35,6 +35,10 @@ import (
 // gives the host back its identity, and can never mint an orphan key
 // or trip the deploy-key mismatch guard. No value is ever printed.
 //
+// On the anonymous route (estate.toml [source], forts#167) — a public
+// repo cloned over https — there is no deploy key: none minted, none
+// registered, no forge client and no forge token. The report says so.
+//
 // Runs after `fort scaffold <host> --write` (the canary's home and the
 // flake's view of the host) and before a layer's verbs. `fort dismantle` is
 // the inverse.
@@ -54,10 +58,17 @@ func mint(args []string) error {
 	}
 	tool := sopsCLI{root: root}
 	// The flux deploy key is registered on the forge (forge.go; the
-	// token lives in sops).
-	f, err := forgeClient(root)
+	// token lives in sops) — on the ssh route. The anonymous route
+	// makes no call to the forge and asks for no token.
+	est, err := estate.Load(root)
 	if err != nil {
 		return err
+	}
+	var f forge
+	if !est.Anonymous() {
+		if f, err = forgeClient(root); err != nil {
+			return err
+		}
 	}
 	p, err := planMint(root, host, tool, f, *write)
 	if err != nil {
@@ -111,6 +122,8 @@ type mintPlan struct {
 	forge      string // the forge's kind (estate.ForgeKind), for the report
 	deployKey  string // the deploy key's standing on the forge
 	registerOn bool   // apply must POST the deploy key
+	anonymous  bool   // the anonymous route (forts#167): no deploy key at all
+	staleKey   bool   // the secrets file carries a deploy key the anonymous route reads nowhere
 
 	write bool // --write: the plan may be applied, so a missing credential is fatal now rather than later
 
@@ -127,21 +140,22 @@ type mintPlan struct {
 }
 
 // planMint reads the plan: f is the estate's forge (forge.go), shared
-// with fort destroy. Every plan needs one — the deploy key's standing
-// is read before anything is written.
+// with fort destroy. Every plan on the ssh route needs one — the deploy
+// key's standing is read before anything is written. On the anonymous
+// route f is nil and unused: there is no deploy key (forts#167).
 func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPlan, error) {
 	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
 	}
-	if f == nil {
-		return nil, fmt.Errorf("host %q: the flux deploy key needs the forge client", host)
-	}
 	est, err := estate.Load(root)
 	if err != nil {
 		return nil, err
 	}
-	p := &mintPlan{root: root, host: host, entry: entry, est: est, forge: f.Kind(), write: write, have: map[string]string{}, admins: map[string][]string{}}
+	if f == nil && !est.Anonymous() {
+		return nil, fmt.Errorf("host %q: the flux deploy key needs the forge client", host)
+	}
+	p := &mintPlan{root: root, host: host, entry: entry, est: est, forge: est.ForgeKind(), anonymous: est.Anonymous(), write: write, have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
@@ -232,13 +246,23 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 			return nil, err
 		}
 	}
-	if v, ok := take(keyDeploy); ok {
-		p.deploy, err = sshKeyFrom(v, "flux-"+host)
-	} else {
-		p.deploy, err = newSSHKey("flux-" + host)
-	}
-	if err != nil {
-		return nil, err
+	// The deploy key is the ssh route's (forts#167). On the anonymous
+	// route none is minted; one already in the file is left where it is
+	// — mint never removes a key — and the report names it, because
+	// nothing on this route reads it and the forge may still hold its
+	// public half.
+	switch {
+	case p.anonymous:
+		_, p.staleKey = p.have[keyDeploy]
+	default:
+		if v, ok := take(keyDeploy); ok {
+			p.deploy, err = sshKeyFrom(v, "flux-"+host)
+		} else {
+			p.deploy, err = newSSHKey("flux-" + host)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// 2b. the console door (sfi/forts#24): the host file enables the
@@ -300,12 +324,10 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 	}
 	if !entry.IsCluster() {
 		// No fleet rule, no infra recipient, no canary; the deploy key
-		// still — auto-rebuild.nix pulls main with it.
-		status, register, err := deployKeyStatus(f, host, p.deploy.public)
-		if err != nil {
+		// still — auto-rebuild.nix pulls main with it — on the ssh route.
+		if err := p.planDeployKey(f); err != nil {
 			return nil, err
 		}
-		p.deployKey, p.registerOn = status, register
 		return p, nil
 	}
 	fleetSops, err := os.ReadFile(filepath.Join(root, ".sops.yaml"))
@@ -347,12 +369,24 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 
 	// 4. the deploy key on the forge — checked now (read-only) so a
 	// mismatch refuses before anything is written; registered by apply.
-	status, register, err := deployKeyStatus(f, host, p.deploy.public)
-	if err != nil {
+	if err := p.planDeployKey(f); err != nil {
 		return nil, err
 	}
-	p.deployKey, p.registerOn = status, register
 	return p, nil
+}
+
+// planDeployKey reads the deploy key's standing on the forge, on the ssh
+// route; the anonymous route has no key and makes no call (forts#167).
+func (p *mintPlan) planDeployKey(f forge) error {
+	if p.anonymous {
+		return nil
+	}
+	status, register, err := deployKeyStatus(f, p.host, p.deploy.public)
+	if err != nil {
+		return err
+	}
+	p.deployKey, p.registerOn = status, register
+	return nil
 }
 
 func (p *mintPlan) apply(tool secretsTool, f forge) error {
@@ -552,7 +586,13 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	if p.canaryPath != "" {
 		fmt.Fprintf(w, "◆ %-36s encrypted under the new rule\n", p.canaryPath)
 	}
-	if p.deployKey != "" {
+	switch {
+	case p.anonymous && p.staleKey:
+		fmt.Fprintf(w, "· anonymous route: no deploy key — flux and the rebuild loop clone %s with no credential\n", p.est.Source.Repo)
+		fmt.Fprintf(w, "! %-36s carries %s, which this route reads nowhere — the estate moved routes; revoke flux-%s on the forge by hand and unset the key (sops --config nixos/.sops.yaml unset %s '[\"%s\"]')\n", p.secretsPath, keyDeploy, p.host, p.secretsPath, keyDeploy)
+	case p.anonymous:
+		fmt.Fprintf(w, "· anonymous route: no deploy key — flux and the rebuild loop clone %s with no credential\n", p.est.Source.Repo)
+	case p.deployKey != "":
 		fmt.Fprintf(w, "· %s deploy key flux-%s: %s\n", p.forge, p.host, p.deployKey)
 	}
 	fmt.Fprintln(w)

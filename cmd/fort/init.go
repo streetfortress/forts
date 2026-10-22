@@ -44,6 +44,10 @@ type initView struct {
 	// Forge: a [hubs.forge] is declared (the template's example is
 	// omitted then).
 	Forge bool
+	// Anonymous: the repo is https://, the anonymous route (forts#167):
+	// the [source] comments say so, and no known_hosts example is
+	// rendered — the route pins no host key.
+	Anonymous bool
 }
 
 // hubView is one [hubs.<role>] table as the template renders it.
@@ -89,7 +93,7 @@ func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
-	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it (ssh://git@<forge>:<port>/<owner>/<name>)")
+	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it: ssh://git@<forge>:<port>/<owner>/<name> (the deploy-key route), or https://<forge>/<owner>/<name> (a public repo, cloned anonymously; forts#167)")
 	var hubs multiFlag
 	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (forge=forge@ssh://git@forge.example:22/acme/hub); repeat per role. The forge is the role the core renders for; any other name is a role a layer or the estate serves (docs/hub.md). The estate may be this one.")
 	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (forge.example), with --hub forge=…")
@@ -97,7 +101,7 @@ func initCmd(args []string) error {
 	iface := fl.String("interface", "", "the WireGuard interface name every host gives this mesh (wg-second; at most 15 characters); default wg0")
 	zone := fl.String("zone", "", "the DNS zone of the mesh: every host on it is <host>.<zone> (docs/mesh.md); default <name>"+estate.DefaultZoneSuffix)
 	forts := fl.String("forts", "", "the framework's flake URL, inputs.forts of the estate flake (git+https://<forge>/<owner>/forts?ref=v0.1.0); required")
-	knownHosts := fl.String("known-hosts", "", "the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); every clone a fort makes pins it, and no fort evaluates until the estate names one")
+	knownHosts := fl.String("known-hosts", "", "the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); on the ssh route every clone a fort makes pins it, and no fort evaluates until the estate names one. Unread on the anonymous (https) route")
 	acmeEmail := fl.String("acme-email", "", "the public ACME account's contact; set, the shared layer carries a Let's Encrypt ClusterIssuer")
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
@@ -158,7 +162,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -200,7 +204,7 @@ func initCmd(args []string) error {
 		fmt.Printf("· %-44s operator_keys — the devices that hold `deployer` on every fort of this estate. No\n", estate.Path)
 		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
 	}
-	if est.Source.KnownHosts == "" {
+	if est.Source.KnownHosts == "" && !est.Anonymous() {
 		fmt.Printf("· %-44s [source] known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
 		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort init --known-hosts, or this file).\n", "")
 	}

@@ -13,8 +13,11 @@ The fort is a cloud cluster fort — a Linode with k3s and flux
 (`forts/cloud-fort.toml`) — so the eval covers the two modules that
 once defaulted to the lab forge's pin: `flux-bootstrap.nix` (the
 git-auth secret's known_hosts) and `auto-rebuild.nix` (the rebuild
-loop's clone). `tests/estate` is the other fixture: a plain lab fort
-with a forge hub in another estate, tier two.
+loop's clone). `tests/estate` is another fixture: a plain lab fort
+with a forge hub in another estate, tier two. `tests/public-estate` is
+the third (forts#167): this same shape on the anonymous route — an
+https repo, no deploy key, no host key — which is why this one keeps
+the ssh route and github.com's host key.
 
 `nixos/hosts/cloud-fort/`, `flux/clusters/cloud-fort/` and
 `flux/apps/cloud-fort/kustomization.yaml` are what `fort scaffold
@@ -27,7 +30,7 @@ and opaque values, the shape sops leaves. `mesh/ssh_config` and
 `mesh/known_hosts` are `fort ssh-config --write` with no age key.
 
 `flake.nix` evaluates the host as `nixosConfigurations.cloud-fort` and
-CI evaluates its toplevel derivation; `tests/check-github-estate.sh`
-runs `fort check --all` on a copy of this tree, which must pass with no
-error. Unlike `tests/estate`, this fixture is a whole estate, because
+CI evaluates its toplevel derivation; `tests/check-fixture-estate.sh
+tests/github-estate` runs `fort check --all` on a copy of this tree,
+which must pass with no error. Unlike `tests/estate`, this fixture is a whole estate, because
 the gate builds the flux tree.

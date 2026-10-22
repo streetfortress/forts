@@ -103,16 +103,42 @@ in
     '';
   };
 
+  # The clone route (forts#167): how a fort reaches the estate's repo.
+  # estate.toml's `[source] auth`, else derived from the scheme of
+  # `[source] repo` the way internal/estate derives it — ssh:// is ssh,
+  # https:// is none. On the ssh route flux and the rebuild loop clone
+  # with the deploy key fort mint registered and pin the forge's host
+  # key (below). On the anonymous route both clone a public repo over
+  # https with no credential: no deploy key in the host's sops file, no
+  # host key to pin — TLS trust comes from the system roots, and the
+  # estate's own CA (security.pki.certificateFiles, below) is additive,
+  # so a lab estate on this route still works. The modules that clone
+  # (auto-rebuild.nix, flux-bootstrap.nix) branch on this one option.
+  options.sfi.estate.authRoute = lib.mkOption {
+    type = lib.types.enum [ "ssh" "none" ];
+    default =
+      if sourceToml ? auth then sourceToml.auth
+      else if lib.hasPrefix "https://" (sourceToml.repo or "") then "none"
+      else "ssh";
+    defaultText = "estate.toml's `[source] auth`, else none for an https:// repo and ssh otherwise";
+    description = "How a fort clones the estate: ssh (the deploy key, the forge's host key pinned) or none (an anonymous https clone of a public repo).";
+  };
+
   # The forge's host key (forts#139): what flux's git-auth secret and the
-  # rebuild loop pin their clones to. estate.toml's `[source] known_hosts`,
-  # which `fort init --known-hosts` writes. The framework shipped its own
-  # forge's key as the default until the first public release; it ships
-  # none now, and a host of an estate that names none does not evaluate.
+  # rebuild loop pin their clones to, on the ssh route. estate.toml's
+  # `[source] known_hosts`, which `fort init --known-hosts` writes. The
+  # framework shipped its own forge's key as the default until the first
+  # public release; it ships none now, and a host of an estate on the ssh
+  # route that names none does not evaluate. The anonymous route pins no
+  # host key — an https clone has none to pin — so there the default is
+  # the empty string and nothing reads it (forts#167).
   options.sfi.estate.knownHosts = lib.mkOption {
     type = lib.types.str;
-    default = sourceToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `[source] known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
-    defaultText = "estate.toml's `[source] known_hosts`";
-    description = "The forge's SSH host key, one known_hosts line, pinned by every clone a fort makes of the estate.";
+    default =
+      if config.sfi.estate.authRoute != "ssh" then ""
+      else sourceToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `[source] known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
+    defaultText = "estate.toml's `[source] known_hosts` on the ssh route; empty on the anonymous route";
+    description = "The forge's SSH host key, one known_hosts line, pinned by every clone a fort makes of the estate on the ssh route. Empty on the anonymous route.";
   };
 
   config = {

@@ -7,7 +7,8 @@ was raised.
   (`.sops.yaml` at the root has the rule). Create it with
   `sops provisioning/secrets.yaml` and the keys the verbs read:
   `<forge>-token` — `gitea-token` or `github-token`, the kind of the
-  estate's forge (mint: the deploy key; destroy: its revocation) —
+  estate's forge (mint: the deploy key; destroy: its revocation) on the
+  ssh route; an estate that clones anonymously over https needs none —
   `pulumi-passphrase` (provision),
   `linode-token` (a cloud fort). A layer's verbs add the keys they read
   (the backups layer: `restic-password`, `b2-minting-key-id`).

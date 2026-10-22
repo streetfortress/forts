@@ -56,7 +56,7 @@ operator_keys = [            # the devices that hold `deployer` on every fort of
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
 known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
 # forge = "gitea"            # the forge's kind; absent, the host of repo derives it (github.com: github)
-# auth = "ssh"               # the clone route; absent, the scheme of repo derives it. ssh is the one route today
+# auth = "ssh"               # the clone route; absent, the scheme of repo derives it: ssh:// is ssh, https:// is none
 
 [mesh]                       # the estate's WireGuard mesh (mesh.md)
 cidr = "10.2.0.0/24"   # the subnet; fort check keeps every mesh address in it, and its prefix is what the interfaces render
@@ -79,8 +79,28 @@ fort = "central"
 ```
 
 `scaffold` renders the FluxInstance source and `sfi.auto-rebuild.repoUrl`
-from `[source] repo`. The clone route is SSH: an https repo URL fails
-validation until the anonymous route lands (forts#1, forts#159), and
+from `[source] repo`. Two clone routes exist, and the scheme of `repo`
+picks one (forts#167):
+
+- **ssh** — `ssh://git@<forge>:<port>/<owner>/<name>`. Flux and the
+  rebuild loop clone with the deploy key `fort mint` registers on the
+  forge, and both pin the forge's SSH host key (`known_hosts`). The
+  forge's token (`gitea-token`, `github-token`) is what mint and destroy
+  need.
+- **none** — `https://<forge>/<owner>/<name>`, the anonymous route: a
+  public repo. Flux's source-controller, nix's flake fetcher and the
+  rebuild loop's `git ls-remote` clone it with no credential, and TLS
+  trust comes from the system roots (the estate's own CA under
+  `nixos/certs` is additive, so a lab estate on this route still
+  works). No deploy key is minted or registered, no forge token is
+  read, no host key is pinned, the FluxInstance names no `pullSecret`,
+  and `nixos-pull --from <ip>` is refused — an address in the forge's
+  place fails the certificate check. `tests/public-estate` is that
+  estate.
+
+`auth` names the route explicitly when you want it written down; the
+scheme and the route must agree (an `ssh://` repo with `auth = "none"`
+and an `https://` repo with `auth = "ssh"` are both refused), and
 `auth = "token"` names a route that does not exist. The hubs are roles
 ([hub.md](hub.md)): `--hub
 <role>=<fort>@<estate git url>` once per role (the fort comes first
@@ -103,8 +123,11 @@ fort-hosted forge is `[hubs.forge]` ([hub.md](hub.md)).
 `--forts` is required: the framework's flake URL the estate pins, at a
 release tag. `--known-hosts` is the forge's SSH host key as one
 known_hosts line (`ssh-keyscan -p <port> <forge>` prints it); the
-framework ships none (forts#139), so a fort of an estate that names none
-does not evaluate, and `fort check --all` says so. `--acme-email` makes
+framework ships none (forts#139), so on the ssh route a fort of an
+estate that names none does not evaluate, and `fort check --all` says
+so. On the anonymous route the key is unread: init asks for none, and
+the gate reports "no host key to pin" (and warns if one is named
+anyway). `--acme-email` makes
 the shared layer carry an ACME ClusterIssuer for the estate's public
 names; without it, no public issuer is rendered. The issuer speaks to
 `[acme] directory`, Let's Encrypt's production directory when the estate

@@ -1,0 +1,7 @@
+# Shared namespace for the whole monitoring stack: operator + edge
+# Prometheus/Alertmanager on every cluster (#53), plus the central stack on
+# a monitoring hub (#98).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring

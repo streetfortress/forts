@@ -1,0 +1,14 @@
+# Test fixture: a cloud cluster fort on a public estate — a Linode with
+# k3s and flux, the estate's repo cloned anonymously over https
+# (forts#167): no deploy key, no host key, no forge token.
+mesh_ip = "10.5.0.2"
+
+[cluster]
+
+[dns]
+zone = "example.cloud"
+name = "public-fort"
+
+[linode]
+region = "us-sea"
+type = "g6-standard-2"

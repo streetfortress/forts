@@ -39,7 +39,7 @@ nixos/hosts/<host>/
                      manifest has mesh_ip
 flux/clusters/<host>/
 ● flux-system/flux-operator.yaml
-● flux-system/flux-instance.yaml             sync path flux/clusters/<host>
+● flux-system/flux-instance.yaml             sync path flux/clusters/<host>; pullSecret on the estate's ssh route only
 ● flux-system/kustomization.yaml
 ● cluster-vars.yaml                          CLUSTER_NAME <host>, ESTATE_NAME <estate>, MESH_IP <mesh_ip>
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)

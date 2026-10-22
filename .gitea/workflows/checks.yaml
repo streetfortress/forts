@@ -71,6 +71,7 @@ jobs:
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.public-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
       - name: sshd refuses a password on both of its paths
@@ -141,6 +142,41 @@ jobs:
           ! grep -q 'ref=\$ref' verb.sh
           ! grep -q '/sfi/deployments' verb.sh
 
+      - name: The anonymous route clones with no credential, and pins nothing
+        # forts#167, read off the public fixture host (tests/public-estate,
+        # an https:// repo). Three things regress silently — the module
+        # still evaluates with each: a GIT_SSH_COMMAND on the rebuild
+        # unit names a deploy key the host's sops file does not carry
+        # (activation fails on the host, not in CI); a flux-git-deploy-key
+        # declaration does the same; and a `--from` that dials an address
+        # over https fails the certificate check at the one moment the
+        # verb is wanted. CI reads what the fort gets: the unit's
+        # environment, the declared secrets, the bootstrap script and the
+        # verb — and, beside them, that the ssh fixture host still carries
+        # all three, so the branch is the route's and not a regression.
+        run: |
+          set -euo pipefail
+          env=$(nix eval --json .#nixosConfigurations.public-fort.config.systemd.services.nixos-upgrade.environment --apply builtins.attrNames)
+          echo "$env" | grep -qv GIT_SSH_COMMAND
+          secrets=$(nix eval --json .#nixosConfigurations.public-fort.config.sops.secrets --apply builtins.attrNames)
+          echo "$secrets" | grep -q flux-sops-age-key
+          ! echo "$secrets" | grep -q flux-git-deploy-key
+          nix eval --raw .#nixosConfigurations.public-fort.config.systemd.services.flux-bootstrap.script > bootstrap.sh
+          grep -q 'anonymous route: no git-auth secret' bootstrap.sh
+          ! grep -q 'ssh-keygen' bootstrap.sh
+          nix eval --raw .#nixosConfigurations.public-fort.config.sfi.ops.commands.nixos-pull.script > verb.sh
+          grep -q 'https://github.com/acme/public-estate.git' verb.sh
+          grep -q 'fails the certificate check' verb.sh
+          ! grep -q 'HostKeyAlias' verb.sh
+          test "$(nix eval --raw .#nixosConfigurations.public-fort.config.sfi.estate.authRoute)" = none
+          test "$(nix eval --raw .#nixosConfigurations.public-fort.config.sfi.estate.knownHosts)" = ""
+          # The ssh fixture host keeps the deploy key, the pin and the hatch.
+          nix eval --json .#nixosConfigurations.cloud-fort.config.systemd.services.nixos-upgrade.environment --apply builtins.attrNames | grep -q GIT_SSH_COMMAND
+          nix eval --json .#nixosConfigurations.cloud-fort.config.sops.secrets --apply builtins.attrNames | grep -q flux-git-deploy-key
+          nix eval --raw .#nixosConfigurations.cloud-fort.config.systemd.services.flux-bootstrap.script | grep -q 'ssh-keygen'
+          nix eval --raw .#nixosConfigurations.cloud-fort.config.sfi.ops.commands.nixos-pull.script | grep -q 'HostKeyAlias=github.com'
+          test "$(nix eval --raw .#nixosConfigurations.cloud-fort.config.sfi.estate.authRoute)" = ssh
+
       - name: The core's verbs are the ladder and nothing else
         # forts#151: a verb that exists for one workload, one runbook or
         # one unit is a layer's, declared through sfi.ops.commands in the
@@ -170,7 +206,14 @@ jobs:
         # forge. The nix eval above proves the host composes; this proves
         # the tree passes the gate an estate's own CI runs, and that the
         # gate assumes no lab forge, no .lofi name and no mesh pin.
-        run: tests/check-github-estate.sh
+        run: tests/check-fixture-estate.sh tests/github-estate
+
+      - name: The public fixture estate passes the gate
+        # `fort check --all` on tests/public-estate (forts#167): the repo
+        # public on github.com, cloned anonymously over https — no deploy
+        # key, no host key, no forge token. This proves the gate asks for
+        # none of them on this route, and names the route instead.
+        run: tests/check-fixture-estate.sh tests/public-estate
 
       - name: Refill the cache with what this run used
         # An exact hit refills nothing: the bulk is nixpkgs, and nixpkgs

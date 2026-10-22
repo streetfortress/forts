@@ -25,11 +25,18 @@ operator_keys = [
 {{- end }}
 
 # The source (docs/init.md): where this estate's tree comes from and how
-# a fort reaches it. The clone route is SSH: flux and the rebuild loop
-# clone `repo` with the deploy key `fort mint` registers, and both pin
-# the forge's host key. `forge` and `auth` derive from `repo` when
-# absent (gitea; ssh).
+# a fort reaches it. Two clone routes, and the scheme of `repo` picks
+# one. An ssh:// repo is the ssh route: flux and the rebuild loop clone
+# it with the deploy key `fort mint` registers, and both pin the forge's
+# host key (`known_hosts`). An https:// repo is the anonymous route
+# (forts#167): a public repo, cloned with no credential and no host key,
+# TLS from the system roots — no deploy key, no forge token. `forge` and
+# `auth` derive from `repo` when absent (github.com is github, every
+# other host gitea; ssh:// is ssh, https:// is none).
 [source]
+{{- if .Anonymous }}
+repo = "{{ .Repo }}"   # the anonymous route: a public repo, no deploy key, no host key to pin
+{{- else }}
 repo = "{{ .Repo }}"
 {{- if .KnownHosts }}
 known_hosts = "{{ .KnownHosts }}"   # the forge's SSH host key: every clone a fort makes pins it
@@ -37,6 +44,7 @@ known_hosts = "{{ .KnownHosts }}"   # the forge's SSH host key: every clone a fo
 # known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key, one known_hosts line
                              # (ssh-keyscan -p <port> <forge>): flux's clone and the rebuild loop pin
                              # it, and no fort evaluates until the estate names it.
+{{- end }}
 {{- end }}
 {{- if or .Mesh .Interface .Zone }}
 

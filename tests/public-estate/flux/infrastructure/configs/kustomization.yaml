@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # coredns-custom is a k3s add-on rendered by sfi/forts modules/mesh-dns.nix —
+  # host-level fact, not fleet config.
+  - gateway-class.yaml
+  # ops-readonly is ALSO a k3s add-on now (modules/ops/ops-kubeconfig.nix,
+  # #185): the host applies it at start so the read-only kubeconfig exists
+  # before flux does. This entry retires once every fort has reconciled the
+  # prune-disabled annotation the file now carries — removing it earlier
+  # would race the prune against the host's first apply.
+  - ops-readonly.yaml
+  - monitoring

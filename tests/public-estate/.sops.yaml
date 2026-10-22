@@ -1,0 +1,18 @@
+# The flux rules: path-scoped per cluster, so a cluster's key decrypts
+# only its own secrets. `fort mint` adds a cluster's rule block and its
+# recipient line in the shared flux/infrastructure rule; `fort dismantle`
+# removes them. The admin recipients are the estate's — the people (and
+# their machines) who can read every secret; add or remove one by hand,
+# in every rule.
+#
+# Recipients:
+#   age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m  admin
+creation_rules:
+  - path_regex: provisioning/.*\.yaml$
+    age:
+      - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m # admin
+  - path_regex: flux/infrastructure/.*
+    encrypted_regex: ^(data|stringData)$
+    age:
+      - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m # admin
+      # fort-managed: one recipient per cluster

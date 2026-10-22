@@ -221,5 +221,21 @@
           sops-nix.nixosModules.sops
         ];
       };
+
+      # The public fixture estate (tests/public-estate, forts#167): the
+      # same cloud cluster fort on the anonymous route — an https:// repo,
+      # no known_hosts, no deploy key. CI evaluates it so the two modules
+      # that branch on the route (flux-bootstrap.nix, auto-rebuild.nix)
+      # compose with no host key to pin and no deploy-key secret to
+      # declare, and reads the rendered unit and verb off it.
+      nixosConfigurations.public-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/public-estate/nixos/hosts/public-fort
+          sops-nix.nixosModules.sops
+        ];
+      };
     };
 }

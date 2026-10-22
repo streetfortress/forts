@@ -1,0 +1,116 @@
+# Edge Prometheus (#53): full mode — not Agent — because rule evaluation
+# must keep working on the edge when the mesh is down. Short local
+# retention; a monitoring layer adds the remote_write into its hub
+# (docs/layers.md).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-edge
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-edge
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, services, endpoints, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - nonResourceURLs: [/metrics, /metrics/cadvisor]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-edge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-edge
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-edge
+    namespace: monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: edge
+  namespace: monitoring
+spec:
+  # Alert Source links resolve from any mesh member instead of a
+  # cluster-internal pod URL (#137 NodePort; MESH_IP is this cluster's
+  # host mesh address from cluster-vars).
+  externalUrl: http://${MESH_IP}:30909
+  replicas: 1
+  serviceAccountName: prometheus-edge
+  scrapeInterval: 15s
+  evaluationInterval: 60s
+
+  # The WAL dominates memory either way (why Agent mode buys nothing), so
+  # local retention is nearly free: 24h + a size cap under the PVC size.
+  retention: 24h
+  retentionSize: 8GB
+  walCompression: true
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi
+
+  # The two identity labels every series leaves this fort with: the
+  # fort's name and its estate's (cluster-vars; forts#50). A hub that
+  # serves several estates groups by estate; the dead man's switch on
+  # the hub keys on cluster alone. Changing either on a running edge
+  # changes the identity of every series it remote-writes: the hub's
+  # old series end and new ones start at the rollout.
+  externalLabels:
+    cluster: ${CLUSTER_NAME}
+    estate: ${ESTATE_NAME}
+
+  # Explicit, and the same as central's (#379): nobody is what the image
+  # already runs as and what the TSDB on local-path is owned by, so this
+  # changes nothing today — it pins the uid so an image change cannot
+  # strand the data. No sidecar here, so no hard-link problem to fix.
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+
+  # Edge Prometheus points ONLY at its local Alertmanager: Prometheus fans
+  # out to every configured AM, so adding a second target double-pages.
+  alerting:
+    alertmanagers:
+      - namespace: monitoring
+        name: alertmanager-operated
+        port: web
+
+  # Select monitors and rules everywhere, EXCEPT rules marked for the
+  # central/fleet-wide set — those belong to a monitoring hub's ruler
+  # and must not be evaluated twice.
+  serviceMonitorSelector: {}
+  serviceMonitorNamespaceSelector: {}
+  podMonitorSelector: {}
+  podMonitorNamespaceSelector: {}
+  ruleNamespaceSelector: {}
+  ruleSelector:
+    matchExpressions:
+      - key: monitoring.sfi/scope
+        operator: NotIn
+        values: [central]
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi

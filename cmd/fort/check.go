@@ -220,21 +220,34 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 
 // knownHostsFindings (forts#139): the forge's SSH host key is an estate
 // fact every clone a fort makes pins to, and the framework ships none.
-// An estate that names none has no fort that evaluates (the throw in
-// modules/estate.nix), and the gate says so where a reader is looking.
+// An estate on the ssh route that names none has no fort that evaluates
+// (the throw in modules/estate.nix), and the gate says so where a reader
+// is looking. The anonymous route (forts#167) pins nothing: an https
+// clone trusts the forge's certificate through the system roots, so a
+// key there is unread, and the gate says that instead.
 func knownHostsFindings(est estate.Estate) []finding {
+	if est.Anonymous() {
+		if est.Source.KnownHosts != "" {
+			return []finding{{"warning", estate.Path, "known_hosts is set, and the anonymous route reads no host key: flux and the rebuild loop clone " + est.Source.Repo + " over https, with TLS from the system roots. Drop the key, or name an ssh:// repo for the ssh route"}}
+		}
+		return []finding{{"ok", estate.Path, "anonymous route: no host key to pin, TLS from the system roots (and the estate's CA under nixos/certs, where it carries one)"}}
+	}
 	if est.Source.KnownHosts == "" {
 		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
 	}
 	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.Source.KnownHosts)[0] + ")"}}
 }
 
-// sourceFindings (forts#1): the forge's kind — declared in [source]
-// forge, else derived from the host of repo — and so which API fort
-// mint and fort destroy speak and which token they read. An estate with
-// no [hubs.forge] on a forge the core knows only as a hosted one
-// (github) is tier one: the gate says where the deploy key goes, so an
-// operator reads the token's name before the first mint asks for it.
+// sourceFindings (forts#1, #167): the forge's kind — declared in
+// [source] forge, else derived from the host of repo — and the clone
+// route — declared in [source] auth, else derived from the scheme of
+// repo — and so which API fort mint and fort destroy speak and which
+// token they read, or that they speak none. An estate with no
+// [hubs.forge] on a forge the core knows only as a hosted one (github)
+// is tier one: the gate says where the deploy key goes, so an operator
+// reads the token's name before the first mint asks for it. On the
+// anonymous route the line says what the estate does without: no deploy
+// key, no token, no host key.
 func sourceFindings(est estate.Estate) []finding {
 	host, _, _, err := est.Forge()
 	if err != nil {
@@ -245,11 +258,18 @@ func sourceFindings(est estate.Estate) []finding {
 	if est.Source.Forge != "" {
 		how = "[source] forge"
 	}
+	route := "derived from the scheme of repo"
+	if est.Source.Auth != "" {
+		route = "[source] auth"
+	}
+	if est.Anonymous() {
+		return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s), route none (%s): flux and the rebuild loop clone %s anonymously over https — a public repo; fort mint registers no deploy key, fort destroy revokes none, and no %s is read", kind, how, route, est.RepoGit(), forgeTokenKey(kind))}}
+	}
 	api := "https://" + host + "/api/v1"
 	if kind == estate.ForgeGitHub {
 		api = "https://api.github.com"
 	}
-	return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s): fort mint registers the deploy key through %s with %s in provisioning/secrets.yaml, and fort destroy revokes it", kind, how, api, forgeTokenKey(kind))}}
+	return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s), route ssh (%s): fort mint registers the deploy key through %s with %s in provisioning/secrets.yaml, and fort destroy revokes it", kind, how, route, api, forgeTokenKey(kind))}}
 }
 
 type checkOpts struct {

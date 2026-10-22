@@ -232,6 +232,7 @@ func TestMint(t *testing.T) {
 func TestMintNeedsGitea(t *testing.T) {
 	repo := estateRoot(t)
 	tmp := t.TempDir()
+	copyEstate(t, tmp)
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
 	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
 		t.Errorf("without a client: want refusal, got %v", err)
@@ -565,5 +566,72 @@ func TestMintConsole(t *testing.T) {
 	}
 	if p5.console || p5.consoleMint || p5.consoleOrphan {
 		t.Fatalf("opted out: console=%v mint=%v orphan=%v", p5.console, p5.consoleMint, p5.consoleOrphan)
+	}
+}
+
+// The anonymous route (forts#167): an https:// estate mints no deploy
+// key — nothing to register, no forge client wanted — and the plan says
+// so. A deploy key already in the secrets file (the estate moved routes)
+// is left alone and reported as unread. On the ssh route a nil forge is
+// still the refusal it was.
+func TestMintAnonymousRoute(t *testing.T) {
+	const host = "mint-public"
+	tmp := t.TempDir()
+	write := func(rel, content string) {
+		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
+		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
+	}
+	const admin = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m"
+	write("estate.toml", "name = \"public\"\n[source]\nrepo = \"https://github.com/acme/public\"\n")
+	write("nixos/.sops.yaml", "creation_rules:\n  - path_regex: secrets/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write(".sops.yaml", "creation_rules:\n  - path_regex: provisioning/.*\\.yaml$\n    age:\n      - "+admin+" # admin\n")
+	write("mesh/peers.json", "{\n  \"peers\": {},\n  \"clients\": {}\n}\n")
+	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
+	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
+	tool := &fakeTool{}
+	p, err := planMint(tmp, host, tool, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.anonymous || p.registerOn || p.staleKey || p.deployKey != "" || len(p.missing) != 3 || contains(p.missing, keyDeploy) {
+		t.Fatalf("plan: anonymous=%v missing=%v register=%v deployKey=%q stale=%v", p.anonymous, p.missing, p.registerOn, p.deployKey, p.staleKey)
+	}
+	if err := p.apply(tool, nil); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	p.report(&sb, true)
+	if rep := sb.String(); !strings.Contains(rep, "anonymous route: no deploy key") || strings.Contains(rep, "registered") || strings.Contains(rep, "carries "+keyDeploy) {
+		t.Errorf("anonymous report:\n%s", rep)
+	}
+	var written map[string]string
+	if err := yamlUnmarshalFile(filepath.Join(tmp, p.secretsPath), &written); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := written[keyDeploy]; ok || len(written) != 3 {
+		t.Errorf("the secrets file carries no deploy key: %v", keysOf(written))
+	}
+
+	// A re-run restores the identity and still mints no deploy key; a
+	// deploy key left from the ssh route is reported, not removed.
+	write(filepath.Join("nixos/secrets", host+".yaml"), readFile(t, filepath.Join(tmp, p.secretsPath))+keyDeploy+": stale\n")
+	tool.encrypted = append(tool.encrypted, filepath.Join(tmp, p.secretsPath))
+	p, err = planMint(tmp, host, tool, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.missing) != 0 || !p.staleKey {
+		t.Fatalf("re-run: missing=%v stale=%v", p.missing, p.staleKey)
+	}
+	sb.Reset()
+	p.report(&sb, false)
+	if rep := sb.String(); !strings.Contains(rep, "carries "+keyDeploy+", which this route reads nowhere") {
+		t.Errorf("stale-key report:\n%s", rep)
+	}
+
+	// The ssh route still wants the forge client.
+	write("estate.toml", "name = \"public\"\n[source]\nrepo = \"ssh://git@github.com/acme/public\"\n")
+	if _, err := planMint(tmp, host, tool, nil, false); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
+		t.Errorf("ssh route without a client: want refusal, got %v", err)
 	}
 }

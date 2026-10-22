@@ -63,6 +63,8 @@ missing manifest is no obstacle.
    (the image-id provenance lives on in git history).
 7. **Revoke the deploy key** `flux-<host>` on the forge — every key under
    that title. Not found is fine (no flux cluster, or removed by hand).
+   On the anonymous route (an `https://` repo, forts#167) mint registered
+   none: the step reports that and makes no call to the forge.
    An identity the estate minted for an account of its own on the fort is
    the estate's to revoke; destroy knows only the fort's.
 8. **Stage the state removal.** Commit it as its own PR

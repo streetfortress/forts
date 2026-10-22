@@ -94,7 +94,8 @@ and the loader had to special-case it (#426).
 **A fort is always hardened, on the mesh — and the `[cluster]` table says
 whether it is a flux cluster.** There is no `production` or `flux_cluster`
 key (#272): every fort imports the hardened profile (mesh-scoped SSH, no
-wheel), gets the deploy key (auto-rebuild's pull credential), carries
+wheel), gets the deploy key (auto-rebuild's pull credential, on the
+estate's ssh route; the anonymous route has none, forts#167), carries
 `protect: true` on its stack, and `mesh_ip` is required. **`[cluster]`**
 (#426) makes the host a flux cluster: `k3s-server.nix` on the datastore
 it names (the cluster grant and the ports ride with it, #154),
@@ -261,7 +262,7 @@ with what the sops secret derives, where the age key is at hand.
 | `link add` | writes `[links.<name>]`: the estate, the address and port it picked, the interface and zone the other estate names, the public half of the key it minted |
 | `estate link` (run in the *other* estate) | every `[links.<name>]` of a fetch of this repo that names that estate, plus the host's endpoint → its `remotes` entry there |
 | `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore`, `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` and `[links.<name>]` ↔ `sfi.links.<name>` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
-| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key always; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token). A layer's identities are the layer's mint to make ([layers](layers.md)) |
+| `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key on the estate's ssh route; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token). A layer's identities are the layer's mint to make ([layers](layers.md)) |
 | `check`, a layer's verbs | `[dns] zone` (the app hostname's zone on a cloud fort); a layer reads its own file beside this one, `layers/<layer>/forts/<fort>.toml` |
 | `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |

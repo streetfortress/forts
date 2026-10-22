@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
@@ -161,7 +162,11 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	if !entry.Realized() {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
 	}
-	p.notes = append(p.notes, "the deploy key `flux-"+host+"` stays registered on the forge until fort destroy revokes it.")
+	if est, err := estate.Load(root); err == nil && est.Anonymous() {
+		p.notes = append(p.notes, "no deploy key on the forge: the estate clones anonymously (estate.toml [source], forts#167); fort destroy has none to revoke.")
+	} else {
+		p.notes = append(p.notes, "the deploy key `flux-"+host+"` stays registered on the forge until fort destroy revokes it.")
+	}
 	sort.Strings(p.removes)
 	return p, nil
 }

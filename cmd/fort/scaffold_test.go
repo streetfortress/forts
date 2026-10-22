@@ -412,3 +412,89 @@ func TestGitHubFixtureEstateIsScaffoldOutput(t *testing.T) {
 		}
 	}
 }
+
+// The anonymous route (forts#167): an https:// estate renders a
+// FluxInstance with no pullSecret — source-controller clones the public
+// repo with no credential, and flux-bootstrap.nix makes no git-auth
+// secret for it to name — and a host file that names no deploy key. The
+// ssh route renders both, byte for byte as before.
+func TestRenderScaffoldAnonymousRoute(t *testing.T) {
+	hosts, problems, err := manifest.LoadAll("testdata")
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
+	}
+	anon := testEstate
+	anon.Source = estate.Source{Repo: "https://github.com/acme/public-estate"}
+	if !anon.Anonymous() {
+		t.Fatal("an https:// repo is the anonymous route")
+	}
+	for _, host := range []string{"cloud-fort", "lab-fort"} {
+		files, err := renderScaffold(host, hosts[host], anon)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ssh := render(t, host, hosts[host])
+		for i, f := range files {
+			got := string(f.content)
+			switch f.path {
+			case "flux/clusters/" + host + "/flux-system/flux-instance.yaml":
+				if strings.Contains(got, "pullSecret") || !strings.Contains(got, "url: https://github.com/acme/public-estate.git\n") || !strings.HasSuffix(got, "path: flux/clusters/"+host+"\n") {
+					t.Errorf("%s: the anonymous route names no pullSecret:\n%s", f.path, got)
+				}
+				if !strings.Contains(string(ssh[i].content), "pullSecret: flux-system\n") {
+					t.Errorf("%s: the ssh route keeps the pullSecret", f.path)
+				}
+			case "nixos/hosts/" + host + "/default.nix":
+				if strings.Contains(got, "flux-git-deploy-key") || !strings.Contains(got, "No deploy key") || !strings.Contains(got, `repoUrl = "https://github.com/acme/public-estate.git"`) {
+					t.Errorf("%s: the anonymous host file names no deploy key:\n%s", f.path, got)
+				}
+				if !strings.Contains(string(ssh[i].content), "flux-git-deploy-key") {
+					t.Errorf("%s: the ssh route keeps the deploy key", f.path)
+				}
+			default:
+				if got != string(ssh[i].content) {
+					t.Errorf("%s: the route changes nothing else", f.path)
+				}
+			}
+		}
+	}
+}
+
+// The public fixture (tests/public-estate, forts#167): the same cloud
+// cluster fort on the anonymous route — an https:// repo, no host key,
+// no hub. The host dir and the flux tree are the scaffold's render, the
+// FluxInstance names no pullSecret, and the host's secrets file carries
+// no deploy key.
+func TestPublicFixtureEstateIsScaffoldOutput(t *testing.T) {
+	const dir = "../../tests/public-estate"
+	est, err := estate.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !est.Anonymous() || est.Source.Auth != "" || est.Source.KnownHosts != "" || est.ForgeKind() != estate.ForgeGitHub || len(est.Hubs) != 0 {
+		t.Fatalf("the fixture is the anonymous route, derived: an https:// repo, no auth key, no host key, no hub; got %+v", est.Source)
+	}
+	hosts, problems, err := manifest.LoadAll(dir)
+	if err != nil || len(problems) > 0 || len(hosts) != 1 {
+		t.Fatal(err, problems, hosts)
+	}
+	files, err := renderScaffold("public-fort", hosts["public-fort"], est)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 9 {
+		t.Fatalf("a cluster fort: the host dir (2) and the flux tree (7), got %d", len(files))
+	}
+	for _, f := range files {
+		got := readFile(t, filepath.Join(dir, f.path))
+		if got != string(f.content) {
+			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold public-fort --write in tests/public-estate", f.path)
+		}
+		if strings.Contains(got, "gitea") || strings.Contains(got, "pullSecret") || strings.Contains(got, "flux-git-deploy-key") {
+			t.Errorf("%s: the anonymous route renders no lab forge, no pullSecret and no deploy key", f.path)
+		}
+	}
+	if secrets := readFile(t, filepath.Join(dir, "nixos/secrets/public-fort.yaml")); strings.Contains(secrets, keyDeploy) || !strings.Contains(secrets, keyAge) {
+		t.Errorf("the fixture's secrets file carries the cluster key and no deploy key:\n%s", secrets)
+	}
+}

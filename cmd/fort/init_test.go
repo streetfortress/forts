@@ -260,3 +260,51 @@ func TestGatewayAPIBundlePin(t *testing.T) {
 		}
 	}
 }
+
+// The anonymous route (forts#167): an https:// repo renders an
+// estate.toml that parses back onto that route, says so beside repo,
+// and carries no known_hosts example — the route pins no host key. The
+// verb accepts the URL and asks for no --known-hosts.
+func TestRenderInitAnonymous(t *testing.T) {
+	v := testInitView
+	v.Repo, v.RepoGit, v.Anonymous = "https://github.com/acme/test-estate", "https://github.com/acme/test-estate.git", true
+	files, err := renderInit(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var toml string
+	for _, f := range files {
+		if f.path == "estate.toml" {
+			toml = string(f.content)
+		}
+	}
+	est, err := estate.Parse([]byte(toml))
+	if err != nil || !est.Anonymous() || est.Source.Auth != "" || est.Source.KnownHosts != "" {
+		t.Fatalf("estate.toml on the anonymous route: %+v %v\n%s", est.Source, err, toml)
+	}
+	if !strings.Contains(toml, `repo = "https://github.com/acme/test-estate"   # the anonymous route`) || strings.Contains(toml, "known_hosts =") {
+		t.Errorf("estate.toml:\n%s", toml)
+	}
+	// The ssh render keeps the commented known_hosts example.
+	files, err = renderInit(testInitView)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f.path == "estate.toml" && !strings.Contains(string(f.content), "# known_hosts = ") {
+			t.Errorf("the ssh route keeps the known_hosts example:\n%s", f.content)
+		}
+	}
+
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Chdir(dir)
+	if err := initCmd([]string{"--name", "test-estate", "--repo", v.Repo, "--forts", v.Forts, "--admin", v.Admins[0], "--operator-key", testOperatorKey, "--write"}); err != nil {
+		t.Fatalf("init on the anonymous route: %v", err)
+	}
+	if est, err := estate.Load(dir); err != nil || !est.Anonymous() {
+		t.Errorf("the written estate is on the anonymous route: %+v %v", est.Source, err)
+	}
+}

@@ -1,0 +1,9 @@
+keys:
+  - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m
+creation_rules:
+  # BEGIN fort sops rule: public-fort
+  - path_regex: secrets/public-fort\.yaml$
+    key_groups:
+      - age:
+          - age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m
+  # END fort sops rule: public-fort

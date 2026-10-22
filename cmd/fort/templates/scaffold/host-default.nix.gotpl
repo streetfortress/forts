@@ -61,8 +61,14 @@
     inputs.forts.nixosModules.hardened
     inputs.forts.nixosModules.ops-deployer
     # Day-0 flux: fort scaffold laid down
+{{- if .Anonymous }}
+    # flux/clusters/{{ .Hostname }}/ and fort mint seeded flux-sops-age-key
+    # into this host's sops file. No deploy key: the estate's repo is
+    # public, cloned anonymously over https (estate.toml [source], forts#167).
+{{- else }}
     # flux/clusters/{{ .Hostname }}/ and fort mint seeded flux-sops-age-key +
     # flux-git-deploy-key into this host's sops file.
+{{- end }}
     inputs.forts.nixosModules.flux-bootstrap
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
     # The operator defaults every fort carries (sfi/forts#24): the shell at
