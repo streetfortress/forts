@@ -99,6 +99,12 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["justfile"], "-F mesh/ssh_config") {
 		t.Errorf("fetch-kubeconfig must read mesh/ssh_config:\n%s", m["justfile"])
 	}
+	// The read-only ops identity takes a layer's rules by aggregation
+	// (#169): the aggregated role and its binding, and the
+	// prometheus-operator kinds the hub runs.
+	if ops := m["flux/infrastructure/configs/ops-readonly.yaml"]; !strings.Contains(ops, "name: ops-ro-layers-read") || !strings.Contains(ops, `sfi.ops/read: "true"`) || strings.Count(ops, "name: ops-ro-layers-read") != 3 || !strings.Contains(ops, "thanosrulers") {
+		t.Error("ops-readonly.yaml lacks the aggregated layers role, its binding, or thanosrulers")
+	}
 	// The core pushes nowhere: a monitoring layer adds the remote_write,
 	// the log shipper and the variable they read (forts#143).
 	if strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "remoteWrite") || strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "fluent-bit") {

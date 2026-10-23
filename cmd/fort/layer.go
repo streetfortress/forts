@@ -626,10 +626,39 @@ func layerFindings(root string) []finding {
 		return []finding{{"ok", layersDir, "no layer installed (docs/layers.md)"}}
 	}
 	out := []finding{{"ok", layersDir, "installed: " + strings.Join(names, ", ") + " — each runs its own gate (fort <layer> check --all)"}}
+	// The one seam a layer has into the read-only ops identity (#169):
+	// the aggregated role in the estate's ops-readonly.yaml. init never
+	// rewrites that file, so an estate rendered before the seam adds the
+	// two objects by hand; until then a layer's labelled rule has no
+	// taker and ops-ro reads none of the layer's kinds.
+	if !opsAggregates(root) {
+		out = append(out, finding{"warning", opsReadFile, "carries no ClusterRole " + opsAggregatedRole + " — a layer's read rule (labelled sfi.ops/read: \"true\") has no taker, so ops-ro reads none of its kinds; add the aggregated role and its binding from the init template (docs/layers.md, 5)"})
+	}
 	for _, n := range names {
 		if _, err := os.Stat(filepath.Join(root, layersDir, n, "estate.toml")); err != nil {
 			out = append(out, finding{"warning", filepath.Join(layersDir, n), "no estate.toml — the layer's init writes it (fort " + n + " init), or the directory is a stray"})
 		}
 	}
 	return out
+}
+
+// The read-only ops identity's seam for a layer (#169).
+const (
+	opsReadFile       = "flux/infrastructure/configs/ops-readonly.yaml"
+	opsAggregatedRole = "ops-ro-layers-read"
+)
+
+// opsAggregates says the estate's ops-readonly.yaml carries the
+// aggregated role, by line.
+func opsAggregates(root string) bool {
+	raw, err := os.ReadFile(filepath.Join(root, opsReadFile))
+	if err != nil {
+		return false
+	}
+	for _, l := range strings.Split(string(raw), "\n") {
+		if strings.TrimSpace(l) == "name: "+opsAggregatedRole {
+			return true
+		}
+	}
+	return false
 }

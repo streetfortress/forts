@@ -128,9 +128,16 @@ func TestLayerAddAndRemove(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "layers/backups"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Without the aggregated role in ops-readonly.yaml a layer's read
+	// rule has no taker (#169): a warning that names the file.
 	fs := layerFindings(root)
-	if levelsOf(fs) != "ok,warning" || !strings.Contains(fs[0].msg, "installed: backups, monitoring") || fs[1].dir != "layers/backups" {
+	if levelsOf(fs) != "ok,warning,warning" || !strings.Contains(fs[0].msg, "installed: backups, monitoring") || fs[1].dir != opsReadFile || !strings.Contains(fs[1].msg, opsAggregatedRole) || fs[2].dir != "layers/backups" {
 		t.Errorf("findings: %+v", fs)
+	}
+	writeTree(t, root, map[string]string{opsReadFile: "kind: ClusterRole\nmetadata:\n  name: ops-ro-layers-read\naggregationRule: {}\n"})
+	fs = layerFindings(root)
+	if levelsOf(fs) != "ok,warning" || fs[1].dir != "layers/backups" {
+		t.Errorf("findings with the aggregated role: %+v", fs)
 	}
 
 	// Remove the first role: its line and step go, the input stays for the second.

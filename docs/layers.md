@@ -103,6 +103,26 @@ No hook in the core: the order is this table. A layer that needs the
 core to call it at a point this table does not name has found a gap in
 the core, and that is an issue there.
 
+## 5. A layer's read rule aggregates by label
+
+The read-only ops identity (`kube-system/ops-ro`, [ops.md](ops.md)) reads
+the core's kinds. A layer's CRDs are the layer's rule, and the rule
+reaches the identity by aggregation (#169): `ops-readonly.yaml` carries
+an aggregated ClusterRole, `ops-ro-layers-read`, bound to the identity,
+that the control plane fills from every ClusterRole labelled
+
+```yaml
+  labels:
+    sfi.ops/read: "true"
+```
+
+A layer ships a labelled ClusterRole and no binding, so it names no
+service account of the core's. The label is the fifth thing the core
+knows about layers. `fort check --all` warns when a layer is installed
+and the estate's `ops-readonly.yaml` lacks the aggregated role: init
+never rewrites that file, so an estate rendered before the seam adds the
+two objects from the init template by hand.
+
 ## The ports
 
 A role a layer serves needs ports open on the link to each estate it

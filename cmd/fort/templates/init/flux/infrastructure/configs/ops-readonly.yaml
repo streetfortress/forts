@@ -7,7 +7,10 @@
 # cert-manager. The ones that DON'T are granted read explicitly below
 # (verified with `kubectl auth can-i`, 2026-09-13):
 # Gateway API (vendored CRDs, no roles at all), traefik Middlewares, and
-# the prometheus-operator kinds. A layer's CRDs are the layer's rule. What it deliberately lacks: Secrets (helm
+# the prometheus-operator kinds. A layer's CRDs are the layer's rule: a
+# ClusterRole labelled sfi.ops/read: "true" and no binding, which the
+# aggregated role at the bottom of this file takes up (#169) — the one
+# seam a layer has into this identity. What it deliberately lacks: Secrets (helm
 # release state is inspected via HelmRelease status / `flux` CLI, NOT a
 # secret carve-out — "the RO config cannot read any Secret" stays an
 # absolute), and cluster-scoped objects, added narrowly below (nodes,
@@ -79,7 +82,7 @@ rules:
     resources: [middlewares]
     verbs: [get, list, watch]
   - apiGroups: [monitoring.coreos.com]
-    resources: [podmonitors, servicemonitors, probes, scrapeconfigs, prometheusrules, prometheuses, alertmanagers, alertmanagerconfigs]
+    resources: [podmonitors, servicemonitors, probes, scrapeconfigs, prometheusrules, prometheuses, alertmanagers, alertmanagerconfigs, thanosrulers]
     verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -107,6 +110,39 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: ops-ro-cluster-read
+subjects:
+  - kind: ServiceAccount
+    name: ops-ro
+    namespace: kube-system
+---
+# A layer's read rules, by aggregation (#169, forts' docs/layers.md): the
+# control plane fills this role from every ClusterRole labelled
+# sfi.ops/read: "true" — the backups layer's CNPG kinds, whatever the
+# next layer ships — so a layer names no service account of the core's.
+# The same label on a rule in this file would aggregate too; the core's
+# own kinds stay in ops-ro-cluster-read above, where they were.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-ro-layers-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        sfi.ops/read: "true"
+rules: []  # filled by the control plane from the matching roles
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-ro-layers-read
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled  # the host applies this file too — see the header
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-ro-layers-read
 subjects:
   - kind: ServiceAccount
     name: ops-ro
