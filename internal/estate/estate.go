@@ -645,6 +645,11 @@ func (e Estate) validateHubs() error {
 			return fmt.Errorf("[hubs.%s] name — only the forge has a name of its own; every other hub is <host>.<zone>", role)
 		case h.Name != "" && !zoneRE.MatchString(h.Name):
 			return fmt.Errorf("[hubs.%s] name %q — want a DNS name of lowercase labels (forge.example)", role, h.Name)
+		case h.Name != "" && !strings.Contains(h.Name, "."):
+			// forts#172: the pin's DNS block is the name, whole; a name of
+			// one label would make that block a TLD, and every fort would
+			// answer NXDOMAIN for every other name under it.
+			return fmt.Errorf("[hubs.%s] name %q — want the forge's name under a domain (forge.example): one label would make its DNS block a whole TLD on every fort (modules/lab-dns.nix)", role, h.Name)
 		}
 	}
 	roles := make([]string, 0, len(e.Serves))

@@ -1,6 +1,7 @@
 # The forge's name, and the LAN's zone. Nothing in here is a property of
 # the mesh — that is mesh-dns.nix — and the file contributes two things
-# through mesh-dns.nix's extension point:
+# through mesh-dns.nix's extension point, each as a CoreDNS server block
+# of its own.
 #
 # The forge is the one exception to <host>.<zone>: its name is an
 # identity, not a location — it is in every git remote, every OCI
@@ -21,17 +22,24 @@
 # (github.com, forts#1) declares no [hubs.forge] and gets no pin: the
 # name resolves by public DNS, as every other public name does.
 #
-# The pin is in /etc/hosts and in the cluster DNS, as a hosts line of
-# the .lofi block: not a record of the zone file, because the .lofi
-# block also forwards on a lab fort and the file plugin does not fall
-# through.
+# The pin is in /etc/hosts and in the cluster DNS, as a `hosts` line in
+# a server block whose zone is the forge's NAME, whole (forts#172): a
+# block answers the names under its zone, and the forge's own name has
+# none under it, so the block answers that one name and no other.
+# CoreDNS picks the longest matching block, so a forge under the LAN
+# zone (gitea.zen.lofi under .lofi) still hits its own block first, and
+# a forge under a public domain (forge.streetfortress.cloud) takes
+# nothing from the rest of that domain: every other name under it
+# resolves as every public name does. The block was the name's TLD once,
+# which is right for a lab TLD and wrong for .cloud.
 #
-# .lofi is the homelab's LAN zone (llm.lofi, chat.lofi), not a fort
-# name. A lab fort forwards it to its LAN resolvers — the same ones its
-# static LAN block names — so a pod there still reaches the LAN; a cloud
-# fort has nowhere to send it and forwards nothing: it knows the forge
-# pin and no other name under the forge's TLD. A LAN resolver gates no
-# fort.
+# The LAN zone is the second thing, and it is the homelab's (.lofi:
+# llm.lofi, chat.lofi), not a fort name and not the forge's. A lab fort
+# forwards it to its LAN resolvers — the same ones its static LAN block
+# names — so a pod there still reaches the LAN; a cloud fort has nowhere
+# to send it and renders no block: it knows the forge pin and no LAN
+# name. A LAN resolver gates no fort. An estate with no LAN zone sets
+# `lanZone = null` and renders no forward block either.
 { config, lib, ... }:
 
 let
@@ -45,9 +53,8 @@ let
   estateToml = if builtins.pathExists tomlPath then builtins.fromTOML (builtins.readFile tomlPath) else { };
   forgeHost = ((estateToml.hubs or { }).forge or { }).fort or null;
   # Its name: [hubs.forge] name, the one name the forge keeps on every
-  # mesh (forts#1). The block below serves that name's TLD.
+  # mesh (forts#1). The pin's block below is that name, whole.
   forgeName = ((estateToml.hubs or { }).forge or { }).name or null;
-  forgeTLD = if forgeName == null then null else lib.last (lib.splitString "." forgeName);
 
   # Its address on this mesh: the peers and remotes of mesh/peers.json,
   # the same two tables that are the zone (mesh-dns.nix). A forge named
@@ -67,30 +74,32 @@ let
   lanDNS = lib.unique (lib.concatMap (n: n.dns or [ ]) (lib.attrValues config.systemd.network.networks));
 
   pinned = cfg.giteaAddress != null && forgeName != null;
-  forwards = cfg.lofiForward != [ ];
+  forwards = cfg.lofiForward != [ ] && cfg.lanZone != null;
 
-  # The .lofi block: the forge pin, and the LAN forward where there is
-  # one. `hosts` without `fallthrough` is the end of the line: a cloud
-  # fort answers no other .lofi name. With neither half there is no
-  # block at all (config, below).
-  lofiServer = lib.concatStringsSep "\n" ([
-    "${forgeTLD}:53 {"
-    "  errors"
-    "  cache 30"
-  ] ++ lib.optionals pinned ([
-    "  hosts {"
-    "    ${cfg.giteaAddress} ${forgeName}"
-  ] ++ lib.optionals forwards [
-    "    fallthrough"
-  ] ++ [
-    "  }"
-  ]) ++ lib.optionals forwards [
-    "  forward . ${lib.concatStringsSep " " cfg.lofiForward} {"
-    "    policy sequential"
-    "  }"
-  ] ++ [
-    "}"
-  ]) + "\n";
+  # The forge's block: its name as the zone, the pin as the one answer.
+  # `hosts` without `fallthrough` is the end of the line, and nothing
+  # else is under this zone to fall through to.
+  forgeServer = ''
+    ${forgeName}:53 {
+      errors
+      cache 30
+      hosts {
+        ${cfg.giteaAddress} ${forgeName}
+      }
+    }
+  '';
+
+  # The LAN zone's block: the forward, where there is one. No pin in
+  # here — the forge has its own block, whatever zone its name is under.
+  lanServer = ''
+    ${cfg.lanZone}:53 {
+      errors
+      cache 30
+      forward . ${lib.concatStringsSep " " cfg.lofiForward} {
+        policy sequential
+      }
+    }
+  '';
 in
 {
   imports = [ ./mesh-dns.nix ];
@@ -109,25 +118,41 @@ in
         the forge's name by whatever other DNS it has.
       '';
     };
+    lanZone = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = "lofi";
+      description = ''
+        The homelab LAN's DNS zone, which a lab fort's cluster DNS
+        forwards to its LAN resolvers (lofiForward). The homelab's zone,
+        not a fort name and not the forge's: the forge's name has a block
+        of its own whatever zone it is under. Null: no LAN zone, and no
+        forward block is rendered.
+      '';
+    };
     lofiForward = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = lanDNS;
       defaultText = "the host's static LAN resolvers (systemd.network dns): a lab fort's lan_dns; empty on a cloud fort";
       description = ''
-        Where the cluster DNS forwards the .lofi names that are not the
-        forge: the homelab's LAN zone, which only a lab fort can reach.
+        Where the cluster DNS forwards the LAN zone's names (lanZone):
+        the homelab's LAN resolvers, which only a lab fort can reach.
         Tried in order. Empty: nothing is forwarded, and the cluster
-        answers no .lofi name but the forge's.
+        answers no LAN name.
       '';
     };
   };
 
   config = lib.mkMerge [
     (lib.mkIf pinned {
+      assertions = [{
+        assertion = builtins.match ".+\\..+" forgeName != null;
+        message = "sfi.lab-dns: [hubs.forge] name ${forgeName} has one label — the pin's DNS block would be a whole TLD; name the forge under a domain (forge.example). fort check refuses this too.";
+      }];
       networking.hosts.${cfg.giteaAddress} = [ forgeName ];
+      sfi.mesh.coredns."${forgeName}.server" = forgeServer;
     })
-    (lib.mkIf (pinned || (forwards && forgeTLD != null)) {
-      sfi.mesh.coredns."${forgeTLD}.server" = lofiServer;
+    (lib.mkIf forwards {
+      sfi.mesh.coredns."${cfg.lanZone}.server" = lanServer;
     })
   ];
 }

@@ -352,3 +352,19 @@ func TestOperatorKeys(t *testing.T) {
 		}
 	}
 }
+
+// forts#172: the forge's name is the pin's DNS block, whole, so a name
+// of one label is refused — it would make the block a TLD. A name under
+// a domain, lab or public, is fine.
+func TestForgeNameNeedsADomain(t *testing.T) {
+	base := "name = \"e\"\n[source]\nrepo = \"ssh://git@forge.example:22/acme/estate\"\n[hubs.forge]\nestate = \"ssh://git@forge.example:22/acme/hub\"\nfort = \"central\"\nname = \"%s\"\n"
+	for _, ok := range []string{"gitea.zen.lofi", "forge.streetfortress.cloud", "forge.example"} {
+		if _, err := Parse([]byte(fmt.Sprintf(base, ok))); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
+	}
+	_, err := Parse([]byte(fmt.Sprintf(base, "forge")))
+	if err == nil || !strings.Contains(err.Error(), "one label would make its DNS block a whole TLD") {
+		t.Errorf("one label: %v", err)
+	}
+}

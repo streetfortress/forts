@@ -38,7 +38,7 @@
     inputs.forts.nixosModules.estate       # sfi.estate.root (below) and the estate's CA root
     inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest), and the names of the mesh
     inputs.forts.nixosModules.metrics      # node-exporter on 9100 and the textfile collectors
-    inputs.forts.nixosModules.lab-dns      # the forge's name pin ([hubs.forge] + mesh/peers.json), and the .lofi forward on a lab fort
+    inputs.forts.nixosModules.lab-dns      # the forge's name pin ([hubs.forge] + mesh/peers.json), and the LAN zone's forward on a lab fort
     # The baseline, which the cluster profile also builds on: the
     # hardening every fort shares, the operator account and its verbs.
     # The keys of `deployer` are the estate's, not the framework's:

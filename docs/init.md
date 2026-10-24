@@ -134,9 +134,10 @@ names; without it, no public issuer is rendered. The issuer speaks to
 names none.
 
 `[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
-one name on every mesh (`gitea.zen.lofi`) to the address `fort` has in
+one name on every mesh (`forge.streetfortress.cloud`) to the address `fort` has in
 `mesh/peers.json`, in `/etc/hosts` and in the cluster DNS, on every fort
-of the estate (forts#26; [mesh.md](mesh.md)). The address is written in
+of the estate (forts#26; [mesh.md](mesh.md)). The name must sit under a
+domain (forts#172). The address is written in
 that entry and nowhere else. An estate that names no forge host gets no
 pin, and `fort check --all` says so.
 

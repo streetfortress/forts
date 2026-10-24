@@ -101,8 +101,9 @@ note says which runtime you got:
 | `[baremetal]` | `runtime-baremetal` | the static LAN block, by MAC where `[baremetal] mac` names one; no backend raises it, and the host key's channel is #658 |
 
 `lab-dns.nix` is imported on all three, as `k3s-server.nix` imports it
-on all three: the module forwards `.lofi` to the host's own static
-resolvers, which a cloud host has none of, so there it pins the forge's
+on all three: the module pins the forge's name in a block of its own,
+and forwards the LAN zone (`.lofi`) to the host's own static resolvers
+in another, which a cloud host has none of, so there it pins the forge's
 name and forwards nothing.
 
 ## The operator defaults

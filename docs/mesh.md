@@ -79,18 +79,24 @@ of another estate that links here serves this zone on itself, from its
 cached copy of peers.json ([links.md](links.md)).
 
 Two names are not of the zone. The forge keeps its one name on every mesh
-(`gitea.zen.lofi`: it is in every git remote, every OCI reference and the
-registry certificate, and one gitea is on several meshes), pinned to its
-address on this mesh by `sfi.lab-dns.giteaAddress`. That address is
+(`forge.streetfortress.cloud`, `gitea.zen.lofi`: it is in every git
+remote, every OCI reference and the registry certificate, and one forge
+is on several meshes), pinned to its address on this mesh by
+`sfi.lab-dns.giteaAddress` — in `/etc/hosts`, and in the cluster DNS as
+a server block whose zone is the name itself, so the pin answers that
+one name and takes nothing from the domain around it (forts#172). The
+name must sit under a domain: one label would make that block a TLD, and
+`fort check` refuses it. That address is
 derived, not written (forts#26): `estate.toml` names the forge host in
 `[hubs.forge]` ([hub.md](hub.md)), and this file gives that host's
 address — its `peers` entry when the forge is a fort of this estate, its
 `remotes` entry when it links here. An estate that names no forge host
 gets no pin, and each of its forts resolves the name by whatever other
-DNS it has. And `.lofi` is the homelab LAN's zone,
-not a fort name: a lab fort's cluster DNS forwards it to the LAN
-resolvers its static LAN block names; a cloud fort forwards nothing and
-knows no `.lofi` name but the forge's. A roaming client is not served the
+DNS it has. And `.lofi` is the homelab LAN's zone
+(`sfi.lab-dns.lanZone`), not a fort name and not the forge's: a lab
+fort's cluster DNS forwards it to the LAN resolvers its static LAN block
+names, in a block of its own; a cloud fort forwards nothing and knows no
+LAN name. An estate with no LAN zone sets `lanZone = null`. A roaming client is not served the
 zone yet; that is a later `dns` role, and `fort wg-conf` says so.
 
 ## The three tables
