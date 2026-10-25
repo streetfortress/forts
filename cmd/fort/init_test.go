@@ -185,6 +185,25 @@ func TestRenderInit(t *testing.T) {
 	}
 }
 
+// hubsView renders every role in est.Hubs: the forge first, then the
+// rest sorted by name (#176) — estate.Roles bounds what the core renders
+// for, not which tables estate.toml carries.
+func TestHubsView(t *testing.T) {
+	hub := estate.Hub{Estate: "ssh://git@forge.example:22/acme/hub", Fort: "central"}
+	e := estate.Estate{Hubs: map[string]estate.Hub{
+		"monitoring":     hub,
+		"ca":             hub,
+		estate.RoleForge: {Estate: hub.Estate, Fort: hub.Fort, Name: "forge.example"},
+	}}
+	got := hubsView(e)
+	if len(got) != 3 || got[0].Role != estate.RoleForge || got[1].Role != "ca" || got[2].Role != "monitoring" {
+		t.Fatalf("hubsView order: %+v", got)
+	}
+	if got[0].Name != "forge.example" || got[2].Fort != "central" || got[1].Estate != hub.Estate {
+		t.Errorf("hubsView fields: %+v", got)
+	}
+}
+
 // The verb: renders into the git root it is run in, once.
 func TestInitCmd(t *testing.T) {
 	dir := t.TempDir()
@@ -192,7 +211,10 @@ func TestInitCmd(t *testing.T) {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	t.Chdir(dir)
-	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--forts", testInitView.Forts, "--admin", testInitView.Admins[0], "--operator-key", testOperatorKey}
+	args := []string{"--name", "test-estate", "--repo", testInitView.Repo, "--forts", testInitView.Forts, "--admin", testInitView.Admins[0], "--operator-key", testOperatorKey,
+		"--hub", "forge=central@" + testInitView.Repo, "--forge-name", "forge.example",
+		"--hub", "monitoring=central@" + testInitView.Repo,
+		"--hub", "ca=central@" + testInitView.Repo}
 	if err := initCmd(args); err != nil {
 		t.Fatalf("dry run: %v", err)
 	}
@@ -214,6 +236,19 @@ func TestInitCmd(t *testing.T) {
 	}
 	if ops := est.Operators(); len(ops) != 1 || ops[0].Name != "macbook-air" {
 		t.Errorf("--operator-key reaches estate.toml: %+v", ops)
+	}
+	// #176: a non-forge --hub reaches estate.toml too — every role, the
+	// forge first, then the rest sorted by name.
+	if len(est.Hubs) != 3 || est.Hubs["monitoring"].Fort != "central" || est.Hubs["ca"].Estate != testInitView.Repo {
+		t.Errorf("every --hub must reach estate.toml: %+v", est.Hubs)
+	}
+	toml, err := os.ReadFile(filepath.Join(dir, "estate.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgeAt, caAt, monAt := strings.Index(string(toml), "\n[hubs.forge]\n"), strings.Index(string(toml), "\n[hubs.ca]\n"), strings.Index(string(toml), "\n[hubs.monitoring]\n")
+	if forgeAt < 0 || caAt < 0 || monAt < 0 || forgeAt > caAt || caAt > monAt {
+		t.Errorf("hub table order (forge %d, ca %d, monitoring %d):\n%s", forgeAt, caAt, monAt, toml)
 	}
 	for _, p := range []string{"nixos/flake.nix", "mesh/peers.json", "flux/infrastructure/configs/kustomization.yaml", "nixos/hosts/.gitkeep", ".gitea/workflows/checks.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {

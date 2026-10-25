@@ -39,7 +39,7 @@ type initView struct {
 	// the estate names one — the framework ships no operator key.
 	OperatorKeys []string
 	// Hubs: the roles another fort serves this estate ([hubs.<role>],
-	// forts#38), in role order.
+	// forts#38): the forge first, then the rest sorted by name.
 	Hubs []hubView
 	// Forge: a [hubs.forge] is declared (the template's example is
 	// omitted then).
@@ -55,14 +55,26 @@ type hubView struct {
 	Role, Estate, Fort, Name string
 }
 
-// hubsView orders an estate's hubs for the template: the roles in the
-// order estate.Roles lists them.
+// hubsView orders an estate's hubs for the template: every role in
+// e.Hubs — the forge first, then the rest sorted by name (#176).
+// estate.Roles stays the list of roles the core renders for; a role it
+// does not know still gets its table, because the table is the whole
+// declaration on the served side (docs/hub.md).
 func hubsView(e estate.Estate) []hubView {
 	var out []hubView
-	for _, role := range estate.Roles {
-		if h, ok := e.Hub(role); ok {
-			out = append(out, hubView{Role: role, Estate: h.Estate, Fort: h.Fort, Name: h.Name})
+	if h, ok := e.Hub(estate.RoleForge); ok {
+		out = append(out, hubView{Role: estate.RoleForge, Estate: h.Estate, Fort: h.Fort, Name: h.Name})
+	}
+	rest := make([]string, 0, len(e.Hubs))
+	for role := range e.Hubs {
+		if role != estate.RoleForge {
+			rest = append(rest, role)
 		}
+	}
+	sort.Strings(rest)
+	for _, role := range rest {
+		h := e.Hubs[role]
+		out = append(out, hubView{Role: role, Estate: h.Estate, Fort: h.Fort, Name: h.Name})
 	}
 	return out
 }
