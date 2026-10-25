@@ -298,7 +298,11 @@ func usage() {
 
   dismantle <host> [--write]
       the inverse of scaffold + mint, as a repo mutation
-      staged for a PR (#217): removes the manifest, nixos/hosts/
+      staged for a PR (#217). Each installed layer's dismantle runs
+      first — fort-<layer> dismantle <host>, --write passed through —
+      and a layer's failure stops the verb before the core removes
+      anything (the cascade, docs/layers.md; forts#180). The core's own
+      half: removes the manifest, nixos/hosts/
       <host>, nixos/secrets/<host>.yaml, both sops rule blocks and the
       shared-infrastructure recipient (then sops updatekeys on the files
       that lost it), the wireguard peer, flux/clusters/<host> and
@@ -341,7 +345,8 @@ func usage() {
       any other first word is a layer's name: fort-<layer> on PATH takes
       the rest, in this process, with FORT_ESTATE_ROOT set. The order
       across the two is the operator's: core's verb, then the layer's —
-      except dismantle and destroy, where the layer's runs first.
+      except retirement, where the layers' dismantles run first and
+      fort dismantle runs them itself (the cascade, docs/layers.md).
 
   Cloud commands take LINODE_TOKEN and PULUMI_CONFIG_PASSPHRASE from the
   environment, else sops-decrypt them from provisioning/secrets.yaml.

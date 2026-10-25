@@ -187,6 +187,93 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 	}
 }
 
+// The cascade (#180): each installed layer's dismantle runs before the
+// core's, in name order, with --write passed through; a layer's failure
+// stops the cascade, says the core did not proceed, and the layers
+// after it never run. No layers installed is a no-op.
+func TestDismantleCascade(t *testing.T) {
+	root := t.TempDir()
+	for _, l := range []string{"monitoring", "ca"} {
+		if err := os.MkdirAll(filepath.Join(root, layersDir, l), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var calls []string
+	rec := func(layer string, args ...string) error {
+		calls = append(calls, layer+": "+strings.Join(args, " "))
+		return nil
+	}
+	var out strings.Builder
+	if err := cascadeLayerDismantles(&out, root, "sfi-x", true, rec); err != nil {
+		t.Fatal(err)
+	}
+	if want := "ca: dismantle sfi-x --write,monitoring: dismantle sfi-x --write"; strings.Join(calls, ",") != want {
+		t.Errorf("calls: %v, want %s", calls, want)
+	}
+	if !strings.Contains(out.String(), "fort ca dismantle sfi-x --write") {
+		t.Errorf("the cascade does not name the layer's verb:\n%s", out.String())
+	}
+
+	// the dry run cascades the layers' dry runs
+	calls = nil
+	if err := cascadeLayerDismantles(&out, root, "sfi-x", false, rec); err != nil {
+		t.Fatal(err)
+	}
+	if want := "ca: dismantle sfi-x,monitoring: dismantle sfi-x"; strings.Join(calls, ",") != want {
+		t.Errorf("dry-run calls: %v, want %s", calls, want)
+	}
+
+	// a layer's failure stops the cascade
+	calls = nil
+	err := cascadeLayerDismantles(&out, root, "sfi-x", true, func(layer string, args ...string) error {
+		calls = append(calls, layer)
+		return os.ErrPermission
+	})
+	if err == nil || !strings.Contains(err.Error(), "fort-ca dismantle") || !strings.Contains(err.Error(), "the core's dismantle did not run") {
+		t.Errorf("err: %v", err)
+	}
+	if strings.Join(calls, ",") != "ca" {
+		t.Errorf("a layer ran after ca failed: %v", calls)
+	}
+
+	// no layers installed: nothing runs
+	if err := cascadeLayerDismantles(&out, t.TempDir(), "sfi-x", true, func(string, ...string) error {
+		t.Fatal("a layer ran in an estate with none")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// runLayerDismantle reaches the binary the way execLayer does: from
+// PATH, with FORT_ESTATE_ROOT set; a missing binary is an error that
+// names it, and the layer's exit status comes back.
+func TestRunLayerDismantle(t *testing.T) {
+	bin := t.TempDir()
+	rec := filepath.Join(bin, "rec")
+	if err := os.WriteFile(filepath.Join(bin, "fort-fake"), []byte("#!/bin/sh\necho \"$FORT_ESTATE_ROOT $*\" > "+rec+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "fort-bad"), []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	root := t.TempDir()
+	run := runLayerDismantle(root)
+	if err := run("fake", "dismantle", "sfi-x", "--write"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(readFile(t, rec)); got != root+" dismantle sfi-x --write" {
+		t.Errorf("the layer saw: %q", got)
+	}
+	if err := run("gone", "dismantle", "sfi-x"); err == nil || !strings.Contains(err.Error(), "no fort-gone on PATH") {
+		t.Errorf("missing binary: %v", err)
+	}
+	if err := run("bad", "dismantle", "sfi-x"); err == nil {
+		t.Error("a failing layer must come back as an error")
+	}
+}
+
 // Without a stack the next step is the --no-stack destroy, and a dry run
 // never names a next step at all.
 func TestDismantleNextStep(t *testing.T) {

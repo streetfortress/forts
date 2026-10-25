@@ -150,8 +150,9 @@ func destroy(args []string) error {
 // off-repo identity of the flux half (the flux age identity died with
 // the sops rule). An identity the estate minted for an account of its
 // own on the fort is the estate's to revoke, and a layer's identities
-// (a backup store's keys) are the layer's: its dismantle runs before
-// this (docs/layers.md). Warned rather than fatal: a destroy must not
+// (a backup store's keys) are the layer's: the cascade in fort
+// dismantle ran its dismantle before this (docs/layers.md, 4; #180).
+// Warned rather than fatal: a destroy must not
 // be blocked waiting for a credential.
 func revokeIdentities(root, host string) {
 	if msg, err := revokeDeployKey(root, host); err != nil {

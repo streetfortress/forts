@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,6 +29,12 @@ import (
 // then the retired host's key keeps decrypting them; and the wireguard
 // peer is removed from peers.json, which the other peers shed on their
 // next rebuild.
+//
+// The layers go first (#180): each installed layer's dismantle runs
+// before the core's own plan (the cascade, docs/layers.md, 4), so the
+// layer withdraws what it declared for the fort — its forts/<host>.toml,
+// its rendered outputs on hubs — before the manifest goes. A layer's
+// failure stops the verb: the core removes nothing after it.
 func dismantle(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort dismantle <host> [--write]")
@@ -42,6 +49,14 @@ func dismantle(args []string) error {
 	if err != nil {
 		return err
 	}
+	// The host must be declared before any layer runs: a mistyped name
+	// must not start a cascade.
+	if _, err := manifest.Load(root, host); err != nil {
+		return err
+	}
+	if err := cascadeLayerDismantles(os.Stdout, root, host, *write, runLayerDismantle(root)); err != nil {
+		return err
+	}
 	p, err := planDismantle(root, host)
 	if err != nil {
 		return err
@@ -53,6 +68,51 @@ func dismantle(args []string) error {
 	}
 	p.report(os.Stdout, *write)
 	return nil
+}
+
+// cascadeLayerDismantles runs `fort-<layer> dismantle <host>` for each
+// installed layer — the layers/ path listing, as `fort check --all`
+// reads it — before the core's own dismantle, with --write passed
+// through, so a dry run previews the whole cascade: the layers' plans,
+// then the core's. The first failure stops the cascade, and the error
+// says the core did not proceed — a fort must not lose its manifest
+// while a layer still declares it (#180).
+func cascadeLayerDismantles(w io.Writer, root, host string, write bool, run func(layer string, args ...string) error) error {
+	layers, err := installedLayers(root)
+	if err != nil {
+		return err
+	}
+	for _, l := range layers {
+		args := []string{"dismantle", host}
+		if write {
+			args = append(args, "--write")
+		}
+		fmt.Fprintf(w, "fort %s %s   (the layer goes first — docs/layers.md, 4)\n", l, strings.Join(args, " "))
+		if err := run(l, args...); err != nil {
+			return fmt.Errorf("fort-%s dismantle: %w — the layers go first (docs/layers.md, 4), so the core's dismantle did not run", l, err)
+		}
+		fmt.Fprintln(w)
+	}
+	return nil
+}
+
+// runLayerDismantle reaches a layer's binary the way `fort <layer>
+// <verb>` does (execLayer: fort-<layer> from PATH, FORT_ESTATE_ROOT set,
+// inherited stdio) — but as a child process, not an exec, because the
+// core's own dismantle still follows.
+func runLayerDismantle(root string) func(layer string, args ...string) error {
+	return func(layer string, args ...string) error {
+		bin := "fort-" + layer
+		path, err := exec.LookPath(bin)
+		if err != nil {
+			return fmt.Errorf("no %s on PATH — a layer's binary (docs/layers.md; fort layer add installs one)", bin)
+		}
+		cmd := exec.Command(path, args...)
+		cmd.Dir = root
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		cmd.Env = append(os.Environ(), "FORT_ESTATE_ROOT="+root)
+		return cmd.Run()
+	}
 }
 
 type dismantlePlan struct {

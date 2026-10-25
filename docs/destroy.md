@@ -35,8 +35,9 @@ refusing: 2 gate(s) not met
 Everything is on file: the provider token and the pulumi passphrase, and
 the forge's token the revocation runs with (`gitea-token` or
 `github-token`, by the kind of `estate.toml`'s `repo`). A layer's keys (a backup
-store's) are the layer's dismantle to revoke, before this
-([layers](layers.md)).
+store's) are the layer's dismantle to revoke — `fort dismantle` runs it
+for every installed layer before its own half (the cascade,
+[layers](layers.md)), so by this point they are gone.
 
 The provider comes from the checkpoint's `pulumi:providers:*` resource,
 not from the manifest: `pulumi destroy` never runs the program, so the

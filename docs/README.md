@@ -130,8 +130,10 @@ the host side.
 ## Retirement
 
 ```
-fort dismantle <host> --write   ← the manifest, nix host dir + secrets, both
-                                  sops rules (+ updatekeys), the peer, both fleet
+fort dismantle <host> --write   ← each installed layer's dismantle first (the
+                                  cascade, layers.md — a layer's failure stops the
+                                  verb), then the manifest, nix host dir + secrets,
+                                  both sops rules (+ updatekeys), the peer, both fleet
                                   trees; prints the residue to triage → PR → merge
                                   (the residue excludes what the plan settles)
 fort destroy <host>             ← gated on that merge: power off, refresh,

@@ -11,6 +11,20 @@ acts on the provider only once main says the host is gone. Git is the
 record and the merge is the gate — the irreversible half never runs on an
 unreviewed intent.
 
+## The layers go first
+
+A fort a layer still declares must not retire by halves (#180): before
+its own plan, `dismantle` runs `fort-<layer> dismantle <host>` for every
+installed layer — the `layers/` listing, as `fort check --all` reads it —
+with `--write` passed through ([layers](layers.md), 4). One command
+retires the fort on every surface that declares it: the layer's
+`forts/<host>.toml`, its rendered outputs on hubs (a dead man's switch
+for a cluster that no longer exists is what this gap paged on). A
+layer's dismantle that fails stops the verb: the core removes nothing
+after it, so the manifest never goes while a layer still declares the
+fort. The dry run previews the whole cascade, the layers' plans
+included.
+
 ## What goes
 
 ```
@@ -59,7 +73,7 @@ Three things deserve the explanation:
   residue count. What the list holds is work for the reviewer, one item
   per line. Docs and CLI fixtures are usually kept (history, goldens); a layer's
   file for the fort (a dead man's switch on a hub) is the layer's own
-  dismantle's, which runs before this one ([layers](layers.md)) — so
+  dismantle's, which this verb already ran (the cascade above) — so
   anything else under central monitoring that names the host is
   hand-written — an s3-exporter target, a dashboard — and usually goes
   too.
@@ -82,7 +96,8 @@ planned only where the host's rule block exists.
 - **The deploy key on the forge**, revoked by `destroy` (none on the
   anonymous route, and the plan's note says so; forts#167).
 - **A layer's identities** (a backup store's keys), withdrawn by the
-  layer's own dismantle, which runs before this one ([layers](layers.md)).
+  layer's own dismantle, which this verb runs first (the cascade,
+  [layers](layers.md)).
 - **The `.files` wireguard copy** for the ubuntu mesh members (#183) —
   still a hand re-render.
 

@@ -88,8 +88,8 @@ layer withdraws what it declared in other estates and on hubs.
 
 A layer provides the verbs the core has, where the role needs them:
 `init`, `scaffold`, `check`, `mint`, `dismantle`. The operator runs the
-core's verb, then the layer's — except on the way out, where the layer's
-runs first:
+core's verb, then the layer's — except on the way out, where the layers'
+run first, and the core runs them itself:
 
 | step | core | then |
 |---|---|---|
@@ -97,11 +97,24 @@ runs first:
 | a fort's files | `fort scaffold <fort>` | `fort <layer> scaffold <fort>` |
 | a fort's identity | `fort mint <fort>` | `fort <layer> mint <fort>` |
 | the gate | `fort check --all` | `fort <layer> check --all` |
-| retire a fort | `fort <layer> dismantle <fort>` **first** | `fort dismantle <fort>`, `fort destroy <fort>` |
+| retire a fort | `fort dismantle <fort>` (the cascade: each layer's dismantle, then the core's) | `fort destroy <fort>` |
 
-No hook in the core: the order is this table. A layer that needs the
-core to call it at a point this table does not name has found a gap in
-the core, and that is an issue there.
+Retirement is the one step where the core calls the layers (#180).
+`fort dismantle <fort> --write` runs `fort-<layer> dismantle <fort>
+--write` for each installed layer — the `layers/` listing, the same one
+`fort check --all` prints — through the lookup `fort <layer> <verb>`
+uses (PATH, `FORT_ESTATE_ROOT`), as a child process, because the core's
+own dismantle follows. Without `--write` the whole cascade is a
+preview, the layers' dry runs included. A layer's dismantle that fails
+stops the verb: the core removes nothing after it, so a fort never
+loses its manifest while a layer still declares it — the half-done
+retirement that left a dead man's switch on a hub for a cluster already
+gone is what #180 paged on.
+
+Everywhere else there is no hook in the core: the order is this table.
+A layer that needs the core to call it at a point this table does not
+name has found a gap in the core, and that is an issue there — the
+retirement row above is where #180 found one.
 
 ## 5. A layer's read rule aggregates by label
 
