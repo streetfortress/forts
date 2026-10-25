@@ -13,7 +13,8 @@ now=$(date +%s)
 fetched=0
 
 metrics() {
-  # $1 = peers applied (or 0). Atomic write; the exporter is unprivileged.
+  # $1 = peers applied, $2 = peers added without an endpoint (or 0 0).
+  # Atomic write; the exporter is unprivileged.
   tmp=$(mktemp "$textfile/.wg-link-$LINK_NAME.prom.XXXXXX")
   {
     echo "# TYPE sfi_link_fetch_success gauge"
@@ -22,6 +23,8 @@ metrics() {
     echo "sfi_link_last_run_seconds{link=\"$LINK_NAME\",interface=\"$LINK_IFACE\"} $now"
     echo "# TYPE sfi_link_peers gauge"
     echo "sfi_link_peers{link=\"$LINK_NAME\",interface=\"$LINK_IFACE\"} $1"
+    echo "# TYPE sfi_link_peers_without_endpoint gauge"
+    echo "sfi_link_peers_without_endpoint{link=\"$LINK_NAME\",interface=\"$LINK_IFACE\"} $2"
   } > "$tmp"
   chmod 0644 "$tmp"
   mv "$tmp" "$textfile/wg-link-$LINK_NAME.prom"
@@ -53,7 +56,7 @@ else
   echo "fetch of $LINK_REPO ($LINK_REF) failed: $(tr '\n' ' ' < "$work/clone.err" 2>/dev/null || true)" >&2
   if [ ! -s "$cache" ]; then
     echo "no cached peers.json either: the link stays empty until the first fetch succeeds" >&2
-    metrics 0
+    metrics 0 0
     exit 1
   fi
   echo "using the cached copy from $(date -r "$cache" -u +%FT%TZ)" >&2
@@ -65,7 +68,7 @@ fi
 theirs=$(cat "$state/interface" 2>/dev/null || true)
 if [ -n "$theirs" ] && [ "$theirs" != "$LINK_IFACE" ]; then
   echo "estate.toml of $LINK_REPO names its mesh interface $theirs; this link is $LINK_IFACE — one name per mesh, fix one side, applying nothing" >&2
-  metrics 0
+  metrics 0 0
   exit 1
 fi
 
@@ -74,7 +77,7 @@ fi
 theirzone=$(cat "$state/zone" 2>/dev/null || true)
 if [ -n "$theirzone" ] && [ "$theirzone" != "$LINK_ZONE" ]; then
   echo "estate.toml of $LINK_REPO makes its zone $theirzone; this link is $LINK_ZONE — one zone per mesh, fix one side, applying nothing" >&2
-  metrics 0
+  metrics 0 0
   exit 1
 fi
 
@@ -84,13 +87,13 @@ mypub=$(wg show "$LINK_IFACE" public-key)
 me=$(jq -r --arg k "$mypub" '(.remotes // {}) | to_entries[] | select(.value.public_key == $k) | "\(.key) \(.value.wg_vpn_ip) \(.value.wg_endpoint_port // 51820)"' "$cache")
 if [ -z "$me" ]; then
   echo "this host's key ($mypub) is in no remotes entry of $LINK_REPO — the other estate has not added this link yet (docs/links.md)" >&2
-  metrics 0
+  metrics 0 0
   exit 1
 fi
 read -r myname myip myport <<< "$me"
 if [ "$myip" != "$LINK_ADDRESS" ] || [ "$myport" != "$LINK_PORT" ]; then
   echo "remotes.$myname in $LINK_REPO says $myip:$myport; this link is configured as $LINK_ADDRESS:$LINK_PORT — fix one side, applying nothing" >&2
-  metrics 0
+  metrics 0 0
   exit 1
 fi
 
@@ -99,14 +102,15 @@ fi
 #    (endpoint + port, keepalive). Exactly what a fort there would carry.
 desired=$(jq -r --arg k "$mypub" '
   def line(kind): to_entries[] | select(.value.public_key != $k)
-    | "\(.value.public_key) \(.value.wg_vpn_ip) \(.value.wg_endpoint_ip // "-") \(.value.wg_endpoint_port // 51820) \(kind)";
+    | "\(.key) \(.value.public_key) \(.value.wg_vpn_ip) \(.value.wg_endpoint_ip // "-") \(.value.wg_endpoint_port // 51820) \(kind)";
   ((.peers // {}) | line("peer")),
   ((.clients // {}) | line("client")),
   ((.remotes // {}) | line("remote"))' "$cache")
 
 declare -A keep=()
 n=0
-while read -r pub ip ep port kind; do
+noendpoint=0
+while read -r name pub ip ep port kind; do
   [ -n "$pub" ] || continue
   keep[$pub]=1
   n=$((n + 1))
@@ -114,7 +118,18 @@ while read -r pub ip ep port kind; do
     client) wg set "$LINK_IFACE" peer "$pub" allowed-ips "$ip/32" ;;
     *)
       if [ "$ep" != "-" ]; then
-        wg set "$LINK_IFACE" peer "$pub" allowed-ips "$ip/32" endpoint "$ep:$port" persistent-keepalive 25
+        # wg resolves the endpoint name at this call and exits 1 when it
+        # cannot — a minted fort has no A record until its provision
+        # (forts#179). Add the peer without the endpoint instead of
+        # aborting the run: the fort dials this host first (its mesh
+        # config carries this host's endpoint from remotes), WireGuard
+        # learns the endpoint from the first handshake, and the next run
+        # adds it once the name resolves.
+        if ! wg set "$LINK_IFACE" peer "$pub" allowed-ips "$ip/32" endpoint "$ep:$port" persistent-keepalive 25; then
+          echo "peer $name: endpoint $ep:$port does not resolve; added without an endpoint until it does" >&2
+          wg set "$LINK_IFACE" peer "$pub" allowed-ips "$ip/32" persistent-keepalive 25
+          noendpoint=$((noendpoint + 1))
+        fi
       else
         wg set "$LINK_IFACE" peer "$pub" allowed-ips "$ip/32" persistent-keepalive 25
       fi ;;
@@ -150,5 +165,5 @@ if [ ! -s "$zonefile" ] || [ "$(sed -n '5,$p' "$zonefile")" != "$records" ]; the
 fi
 hosts=$(jq -r '((.peers // {}) + (.remotes // {})) | length' "$cache")
 
-metrics "$n"
+metrics "$n" "$noendpoint"
 echo "$LINK_IFACE: $n peer(s) from $LINK_REPO ($LINK_REF), fetched=$fetched, as remotes.$myname $myip:$myport; $hosts name(s) in $LINK_ZONE"

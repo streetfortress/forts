@@ -92,8 +92,12 @@ runs `links/reconcile.sh`:
 4. `wg set <interface> peer …` for every peer (endpoint where stable,
    keepalive), every roaming client (neither), every other linked host
    (endpoint and port, keepalive): exactly what a fort of that estate
-   carries. Then remove every peer on the interface the file no longer
-   names.
+   carries. An endpoint name that does not resolve — a minted fort
+   before its provision — does not abort the run: the peer is added
+   without the endpoint (one line on stderr says so), the fort dials
+   this host first, and the next run adds the endpoint once the name
+   resolves. Then remove every peer on the interface the file no
+   longer names.
 5. Render the zone (below) into `/var/lib/wg-link-<name>/zone.db`: every
    peer and remote of that estate as `<host>` and `*.<host>` at its
    address on that mesh, the shape `mesh-dns.nix` gives a fort's own
@@ -101,7 +105,7 @@ runs `links/reconcile.sh`:
    rewritten.
 6. Write `wg-link-<name>.prom` for node_exporter:
    `sfi_link_fetch_success`, `sfi_link_last_run_seconds`,
-   `sfi_link_peers`.
+   `sfi_link_peers`, `sfi_link_peers_without_endpoint`.
 
 `systemctl restart wg-link-<name>` runs it now, from the admin rung
 ([ops.md](ops.md)); an estate that wants a pinned verb for it declares
