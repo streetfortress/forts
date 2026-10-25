@@ -73,6 +73,16 @@ owns `layers/<layer>/` in the estate, provides `fort-<layer>`, and its
 scaffold renders what the role asks of each fort ([layers](layers.md)).
 The core's line is this table: a name, the ports, the link.
 
+The forge is also the one role whose move can take two commits. When
+the new forge's certificate chains to a root that is not yet in
+`nixos/certs/ca-root.pem`, the trust lands first — with `[source]
+repo`, `known_hosts`, the FluxInstance URL and the rebuild URL — and
+the framework inputs move to the new forge in a second commit: the
+inputs are what nix fetches over https at build time, with the roots of
+the running generation, and everything else in the move is read over
+ssh with the deploy key or is a file in the tree ([init.md](init.md),
+"Moving to another forge"; sfi/staging#17).
+
 ## The link
 
 `modules/links.nix` derives a link's `openTCPPorts` from its `roles`: the

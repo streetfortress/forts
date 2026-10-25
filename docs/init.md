@@ -147,6 +147,40 @@ core, and the layer's own verbs for what the role renders
 rendered, and `cluster-vars.yaml` is never overwritten by scaffold (it
 appends the `ESTATE_NAME` line and nothing else; [scaffold.md](scaffold.md)).
 
+## Moving to another forge
+
+A forge move edits the keys init wrote: `[source] repo` and
+`known_hosts` in `estate.toml`, the FluxInstance URL and
+`sfi.auto-rebuild.repoUrl` on every host (what scaffold rendered from
+`[source] repo`), `[hubs.forge]` when the hub changes, and the
+framework inputs in `nixos/flake.nix` when the framework lives on the
+forge that moves. One edit, but not always one commit: the framework
+inputs are the one thing nix fetches over https at build time, and the
+build runs with the trust of the *running* generation — a root added to
+`nixos/certs/ca-root.pem` reaches the host's trust store only when the
+generation built from that tree activates. Everything else in the move
+is read over ssh with the deploy key (the host key `known_hosts` pins)
+or is a file in the tree.
+
+So when the new forge's certificate chains to a root that is not yet in
+`nixos/certs/ca-root.pem`, the move is two commits:
+
+1. **The trust, and everything ssh.** The new root into
+   `nixos/certs/ca-root.pem`, plus `[source] repo`, `known_hosts`, the
+   FluxInstance URL and the rebuild URL. The framework inputs stay on
+   the old forge — nothing in this commit fetches from the new forge
+   over https, so the host builds it with its old roots, and activation
+   installs the new trust.
+2. **The inputs.** The framework inputs in `nixos/flake.nix` to the new
+   forge, and `nix flake lock ./nixos`.
+
+A one-commit move fails on the running generation's roots: nix reports
+`unable to get local issuer certificate` against the new forge, and the
+auto-rebuild gate records the attempted tip and does not retry it — the
+host sits on the old generation saying "main unchanged" until the next
+commit arrives (sfi/staging#17). An estate whose trust file already
+carries the new forge's root moves in one commit (sfi/estate-hub#69).
+
 ## The operators
 
 `deployer` is the operator account of every fort: the ops verbs
