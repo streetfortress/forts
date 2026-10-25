@@ -71,7 +71,13 @@
 #     success); the failure is visible in journald (and a log shipper's stream)
 #     ({job="systemd"} SYSTEMD_UNIT="nixos-upgrade.service"). The
 #     NixosUpgradeFailed rule of a monitoring hub
-#     alerts on it.
+#     alerts on it. switch-to-configuration exit 4 is NOT a failed
+#     switch: it means "switched, some units failed to start" — the
+#     profile link names the new generation and the host runs it — so
+#     the unit's script maps it to success with a warning, the records
+#     below run, and the ledger keeps the generation (#182). The failed
+#     units page through their own alerts. Every other non-zero exit
+#     stays a failure.
 { config, lib, pkgs, ... }:
 
 let
@@ -412,8 +418,30 @@ in
       # replace it wholesale with a properly escaped ref; --refresh bypasses
       # the flake fetcher's cache so every run sees main's tip (upstream
       # adds it too, but to the flags this override ignores).
+      #
+      # Exit 4 is a switch that happened (#182). nixos-rebuild runs
+      # switch-to-configuration through `systemd-run --wait`
+      # (nixos-rebuild-switch-to-configuration.service) and exits with
+      # that unit's status, and switch-to-configuration exits 4 when the
+      # switch completed but a unit failed to start during activation —
+      # the profile link already names the new generation and the host
+      # runs it. Treating 4 as a failure skipped ExecStartPost, so the
+      # generations ledger and the applied/effective metrics stopped at
+      # the last clean activation, nixos-revision answered "no revision
+      # recorded" for pull-built generations, nixos-rollback's menu lost
+      # their commits, and NixosUpgradeFailed fired on every merge. Map 4
+      # to success with a loud warning so the records run; the failed
+      # units page through their own alerts. Every other non-zero exit
+      # stays a failure.
       script = lib.mkForce ''
-        ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh --flake ${lib.escapeShellArg flakeRef}
+        rc=0
+        ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh --flake ${lib.escapeShellArg flakeRef} || rc=$?
+        if [ "$rc" -eq 4 ]; then
+          echo "warning: switch-to-configuration exited 4 — the host SWITCHED to the new generation, but some units failed to start during activation (#182)"
+          echo "warning: recording the generation as applied and effective; check 'systemctl --failed' — the failed units alert on their own"
+        elif [ "$rc" -ne 0 ]; then
+          exit "$rc"
+        fi
       '';
       # The clone's credential, on the ssh route alone: the anonymous
       # route sets nothing, and git and nix's fetcher clone the public
@@ -430,6 +458,9 @@ in
         StateDirectory = "sfi-auto-rebuild"; # /var/lib/sfi-auto-rebuild
         ExecCondition = "${gate}";
         # Only on ExecStart success — see recordApplied / recordEffective.
+        # "Success" includes a switch whose activation left units failed:
+        # the script above maps switch-to-configuration's exit 4 to 0, so
+        # these records run for every generation the host switched to (#182).
         ExecStartPost = [ "${recordApplied}" "${recordEffective}" ];
       };
     };
@@ -510,8 +541,17 @@ in
             "-o IdentitiesOnly=yes"
             "-o HostKeyAlias=${repo.hostKeyAlias}"
           ]}"
+          # Exit 4 = switched, some units failed during activation (#182):
+          # the switch happened, so the verb reports it and succeeds — the
+          # failed units alert on their own. Other non-zero exits abort.
+          rc=0
           ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch --refresh \
-            --flake "git+$url?ref=main&dir=nixos#${config.networking.hostName}"
+            --flake "git+$url?ref=main&dir=nixos#${config.networking.hostName}" || rc=$?
+          if [ "$rc" -eq 4 ]; then
+            echo "warning: switched, but some units failed to start during activation — check 'systemctl --failed'"
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
           echo "switched from $from (main); the timer converges back to main from wherever ${repo.host} now points"
           exit 0
           ''}
