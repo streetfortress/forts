@@ -22,6 +22,14 @@
 #      the release secret)
 #   7. apply the cluster's FluxInstance
 #
+# Steps 6 and 7 are day-0 only (#178). The unit re-runs whenever its
+# definition changes (a new closure, a new estate root, a new pin), and once
+# the fleet's HelmRelease owns the release, helm 4's server-side apply of
+# the day-0 pin conflicts with helm-controller's field ownership — the unit
+# then fails on every rebuild and blocks the switch. A deployed release with
+# the FluxInstance in place means day 0 is done: the run refreshes the
+# secrets (steps 4–5) and exits 0.
+#
 # The unit retries on failure (a minute apart, no start limit): day 0 is
 # when k3s under it is most likely to flap, and a oneshot that stays
 # `failed` needs a reboot — or a `systemctl restart` from the admin rung
@@ -162,6 +170,22 @@ in
           echo "clearing stuck helm release record(s): $pending"
           # shellcheck disable=SC2086
           kubectl -n flux-system delete $pending
+        fi
+
+        # Day-0 only past this line (#178). A deployed release means helm
+        # (ours or the fleet's HelmRelease, which adopts it) owns the
+        # operator; re-applying the day-0 pin against the fleet's release
+        # is an SSA conflict with helm-controller, and loses even at the
+        # same version (the fleet's chart carries build metadata, so the
+        # helm.sh/chart label differs). The FluxInstance must also exist:
+        # a day-0 run that died after helm but before the apply still has
+        # work to do here.
+        deployed=$(kubectl -n flux-system get secret \
+          -l 'owner=helm,name=flux-operator,status=deployed' \
+          -o name)
+        if [ -n "$deployed" ] && kubectl get -f ${fluxInstanceManifest} >/dev/null 2>&1; then
+          echo "flux-operator release is deployed and the FluxInstance exists — day 0 is done; secrets refreshed, helm and FluxInstance steps skipped"
+          exit 0
         fi
 
         installed=""
