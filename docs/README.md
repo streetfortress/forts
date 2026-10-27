@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="doc-images/getting-started-banner.png" alt="Getting Started with Forts" height="160">
+</p>
+
 # Forts — Getting Started
 
 ## Configuration

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="doc-images/estate-links-banner.png" alt="Connecting Services acrosss Estates" height="160">
+</p>
+
 # Estate Links: Connectivity and Network Segmentation
 
 While working on forts we came to the realization that _the estate makes for a nice network boundary_. Instead of defining a multi-dimension mesh in one repository, split forts by their area of concern and **Link** forts to other estates as necessary.
