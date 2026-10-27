@@ -71,6 +71,8 @@ In the production estate, run `fort estate link https://path/to/infra`. This com
 
 Once both sides have merged their respective configurations,  the metric collector endpoint `monitoring-central.production.mesh` is available to **all forts on the production mesh**. `incident-response-bot` has no direct access to production. Instead, that bot reads observability signals from `monitoring-central.`_infra_`.mesh` and proposed remediations _as Pull Requests!_ Due to the declarative nature of forts, this approach is surprisingly effective.
 
+A working pair of linked estates is published in the examples repo: the [`link-side-a`](https://github.com/streetfortress/estate-examples/tree/link-side-a) and [`link-side-b`](https://github.com/streetfortress/estate-examples/tree/link-side-b) branches hold the two halves, with the handshake's rendered result committed and annotated. Each branch's README walks through making it your own.
+
 ## Fort Federation and meshing with other people's estates
 
 Initially we intended for forts to be used internally as a platform tool. But with the git repository and linking semantics, it's feasible to _link a fort to someone else's estate_. This opens up interesting possibilities for federation: cross-forge pull requests in forgejo, social networks, and more. 
