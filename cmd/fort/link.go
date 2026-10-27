@@ -11,6 +11,7 @@ import (
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
+	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -76,6 +77,9 @@ func linkAdd(args []string) error {
 		return err
 	}
 	if *write {
+		if err := tools.EnsureAll("sops", "git"); err != nil {
+			return err
+		}
 		if err := p.apply(tool); err != nil {
 			return err
 		}

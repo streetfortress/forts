@@ -96,6 +96,9 @@ func consolePassword(args []string) error {
 		return p.show(os.Stdout)
 	}
 	if *write && p.mints() {
+		if err := tools.EnsureAll("sops", "mkpasswd", "git"); err != nil {
+			return err
+		}
 		if err := p.apply(sopsCLI{root: root}); err != nil {
 			return err
 		}
@@ -341,7 +344,7 @@ func consoleFindings(root, fort string) []finding {
 	entry := sopsHasKey(filepath.Join(root, consoleRegistry), fort)
 	switch {
 	case enabled && !hash:
-		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " --write (the console credential is part of the identity, sfi/forts#24; fort console-password " + fort + " --write mints it alone)"}}
+		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " --write (fort console-password " + fort + " --write mints it alone)"}}
 	case enabled && !entry:
 		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyDeployerPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate --write"}}
 	case enabled:

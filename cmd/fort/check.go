@@ -208,7 +208,7 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 	var devices []string
 	for i, op := range ops {
 		if op.Name == "" {
-			out = append(out, finding{"warning", estate.Path, fmt.Sprintf("operator_keys #%d carries no comment — nothing says which device holds it, and vetting trims the list by device (#415)", i+1)})
+			out = append(out, finding{"warning", estate.Path, fmt.Sprintf("operator_keys #%d carries no comment — nothing says which device holds it, and vetting trims the list by device", i+1)})
 			devices = append(devices, fmt.Sprintf("#%d (no device named)", i+1))
 			continue
 		}
@@ -249,7 +249,7 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 	}
 	path := manifest.Path(fort)
 	if spec.URI == "" {
-		return []finding{{"warning", path, "[libvirt] names no uri: nothing here says which hypervisor holds this fort, and every apply verb needs LIBVIRT_DEFAULT_URI in the environment. Add uri = \"qemu+ssh://<hypervisor>/system\" (forts#27)"}}
+		return []finding{{"warning", path, "[libvirt] names no uri: nothing here says which hypervisor holds this fort, and every apply verb needs LIBVIRT_DEFAULT_URI in the environment. Add uri = \"qemu+ssh://<hypervisor>/system\""}}
 	}
 	out := []finding{{"ok", path, fmt.Sprintf("[libvirt] uri %s, pool %s", spec.URI, spec.PoolName())}}
 	if u, err := url.Parse(spec.URI); err == nil && u.Query().Get("keyfile") != "" {

@@ -62,6 +62,9 @@ func dismantle(args []string) error {
 		return err
 	}
 	if *write {
+		if err := tools.EnsureAll("sops", "git"); err != nil {
+			return err
+		}
 		if err := p.apply(sopsCLI{root: root}); err != nil {
 			return err
 		}
@@ -223,7 +226,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		p.notes = append(p.notes, "["+entry.Provider+"]: no backend raised this host, so there is no stack. Power the machine off and wipe its disk by hand (docs/baremetal.md).")
 	}
 	if est, err := estate.Load(root); err == nil && est.Anonymous() {
-		p.notes = append(p.notes, "no deploy key on the forge: the estate clones anonymously (estate.toml [source], forts#167); fort destroy has none to revoke.")
+		p.notes = append(p.notes, "no deploy key on the forge: the estate clones anonymously (estate.toml [source]); fort destroy has none to revoke.")
 	} else {
 		p.notes = append(p.notes, "the deploy key `flux-"+host+"` stays registered on the forge until fort destroy revokes it.")
 	}

@@ -105,7 +105,7 @@ func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
-	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it: ssh://git@<forge>:<port>/<owner>/<name> (the deploy-key route), or https://<forge>/<owner>/<name> (a public repo, cloned anonymously; forts#167)")
+	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it: ssh://git@<forge>:<port>/<owner>/<name> (the deploy-key route), or https://<forge>/<owner>/<name> (a public repo, cloned anonymously)")
 	var hubs multiFlag
 	fl.Var(&hubs, "hub", "a role another fort serves this estate, <role>=<fort>@<estate git url> (forge=forge@ssh://git@forge.example:22/acme/hub); repeat per role. The forge is the role the core renders for; any other name is a role a layer or the estate serves (docs/hub.md). The estate may be this one.")
 	forgeName := fl.String("forge-name", "", "the forge's one name on every mesh (forge.example), with --hub forge=…")

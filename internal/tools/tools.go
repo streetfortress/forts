@@ -77,6 +77,20 @@ func Ensure(name string) error {
 	return nil
 }
 
+// EnsureAll checks every named tool before a verb writes anything. A
+// verb that dies on a missing tool mid-apply leaves a half-written
+// estate behind (a mkpasswd-less mint wrote the sops rule and the mesh,
+// then died before the secrets file, 2026-10-27), so the whole list
+// resolves up front or the verb does not start.
+func EnsureAll(names ...string) error {
+	for _, n := range names {
+		if err := Ensure(n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Command is the one way the CLI starts a declared tool: Ensure, then
 // the command itself, unstarted — the caller owns the stdio, the
 // working directory and the error text, as it did when it held an

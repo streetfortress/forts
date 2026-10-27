@@ -203,7 +203,7 @@ func clusterVarFindings(fort string, vars map[string]string, estateName string) 
 	}
 	switch v, ok := vars["ESTATE_NAME"]; {
 	case !ok:
-		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line (forts#50); fort scaffold %s --write adds ESTATE_NAME: %s", fort, estateName)})
+		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line; fort scaffold %s --write adds ESTATE_NAME: %s", fort, estateName)})
 	case v != estateName:
 		out = append(out, finding{"error", file, fmt.Sprintf("ESTATE_NAME is %q, not %q — the estate label is this estate's name (estate.toml) on every metric and log line the fort emits", v, estateName)})
 	}

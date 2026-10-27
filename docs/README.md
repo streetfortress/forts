@@ -214,10 +214,10 @@ files."
 | need | comes from | verbs |
 |---|---|---|
 | admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md), forts#167) |
+| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md)) |
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
-| the hypervisor | the fort's `[libvirt] uri` (#27); `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |
+| the hypervisor | the fort's `[libvirt] uri`; `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |
 | the tools the verbs exec (`git`, `helm`, `jq`, `kustomize`, `mkisofs`, `mkpasswd`, `qemu-img`, `sops`, `xsltproc`) | the `fort` package, which carries them on its own PATH ([reference/tools](reference/tools.md)) | every verb that shells out |
 | `nix`, `pulumi` | the host | `image` (nix), the apply verbs (pulumi) |
 | nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |

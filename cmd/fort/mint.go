@@ -75,6 +75,16 @@ func mint(args []string) error {
 		return err
 	}
 	if *write {
+		// Every tool the apply execs, before the first write: a mint
+		// that dies mid-apply leaves the rule and the mesh staged with
+		// no secrets file behind them.
+		needs := []string{"sops", "jq", "git"}
+		if p.consoleMint {
+			needs = append(needs, "mkpasswd")
+		}
+		if err := tools.EnsureAll(needs...); err != nil {
+			return err
+		}
 		if err := p.apply(tool, f); err != nil {
 			return err
 		}
@@ -295,7 +305,7 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 		// on the hypervisor) or the rule is stale — either way not ours
 		// to paper over with a fresh key.
 		if !strings.Contains(block, p.hostRecip) {
-			return nil, fmt.Errorf("nixos/.sops.yaml already has a rule for %s but its host recipient is not the one %s derives (%s) — the host's real ssh key is not in the secrets file (import it: sops --config nixos/.sops.yaml set %s '[\"%s\"]' …), or the rule is stale; a re-key is a deliberate act", host, keySSHHost, p.hostRecip, p.secretsPath, keySSHHost)
+			return nil, fmt.Errorf("nixos/.sops.yaml already has a rule for %s but its host recipient is not the one %s derives (%s). Either the host's real ssh key is missing from the secrets file (import it: sops --config nixos/.sops.yaml set %s '[\"%s\"]' …), or the rule is residue — an interrupted mint writes the rule and the mesh before the secrets file; `git reset --hard` discards uncommitted residue, then mint again. A re-key of a live fort is a deliberate act", host, keySSHHost, p.hostRecip, p.secretsPath, keySSHHost)
 		}
 	} else {
 		p.admins["nixos/.sops.yaml"] = sharedRecipients(string(nixosSops))

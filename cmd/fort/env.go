@@ -105,7 +105,7 @@ func resolveLibvirtURI(override, recorded string) (string, error) {
 		return override, nil
 	}
 	if recorded == "" {
-		return "", fmt.Errorf("no hypervisor for this fort: its [libvirt] table names no uri, and LIBVIRT_DEFAULT_URI is not set. Add uri = \"qemu+ssh://<hypervisor>/system\" to the manifest (forts#27), or export LIBVIRT_DEFAULT_URI for this run")
+		return "", fmt.Errorf("no hypervisor for this fort: its [libvirt] table names no uri, and LIBVIRT_DEFAULT_URI is not set. Add uri = \"qemu+ssh://<hypervisor>/system\" to the manifest, or export LIBVIRT_DEFAULT_URI for this run")
 	}
 	return recorded, nil
 }

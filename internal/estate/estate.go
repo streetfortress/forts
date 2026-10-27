@@ -300,7 +300,7 @@ func Parse(raw []byte) (Estate, error) {
 	}
 	for _, k := range md.Undecoded() {
 		if to, moved := movedKeys[k.String()]; moved {
-			return Estate{}, fmt.Errorf("%s: %s moved to %s (forts#161)", Path, k.String(), to)
+			return Estate{}, fmt.Errorf("%s: %s moved to %s", Path, k.String(), to)
 		}
 		return Estate{}, fmt.Errorf("%s: unknown key %s", Path, k.String())
 	}
@@ -674,7 +674,7 @@ func (e Estate) validateHubs() error {
 			case role == RoleForge && len(s.Ports) > 0:
 				return fmt.Errorf("%s ports — the forge's ports are the core's (30022 and 443); drop the key", at)
 			case role != RoleForge && len(s.Ports) == 0:
-				return fmt.Errorf("%s ports — want the ports the hub opens on the link for this role (forts#105), at least one", at)
+				return fmt.Errorf("%s ports — want the ports the hub opens on the link for this role, at least one", at)
 			}
 			for _, port := range s.Ports {
 				if port < 1 || port > 65535 {
