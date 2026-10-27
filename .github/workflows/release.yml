@@ -1,0 +1,76 @@
+# The GitHub Release off vX.Y.Z tags. A release of forts is the flake at
+# the tag (docs/release.md): the modules, the fort CLI, the init templates
+# and the lock they were tested with, together. An estate consumes it
+# through its pin — `forts.url = "...?ref=refs/tags/vX.Y.Z"` — so there is
+# no artifact to build here: no image, no chart, no binary (the flake's
+# `self` stamps `fort --version`, and a binary built outside an estate's
+# lock would claim a pin it does not have). This workflow gives the tag
+# its page: the GitHub Release, whose generated body is the commit
+# subjects since the previous tag.
+#
+# The generated body is the whole note for a patch tag (the lock moved,
+# the contract did not). A minor tag's note names the contract changes
+# and the hand edits, by surface (docs/release.md, "Two kinds of tag") —
+# the person who cut the tag writes that part onto the Release after this
+# workflow creates it. The workflow never knows which kind it has, so it
+# never claims more than the subjects.
+#
+# This workflow runs on GitHub only. forge.streetfortress.cloud/oss/forts
+# is the source of truth; the ref-pusher of sfi/estate-hub (#83; the
+# design is sfi/deployments#612) carries refs/heads/main and refs/tags/v*
+# to github.com/streetfortress/forts. That push carries a GitHub App
+# installation token, not a workflow's GITHUB_TOKEN, so it triggers this
+# workflow. Forgejo Actions never sees this file: .gitea/workflows/
+# exists, so the forge does not fall back to .github/workflows.
+#
+# Cut a release with `just tag X.Y.Z` from the repo root — it validates
+# semver, refuses unless HEAD is exactly the forge remote's main, and
+# pushes the tag to the forge. The ref-pusher reconciles on an interval,
+# so this workflow starts after that delay and not at once.
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 — the default checkout takes one commit and no tags,
+      # and cannot walk PREV..TAG.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          VERSION="${TAG#v}"
+
+          # The first tag has no previous tag; the range is then the whole
+          # history. No fork to stop at: forts starts at its own root.
+          if PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null); then
+            RANGE="$PREV..$TAG"
+            SINCE="since $PREV"
+          else
+            RANGE="$TAG"
+            SINCE="since the beginning"
+          fi
+
+          # A trailing (#N) is the number of a forge pull request. The
+          # GitHub mirror numbers its own issues and pull requests, so the
+          # reference autolinks to the wrong thread there.
+          {
+            echo "### Changes $SINCE"
+            echo
+            git log --no-merges --format='- %s' "$RANGE" | sed -E 's/( \(#[0-9]+\))+$//'
+          } > notes.md
+
+          gh release create "$TAG" --title "forts $VERSION" --notes-file notes.md

@@ -1,0 +1,65 @@
+# CI for the GitHub mirror: the Go checks, the module evals and the
+# fixture-estate gates on push to main and on every pull request.
+# forge.streetfortress.cloud/oss/forts runs the full battery on every
+# branch push via .gitea/workflows/checks.yaml — including the rendered-
+# config regression tests (sshd, sudo, the ops verbs) this file leaves
+# out. This file exists so a pull request against the mirror — the only
+# way an outside contributor can send a change — gets a check too; a
+# maintainer applies accepted commits on the forge, where the full
+# battery runs before anything reaches main.
+#
+# No closure cache here: the forge job's file:// substituter works around
+# act_runner's fresh containers (forts#75); GitHub-hosted runners reach
+# cache.nixos.org directly.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Vet + test the fort CLI
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l cmd internal)" || { gofmt -l cmd internal; echo "::error::gofmt"; exit 1; }
+          go vet ./cmd/... ./internal/...
+          go test ./cmd/fort ./internal/...
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: The module outputs evaluate and the package builds
+        run: |
+          set -euo pipefail
+          nix eval --json .#nixosModules --apply builtins.attrNames
+          nix eval --raw .#nixosConfigurations.plain-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.plain-cloud-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.public-fort.config.system.build.toplevel.drvPath
+          nix build --no-link --print-out-paths .#fort
+
+      - name: An estate that fort init created evaluates against this checkout
+        run: tests/init-estate.sh
+
+      - name: The github.com fixture estate passes the gate
+        run: tests/check-fixture-estate.sh tests/github-estate
+
+      - name: The public fixture estate passes the gate
+        run: tests/check-fixture-estate.sh tests/public-estate
