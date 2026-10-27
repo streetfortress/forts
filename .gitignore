@@ -2,3 +2,4 @@
 # scratch directory, or let this file catch it.
 /fort
 /fort-pulumi
+.DS_Store

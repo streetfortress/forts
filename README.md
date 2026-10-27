@@ -28,7 +28,7 @@ Once deployed, the fort begins a continuous reconciliation against the estate re
 
 <div align="center">
 
-[Getting Started](docs/README.md) | [Contributing](CONTRIBUTING.md) | [Security](SECURITY.md) | [SFI's AI Disclosure](https://github.com/streetfortress/ai-disclosure) | [MIT License](LICENSE)
+[Getting Started](docs/README.md) | [Ops](docs/reference/ops.md)[Contributing](CONTRIBUTING.md) | [Security](SECURITY.md) | [SFI's AI Disclosure](https://github.com/streetfortress/ai-disclosure) | [MIT License](LICENSE)
 
 </div>
 
