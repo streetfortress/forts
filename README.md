@@ -10,7 +10,8 @@ Use the `fort` cli to scaffold a git repository (called an _estate_) and lifecyc
 
 - An **Estate** is a git repository that declares one or more **forts**. 
 - A **Fort** is a nixOS machine and its associated workloads.
-- Forts in an estate sit on a wireguard **Mesh**. 
+- Forts in an estate sit on a wireguard **Mesh**.
+
 
 After scaffolding a **fort**, `fort image` builds a bootable disk image and `fort provision` uses **pulumi** to deploy it.
 
@@ -19,6 +20,8 @@ After scaffolding a **fort**, `fort image` builds a bootable disk image and `for
 Since everything about a fort is managed in the estate, the resulting **I.A.C.** surface is tiny:
 - A Compute Instance and Disk
 - A Firewall and Domain Name
+
+The mesh is provider agnostic, so **forts in an estate can be spread across local, cloud providers, and geographic regions** without additional configuration.
 
 Once deployed, the fort begins a continuous reconciliation against the estate repo:
 - **It's "Just NixOS:"** System changes stem from `<estate>/nixos/hosts/<fort>/default.nix`. Configure a fort to your heart's content, even installing desktop environments and advanced dotfile configurations if you have them. Changes here are automatically pulled down and applied. nixOS revisions can easily _be rolled back_ if anything goes wrong.
