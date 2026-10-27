@@ -76,7 +76,7 @@ The 'PR for every change' practice might feel like overkill, but it has a few up
 Start by creating an empty git repo. Write an `estate.toml` file describing the `[source]` repository, `[mesh]` network, and operator SSH public keys.
 
 ```
-fort init        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
+fort init        ← once per estate: estate.toml, the flake, the rules, the layer. See [init.md](reference/init.md)
 ```
 
 This command will render out _the estate's_ directory tree. Commit this and push to the repo.
@@ -171,25 +171,9 @@ When it's time to decommission a fort, these CLI commands take care of the remov
 
 ## More Reading
 
-- [manifest](manifest.md) — the fort's declaration: neutral intent + one provider table
-- [scaffold](scaffold.md) — the host's generated surface, from its manifest
-- [mint](mint.md) — the host's identity, sops-encrypted in-repo
-- [provision](provision.md) — the first provision and day-2 applies; `preview`
-- [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
-- [init](init.md) — create an estate: the files every other verb assumes
-- [ops](ops.md) — the host side: the three rungs of the ops ladder, the verb each rung has, and how an estate or a layer declares one of its own
-- [dismantle](dismantle.md) — the repo half of retirement
-- [hub](hub.md) — the hub as a relationship between estates: `[hubs.<role>]` and `[[serves.<role>]]` with its `ports`; the forge is the one role the core renders for
-- [links](links.md) — a host on another estate's mesh: `[links.<name>]` in the manifest, `fort link add` and `fort estate link`, the reconciler, the `remotes` entry; the roles it opens
-- [layers](layers.md) — what sits on top of the core: `layers/<layer>/` in the estate, `fort <layer> <verb>` execs `fort-<layer>`, `fort layer add` installs one and passes its flags through, the verb order
-- [mesh](mesh.md) — `peers.json`: the subnet, the three tables, linking a host of another estate
-- [ssh-config](ssh-config.md) — the client side of the mesh: `ssh_config` +
-  `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
-  Mac joining the mesh
-- [destroy](destroy.md) — the side-effects half, gated on the merge
-- [tools](reference/tools.md) — the CLI's tool set: what the package carries, what the host owns, and why
-- [check](reference/check.md) — the merge gate: what it checks per fort and fleet-wide, reading the output, CI annotations
-- [release](release.md) — a release is the flake at a tag: the contract, the two kinds of tag, nixpkgs as the channel, templates as bootstrap only, how an estate bumps
+The [forts technical reference](reference/) is an AI generated docs repository that is frequently updated during the development lifecycle. These docs are usually the most up-to-date, but not always the most _clear_. They're provided mainly to preserve context for agents, but you can read them too.
+
+---
 
 ## Appendix
 
@@ -218,7 +202,7 @@ files."
 | need | comes from | verbs |
 |---|---|---|
 | admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md)) |
+| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](reference/init.md)) |
 | `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, preview, destroy |
 | `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
 | the hypervisor | the fort's `[libvirt] uri`; `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |

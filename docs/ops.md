@@ -36,7 +36,9 @@ In an estate, _All_ changes to the system go through source control and code rev
   - Triage can live in the codebase as comments, documentation remains close to the code, not scattered across wikis etc.
   - A purely declarative infrastructure is easily understood by agents and can be extended with purpose-built monitoring, utility scripts, and runbook automation.
 
-However, because _All_ changes must go through git, your abilities as an operator are rather limited. More on this below or in [docs/reference/ops.md](reference/ops.md).
+However, because _All_ changes must go through git, your abilities as an operator are rather limited. More on this below.
+
+---
 
 ## Ops is about Recovery - Not Repairs
 
@@ -66,7 +68,9 @@ It's possible for a nixos/ change to **sever the mesh**, and the way back from t
 
 A Flux change shouldn't ever _break the fort_, so the PR -> FluxCD reconciliation loop should always remain active. Therefore the fort ops module does not have a built-in `flux-rollback` command like it does for nixos. Recovery for a flux app is achieved through git operations.
 
-## A Minimal, Declared, Network Surface
+---
+
+## The Estate Mesh: A Minimal, Declared, Network Surface
 
 A fort only exposes its **Wireguard Mesh** port(s) by default. Enabling `[cluster]` in `forts/<fort>.toml` opens 80/443 as a part of the k3s server scaffold.
 
@@ -79,6 +83,8 @@ The _only_ way onto a fort is SSH _over the mesh_, or an out-of-band console ses
 One property of an _estate_ is its **Mesh**. Forts are addressable on the mesh network at `<fort>.<estate>.mesh`
 
 **Expose mesh services as kubernetes `NodePorts`, and open the port _only on the mesh interface_**. This keeps the service channel private while maintaining the public face for HTTP/S.
+
+---
 
 ## Secrets in an Estate
 

@@ -84,7 +84,7 @@ Linode's caps are asserted and the file is copied (the lab copy is what
 what a human writes to the disk, [baremetal.md](baremetal.md)). The
 flake picks the variant from the runtime module the host file imports, so
 scaffold's choice of shape is the only switch. Details in
-[`docs/nixos/operations.md`](../nixos/operations.md).
+[`docs/reference/ops.md`](reference/ops.md).
 
 ## The seed: the host key arrives through the platform's channel
 

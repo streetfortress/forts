@@ -64,7 +64,7 @@ owns:
   reported as not verified — a skip, never a failure
 - the layers: each installed layer by name, and nothing beneath it —
   a layer's own check is its own gate step after this one
-  ([layers](../layers.md))
+  ([layers](layers.md))
 
 ## --eval: the nix half
 
