@@ -28,14 +28,14 @@ init_and_eval() {
   "$fort" init --name test-estate "$@" \
     --admin age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m \
     --operator-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL test-operator" \
-    --forts git+https://example.invalid/forts --write
+    --forts git+https://example.invalid/forts
   # The estate's own files init names: the lab CA. And what mint would
   # write for the fort: its peer, its secrets file (names, no values).
   cp "$repo/tests/estate/forts/plain-fort.toml" forts/
   cp "$repo/tests/estate/nixos/certs/ca-root.pem" nixos/certs/
   cp "$repo/tests/estate/nixos/secrets/plain-fort.yaml" nixos/secrets/
   cp "$repo/tests/estate/mesh/peers.json" mesh/peers.json
-  "$fort" scaffold plain-fort --write
+  "$fort" scaffold plain-fort
   git add -A
   git -c user.email=t@t -c user.name=t commit -qm "init + plain-fort"
   echo "== lock against $repo ($route route)"

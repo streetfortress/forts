@@ -1,7 +1,7 @@
 # fort scaffold — the host's generated surface
 
 ```
-fort scaffold <host> [--write]
+fort scaffold <host> [--dry-run]
 ```
 
 `scaffold` renders every file a host needs that is derivable from its
@@ -127,7 +127,7 @@ enable line, and mints the console password with the rest of the
 identity — the hash into the fort's sops file, the passphrase into
 `provisioning/console-passwords.yaml`. `fort check` fails a host that
 enables the module without the hash, which is the state between
-`scaffold --write` and `mint --write`.
+`scaffold` and `mint`.
 
 A host that wants no door takes the two console lines out of its own
 `default.nix` before mint; `fort check` says nothing about a host with
@@ -155,13 +155,13 @@ is not the fort's name, or an `ESTATE_NAME` that is not this estate's,
 passes flux's strict substitution and mislabels the fort wherever its
 series go. A cluster scaffolded before
 `ESTATE_NAME` existed fails the gate (the shared layer references a
-var its cluster-vars lacks) until `fort scaffold <host> --write` adds
+var its cluster-vars lacks) until `fort scaffold <host>` adds
 the line — the one key scaffold appends to an existing
 `cluster-vars.yaml`, below.
 
 ## Force-no semantics
 
-`--write` lays a file down only when it does not exist; an existing one is
+The apply lays a file down only when it does not exist; an existing one is
 reported `○ exists — kept` and never touched. The one exception is the
 `ESTATE_NAME` line of an existing `cluster-vars.yaml`: a cluster-vars
 without it gains the line (a text-level append under `data:`, comments
@@ -184,8 +184,8 @@ fort.
 ## Then
 
 ```
-fort scaffold web3 --write
-fort mint web3 --write        # identity, the console password included
+fort scaffold web3
+fort mint web3            # identity, the console password included
 # PR → merge → fort image web3 → fort provision web3 --image …
 ```
 

@@ -1,7 +1,7 @@
 # fort mint — the host's identity
 
 ```
-fort mint <host> [--write]
+fort mint <host> [--dry-run]
 ```
 
 `mint` gives a host everything that makes it *itself*: the keys other
@@ -9,7 +9,7 @@ systems will recognise it by, the sops rules that let it read its own
 secrets, the mesh peer entry, the console password where the host file
 enables the door, and — for a flux cluster — the cluster's
 age key, the deploy key the forge trusts (on the ssh route), and the
-canary that proves the whole chain works. It runs after [`scaffold --write`](scaffold.md) and
+canary that proves the whole chain works. It runs after [`scaffold`](scaffold.md) and
 before a layer's verbs over the fort's tree; [`dismantle`](dismantle.md) is its exact inverse.
 
 ## The custody model
@@ -52,7 +52,7 @@ Consequences worth knowing:
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
 | ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
-| · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | on the ssh route; registered under `--write` only. The anonymous route (an `https://` repo, forts#167) mints none, registers none and needs no forge token — the report says so |
+| · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | on the ssh route; registered on the apply only. The anonymous route (an `https://` repo, forts#167) mints none, registers none and needs no forge token — the report says so |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
 that first wrote them; `mint` writes and `dismantle` keys on the `fort` name.
@@ -69,13 +69,13 @@ read back. Nothing is printed; `fort console-password <host> --show`
 is the read. Restore-not-rotate holds as for every other key: a hash
 already in the file is kept, and when its passphrase has gone missing
 from the registry mint says so and names `console-password <host>
---rotate --write` rather than replacing a value somebody may still
+--rotate` rather than replacing a value somebody may still
 hold. A host whose `default.nix` does not enable the module gets no
 console half at all.
 
 **The call outside the tree** is the deploy key on the forge — gitea or
 GitHub, the kind the host of `repo` derives and `[source] forge`
-overrides (forts#1) — registered only under `--write`, reported without
+overrides (forts#1) — registered only on the apply, reported without
 printing a value, and revoked by `fort destroy`. The two forges answer
 the same three calls (list, register, revoke) at different roots with
 different tokens; `cmd/fort/forge.go` is both. **On the anonymous
@@ -152,7 +152,7 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ◆ flux/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
 · gitea deploy key flux-sfi-x: would register (read-only)
 
-dry run — nothing minted (mint --write).
+dry run — nothing minted.
 ```
 
 A complete host reports `complete — identity restored from it` and the

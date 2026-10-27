@@ -17,7 +17,7 @@ import (
 // verb so far — link (forts#57).
 func estateCmd(args []string) error {
 	if len(args) < 1 || args[0] != "link" {
-		return fmt.Errorf("usage: fort estate link <estate url> [--write]")
+		return fmt.Errorf("usage: fort estate link <estate url> [--dry-run]")
 	}
 	return estateLink(args[1:])
 }
@@ -48,12 +48,14 @@ func estateLink(args []string) error {
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet("estate", flag.ContinueOnError)
-	write := fs.Bool("write", false, "write the remotes entries and stage them (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 {
-		return fmt.Errorf("usage: fort estate link <estate url> [--write]")
+		return fmt.Errorf("usage: fort estate link <estate url> [--dry-run]")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -64,12 +66,12 @@ func estateLink(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *write && p.errors == 0 {
+	if write && p.errors == 0 {
 		if err := p.apply(tool); err != nil {
 			return err
 		}
 	}
-	p.report(os.Stdout, *write)
+	p.report(os.Stdout, write)
 	if p.errors > 0 {
 		return fmt.Errorf("%d claim(s) refused — nothing written", p.errors)
 	}
@@ -272,7 +274,7 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "! %-36s does not parse there: %v\n", fmt.Sprintf("%q", manifest.Path(h)), p.other.problems[h])
 	}
 	if len(p.claims) == 0 {
-		fmt.Fprintf(w, "  no fort of %s links to this estate — in a checkout of it: fort link add <fort> %s --write, then PR, merge, and this verb again\n", o.Ref(), p.est.Source.Repo)
+		fmt.Fprintf(w, "  no fort of %s links to this estate — in a checkout of it: fort link add <fort> %s, then PR, merge, and this verb again\n", o.Ref(), p.est.Source.Repo)
 	}
 	for _, c := range p.claims {
 		facts := fmt.Sprintf("%-15s endpoint %s:%d  key %s", c.entry.IP, c.entry.Endpoint, c.entry.endpointPort(), abbrevKey(c.entry.PublicKey))
@@ -308,7 +310,7 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 	case p.errors > 0:
 		return
 	case !written:
-		fmt.Fprintln(w, "dry run — nothing written (estate link --write).")
+		fmt.Fprintln(w, "dry run — nothing written.")
 	case len(writes) == 0:
 		fmt.Fprintln(w, "nothing to write.")
 	default:

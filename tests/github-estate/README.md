@@ -21,13 +21,13 @@ the ssh route and github.com's host key.
 
 `nixos/hosts/cloud-fort/`, `flux/clusters/cloud-fort/` and
 `flux/apps/cloud-fort/kustomization.yaml` are what `fort scaffold
-cloud-fort --write` renders into this tree; the test
+cloud-fort` renders into this tree; the test
 `TestGitHubFixtureEstateIsScaffoldOutput` keeps them so.
 `flux/infrastructure/` and the two `.sops.yaml` rule files are what
 `fort init` renders. The sops files — the host's secrets, the canary,
 the console registry, the Alertmanager webhook — carry the key names
 and opaque values, the shape sops leaves. `mesh/ssh_config` and
-`mesh/known_hosts` are `fort ssh-config --write` with no age key.
+`mesh/known_hosts` are `fort ssh-config` with no age key.
 
 `flake.nix` evaluates the host as `nixosConfigurations.cloud-fort` and
 CI evaluates its toplevel derivation; `tests/check-fixture-estate.sh

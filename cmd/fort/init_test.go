@@ -215,19 +215,19 @@ func TestInitCmd(t *testing.T) {
 		"--hub", "forge=central@" + testInitView.Repo, "--forge-name", "forge.example",
 		"--hub", "monitoring=central@" + testInitView.Repo,
 		"--hub", "ca=central@" + testInitView.Repo}
-	if err := initCmd(args); err != nil {
+	if err := initCmd(append(args, "--dry-run")); err != nil {
 		t.Fatalf("dry run: %v", err)
 	}
 	// A key sshd cannot read is refused before anything is rendered: the
 	// account is reached over the mesh and nowhere else, so a typo would
 	// be a key no fort accepts and nobody reports.
-	if err := initCmd(append(args, "--operator-key", "macbook-air")); err == nil {
+	if err := initCmd(append(args, "--dry-run", "--operator-key", "macbook-air")); err == nil {
 		t.Error("--operator-key with no key: want a refusal")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "estate.toml")); err == nil {
 		t.Fatal("a dry run wrote estate.toml")
 	}
-	if err := initCmd(append(args, "--write")); err != nil {
+	if err := initCmd(args); err != nil { // writing is the default now
 		t.Fatalf("write: %v", err)
 	}
 	est, err := estate.Load(dir)
@@ -255,7 +255,7 @@ func TestInitCmd(t *testing.T) {
 			t.Errorf("%s: %v", p, err)
 		}
 	}
-	if err := initCmd(append(args, "--write")); err == nil || !strings.Contains(err.Error(), "already") {
+	if err := initCmd(append(args, "--write")); err == nil || !strings.Contains(err.Error(), "already") { // --write accepted as a no-op
 		t.Errorf("a second init must refuse: %v", err)
 	}
 	if err := initCmd([]string{"--name", "x"}); err == nil {

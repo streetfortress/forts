@@ -36,7 +36,7 @@ justfile                     the estate's own verbs: fetch-kubeconfig (a fort's 
    (the edge Alertmanager's webhook; `sops` it under the shared rule).
 3. Create `provisioning/secrets.yaml` (provisioning/README.md).
 4. Write `forts/<host>.toml` (sfi/forts `docs/manifest.md`), then
-   `fort scaffold <host> --write`, `fort mint <host> --write`, a PR,
+   `fort scaffold <host>`, `fort mint <host>`, a PR,
    `fort image <host>`, `fort provision <host> --image <path>`.
 5. `just fetch-kubeconfig <host>` — the fort's read-only ops kubeconfig,
    to read the cluster from here.

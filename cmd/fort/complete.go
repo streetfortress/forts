@@ -62,7 +62,7 @@ type candidates func(cx *completeCx) []string
 type argKind int
 
 const (
-	noValue  argKind = iota // a boolean flag: --write, --yes
+	noValue  argKind = iota // a boolean flag: --dry-run, --yes
 	opaque                  // a value nothing can enumerate: a name, a URL, a number
 	paths                   // a path: the shell's own file completion
 	dirsOnly                // a directory: the shell's own, directories only
@@ -91,7 +91,7 @@ type verbSpec struct {
 
 // write, yes and the other switches every verb spells the same way.
 var (
-	writeFlag = flagSpec{name: "write"}
+	writeFlag = flagSpec{name: "dry-run"}
 	yesFlag   = flagSpec{name: "yes"}
 )
 
@@ -218,7 +218,7 @@ func completeWords(index int, words []string) ([]string, string) {
 	typed := words[1:index]
 
 	// A flag's value, when the word before the cursor is a flag that
-	// takes one. `--write <TAB>` is a positional; `--out <TAB>` is not.
+	// takes one. `--dry-run <TAB>` is a positional; `--out <TAB>` is not.
 	if len(typed) > 0 && !strings.HasPrefix(cur, "-") {
 		if f, ok := spec.flag(typed[len(typed)-1]); ok && f.kind != noValue && !strings.Contains(typed[len(typed)-1], "=") {
 			return flagValues(f, &completeCx{root: root})

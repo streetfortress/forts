@@ -162,7 +162,7 @@ Nix; the address written there is a **claim**, and the other estate's
 **1. In the linking estate** — the hub's, where the admin age key is:
 
 ```sh
-fort link add luxor ssh://git@gitea.zen.lofi:30022/sfi/staging --write
+fort link add luxor ssh://git@gitea.zen.lofi:30022/sfi/staging
 ```
 
 The verb fetches staging's repo (a shallow clone with the operator's own
@@ -196,7 +196,7 @@ also says what staging's `remotes` entry for the host says, if anything.
 **2. In the estate being linked to** — staging, after that merge:
 
 ```sh
-fort estate link ssh://git@gitea.zen.lofi:30022/sfi/infra --write
+fort estate link ssh://git@gitea.zen.lofi:30022/sfi/infra
 ```
 
 The verb fetches infra's repo and reads every `forts/*.toml` for a

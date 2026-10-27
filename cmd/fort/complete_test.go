@@ -34,7 +34,7 @@ func TestCompleteCandidates(t *testing.T) {
 
 		// Every manifest.
 		{line: []string{"scaffold", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
-		{line: []string{"mint", "--write", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
+		{line: []string{"mint", "--dry-run", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 		{line: []string{"console-password", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 
 		// The verbs a backend raises: [baremetal] has no stack by design,
@@ -64,7 +64,7 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"link", ""}, want: []string{"add"}},
 		{line: []string{"link", "add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 		{line: []string{"link", "add", "lab-fort", ""}},
-		{line: []string{"link", "add", "lab-fort", "ssh://x/y/z", "--"}, want: []string{"--address", "--port", "--write"}},
+		{line: []string{"link", "add", "lab-fort", "ssh://x/y/z", "--"}, want: []string{"--address", "--dry-run", "--port"}},
 		{line: []string{"estate", ""}, want: []string{"link"}},
 		{line: []string{"estate", "link", ""}},
 
@@ -129,6 +129,10 @@ func TestCompletionFlagsAreTheFlagSets(t *testing.T) {
 		for _, f := range spec.flags {
 			want = append(want, f.name)
 		}
+		// "write" is the deprecated no-op every author verb still accepts
+		// (the --write default flip): parsed for compatibility, never
+		// advertised by completion.
+		got = slices.DeleteFunc(got, func(n string) bool { return n == "write" })
 		sort.Strings(want)
 		sort.Strings(got)
 		if !slices.Equal(got, want) {

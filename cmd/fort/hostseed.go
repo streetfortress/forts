@@ -17,7 +17,7 @@ import (
 func hostKeyPair(tool secretsTool, root, host string) (private, public string, err error) {
 	secretsPath := filepath.Join("nixos/secrets", host+".yaml")
 	if !exists(root, secretsPath) {
-		return "", "", fmt.Errorf("no %s — run `fort mint %s --write` first", secretsPath, host)
+		return "", "", fmt.Errorf("no %s — run `fort mint %s` first", secretsPath, host)
 	}
 	raw, err := tool.Decrypt(filepath.Join(root, secretsPath))
 	if err != nil {
@@ -29,7 +29,7 @@ func hostKeyPair(tool secretsTool, root, host string) (private, public string, e
 	}
 	private, public = have[keySSHHost], have[keySSHHostPub]
 	if private == "" || public == "" {
-		return "", "", fmt.Errorf("%s lacks %s / %s — run `fort mint %s --write` first", secretsPath, keySSHHost, keySSHHostPub, host)
+		return "", "", fmt.Errorf("%s lacks %s / %s — run `fort mint %s` first", secretsPath, keySSHHost, keySSHHostPub, host)
 	}
 	return private, public, nil
 }

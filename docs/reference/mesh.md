@@ -176,7 +176,7 @@ address is written once, in the PR that linked the host.
 ## Joining
 
 **A fort:** `forts/<host>.toml` with `mesh_ip`, then `fort mint <host>
---write`. The key is minted, sops-encrypted into the fort's secrets file,
+`. The key is minted, sops-encrypted into the fort's secrets file,
 and the `peers` entry written with the endpoint the manifest implies
 (`mesh_endpoint`, else `[libvirt] ip`, else the `[dns]` name).
 

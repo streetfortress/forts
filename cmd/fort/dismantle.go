@@ -37,14 +37,16 @@ import (
 // failure stops the verb: the core removes nothing after it.
 func dismantle(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort dismantle <host> [--write]")
+		return fmt.Errorf("usage: fort dismantle <host> [--dry-run]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("dismantle", flag.ContinueOnError)
-	write := fs.Bool("write", false, "apply and stage (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply and stage)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -54,14 +56,14 @@ func dismantle(args []string) error {
 	if _, err := manifest.Load(root, host); err != nil {
 		return err
 	}
-	if err := cascadeLayerDismantles(os.Stdout, root, host, *write, runLayerDismantle(root)); err != nil {
+	if err := cascadeLayerDismantles(os.Stdout, root, host, write, runLayerDismantle(root)); err != nil {
 		return err
 	}
 	p, err := planDismantle(root, host)
 	if err != nil {
 		return err
 	}
-	if *write {
+	if write {
 		if err := tools.EnsureAll("sops", "git"); err != nil {
 			return err
 		}
@@ -69,7 +71,7 @@ func dismantle(args []string) error {
 			return err
 		}
 	}
-	p.report(os.Stdout, *write)
+	p.report(os.Stdout, write)
 	return nil
 }
 
@@ -88,6 +90,8 @@ func cascadeLayerDismantles(w io.Writer, root, host string, write bool, run func
 	for _, l := range layers {
 		args := []string{"dismantle", host}
 		if write {
+			// The layer binary's own flag convention: its pin may predate
+			// the --write default flip, and the flag stays accepted after it.
 			args = append(args, "--write")
 		}
 		fmt.Fprintf(w, "fort %s %s   (the layer goes first — docs/layers.md, 4)\n", l, strings.Join(args, " "))
@@ -339,7 +343,7 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	}
 	fmt.Fprintln(w)
 	if !written {
-		fmt.Fprintln(w, "dry run — nothing changed (dismantle --write).")
+		fmt.Fprintln(w, "dry run — nothing changed.")
 		return
 	}
 	if p.stack {

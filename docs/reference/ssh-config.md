@@ -9,7 +9,7 @@ dismantle left one behind (#183, #434). Two verbs render it instead:
 
 | verb | kind | renders | from |
 |---|---|---|---|
-| `fort ssh-config [--write]` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
+| `fort ssh-config [--dry-run]` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
 | `fort wg-conf <member>` | read | a member's own mesh interface on stdout | peers.json + estate.toml (the interface's name) |
 
 `fort mint` and `fort dismantle` keep the two files current as they add
@@ -76,10 +76,10 @@ with the rest of its secrets in `nixos/secrets/<host>.yaml` (the whole
 file is encrypted; there is no plaintext copy anywhere). Hence who
 writes the line:
 
-- **`fort mint --write`** has the key in hand — minted, or restored from
+- **`fort mint`** has the key in hand — minted, or restored from
   the file — and writes the line with the peer. A line that names the
   host under another key is refused the way a foreign peer entry is.
-- **`fort ssh-config --write`** decrypts each fort's file for the one
+- **`fort ssh-config`** decrypts each fort's file for the one
   public key. Without the admin age key (or `sops` on PATH) it keeps the
   committed line and says so; a fort with no line and no readable key is
   reported, not invented.
@@ -141,7 +141,7 @@ The join, for an always-on Mac on the lab LAN (macmini):
    [`mesh.md`](mesh.md#joining): `.peers.macmini`
    with the next free lab address, `wg_endpoint_ip` = its LAN address (an
    always-on LAN host is a peer the others can dial, not a roaming
-   client), and the app's public key. `fort ssh-config --write` in the
+   client), and the app's public key. `fort ssh-config` in the
    same change gives it a `Host <peer>` block on its `ssh_user`.
 3. `fort wg-conf macmini` → paste everything below the app's `PrivateKey`
    line into the tunnel. Save, activate.
@@ -156,12 +156,12 @@ The join, for an always-on Mac on the lab LAN (macmini):
 
 | finding | level | fix |
 |---|---|---|
-| `ssh_config` missing or not what the tree renders | error | `fort ssh-config --write` |
-| a fort on the mesh with no `known_hosts` line | warning | `fort ssh-config --write` with the admin age key, or `fort mint <host> --write` |
-| a line keyed to an address peers.json does not give that fort | error | `fort ssh-config --write` |
-| a line for a host with no manifest | error | dismantle leaves none; `fort ssh-config --write` prunes it |
+| `ssh_config` missing or not what the tree renders | error | `fort ssh-config` |
+| a fort on the mesh with no `known_hosts` line | warning | `fort ssh-config` with the admin age key, or `fort mint <host>` |
+| a line keyed to an address peers.json does not give that fort | error | `fort ssh-config` |
+| a line for a host with no manifest | error | dismantle leaves none; `fort ssh-config` prunes it |
 
 The key line is a warning and not an error because verifying it needs the
 age key CI does not hold, and every fort minted before this file existed
-starts without one. The backfill is one `fort ssh-config --write` on a
+starts without one. The backfill is one `fort ssh-config` on a
 machine with the key.

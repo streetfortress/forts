@@ -48,7 +48,7 @@ import (
 // names are plaintext in a sops file, so the check reads WHICH forts
 // are listed without an age key and never a value.
 //
-// NOTHING IS PRINTED BY --write. The registry is where the value lives,
+// NOTHING IS PRINTED BY the apply. The registry is where the value lives,
 // so a banner would be a second copy in terminal scrollback, in a
 // multiplexer's buffer and in whatever transcript the session leaves.
 // `--show` is the deliberate read, one fort at a time.
@@ -63,7 +63,7 @@ import (
 // its passphrase has gone missing from the registry. A password is the
 // one credential an operator rotates — after a person leaves, after a
 // shared console session, after a drill — so rotation stays here, as
-// `--rotate`, and `--show` is the read. `--write` without `--rotate`
+// `--rotate`, and `--show` is the read. A plain run without `--rotate`
 // mints only where mint did not: a host that enabled the module after
 // the first provision.
 //
@@ -74,16 +74,18 @@ import (
 // cluster while #524 left that question open; it no longer does.
 func consolePassword(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort console-password <host> [--write] [--rotate] [--show]")
+		return fmt.Errorf("usage: fort console-password <host> [--dry-run] [--rotate] [--show]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("console-password", flag.ContinueOnError)
-	write := fs.Bool("write", false, "mint the passphrase, hash it for the host and record it in the registry (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	rotate := fs.Bool("rotate", false, "replace a passphrase the fort already has — the old one stops working when the host activates the next generation")
 	show := fs.Bool("show", false, "decrypt and print this fort's passphrase from the registry; writes nothing")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -95,7 +97,7 @@ func consolePassword(args []string) error {
 	if *show {
 		return p.show(os.Stdout)
 	}
-	if *write && p.mints() {
+	if write && p.mints() {
 		if err := tools.EnsureAll("sops", "mkpasswd", "git"); err != nil {
 			return err
 		}
@@ -103,7 +105,7 @@ func consolePassword(args []string) error {
 			return err
 		}
 	}
-	p.report(os.Stdout, *write)
+	p.report(os.Stdout, write)
 	return nil
 }
 
@@ -141,7 +143,7 @@ type consolePlan struct {
 	hash       string
 }
 
-// mints says whether --write has work to do. The test is the HASH, not
+// mints says whether the apply has work to do. The test is the HASH, not
 // the registry entry: a hash that is already on a host is never replaced
 // without --rotate, even when its passphrase has gone missing from the
 // registry. Replacing it would invalidate a value somebody may still
@@ -151,7 +153,7 @@ func (p *consolePlan) mints() bool { return !p.haveHash || p.rotate }
 // planConsolePassword reads all three halves of the failsafe and no
 // secret value: the key names it looks for are plaintext in a sops
 // file, the same property `fort check` relies on. So a dry run needs no
-// age key. Only --write and --show do.
+// age key. Only the apply and --show do.
 func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
 	// A manifest is the gate — cluster or plain, both carry deployer.
 	if _, err := manifest.Load(root, host); err != nil {
@@ -165,7 +167,7 @@ func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
 		rotate:      rotate,
 	}
 	if !exists(root, p.secretsPath) {
-		return nil, fmt.Errorf("%s does not exist — the host has no identity yet; run `fort mint %s --write` first", p.secretsPath, host)
+		return nil, fmt.Errorf("%s does not exist — the host has no identity yet; run `fort mint %s` first", p.secretsPath, host)
 	}
 	p.haveHash = sopsHasKey(filepath.Join(root, p.secretsPath), keyDeployerPasswordHash)
 	p.newRegistry = !exists(root, consoleRegistry)
@@ -247,7 +249,7 @@ func recordPassphrase(tool secretsTool, root, host, pass string) error {
 // one of them.
 func (p *consolePlan) show(w io.Writer) error {
 	if !p.haveEntry {
-		return fmt.Errorf("%s has no entry for %s — its passphrase was never recorded, or `fort dismantle` withdrew it. A hash on the host cannot be read back; mint a new passphrase with `fort console-password %s --rotate --write`", consoleRegistry, p.host, p.host)
+		return fmt.Errorf("%s has no entry for %s — its passphrase was never recorded, or `fort dismantle` withdrew it. A hash on the host cannot be read back; mint a new passphrase with `fort console-password %s --rotate`", consoleRegistry, p.host, p.host)
 	}
 	pass, err := readConsolePassword(p.root, p.host)
 	if err != nil {
@@ -284,15 +286,15 @@ func (p *consolePlan) report(w io.Writer, written bool) {
 	}
 	if p.haveHash && !p.rotate {
 		if p.haveEntry {
-			fmt.Fprintf(w, "\nnothing minted. read: console-password %s --show; replace: console-password %s --rotate --write\n", p.host, p.host)
+			fmt.Fprintf(w, "\nnothing minted. read: console-password %s --show; replace: console-password %s --rotate\n", p.host, p.host)
 		} else {
-			fmt.Fprintf(w, "\nnothing minted. mint a new passphrase: console-password %s --rotate --write\n", p.host)
+			fmt.Fprintf(w, "\nnothing minted. mint a new passphrase: console-password %s --rotate\n", p.host)
 		}
 		p.tail(w)
 		return
 	}
 	if !written {
-		fmt.Fprintln(w, "\ndry run — nothing minted (console-password", p.host, "--write).")
+		fmt.Fprintln(w, "\ndry run — nothing minted.")
 		return
 	}
 	fmt.Fprintf(w, "\nminted. passphrase in %s only (console-password %s --show)\n", consoleRegistry, p.host)
@@ -344,9 +346,9 @@ func consoleFindings(root, fort string) []finding {
 	entry := sopsHasKey(filepath.Join(root, consoleRegistry), fort)
 	switch {
 	case enabled && !hash:
-		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " --write (fort console-password " + fort + " --write mints it alone)"}}
+		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " (fort console-password " + fort + " mints it alone)"}}
 	case enabled && !entry:
-		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyDeployerPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate --write"}}
+		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyDeployerPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate"}}
 	case enabled:
 		return []finding{{"ok", hostNix, "console login: the module, " + keyDeployerPasswordHash + ", and the passphrase in " + consoleRegistry}}
 	case hash || entry:

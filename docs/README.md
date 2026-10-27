@@ -76,7 +76,7 @@ The 'PR for every change' practice might feel like overkill, but it has a few up
 Start by creating an empty git repo. Write an `estate.toml` file describing the `[source]` repository, `[mesh]` network, and operator SSH public keys.
 
 ```
-fort init --write        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
+fort init        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
 ```
 
 This command will render out _the estate's_ directory tree. Commit this and push to the repo.
@@ -88,7 +88,7 @@ Write a `<fort>.toml` file in the `forts/` directory. The fort file is where you
 Then run:
 
 ```
-fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
+fort scaffold <host>  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
 ```
 
 Like `fort init`, `fort scaffold` will render out _the fort's_ nixos and flux directory trees.
@@ -109,7 +109,7 @@ Forts relies heavily on [sops](https://getsops.io) for secrets management. Secre
 Because of this exposure it's common to keep estate repos private/unlisted (to avoid "collect now, decrypt later" style attacks.) SOPS uses AGE by default when encrypting secrets.
 
 
-Run `fort mint <fort> --write` and commit the changes.
+Run `fort mint <fort>` and commit the changes.
 
 ### Provision the Fort
 
@@ -195,9 +195,9 @@ When it's time to decommission a fort, these CLI commands take care of the remov
 
 ### Reading a verb's report
 
-Every author verb prints the same report twice: without `--write` it is a dry
-run (a plan, nothing touched), with `--write` it is the record of what was
-laid down. One line per file, led by a mark:
+Every author verb prints the same report twice: with `--dry-run` it is a
+plan (nothing touched), and by default it is the record of what was laid
+down. One line per file, led by a mark:
 
 | mark | meaning |
 | --- | --- |

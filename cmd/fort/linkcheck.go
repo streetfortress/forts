@@ -62,20 +62,20 @@ func linkFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 				out = append(out, finding{"error", path, fmt.Sprintf("%s zone %s is this estate's own mesh zone — the other estate's names need a zone of their own", at, l.ZoneName())})
 			}
 			if nix != nil && !nixSetsAttr(string(nix), "sfi.links."+name) {
-				out = append(out, finding{"error", hostNix, fmt.Sprintf("no sfi.links.%s — the manifest declares %s and nix cannot read it; `fort scaffold %s --write` appends the block", name, at, host)})
+				out = append(out, finding{"error", hostNix, fmt.Sprintf("no sfi.links.%s — the manifest declares %s and nix cannot read it; `fort scaffold %s` appends the block", name, at, host)})
 			}
 			switch {
 			case decryptErr != nil:
 				unverified++
 			case have[linkSecretKey(name)] == "":
-				out = append(out, finding{"error", secretsPath, fmt.Sprintf("no %s — %s names a public key whose private half is not in the secrets file; `fort link add %s %s --write` mints one (a re-key: the other estate's remotes entry follows on its next `fort estate link`)", linkSecretKey(name), at, host, l.Estate)})
+				out = append(out, finding{"error", secretsPath, fmt.Sprintf("no %s — %s names a public key whose private half is not in the secrets file; `fort link add %s %s` mints one (a re-key: the other estate's remotes entry follows on its next `fort estate link`)", linkSecretKey(name), at, host, l.Estate)})
 			default:
 				k, err := wgKeyFrom(have[linkSecretKey(name)])
 				switch {
 				case err != nil:
 					out = append(out, finding{"error", secretsPath, linkSecretKey(name) + ": " + err.Error()})
 				case k.public != l.PublicKey:
-					out = append(out, finding{"error", path, fmt.Sprintf("%s public_key %s is not what %s derives (%s) — the other estate dials a key this host does not hold; `fort link add %s %s --write` rewrites the table from the secret", at, abbrevKey(l.PublicKey), linkSecretKey(name), abbrevKey(k.public), host, l.Estate)})
+					out = append(out, finding{"error", path, fmt.Sprintf("%s public_key %s is not what %s derives (%s) — the other estate dials a key this host does not hold; `fort link add %s %s` rewrites the table from the secret", at, abbrevKey(l.PublicKey), linkSecretKey(name), abbrevKey(k.public), host, l.Estate)})
 				}
 			}
 		}

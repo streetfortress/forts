@@ -25,7 +25,7 @@ throwaway key): the framework ships no operator key, so a fort of an
 estate that names none does not evaluate (forts#81,
 `modules/ops/deployer.nix`).
 
-`nixos/hosts/<host>/` is what `fort scaffold <host> --write` renders into
+`nixos/hosts/<host>/` is what `fort scaffold <host>` renders into
 this tree; `TestFixtureEstateIsScaffoldOutput` keeps it so, and that test
 also names the hosts this file lists — a fort added here must gain a
 `nixosConfigurations` entry in `flake.nix` and an eval line in the nix

@@ -517,7 +517,7 @@ func TestMintConsole(t *testing.T) {
 	}
 	sb.Reset()
 	p3.report(&sb, false)
-	if !strings.Contains(sb.String(), "! "+consoleRegistry) || !strings.Contains(sb.String(), "console-password "+host+" --rotate --write") {
+	if !strings.Contains(sb.String(), "! "+consoleRegistry) || !strings.Contains(sb.String(), "console-password "+host+" --rotate") {
 		t.Fatalf("orphan: want the repair named, got:\n%s", sb.String())
 	}
 

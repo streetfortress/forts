@@ -22,7 +22,7 @@ with a forge hub in another estate.
 
 `nixos/hosts/public-fort/`, `flux/clusters/public-fort/` and
 `flux/apps/public-fort/kustomization.yaml` are what `fort scaffold
-public-fort --write` renders into this tree; the test
+public-fort` renders into this tree; the test
 `TestPublicFixtureEstateIsScaffoldOutput` keeps them so, and reads off
 them that the FluxInstance names no `pullSecret`.
 `flux/infrastructure/` and the two `.sops.yaml` rule files are what
@@ -30,7 +30,7 @@ them that the FluxInstance names no `pullSecret`.
 `flux-git-deploy-key`), the canary, the console registry, the
 Alertmanager webhook — carry the key names and opaque values, the shape
 sops leaves. `mesh/ssh_config` and `mesh/known_hosts` are `fort
-ssh-config --write` with no age key.
+ssh-config` with no age key.
 
 `flake.nix` evaluates the host as `nixosConfigurations.public-fort` and
 CI evaluates its toplevel derivation, then reads the rendered

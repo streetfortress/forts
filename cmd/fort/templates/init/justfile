@@ -29,7 +29,7 @@ fetch-kubeconfig host:
     # and fort dismantle keep both files current, and `fort check --all`
     # fails a stale ssh_config. So this recipe needs no address and no
     # user name of its own.
-    [ -f mesh/ssh_config ] || { echo "mesh/ssh_config is not there — run: fort ssh-config --write" >&2; exit 1; }
+    [ -f mesh/ssh_config ] || { echo "mesh/ssh_config is not there — run: fort ssh-config" >&2; exit 1; }
     mkdir -p ~/.kube
     scp -q -F mesh/ssh_config -o UserKnownHostsFile=mesh/known_hosts \
       "{{ host }}:/var/lib/sfi/kubeconfig-ro" ~/.kube/{{ host }}.config

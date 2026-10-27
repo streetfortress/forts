@@ -208,7 +208,7 @@ func TestConsolePassword(t *testing.T) {
 	}
 	buf.Reset()
 	p.report(&buf, true)
-	if !strings.Contains(buf.String(), "cannot be read back") || !strings.Contains(buf.String(), "--rotate --write") {
+	if !strings.Contains(buf.String(), "cannot be read back") || !strings.Contains(buf.String(), "--rotate") {
 		t.Fatalf("orphaned hash: want the report to say so, got %q", buf.String())
 	}
 

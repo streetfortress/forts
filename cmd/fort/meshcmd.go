@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fort ssh-config [--write] — render mesh/ssh_config and
+// fort ssh-config [--dry-run] — render mesh/ssh_config and
 // mesh/known_hosts from the tree (mesh.go). mint and dismantle keep
 // them current as a side effect of their own edit; this verb is the
 // whole-fleet render: after a hand edit to peers.json, to backfill the
@@ -26,12 +26,14 @@ import (
 // truth in sops.
 func sshConfigCmd(args []string) error {
 	fs := flag.NewFlagSet("ssh-config", flag.ContinueOnError)
-	write := fs.Bool("write", false, "write and stage (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: write and stage)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	write := !*dryRun
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: fort ssh-config [--write]")
+		return fmt.Errorf("usage: fort ssh-config [--dry-run]")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -42,12 +44,12 @@ func sshConfigCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *write {
+	if write {
 		if err := p.apply(tool); err != nil {
 			return err
 		}
 	}
-	p.report(os.Stdout, *write)
+	p.report(os.Stdout, write)
 	return nil
 }
 
@@ -190,7 +192,7 @@ func (p *sshConfigPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "○ %-24s unchanged\n", knownHostsPath)
 	}
 	if len(p.unreadable) > 0 {
-		fmt.Fprintf(w, "! no host key line for %s and none readable here — run with the admin age key (sops on PATH), or `fort mint <host> --write` per fort\n", strings.Join(p.unreadable, ", "))
+		fmt.Fprintf(w, "! no host key line for %s and none readable here — run with the admin age key (sops on PATH), or `fort mint <host>` per fort\n", strings.Join(p.unreadable, ", "))
 	}
 	if p.decryptErr != "" && (len(p.kept) > 0 || len(p.unreadable) > 0) {
 		fmt.Fprintf(w, "  (%s)\n", firstLine(p.decryptErr))
@@ -198,7 +200,7 @@ func (p *sshConfigPlan) report(w io.Writer, written bool) {
 	fmt.Fprintln(w)
 	switch {
 	case !written:
-		fmt.Fprintln(w, "dry run — nothing written (ssh-config --write).")
+		fmt.Fprintln(w, "dry run — nothing written.")
 	case p.sshConfig == "" && p.knownHosts == "":
 		fmt.Fprintln(w, "nothing to write — both files are current.")
 	default:

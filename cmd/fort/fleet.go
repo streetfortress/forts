@@ -190,7 +190,7 @@ func clusterVars(root, fort string) (map[string]string, error) {
 // and mislabels every series and log line the fort emits, which only
 // the hub would notice — so the gate reads the two names. ESTATE_NAME
 // is the estate's (estate.toml `name`); a cluster scaffolded before it
-// existed gains the line from `fort scaffold <fort> --write`.
+// existed gains the line from `fort scaffold <fort>`.
 // CLUSTER_NAME is the fort's own.
 func clusterVarFindings(fort string, vars map[string]string, estateName string) []finding {
 	var out []finding
@@ -203,7 +203,7 @@ func clusterVarFindings(fort string, vars map[string]string, estateName string) 
 	}
 	switch v, ok := vars["ESTATE_NAME"]; {
 	case !ok:
-		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line; fort scaffold %s --write adds ESTATE_NAME: %s", fort, estateName)})
+		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line; fort scaffold %s adds ESTATE_NAME: %s", fort, estateName)})
 	case v != estateName:
 		out = append(out, finding{"error", file, fmt.Sprintf("ESTATE_NAME is %q, not %q — the estate label is this estate's name (estate.toml) on every metric and log line the fort emits", v, estateName)})
 	}

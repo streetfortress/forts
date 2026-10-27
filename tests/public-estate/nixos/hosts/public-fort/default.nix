@@ -71,7 +71,7 @@
   # The console door (#524): the getty reads deployer-password-hash from
   # this host's sops file, and sshd still refuses the password. Read the
   # passphrase with `fort console-password public-fort --show`; replace
-  # it with `--rotate --write`.
+  # it with `--rotate`.
   sfi.ops.console.enable = true;
 
   # Upstream linode-config.nix sets PermitRootLogin = "prohibit-password"

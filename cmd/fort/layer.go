@@ -27,12 +27,12 @@ import (
 //  2. A layer is one binary, fort-<layer>, with the verbs the order
 //     expects: init, scaffold, check, mint, dismantle. `fort <layer>
 //     <verb> …` execs it from PATH, git style (execLayer).
-//  3. `fort layer add <flake url>#<role> [--write] [-- <the layer's init
+//  3. `fort layer add <flake url>#<role> [--dry-run] [-- <the layer's init
 //     flags>]` installs one: the flake input, the binary re-exported at
 //     the layer's pin so the gate runs `nix run ./nixos#fort-<role>`,
 //     the gate step, then the layer's own init with every flag after
 //     `--`, passed through unread. `fort layer remove <role>` is the
-//     reversal. Both are author verbs in the plan shape: print, --write.
+//     reversal. Both are author verbs: apply by default, --dry-run plans.
 //  4. The ports a role needs are on core's link entry ([[serves.<role>]]
 //     ports, forts#105); the layer's check verifies them. A layer writes
 //     no core file, and core writes no layer file.
@@ -56,7 +56,7 @@ func layerCmd(args []string) error {
 	return errors.New(layerUsage)
 }
 
-const layerUsage = "usage: fort layer add <flake url>#<role> [--write] [-- <the layer's init flags>]\n       fort layer remove <role> [--write]"
+const layerUsage = "usage: fort layer add <flake url>#<role> [--dry-run] [-- <the layer's init flags>]\n       fort layer remove <role> [--dry-run]"
 
 // layerRef is the one argument of fort layer add, split: the flake URL
 // (the input, named by its last path label) and the role (the binary).
@@ -109,7 +109,8 @@ func layerAdd(args []string) error {
 		}
 	}
 	fs := flag.NewFlagSet("layer", flag.ContinueOnError)
-	write := fs.Bool("write", false, "edit the flake and the gate, stage them, then run the layer's init (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: edit, stage, run the layer's init)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	var pos []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		pos = append(pos, args[0])
@@ -118,6 +119,7 @@ func layerAdd(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 {
 		return errors.New(layerUsage)
 	}
@@ -133,14 +135,14 @@ func layerAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *write {
+	if write {
 		if err := p.apply(); err != nil {
 			return err
 		}
 		stageLayerFiles(root)
 	}
-	p.report(os.Stdout, *write, passthrough)
-	if !*write {
+	p.report(os.Stdout, write, passthrough)
+	if !write {
 		return nil
 	}
 	return runLayerInit(root, ref, passthrough)
@@ -258,7 +260,7 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 		fmt.Fprintf(w, "· %-30s already as planned\n", f)
 	}
 	if !written {
-		fmt.Fprintf(w, "\ndry run — nothing written (%s --write).\n", verb)
+		fmt.Fprintf(w, "\ndry run — nothing written.\n")
 		return
 	}
 	if p.remove {
@@ -295,7 +297,8 @@ func runLayerInit(root string, ref layerRef, flags []string) error {
 
 func layerRemove(args []string) error {
 	fs := flag.NewFlagSet("layer", flag.ContinueOnError)
-	write := fs.Bool("write", false, "remove layers/<role>/, the gate step and the re-export; stage (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: remove and stage)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	var pos []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		pos = append(pos, args[0])
@@ -304,6 +307,7 @@ func layerRemove(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 || !nameOK(pos[0]) {
 		return errors.New(layerUsage)
 	}
@@ -315,13 +319,13 @@ func layerRemove(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *write {
+	if write {
 		if err := p.apply(); err != nil {
 			return err
 		}
 		stageLayerFiles(root)
 	}
-	p.report(os.Stdout, *write, nil)
+	p.report(os.Stdout, write, nil)
 	return nil
 }
 

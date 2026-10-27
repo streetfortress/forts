@@ -1,7 +1,7 @@
 # fort dismantle — the repo half of retirement
 
 ```
-fort dismantle <host> [--write]
+fort dismantle <host> [--dry-run]
 ```
 
 Retiring a fort is two steps with a reviewed merge between them:

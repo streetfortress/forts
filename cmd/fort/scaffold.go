@@ -175,16 +175,17 @@ type scaffoldFile struct {
 // key, canary) is `fort mint`, run after this.
 func scaffold(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort scaffold <host> [--write]")
+		return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
 	}
 	host := args[0]
-	write := false
+	write := true
 	for _, a := range args[1:] {
 		switch a {
-		case "--write":
-			write = true
+		case "--write": // deprecated no-op: writing is the default
+		case "--dry-run":
+			write = false
 		default:
-			return fmt.Errorf("usage: fort scaffold <host> [--write]")
+			return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
 		}
 	}
 	root, err := repoRoot()
@@ -243,10 +244,10 @@ func scaffold(args []string) error {
 		fmt.Printf("%c %-44s %s\n", mark, f.path, status)
 	}
 	if !write {
-		fmt.Println("\ndry run — nothing written (scaffold --write).")
+		fmt.Println("\ndry run — nothing written.")
 		return nil
 	}
-	fmt.Printf("\n%d file(s) written. next: fort mint %s --write\n", written, host)
+	fmt.Printf("\n%d file(s) written. next: fort mint %s\n", written, host)
 	return nil
 }
 

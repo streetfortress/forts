@@ -39,19 +39,21 @@ import (
 // repo cloned over https — there is no deploy key: none minted, none
 // registered, no forge client and no forge token. The report says so.
 //
-// Runs after `fort scaffold <host> --write` (the canary's home and the
+// Runs after `fort scaffold <host>` (the canary's home and the
 // flake's view of the host) and before a layer's verbs. `fort dismantle` is
 // the inverse.
 func mint(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort mint <host> [--write]")
+		return fmt.Errorf("usage: fort mint <host> [--dry-run]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("mint", flag.ContinueOnError)
-	write := fs.Bool("write", false, "mint, encrypt, register and stage (default: print the plan)")
+	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: mint, encrypt, register, stage)")
+	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -70,11 +72,11 @@ func mint(args []string) error {
 			return err
 		}
 	}
-	p, err := planMint(root, host, tool, f, *write)
+	p, err := planMint(root, host, tool, f, write)
 	if err != nil {
 		return err
 	}
-	if *write {
+	if write {
 		// Every tool the apply execs, before the first write: a mint
 		// that dies mid-apply leaves the rule and the mesh staged with
 		// no secrets file behind them.
@@ -89,7 +91,7 @@ func mint(args []string) error {
 			return err
 		}
 	}
-	p.report(os.Stdout, *write)
+	p.report(os.Stdout, write)
 	return nil
 }
 
@@ -135,7 +137,7 @@ type mintPlan struct {
 	anonymous  bool   // the anonymous route (forts#167): no deploy key at all
 	staleKey   bool   // the secrets file carries a deploy key the anonymous route reads nowhere
 
-	write bool // --write: the plan may be applied, so a missing credential is fatal now rather than later
+	write bool // the plan will be applied, so a missing credential is fatal now rather than later
 
 	// The console door (console.go, sfi/forts#24): minted with the
 	// identity when the host file enables sfi.ops.console. The hash is
@@ -182,7 +184,7 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 		}
 	}
 	if len(need) > 0 {
-		return nil, fmt.Errorf("missing %s — run `fort scaffold %s --write` first", strings.Join(need, ", "), host)
+		return nil, fmt.Errorf("missing %s — run `fort scaffold %s` first", strings.Join(need, ", "), host)
 	}
 	hostNix, err := os.ReadFile(filepath.Join(root, "nixos/hosts", host, "default.nix"))
 	if err != nil {
@@ -554,10 +556,10 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	fmt.Fprintf(w, "mint ⛫ %s   (%s)\n", p.host, strings.Join(facts, " · "))
 	// A dry run mints in memory and discards: a recipient derived from a
 	// key that does not exist yet is a throwaway, and printing it bare
-	// invites copying it somewhere. Say so; --write prints the real one.
+	// invites copying it somewhere. Say so; the apply prints the real one.
 	throwaway := func(key string) string {
 		if !written && hasKey(p.missing, key) {
-			return "   (dry run: minted in memory and discarded — --write prints the real one)"
+			return "   (dry run: minted in memory and discarded)"
 		}
 		return ""
 	}
@@ -582,7 +584,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	case p.consoleMint:
 		fmt.Fprintf(w, "○ %-36s + %s: its console passphrase (sops set; the host holds the hash)\n", consoleRegistry, p.host)
 	case p.consoleOrphan:
-		fmt.Fprintf(w, "! %-36s has NO entry for %s — the host carries %s and nothing can read it back; a new passphrase is a deliberate act: fort console-password %s --rotate --write\n", consoleRegistry, p.host, keyDeployerPasswordHash, p.host)
+		fmt.Fprintf(w, "! %-36s has NO entry for %s — the host carries %s and nothing can read it back; a new passphrase is a deliberate act: fort console-password %s --rotate\n", consoleRegistry, p.host, keyDeployerPasswordHash, p.host)
 	}
 	if p.sshConfig != "" {
 		fmt.Fprintf(w, "◆ %-36s re-rendered — %s\n", sshConfigPath, p.sshNote)
@@ -607,7 +609,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	fmt.Fprintln(w)
 	if !written {
-		fmt.Fprintln(w, "dry run — nothing minted (mint --write).")
+		fmt.Fprintln(w, "dry run — nothing minted.")
 		return
 	}
 	if p.consoleMint {

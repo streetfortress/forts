@@ -72,7 +72,7 @@ func TestClusterVarFindings(t *testing.T) {
 	// no ESTATE_NAME: the pre-forts#50 cluster, and the finding names
 	// the command that adds the line
 	got := clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "a", "MESH_IP": "10.1.0.1"}, "staging")
-	if len(got) != 1 || got[0].level != "error" || got[0].dir != "flux/clusters/a/cluster-vars.yaml" || !strings.Contains(got[0].msg, "fort scaffold a --write adds ESTATE_NAME: staging") {
+	if len(got) != 1 || got[0].level != "error" || got[0].dir != "flux/clusters/a/cluster-vars.yaml" || !strings.Contains(got[0].msg, "fort scaffold a adds ESTATE_NAME: staging") {
 		t.Errorf("no ESTATE_NAME: %+v", got)
 	}
 	got = clusterVarFindings("a", map[string]string{"CLUSTER_NAME": "a", "ESTATE_NAME": "production"}, "staging")

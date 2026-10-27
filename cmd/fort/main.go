@@ -15,7 +15,7 @@
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
-//	fort dismantle web3 --write         # retire: repo half → PR (merge)
+//	fort dismantle web3         # retire: repo half → PR (merge)
 //	fort destroy web3                   # then the side-effects half
 //
 // The create-nixos / delete playbooks that raised lab VMs on the hypervisor
@@ -96,34 +96,34 @@ func usage() {
   --version
 	  Display version information about the fort cli and associated flake
 
-  init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--write]
+  init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--dry-run]
       Create an estate: render the files and directory structure expected by forts.
-      See docs/init.md for more information.
+      See docs/reference/init.md for more information.
 
-  scaffold <fort> [--write]
+  scaffold <fort> [--dry-run]
 	  Create a fort: render the files and directory structure for a single fort.
-	  See docs/scaffold.md for more information.
+	  See docs/reference/scaffold.md for more information.
 
-  mint <fort> [--write]
+  mint <fort> [--dry-run]
       Mint a fort's identity: Generate host, cluster, wireguard keys.
-	  See docs/mint.md for more information.
+	  See docs/reference/mint.md for more information.
 
   image <fort> [--from <built image>] [--out <dir>]
 	  Build a bootable disk image for a fort.
-	  See docs/provision.md for more information.
+	  See docs/reference/provision.md for more information.
 
   provision <fort> [--image <path>] [--yes]
 	  Deploy a fort. Wrapper around 'pulumi up'
-	  See docs/provision.md for more information.
+	  See docs/reference/provision.md for more information.
 
-  dismantle <fort> [--write]
+  dismantle <fort> [--dry-run]
 	  Remove a fort's files that were rendered by fort cli. Used when preparing a fort for decomission.
-	  See docs/provision.md for more information.
+	  See docs/reference/provision.md for more information.
 
   destroy <fort> [--yes] [--no-stack]
 	  Once a fort has been dismantled, this command deletes the associated compute resources.
 	  Wrapper around 'pulumi destroy'
-	  See docs/provision.md for more information.
+	  See docs/reference/provision.md for more information.
 
   check (<fort>... | --all) [--eval]
 	  Static validation of the estate repo:
@@ -135,32 +135,32 @@ func usage() {
   preview (<host> | --all) [--refresh] [--expect-no-changes]
 	  Compare reality with what's declared in the estate.
 	  Wrapper around 'pulumi preview'
-	  See docs/provision.md for more information.
+	  See docs/reference/provision.md for more information.
 
-  console-password <fort> [--write] [--rotate] [--show]
+  console-password <fort> [--dry-run] [--rotate] [--show]
 	  Manage the out-of-band console access password for a fort.
 	  See docs/ops.md for more information.
 
-  ssh-config [--write]
+  ssh-config [--dry-run]
 	  Helper function: render an SSH config for accessing the forts of this estate.
 
   wg-conf <member>
 	  Helper function: render a Wireguard configuration file for joining a client to the estate mesh.
 
-  link add <fort> <estate url> [--address <ip>] [--port <udp>] [--write]
+  link add <fort> <estate url> [--address <ip>] [--port <udp>] [--dry-run]
 	  Configure a link between <fort> and a remote estate.
-	  See docs/links.md for more information.
+	  See docs/reference/links.md for more information.
 
-  estate link <estate url> [--write]
+  estate link <estate url> [--dry-run]
 	  Configure this estate to accept peers in a remote estate.
-	  See docs/links.md for more information.
+	  See docs/reference/links.md for more information.
 
-  layer add <flake url>#<role> [--write] [-- <the layer's init flags>]
+  layer add <flake url>#<role> [--dry-run] [-- <the layer's init flags>]
 	  Add a layer configuration. Layers allow for arbitrary apps and configs to be applied in estates uniformly.
-	  See docs/layers.md for more information.
+	  See docs/reference/layers.md for more information.
 
-  layer remove <role> [--write]
+  layer remove <role> [--dry-run]
 	  Remove a layer configuration.
-	  See docs/layers.md for more information.
+	  See docs/reference/layers.md for more information.
   `)
 }

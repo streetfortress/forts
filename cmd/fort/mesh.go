@@ -648,7 +648,7 @@ func forgeFindings(root string, est estate.Estate, hosts map[string]manifest.Hos
 // it — and nothing that is not a fort. A missing key line is a warning,
 // not an error: verifying the key needs the admin age key, which CI does
 // not hold, and a fort minted before this file existed gets its line
-// from the next `fort ssh-config --write` run with the key.
+// from the next `fort ssh-config` run with the key.
 func meshFindings(root string, hosts map[string]manifest.Host) []finding {
 	var out []finding
 	peersText, err := readOrEmpty(root, peersPath)
@@ -665,9 +665,9 @@ func meshFindings(root string, hosts map[string]manifest.Host) []finding {
 	case err != nil:
 		out = append(out, finding{"error", sshConfigPath, err.Error()})
 	case have == "":
-		out = append(out, finding{"error", sshConfigPath, "missing — `fort ssh-config --write` renders it from peers.json + the manifests"})
+		out = append(out, finding{"error", sshConfigPath, "missing — `fort ssh-config` renders it from peers.json + the manifests"})
 	case have != want:
-		out = append(out, finding{"error", sshConfigPath, "stale — differs from what peers.json + the manifests render; `fort ssh-config --write`"})
+		out = append(out, finding{"error", sshConfigPath, "stale — differs from what peers.json + the manifests render; `fort ssh-config`"})
 	default:
 		out = append(out, finding{"ok", sshConfigPath, fmt.Sprintf("%d peer(s) rendered", len(m.Peers))})
 	}
@@ -686,14 +686,14 @@ func meshFindings(root string, hosts map[string]manifest.Host) []finding {
 		switch {
 		case !ok:
 			missing++
-			out = append(out, finding{"warning", knownHostsPath, fmt.Sprintf("no host key line for %s — `fort ssh-config --write` (with the admin age key) or `fort mint %s --write` adds it", h, h)})
+			out = append(out, finding{"warning", knownHostsPath, fmt.Sprintf("no host key line for %s — `fort ssh-config` (with the admin age key) or `fort mint %s` adds it", h, h)})
 		case e.ip != p.IP:
-			out = append(out, finding{"error", knownHostsPath, fmt.Sprintf("%s is keyed to %s but peers.json says %s — `fort ssh-config --write`", h, e.ip, p.IP)})
+			out = append(out, finding{"error", knownHostsPath, fmt.Sprintf("%s is keyed to %s but peers.json says %s — `fort ssh-config`", h, e.ip, p.IP)})
 		}
 	}
 	for _, h := range sortedNames(entries) {
 		if _, ok := hosts[h]; !ok {
-			out = append(out, finding{"error", knownHostsPath, fmt.Sprintf("line for %s, which has no manifest — dismantle removes it; `fort ssh-config --write`", h)})
+			out = append(out, finding{"error", knownHostsPath, fmt.Sprintf("line for %s, which has no manifest — dismantle removes it; `fort ssh-config`", h)})
 		}
 	}
 	if khText != "" && missing == 0 {

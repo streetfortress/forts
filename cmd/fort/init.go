@@ -119,14 +119,16 @@ func initCmd(args []string) error {
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	var operatorKeys multiFlag
 	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `deployer`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
-	write := fl.Bool("write", false, "write the files (default: print the tree)")
+	dryRun := fl.Bool("dry-run", false, "print the tree and write nothing (default: write the files)")
+	fl.Bool("write", true, "deprecated no-op: writing is the default")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--write]")
+		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--dry-run]")
 		fl.PrintDefaults()
 	}
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
+	write := !*dryRun
 	if *name == "" || *repo == "" || len(admins) == 0 || *forts == "" {
 		fl.Usage()
 		return fmt.Errorf("--name, --repo, --forts and at least one --admin are required")
@@ -188,7 +190,7 @@ func initCmd(args []string) error {
 		mark, status := '●', f.note
 		if exists(root, f.path) {
 			mark, status = '○', "exists — kept (init never overwrites)"
-		} else if *write {
+		} else if write {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.path)), 0o755); err != nil {
 				return err
 			}
@@ -220,8 +222,8 @@ func initCmd(args []string) error {
 		fmt.Printf("· %-44s [source] known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
 		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort init --known-hosts, or this file).\n", "")
 	}
-	if !*write {
-		fmt.Println("\ndry run — nothing written (init --write).")
+	if !write {
+		fmt.Println("\ndry run — nothing written.")
 		return nil
 	}
 	fmt.Printf("\n%d file(s) written. next: nix flake lock ./nixos\n", written)
