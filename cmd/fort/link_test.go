@@ -74,7 +74,7 @@ func TestLinkAdd(t *testing.T) {
 	var sb strings.Builder
 	p.report(&sb, false)
 	dry := sb.String()
-	for _, want := range []string{"link add hub → sfi/staging", "mesh 10.2.0.0/24 · wg-staging · staging.mesh", "10.2.0.252", "highest free address", "○ nixos/secrets/hub.yaml", "wireguard-private-key-staging", "○ forts/hub.toml", "+ [links.staging]", "○ nixos/hosts/hub/default.nix", "+ sfi.links.staging", "roles forge", "not recorded yet", "dry run"} {
+	for _, want := range []string{"link add ⛫ hub → sfi/staging", "mesh 10.2.0.0/24 · wg-staging · staging.mesh", "10.2.0.252", "highest free address", "○ nixos/secrets/hub.yaml", "wireguard-private-key-staging", "○ forts/hub.toml", "+ [links.staging]", "○ nixos/hosts/hub/default.nix", "+ sfi.links.staging", "roles forge", "not recorded yet", "dry run"} {
 		if !strings.Contains(dry, want) {
 			t.Errorf("report lacks %q:\n%s", want, dry)
 		}

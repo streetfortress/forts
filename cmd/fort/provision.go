@@ -126,7 +126,7 @@ func provision(args []string) error {
 		// Committed provenance: which channel the host was provisioned
 		// through (#657). The libvirt program declares the seed volume
 		// only when this says so, so a host provisioned before the channel
-		// — adopted, or provisioned from an image that carried the key —
+		// — one provisioned from an image that carried the key —
 		// never sees an empty ISO proposed on a day-2 apply.
 		if err := runPulumi(pulumiDir, "config", "set", "seed", seedChannels[entry.Provider], "--stack", host); err != nil {
 			return fmt.Errorf("recording the seed channel: %w", err)
@@ -208,7 +208,7 @@ func needsTTYOrYes(verb string, yes bool) error {
 }
 
 // hasStack reports whether the file backend holds a checkpoint for host —
-// the same test adopt and destroy make.
+// the same test destroy makes.
 func hasStack(pulumiDir, host string) bool {
 	return exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json"))
 }
@@ -311,7 +311,7 @@ func recordLibvirtURI(pulumiDir, host string, entry manifest.Host) error {
 }
 
 // initStack is the one `pulumi stack init` — passphrase secrets provider,
-// the passphrase itself sops-managed (cloudEnv). Shared with adopt.
+// the passphrase itself sops-managed (cloudEnv).
 func initStack(pulumiDir, host string) error {
 	return runPulumi(pulumiDir, "stack", "init", host, "--secrets-provider", "passphrase", "--non-interactive")
 }

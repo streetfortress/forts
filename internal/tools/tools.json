@@ -9,13 +9,12 @@
     "mkpasswd": "mkpasswd",
     "qemu-img": "qemu-utils",
     "sops": "sops",
-    "virsh": "libvirt",
     "xsltproc": "libxslt.bin"
   },
   "ambient": {
     "nix": {
       "attr": "nix",
-      "why": "it is the client of the host's own daemon; only `image` runs it, to build the generic image"
+      "why": "it is the client of the host's own daemon; `image` builds with it, `check --eval` evaluates with it"
     },
     "pulumi": {
       "attr": "pulumi-bin",

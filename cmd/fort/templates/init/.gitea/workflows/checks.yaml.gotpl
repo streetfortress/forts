@@ -1,8 +1,8 @@
-# The estate's gate, on every push: `fort check --all` (tree ↔ manifests,
-# kustomize builds, strict envsubst, the mesh and the links), and a full
-# module-system eval of every host that has a manifest. Both come from
-# the framework this estate pins: `nix run ./nixos#fort` is the CLI at
-# that pin. A layer's gate is its own step after the core's
+# The estate's gate, on every push: `fort check --all --eval` — tree ↔
+# manifests, kustomize builds, strict envsubst, the mesh and the links,
+# then a full module-system eval of every host that has a manifest. It
+# comes from the framework this estate pins: `nix run ./nixos#fort` is
+# the CLI at that pin. A layer's gate is its own step after the core's
 # (docs/layers.md; `fort layer add` appends it).
 #
 # Two red-X states are DELIBERATE gates, not breakage: a staged-but-
@@ -52,33 +52,10 @@ jobs:
         # a full miss restores nothing.
         run: mkdir -p /nix-closure-cache
 
-      - name: The gate (fort check --all)
+      - name: The gate (fort check --all --eval)
         env:
           GITEA_ACTIONS: "true"
-        run: nix run ./nixos#fort -- check --all
-
-      - name: Eval every host with a manifest
-        run: |
-          set -euo pipefail
-          # nullglob: with no manifest the bare glob would stay literal and
-          # basename would print "*", which re-globs to every top-level entry.
-          shopt -s nullglob
-          manifests=(forts/*.toml)
-          if [ "${#manifests[@]}" -eq 0 ]; then
-            echo "no fort has a manifest; nothing to eval"
-            exit 0
-          fi
-          fail=0
-          for f in "${manifests[@]}"; do
-            host=$(basename -s .toml "$f")
-            echo "== nix eval $host"
-            if ! nix eval --raw "./nixos#nixosConfigurations.${host}.config.system.build.toplevel.drvPath"; then
-              echo "::error::nix eval failed for ${host}"
-              fail=1
-            fi
-            echo
-          done
-          exit "$fail"
+        run: nix run ./nixos#fort -- check --all --eval
 
       - name: Refill the cache with what this run used
         # An exact hit refills nothing: the bulk is nixpkgs, and nixpkgs

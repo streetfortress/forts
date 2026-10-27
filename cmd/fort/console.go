@@ -255,7 +255,7 @@ func (p *consolePlan) show(w io.Writer) error {
 }
 
 func (p *consolePlan) report(w io.Writer, written bool) {
-	fmt.Fprintf(w, "console-password %s   (the getty door to `sudo nixos-rollback`; ssh never accepts it)\n", p.host)
+	fmt.Fprintf(w, "console-password ⛫ %s   (the getty door to `sudo nixos-rollback`; ssh never accepts it)\n", p.host)
 	switch {
 	case p.haveHash && !p.rotate:
 		fmt.Fprintf(w, "○ %-40s carries %s already\n", p.secretsPath, keyDeployerPasswordHash)
@@ -281,21 +281,9 @@ func (p *consolePlan) report(w io.Writer, written bool) {
 	}
 	if p.haveHash && !p.rotate {
 		if p.haveEntry {
-			fmt.Fprintf(w, `
-Nothing minted. Read the passphrase with console-password %s --show.
-Replace it — a person left, a console session was shared, a drill
-exposed it — with console-password %s --rotate --write. The old
-passphrase works until the host activates the generation that carries
-the new hash.
-`, p.host, p.host)
+			fmt.Fprintf(w, "\nnothing minted. read: console-password %s --show; replace: console-password %s --rotate --write\n", p.host, p.host)
 		} else {
-			fmt.Fprintf(w, `
-Nothing minted, and nothing can read this fort's console password: the
-host carries a hash and the registry has no passphrase behind it. A
-hash cannot be reversed, so the repair is a new passphrase —
-console-password %s --rotate --write. It stays a deliberate act because
-somebody may still hold the value that hash was made from.
-`, p.host)
+			fmt.Fprintf(w, "\nnothing minted. mint a new passphrase: console-password %s --rotate --write\n", p.host)
 		}
 		p.tail(w)
 		return
@@ -304,39 +292,17 @@ somebody may still hold the value that hash was made from.
 		fmt.Fprintln(w, "\ndry run — nothing minted (console-password", p.host, "--write).")
 		return
 	}
-	fmt.Fprintf(w, `
-Minted. The passphrase is in %s and NOWHERE else — not in this output,
-not in your scrollback. Read it when you need it:
-
-    fort console-password %s --show
-
-`, consoleRegistry, p.host)
+	fmt.Fprintf(w, "\nminted. passphrase in %s only (console-password %s --show)\n", consoleRegistry, p.host)
 	p.tail(w)
 }
 
-// tail is what the operator does next, and it differs by whether the
-// host has opted in yet.
+// tail: one pointer when the host has not opted in; the ! line in the
+// report carries the fact, this carries the fix.
 func (p *consolePlan) tail(w io.Writer) {
-	if !p.enabled {
-		fmt.Fprintf(w, `Next: the host must opt in. In %s, import the module and enable it
-(every host fort scaffold renders does both already, sfi/forts#24):
-
-    imports = [ inputs.forts.nixosModules.ops-console ];
-    sfi.ops.console.enable = true;
-
-Then PR both changes together — `+"`fort check`"+` fails a fort that enables the
-module without the hash, and warns on a credential nothing reads.
-`, p.hostNix)
+	if p.enabled {
 		return
 	}
-	fmt.Fprintf(w, `Next: PR the secrets file and the registry. The password works when %s
-has activated the generation that carries it; the pull loop does that on
-its own (modules/auto-rebuild.nix).
-
-Then open the console once and log in, so the failsafe is exercised and
-not merely believed: Lish for a Linode fort, `+"`virsh console %s`"+` on
-the hypervisor for a lab fort.
-`, p.host, p.host)
+	fmt.Fprintf(w, "next: set sfi.ops.console.enable = true in %s and PR both files together — fort check gates the pair\n", p.hostNix)
 }
 
 // readConsolePassword decrypts one entry of the registry; a variable so

@@ -541,7 +541,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		facts = append(facts, "plain fort: no cluster identity")
 	}
 	facts = append(facts, "mesh "+p.entry.MeshIP)
-	fmt.Fprintf(w, "mint %s   (%s)\n", p.host, strings.Join(facts, " · "))
+	fmt.Fprintf(w, "mint ⛫ %s   (%s)\n", p.host, strings.Join(facts, " · "))
 	// A dry run mints in memory and discards: a recipient derived from a
 	// key that does not exist yet is a throwaway, and printing it bare
 	// invites copying it somewhere. Say so; --write prints the real one.
@@ -602,13 +602,9 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	if p.consoleMint {
 		// Never the value: the registry is the one copy (console.go).
-		fmt.Fprintf(w, "The console passphrase is in %s and NOWHERE else — not in this output.\nRead it when you need it: fort console-password %s --show\n", consoleRegistry, p.host)
+		fmt.Fprintf(w, "console passphrase: in %s only (fort console-password %s --show)\n", consoleRegistry, p.host)
 	}
-	if !p.entry.IsCluster() {
-		fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then the image build + fort provision %s --image <path>\n", p.host)
-		return
-	}
-	fmt.Fprintf(w, "staged. Identity is sops-encrypted in-repo; nothing is left on this machine.\nnext: the fort's workloads (the estate's flux, or a layer's verbs: docs/layers.md) → PR → merge; then the image build + fort provision %s --image <path>\n", p.host)
+	fmt.Fprintln(w, "staged — commit the rendered files.")
 }
 
 // planMesh is the client side of the peer (mesh.go): the fort's Host

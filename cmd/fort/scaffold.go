@@ -204,7 +204,7 @@ func scaffold(args []string) error {
 		return err
 	}
 
-	fmt.Printf("%s   (%s)\n", host, scaffoldShape(entry))
+	fmt.Printf("⛫ %s   (%s)\n", host, scaffoldShape(entry))
 	written := 0
 	for _, f := range files {
 		mark, status := '●', f.note
@@ -246,16 +246,7 @@ func scaffold(args []string) error {
 		fmt.Println("\ndry run — nothing written (scaffold --write).")
 		return nil
 	}
-	if !entry.IsCluster() {
-		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (host keys, sops rule, deploy key — no cluster identity),\n", written, host)
-	} else {
-		fmt.Printf("\n%d file(s) written. next: fort mint %s --write (keys, sops rules, deploy key, canary),\n", written, host)
-	}
-	if entry.Realized() {
-		fmt.Printf("then PR → merge → fort image %s → fort provision %s --image <path>\n", host, host)
-	} else {
-		fmt.Printf("then PR → merge → fort image %s → write it to the machine by hand (docs/baremetal.md)\n", host)
-	}
+	fmt.Printf("\n%d file(s) written. next: fort mint %s --write\n", written, host)
 	return nil
 }
 

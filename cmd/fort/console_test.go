@@ -208,7 +208,7 @@ func TestConsolePassword(t *testing.T) {
 	}
 	buf.Reset()
 	p.report(&buf, true)
-	if !strings.Contains(buf.String(), "nothing can read") {
+	if !strings.Contains(buf.String(), "cannot be read back") || !strings.Contains(buf.String(), "--rotate --write") {
 		t.Fatalf("orphaned hash: want the report to say so, got %q", buf.String())
 	}
 
@@ -221,8 +221,8 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatal("--rotate: want a mint")
 	}
 
-	// The opt-in line is read from the host's default.nix, and the
-	// follow-up text turns on it.
+	// The opt-in line is read from the host's default.nix; once opted
+	// in, the report drops the pointer to it.
 	write(hostNix, "{\n  sfi.ops.console.enable = true;\n}\n")
 	write(registry, "lab-fort: ENC[z]\nsops: {}\n")
 	p, err = planConsolePassword(tmp, "lab-fort", false)
@@ -234,8 +234,8 @@ func TestConsolePassword(t *testing.T) {
 	}
 	buf.Reset()
 	p.report(&buf, false)
-	if !strings.Contains(buf.String(), "the getty reads the hash") || !strings.Contains(buf.String(), "virsh console lab-fort") {
-		t.Fatalf("opted in: want the exercise note, got %q", buf.String())
+	if !strings.Contains(buf.String(), "the getty reads the hash") || strings.Contains(buf.String(), "sfi.ops.console.enable = true in") {
+		t.Fatalf("opted in: want the ○ line and no opt-in pointer, got %q", buf.String())
 	}
 }
 

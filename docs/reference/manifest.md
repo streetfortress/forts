@@ -264,7 +264,7 @@ with what the sops secret derives, where the age key is at hand.
 | `go test ./cmd/fort` (the mirror tests) | `[cluster] datastore` ↔ `sfi.k3s.datastore`, `[cluster] audit_logging` ↔ `sfi.k3s.auditLog.enable` and `[links.<name>]` ↔ `sfi.links.<name>` in the host file — nix cannot read the manifest, so a test keeps each pair equal |
 | `mint` | `mesh_ip` (wg key, peer), the endpoint; the deploy key on the estate's ssh route; the cluster key and canary for a `[cluster]` fort (a plain fort skips them and the k3s token). A layer's identities are the layer's mint to make ([layers](layers.md)) |
 | `check`, a layer's verbs | `[dns] zone` (the app hostname's zone on a cloud fort); a layer reads its own file beside this one, `layers/<layer>/forts/<fort>.toml` |
-| `provision`, `preview`, `adopt` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped, not adoptable) |
+| `provision`, `preview` | the provider table (which backend, its credentials; `[baremetal]` has none — refused, skipped) |
 | the pulumi program | the provider table, `[dns]`, `[shape]`, `mesh_ip` (exported) |
 | `dismantle` | removes the file — the declaration goes first; the rest is its realization |
 | `destroy` | the gate: no manifest on `origin/main` and none in the working tree (there is no manifest left to read) |

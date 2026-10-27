@@ -306,7 +306,7 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 	if p.entry.Cloud() {
 		kind = "cloud: " + p.entry.Provider
 	}
-	fmt.Fprintf(w, "dismantle %s   (%s)\n", p.host, kind)
+	fmt.Fprintf(w, "dismantle ⛫ %s   (%s)\n", p.host, kind)
 	for _, rel := range p.removes {
 		fmt.Fprintf(w, "✗ %s\n", rel)
 	}
@@ -323,7 +323,7 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "◆ %-32s sops updatekeys (lost the %s recipient)\n", rel, p.host)
 	}
 	if p.consolePass {
-		fmt.Fprintf(w, "○ %-32s - the %s entry (its console passphrase, #524)\n", consoleRegistry, p.host)
+		fmt.Fprintf(w, "○ %-32s - the %s entry (its console passphrase)\n", consoleRegistry, p.host)
 	}
 	if len(p.residue) > 0 {
 		fmt.Fprintf(w, "! residue — %d file(s) still mention %s:\n", len(p.residue), p.host)

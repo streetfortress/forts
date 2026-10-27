@@ -202,7 +202,7 @@ func (p *sshConfigPlan) report(w io.Writer, written bool) {
 	case p.sshConfig == "" && p.knownHosts == "":
 		fmt.Fprintln(w, "nothing to write — both files are current.")
 	default:
-		fmt.Fprintln(w, "staged. Commit with the peers.json change it follows, or on its own.")
+		fmt.Fprintln(w, "staged — commit the rendered files.")
 	}
 }
 

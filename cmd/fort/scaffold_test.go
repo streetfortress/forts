@@ -103,7 +103,7 @@ func TestRenderScaffold(t *testing.T) {
 		t.Error("cluster-vars edit with no data: block must fail, not invent one")
 	}
 
-	// a [libvirt] host is the lab shape (fort adopt, the libvirt backend)
+	// a [libvirt] host is the lab shape (the libvirt backend)
 	if got := lab["nixos/hosts/lab-fort/default.nix"]; !strings.Contains(got, "runtime-qemu") || strings.Contains(got, "linode") {
 		t.Errorf("libvirt host should render the lab shape")
 	}

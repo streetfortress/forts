@@ -73,7 +73,7 @@ func TestRenderInit(t *testing.T) {
 	// The gate is the core's two steps and no layer's: a layer's step is
 	// what `fort layer add` appends (forts#144), and nothing logs into a
 	// chart registry here since the contract gate left (forts#143).
-	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "nix run ./nixos#fort -- check --all") || strings.Contains(m[".gitea/workflows/checks.yaml"], "helm") || strings.Contains(m[".gitea/workflows/checks.yaml"], "crd-diff") {
+	if !strings.Contains(m[".gitea/workflows/checks.yaml"], "nix run ./nixos#fort -- check --all --eval") || strings.Contains(m[".gitea/workflows/checks.yaml"], "helm") || strings.Contains(m[".gitea/workflows/checks.yaml"], "crd-diff") {
 		t.Errorf("workflow:\n%s", m[".gitea/workflows/checks.yaml"])
 	}
 	// The cache key is a live workflow expression, not the escaping that

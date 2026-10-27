@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,5 +140,22 @@ func TestSourceFindingsAnonymous(t *testing.T) {
 	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate", Auth: "ssh"}})
 	if len(fs) != 1 || !strings.Contains(fs[0].msg, "route ssh ([source] auth)") || !strings.Contains(fs[0].msg, "https://api.github.com") {
 		t.Errorf("ssh, declared: %+v", fs)
+	}
+}
+
+// evalHost prints the section, counts a failure as one error, and
+// annotates it under a workflow; a pass costs nothing.
+func TestEvalHost(t *testing.T) {
+	saved := nixEval
+	defer func() { nixEval = saved }()
+
+	nixEval = func(root, host string) error { return nil }
+	if got := evalHost("/estate", "lab-fort", false); got != 0 {
+		t.Fatalf("passing eval: want 0 errors, got %d", got)
+	}
+
+	nixEval = func(root, host string) error { return errors.New("evaluation aborted") }
+	if got := evalHost("/estate", "lab-fort", true); got != 1 {
+		t.Fatalf("failing eval: want 1 error, got %d", got)
 	}
 }

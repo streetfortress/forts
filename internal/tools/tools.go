@@ -90,7 +90,7 @@ func Command(name string, args ...string) (*exec.Cmd, error) {
 }
 
 // Runner is Command for a caller that runs the same tool more than once
-// (destroy's four git calls, adopt's virsh): the tool is checked here,
+// (destroy's four git calls): the tool is checked here,
 // and every command after that is one call.
 func Runner(name string) (func(args ...string) *exec.Cmd, error) {
 	if err := Ensure(name); err != nil {

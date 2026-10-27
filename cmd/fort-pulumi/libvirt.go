@@ -40,7 +40,7 @@ import (
 // as for Linode) when the apply creates the domain, and records
 // `forts:seed = nocloud` on the stack: the program declares the volume
 // whenever that key is set, so a host provisioned before the channel
-// existed (the three adopted lab VMs, and the dev fort provisioned from
+// existed (one provisioned from
 // an image that carried the key) never sees a
 // spurious ISO proposed on a day-2 apply. userData is a pulumi secret
 // and ignored after creation, as the Linode instance ignores metadatas:
@@ -182,8 +182,8 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		Xml: &libvirt.DomainXmlArgs{Xslt: pulumi.String(qcow2DriverXSLT)},
 		// Provision-time shape, ignored after creation: the provider reads a
 		// pool-resident file disk back as a volume ref, and reads no
-		// consoles/graphics/defaults back from a playbook-defined domain
-		// (fort adopt) — every one of these is replace-forcing, and a
+		// consoles/graphics/defaults back from a hand-defined domain —
+		// every one of these is replace-forcing, and a
 		// different shape IS a re-provision (destroy + provision), never an
 		// in-place change. What stays managed live: autostart, running,
 		// memory, vcpu (the last two also replace: a deliberate act).

@@ -312,6 +312,6 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 	case len(writes) == 0:
 		fmt.Fprintln(w, "nothing to write.")
 	default:
-		fmt.Fprintf(w, "staged. next: PR → merge; every fort of this estate dials the host on its next rebuild, and the host's reconciler (wg-link-%s) fills its peer set on its next run.\n", estate.ShortName(p.est.Source.Repo))
+		fmt.Fprintln(w, "staged — commit the rendered files.")
 	}
 }

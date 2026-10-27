@@ -43,9 +43,6 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"provision", ""}, want: []string{"cloud-fort", "lab-fort", "plain-cloud-fort", "plain-fort", "sfi-fort-e33e2d5"}},
 		{line: []string{"preview", ""}, want: []string{"cloud-fort", "lab-fort", "plain-cloud-fort", "plain-fort", "sfi-fort-e33e2d5"}},
 
-		// A [libvirt] manifest with no stack yet. lab-fort has one.
-		{line: []string{"adopt", ""}, want: []string{"plain-fort", "sfi-fort-e33e2d5"}},
-
 		// The inverse of the manifest list: a stack whose manifest is gone.
 		{line: []string{"destroy", ""}, want: []string{"gone-fort"}},
 
@@ -357,8 +354,8 @@ func completionEstate(t *testing.T) string {
 }
 `)
 
-	// Two stacks: lab-fort is declared (so adopt has nothing to do with
-	// it), gone-fort is not (so destroy is what it is waiting for).
+	// Two stacks: lab-fort is declared, gone-fort is not (so destroy is
+	// what it is waiting for).
 	for _, stack := range []string{"lab-fort", "gone-fort"} {
 		write(filepath.Join(pulumiProject, "state/.pulumi/stacks/forts", stack+".json"), "{}\n")
 	}

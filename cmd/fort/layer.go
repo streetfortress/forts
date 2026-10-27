@@ -258,14 +258,14 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 		fmt.Fprintf(w, "· %-30s already as planned\n", f)
 	}
 	if !written {
-		fmt.Fprintln(w, "\nPlan only; --write edits and stages the files, then runs the layer's init.")
+		fmt.Fprintf(w, "\ndry run — nothing written (%s --write).\n", verb)
 		return
 	}
 	if p.remove {
-		fmt.Fprintf(w, "\nNext: nix flake lock ./nixos (the input left when no other role of it is installed), then the PR.\n")
+		fmt.Fprintln(w, "\nstaged — commit the edited files. next: nix flake lock ./nixos")
 		return
 	}
-	fmt.Fprintf(w, "\nThen: fort-%s init %s\n", p.ref.role, strings.Join(passthrough, " "))
+	fmt.Fprintf(w, "\nnext: fort-%s init %s\n", p.ref.role, strings.Join(passthrough, " "))
 }
 
 // runLayerInit execs the layer's init with the operator's flags, after

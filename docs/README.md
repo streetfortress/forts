@@ -1,231 +1,176 @@
-# Forts — the CLI workflow
+# Forts — Getting Started
 
-A **fort** is one host: one NixOS machine, one pulumi stack named after it,
-and one single-node k3s cluster that flux
-reconciles from `flux/clusters/<host>` + `flux/apps/<host>`. Everything
-about it — the node config, its identity, its workloads, the state that
-says it exists — lives in this repo, and the `fort` CLI (`cmd/fort`)
-is the one tool that moves a fort through its life. There is no playbook,
-no console step, no host shell in the happy path.
+## Configuration
 
+We tried to minimize the amount of new configuration when designing forts. Typically, when you're building out an environment, you're repeating a lot of manifest content with only a handful of differentiating factors: names, ip addresses, that kind of thing.
+
+To that end, there's only two fort configuration files, and they both use `.toml` to distinguish themselves from the Flux and nixOS configs. These files are kept intentionally brief: 
+
+**Estate.toml** holds the core estate-level facts:
 ```
-fort <verb> …                  # every verb, on an operator machine (nix profile install <estate>/nixos#fort)
-go run ./cmd/fort <verb> …     # every verb, from a checkout of this repo
-just <verb> …                  # the estate's own verbs, which are not the CLI: fetch-kubeconfig, updatekeys (init.md)
+name = "estate"
+operator_keys = [ "ssh-ed25519 AAAA...", ] # ssh public keys for operator access after bootstrapping; configure later in default.nix
+
+[source]
+repo = "https://forge.streetfortress.cloud/sfi/estate" # where the estate's forts will pull their configurations from
+
+[mesh]
+cidr = "10.1.0.0/16" # the mesh network topology
 ```
 
-Two shapes, one table apart: a fort with a `[cluster]` table is a flux
-cluster; without one it is a **plain fort** — the same hardened host and
-the same `deployer` with the ops verbs (#647, [ops.md](ops.md)), and no cluster. The
-framework stops there on purpose: ideally nobody logs in, and the
-prescribed access is `deployer` over the mesh and the console password.
-What a plain fort does beyond that is plain NixOS in its host file, the
-estate's. A plain fort goes where a cluster fort goes — a lab VM, a
-linode, a machine on the LAN: the provider table decides the runtime and
-the backend, the `[cluster]` table decides k3s and flux, and the two do
-not depend on each other (forts#142). The verbs know the difference from
-the manifest; nothing else changes hands ([manifest.md](manifest.md)).
+**\<fort\>.toml** holds the core fort-level facts:
+```
+mesh_ip = "10.1.0.2"
 
-## Verbs by intent
 
-| kind | verbs | what they touch |
-|---|---|---|
-| **author** | [`scaffold`](scaffold.md), [`mint`](mint.md), [`dismantle`](dismantle.md), [`ssh-config`](ssh-config.md), [`layer add`, `layer remove`](layers.md) | the repo only — render or remove files, stage them for a PR. Dry run by default; `--write` acts. |
-| **layers** | `fort <layer> <verb>` ([layers](layers.md)) | the layer's own binary, `fort-<layer>`, from PATH: what sits on top of the core — a hub role with a render, the chart contract, a backup store. Core knows the protocol and no layer by name. |
-| **apply** | [`provision`](provision.md), [`adopt`](provision.md#adopt), [`destroy`](destroy.md) | the provider (Linode, or soundship's libvirt), through pulumi with inherited stdio: you read the preview and confirm. |
-| **read** | `check`, [`preview`](provision.md#preview), [`wg-conf`](ssh-config.md#fort-wg-conf-member--a-mac-joins-the-mesh) | nothing. `check` is the admission gate over the repo (CI runs it); `preview` is the diff against pulumi, `--refresh` the drift against the provider; `wg-conf` prints a mesh member's own wg0 from peers.json. |
+[libvirt] # other backends: baremetal and linode (more to come)
+uri = "qemu+ssh://my-hypervisor/system"
+ip = "10.0.0.2" # LAN IP
 
-Author verbs never overwrite: scaffold keeps a file that exists, add only
-creates files and appends list entries, seed adds missing keys and never
-rewrites a Secret, mint restores an identity before minting anything. A
-re-run fills gaps; rotation and replacement are deliberate acts you make
-by removing the thing first.
+[shape] # some backend providers use a 'sku' instead of a shape
+vcpus = 4
+memory = 8
+disk = "80G"
 
-## The rhythm: author → PR → merge → apply → commit the state
+[cluster] # enable k3s if you want to leverage flux for workload management
+datastore = "sqlite"
+audit_logging = true
+```
 
-Every fort change follows the same beat, and the reasons are the rules.
+There's a bit more when **Estate Linking** gets involved, but that's the core of it. 
 
-1. **Author on a branch.** Run the author verb (dry run, then `--write`).
-   It stages exactly what it generated. You refine in place — replicas,
-   hostnames, the odd hand edit — and commit.
-2. **PR, review, merge.** Generated code is reviewed like any other. CI
-   runs `fort check --all` (every manifest valid, the tree matches them,
-   the estate names the devices that hold `deployer` ([init.md](init.md#the-operators)),
-   every flux layer kustomize-builds — a listed-but-unseeded Secret fails
-   it, that red X is the guard working — strict envsubst satisfiable, no
-   ConfigMap or Secret above the API server's 1 MiB limit) and `nix eval`
-   of every host. A layer's gate is its own step after it ([layers](layers.md)).
-3. **Apply from merged main.** `provision` and `destroy` run against what
-   main says. `destroy` refuses outright unless the host's manifest is
-   *absent* from `origin/main` — the merged dismantle PR is the deliberate
-   act `protect: true` was guarding for.
-4. **Commit the pulumi state as its own PR.** Apply verbs write the file
-   backend under `provisioning/pulumi/state/` and stage it. That PR carries no
-   code, just the checkpoint: it is the provenance — how the host was
-   provisioned, or destroyed — and `fort preview --all` is red until it
-   lands.
+Run `fort init` inside an empty directory with `estate.toml` to render out _the estate's_ boilerplate. Then, `fort scaffold <fort>` renders out _that fort's_ boilerplate.
 
-The state lives in the repo on purpose: the owning repo is where state
-lives, which dissolves the client-buildout bootstrap problem, and a
-checkpoint in git history is an audit trail no backend gives you for free.
+## Deploying a fort
 
-## The first provision of a fort
+In this GitOps environment, _everything_ about a fort involves a git commit; doing _anything_ usually requires a handful of manifest files and edits.
+
+The `fort` cli provides a few commands to help facilitate this boilerplate:
+
+- `scaffold`: renders the fort's nixos and flux trees.
+- `mint`: generates _identity_ secrets for the fort.
+- `add`: render flux HelmRelease, Gateway API CRs, etc.
+- `seed`: generates _application_ secrets for the fort workloads.
+- `image`: builds the fort's bootable disk image.
+- `provision`: deploys the fort's disk image using **pulumi**.
+- `dismantle`: removes the rendered manifests.
+- `destroy`: destroys the _pulumi stack_ and associated resources _like keys_.
+
+### The rhythm: author → PR → merge → apply → commit the state
+
+Every change follows the same process: prepare the change in git, review and merge to main, the change rolls out automatically across the estate.
+
+The 'PR for every change' practice might feel like overkill, but it has a few upsides that make it interesting:
+- it builds a recorded history of infrastructure configurations
+- everything being declared makes it easy to reason about during incidents
+- committed revisions make rollback and recovery straightforward, drill-able steps.
+
+## Your first 5 minutes with forts:
+
+### Create an Estate
+
+Start by creating an empty git repo. Write an `estate.toml` file describing the `[source]` repository, `[mesh]` network, and operator SSH public keys.
 
 ```
 fort init --write        ← once per estate: estate.toml, the flake, the rules, the layer (init.md)
-forts/<host>.toml ← the manifest (manifest.md): copy a sibling's, edit
-                                 mesh_ip, [dns], the provider table; fort check --all
-fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
-fort mint <host> --write      ← keys, sops rules, mesh peer, deploy key, canary;
-                                 the fort's block in mesh/ssh_config + its
-                                 host key in mesh/known_hosts (ssh-config.md);
-                                 the console password (sfi/forts#24): its hash
-                                 in the fort's sops file, the passphrase in
-                                 provisioning/console-passwords.yaml —
-                                 `fort console-password <host> --show` reads it
-                              → PR → merge
-fort image <host>             ← nix build (the variant from the manifest); the output
-                                 is the artifact, no secret inside (#659)
-                                 → ~/.cache/forts/<host>-nixos.{qcow2,img.gz,img}
-fort provision <host> --image <path>   ← pulumi up, you confirm; the host key rides as
-                                          metadata.user_data (linode) or on a cidata
-                                          volume (libvirt), #606/#657; the image is
-                                          released once the host exists; state staged
-                              → "<host>: provisioned" PR (state only) → merge
-                                 (a [baremetal] host: no provision — you write
-                                  the image to the disk, baremetal.md)
-fort add <host> oci://…/<chart> --version X --write   ← per workload
-fort seed <host> --write      ← the sops Secrets
-fort check <host>             ← what CI will say
-                              → PR → merge → flux reconciles
 ```
 
-A layer's author verbs (an app's tree from its chart, [layers](layers.md))
-can run before the host exists — they are pure repo mutations — and
-usually do, so the first flux sync already finds the workloads. `fort image` runs on any x86_64 Nix host with KVM (devbox;
-soundship needs no shell) and needs nix alone. See
-[`docs/nixos/operations.md`](../nixos/operations.md) for the image and
-the host side.
+This command will render out _the estate's_ directory tree. Commit this and push to the repo.
 
-## Day 2
+### Scaffold a Fort
 
-- **A provider-side edit** (firewall rule, DNS record, a resize): change
-  the program or the manifest, `fort preview <host>` to read the diff, PR,
-  merge, `fort provision <host>` to apply, commit the state.
-- **Drift:** `fort preview --all --refresh --expect-no-changes`, one
-  `OK` / `DRIFT` / `FAILED` / `PENDING` line per stack. `PENDING` means state without a manifest: a dismantle merged and
-  `fort destroy` has not run. The `--refresh` block above the program diff
-  compares the provider with the *checkpoint*, not the program — provision-time
-  outputs (status, disks, firewall devices) look stale there until a
-  `pulumi refresh` is committed; only the program diff counts.
-- **A new workload:** the estate's flux, or a layer's verbs over it
-  ([layers](layers.md)) → `fort check` → PR, as at the first provision.
-- **OS updates** are pull-based on the host (`auto-rebuild`): a merge to
-  main is the deploy. The CLI is not involved.
-- **A framework bump:** move the tag in `nixos/flake.nix`, `nix flake
-  lock ./nixos`, PR. The gate runs the new pin's `fort check`, so the
-  edits the release needs surface in the PR; the release note lists the
-  rest. nixpkgs moves with it, by design ([release](release.md)).
+Write a `<fort>.toml` file in the `forts/` directory. The fort file is where you define its mesh IP, resource allocations, and provider (eg libvirt).
+
+Then run:
+
+```
+fort scaffold <host> --write  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
+```
+
+Like `fort init`, `fort scaffold` will render out _the fort's_ nixos and flux directory trees.
+
+
+#### Mint the fort's identity
+
+One last step before we deploy. The fort has manifests, but is missing important sensitive configurations:
+
+- Its **host SSH key**. This is used to identify the fort to other machines AND doubles as the **host age key** used to decrypt secrets on the fort.
+- Its **wireguard key** and peer configuration. Without these the fort cannot communicate on the mesh.
+- Its **kubernetes cluster token** and **cluster age key** used to decrypt secrets in the cluster.
+
+Forts relies heavily on [sops](https://getsops.io) for secrets management. Secrets sit encrypted at rest _in the estate repo_ and are made accessible by effective key management:
+- A fort cannot read secrets encrypted to another fort
+- A _cluster workload_ cannot read secrets encrypted in the fort's _own host_ secrets
+
+Because of this exposure it's common to keep estate repos private/unlisted (to avoid "collect now, decrypt later" style attacks.) SOPS uses AGE by default when encrypting secrets.
+
+
+Run `fort mint <fort> --write` and commit the changes.
+
+### Provision the Fort
+
+Once a fort has been scaffolded and minted, it's ready to deploy. `fort image <fort>` will build a bootable disk image in the format required by the fort's **provider** (libvirt: qcow2, linode: .img.gz, etc). The build is its own verb, not a step inside `provision`: images build where a builder lives (an x86_64 nix host), and an operator can build a batch ahead of a deployment.
+
+That image is pre-configured to look up the estate repo and begin reconciling. No step 2, just boot it and you're ready to go.
+
+#### Compute Providers
+`fort provision <fort>` takes that image and deploys it on a _compute provider_:
+
+| provider | notes |
+| --- | --- |
+| `libvirt` | any libvirt hypervisor |
+| `linode` | the only cloud provider supported atm. Any that allow upload of custom VM disk images should be supportable in the future |
+| `baremetal` | Works in practice but not automated yet |
+
+#### Fort cli is a pulumi wrapper
+
+`fort provision` and its companions `fort destroy` and `fort preview` call [**pulumi**](https://github.com/pulumi/pulumi) under the hood. Everything above the fort is reconciled from the estate - but everything below it (the compute instance, disk, firewall) are not.
+
+Thankfully, that's a short list, and **pulumi** serves as a good backend for deploying forts.
+
+Each fort gets an independent _pulumi stack_ that tracks deployment state in a _pulumi history file_.  **`fort provision` leaves the pulumi history uncommitted** in the repo. Commit this after provisioning and merge it to main.
+
+
+### Define a Kubernetes Workload
+
+Once your fort is deployed, it continuously reconciles both the `flux/` and `nixos/` trees. These work _exactly_ like a vanilla flux or nixos environment. You can define your own `HelmReleases`, custom nix configs, etc just like normal.
+
+The fort CLI has a few more commands that can help with the workload boilerplate:
+
+- `fort add <fort> oci://…/<chart>`: Render a HelmRelease and optionally the associated Gateway API CRs
+- `fort seed <fort>`: Generate and encrypt strong secrets for your workloads
+- `fort check <host>`: Run `kustomize build` and static validation against the `flux/` tree and the manifests; `--eval` adds a full nix evaluation of the host ([reference/check](reference/check.md)).
+
+## Day 2 Stuff
+
+Eventually you will need to get onto a fort for some operations work. When that day comes, your options are:
+
+- SSH over the estate's **Mesh**
+- Console access via the **provider backend**
+
+See [ops.md](ops.md) for more information.
+
+### Updating Forts
+
+We're still working on the update cadence for forts. The nixOS flake will require more updates than the templates and CLI. To update the flake, the process looks like:
+
+1. Move the tag in `nixos/flake.nix`
+2. Run `nix flake lock ./nixos`
+3. Commit and merge to main. The forts will reconcile the change shortly afterwards.
 
 ## Retirement
 
-```
-fort dismantle <host> --write   ← each installed layer's dismantle first (the
-                                  cascade, layers.md — a layer's failure stops the
-                                  verb), then the manifest, nix host dir + secrets,
-                                  both sops rules (+ updatekeys), the peer, both fleet
-                                  trees; prints the residue to triage → PR → merge
-                                  (the residue excludes what the plan settles)
-fort destroy <host>             ← gated on that merge: power off, refresh,
-                                  unprotect, destroy, stack rm, deploy key revoked;
-                                  state removal staged → "<host>: destroyed" PR
-```
+When it's time to decommission a fort, these CLI commands take care of the removal boilerplate:
 
-## Credentials and environment
+- `fort dismantle <fort>` removes the files created by `fort scaffold`. Commit and merge their removal.
+- `fort destroy <fort>` runs the equivalent `pulumi destroy` against the fort and _deletes the keys associated with the fort_. 
 
-| need | comes from | verbs |
-|---|---|---|
-| admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
-| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md), forts#167) |
-| `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, adopt, preview, destroy |
-| `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
-| the hypervisor | the fort's `[libvirt] uri` (#27); `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |
-| the tools the verbs exec (`git`, `helm`, `jq`, `kustomize`, `mkisofs`, `mkpasswd`, `qemu-img`, `sops`, `virsh`, `xsltproc`) | the `fort` package, which carries them on its own PATH | every verb that shells out |
-| `nix`, `pulumi` | the host | `image` (nix), the apply verbs (pulumi) |
-| nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
-
-### The tool set
-
-The CLI shells out to ten binaries, and they are one declared set:
-`internal/tools/tools.json` names each one with the nixpkgs attribute it
-comes from. `packages.fort` wraps `fort` and `fort-pulumi` with the whole
-set ahead of them on PATH, from the framework's own nixpkgs, so a verb
-never fetches a tool with a provider waiting on it:
-
-```
-nix profile install <estate>/nixos#fort   ← an operator machine, once
-nix run <estate>/nixos#fort -- check --all
-nix develop                               ← in sfi/forts: the same set, plus Go
-```
-
-The CLI never fetches a tool itself. A verb checks for the tools it
-needs before it does any work, and a missing one is named with both ways
-to get it: the machine's own package manager, or the whole set through
-the package or the dev shell. So a dev who already keeps `git`, `helm`,
-`jq`, `kustomize` and `sops` needs no nix on the machine for `check`,
-`scaffold` or the sops verbs; nix is for the servers, and
-for the verbs that build or provision them (`image` runs `nix build`,
-`provision` and `console-password` want the libvirt and mkpasswd tools).
-
-`nix` and `pulumi` stay the host's own, and the set records why. `nix` is
-the client of the host's daemon. `pulumi` loads its bundled Go language
-host from the directory of its own binary, and the CLI sets
-`PULUMI_IGNORE_AMBIENT_PLUGINS` so the provider version `go.mod` pins
-always wins — a `pulumi` on a wrapper's PATH would satisfy neither. A
-verb that wants a tool it cannot find names the attribute to install it
-from, and stops before it does any work.
-
-`PULUMI_BACKEND_URL` is forced to this checkout's `provisioning/pulumi/state` by
-every verb, so a `pulumi login` elsewhere can never redirect state into
-another worktree. The stock `pulumi … -s <host>` from `provisioning/pulumi` under
-the same environment is always a first-class escape hatch.
-
-**Without a TTY** (an agent, a script, CI) pass `--yes` to the apply
-verbs: it is pulumi's own `--yes --non-interactive`, and the merge that
-put the manifest on main is the confirmation. Without a TTY and without
-`--yes` the verb refuses up front, before it stages anything.
-
-## Completion
-
-The `fort` package carries a completion script for zsh
-(`share/zsh/site-functions/_fort`, which `compinit` reads) and one for
-bash (`share/bash-completion/completions/fort`, loaded on demand).
-Install the package and press `<TAB>`; from a checkout, `source
-completions/fort.bash`, or put `completions/` on `$fpath` before
-`compinit`.
-
-Neither script knows anything: both call `fort __complete`, a hidden
-verb that prints the candidates for the word under the cursor
-(`cmd/fort/complete.go`). The candidate set is **per verb**, because the
-verbs do not want the same list — `destroy` wants a stack whose manifest
-is gone, `wg-conf` wants a mesh member, which `macmini` is and never has
-a manifest. The
-completion reads the tree only: it never `git fetch`es, so `destroy`'s
-candidates are right except between the merge of a dismantle PR and the
-pull.
-
-Three copies of the verb list now exist — the dispatch switch, `usage()`
-and the completion table — so `cmd/fort/complete_test.go` asserts that
-the table equals the switch, and that each verb's flags equal the ones
-its `flag.FlagSet` registers. A verb or a flag added to one and not the
-other fails `go test`.
-
-## Pages
+## More Reading
 
 - [manifest](manifest.md) — the fort's declaration: neutral intent + one provider table
 - [scaffold](scaffold.md) — the host's generated surface, from its manifest
 - [mint](mint.md) — the host's identity, sops-encrypted in-repo
-- [provision](provision.md) — the first provision and day-2 applies; `preview`, `adopt`
+- [provision](provision.md) — the first provision and day-2 applies; `preview`
 - [baremetal](baremetal.md) — a fort on hardware: the `[baremetal]` table, the hardware-neutral image, the provision by hand
 - [init](init.md) — create an estate: the files every other verb assumes
 - [ops](ops.md) — the host side: the three rungs of the ops ladder, the verb each rung has, and how an estate or a layer declares one of its own
@@ -238,13 +183,50 @@ other fails `go test`.
   `known_hosts` rendered from peers.json and the manifests; `wg-conf` for a
   Mac joining the mesh
 - [destroy](destroy.md) — the side-effects half, gated on the merge
+- [tools](reference/tools.md) — the CLI's tool set: what the package carries, what the host owns, and why
+- [check](reference/check.md) — the merge gate: what it checks per fort and fleet-wide, reading the output, CI annotations
 - [release](release.md) — a release is the flake at a tag: the contract, the two kinds of tag, nixpkgs as the channel, templates as bootstrap only, how an estate bumps
 
-## The estate layout (v1, 2026-10-04)
+## Appendix
 
-What the verbs read and write in an estate, by directory. Decided in
-sfi/deployments#525 and applied to the CLI with the split (sfi/deployments#385,
-step 3); sfi/deployments itself moves to it at sfi/deployments#675.
+### Reading a verb's report
+
+Every author verb prints the same report twice: without `--write` it is a dry
+run (a plan, nothing touched), with `--write` it is the record of what was
+laid down. One line per file, led by a mark:
+
+| mark | meaning |
+| --- | --- |
+| `●` | created — a file this verb writes new |
+| `○` | edited — an existing file this verb adds to or confirms current; never a rewrite |
+| `◆` | regenerated — rendered wholesale from its sources (`ssh_config`, `known_hosts`, sops updatekeys); regenerate, never hand-edit |
+| `✗` | removed — or, in `fort check` and the `fort destroy` gates, a failure |
+| `✓` | a passed check or gate |
+| `·` | a note — nothing was done; context you may want |
+| `!` | attention — something this verb cannot fix; the line names the repair |
+
+Author verbs stage what they write and stop there: the commit and the PR stay
+with you. That is the whole contract behind "staged — commit the rendered
+files."
+
+### Credentials and environment
+
+| need | comes from | verbs |
+|---|---|---|
+| admin age key (`~/.config/sops/age/keys.txt`) | you | mint, seed, dismantle (updatekeys), everything that reads `provisioning/secrets.yaml` |
+| `gitea-token` or `github-token` — the forge's kind, derived from the host of `estate.toml`'s `repo` | `provisioning/secrets.yaml` | mint (register deploy key), destroy (revoke) — on the ssh route; an estate whose `repo` is `https://` clones anonymously and needs neither ([init.md](init.md), forts#167) |
+| `PULUMI_CONFIG_PASSPHRASE` | env, else `pulumi-passphrase` in `provisioning/secrets.yaml` | provision, preview, destroy |
+| `LINODE_TOKEN` | env, else `linode-token` in `provisioning/secrets.yaml` | the same, for `provider: linode` |
+| the hypervisor | the fort's `[libvirt] uri` (#27); `LIBVIRT_DEFAULT_URI` in the environment wins, and a destroy reads `forts:libvirtUri` off the stack | the same, for `provider: libvirt` |
+| the tools the verbs exec (`git`, `helm`, `jq`, `kustomize`, `mkisofs`, `mkpasswd`, `qemu-img`, `sops`, `xsltproc`) | the `fort` package, which carries them on its own PATH ([reference/tools](reference/tools.md)) | every verb that shells out |
+| `nix`, `pulumi` | the host | `image` (nix), the apply verbs (pulumi) |
+| nothing | — | `check` (CI runs it without any key), `scaffold`, `wg-conf`, `ssh-config` (the `ssh_config` half; a fort's `known_hosts` line needs the admin age key) |
+
+
+## The estate layout 
+
+Here's what an estate typically looks like. These directories and files are generated by `fort init` and `fort scaffold` etc.
+
 
 ```
 forts/<host>.toml                the manifests: one file per fort, the declaration
@@ -267,8 +249,3 @@ provisioning/
   pulumi/                        the project file, Pulumi.<host>.yaml per stack, and state/ (the file:// backend)
 .sops.yaml                       the flux rules: one per cluster, plus the shared infrastructure rule
 ```
-
-`provisioning/pulumi/Pulumi.yaml` is the estate's: it names the program
-(`main:`), which the framework provides. Until `fort init` renders it, a
-new estate writes it by hand.
-

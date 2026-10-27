@@ -224,7 +224,7 @@ func initCmd(args []string) error {
 		fmt.Println("\ndry run — nothing written (init --write).")
 		return nil
 	}
-	fmt.Printf("\n%d file(s) written. next: nix flake lock ./nixos; provide the files above; write forts/<host>.toml; fort scaffold <host> --write\n", written)
+	fmt.Printf("\n%d file(s) written. next: nix flake lock ./nixos\n", written)
 	return nil
 }
 

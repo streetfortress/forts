@@ -29,6 +29,7 @@ import (
 func check(args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	all := fs.Bool("all", false, "every host with a manifest")
+	eval := fs.Bool("eval", false, "after the static checks, nix-eval each checked fort's nixos configuration (needs nix)")
 	var forts []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		forts = append(forts, args[0])
@@ -108,11 +109,50 @@ func check(args []string) error {
 		findings = append(findings, hypervisorFindings(fort, entry)...)
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
 	}
+	if *eval {
+		if err := tools.Ensure("nix"); err != nil {
+			return err
+		}
+		for _, fort := range forts {
+			errors += evalHost(root, fort, o.annotate)
+		}
+	}
 	if errors > 0 {
 		return fmt.Errorf("%d error(s)", errors)
 	}
 	fmt.Println("all checks passed")
 	return nil
+}
+
+// nixEval execs the one eval; a variable so the test needs no nix store
+// behind it.
+var nixEval = func(root, host string) error {
+	cmd, err := tools.Command("nix", "eval", "--raw", "./nixos#nixosConfigurations."+host+".config.system.build.toplevel.drvPath")
+	if err != nil {
+		return err
+	}
+	cmd.Dir = root
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// evalHost is the nix half of the gate (--eval): the host's whole
+// module system evaluates, through to the toplevel derivation, whose
+// path prints as the proof. A staged-but-unprovisioned host fails here
+// by design — its mesh peer does not exist until mint — the same
+// deliberate red the workflow comment documents.
+func evalHost(root, fort string, annotate bool) int {
+	fmt.Printf("== nix eval ⛫ %s\n", fort)
+	if err := nixEval(root, fort); err != nil {
+		fmt.Printf("  ✗ nixos/hosts/%s: %v\n", fort, err)
+		if annotate {
+			fmt.Printf("::error::nix eval failed for %s\n", fort)
+		}
+		return 1
+	}
+	fmt.Println()
+	return 0
 }
 
 // manifestFindings: every manifest parses and validates — exactly one
@@ -286,7 +326,7 @@ type finding struct {
 // reportFindings prints one fort's findings and returns its error count.
 // With annotate, errors and warnings also go out as workflow commands.
 func reportFindings(w io.Writer, fort string, findings []finding, annotate bool) int {
-	fmt.Fprintf(w, "== %s\n", fort)
+	fmt.Fprintf(w, "== ⛫ %s\n", fort)
 	errors := 0
 	for _, f := range findings {
 		switch f.level {

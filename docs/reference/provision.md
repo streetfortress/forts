@@ -3,7 +3,6 @@
 ```
 fort provision <host> [--image <path>] [--yes]
 fort preview  (<host> | --all) [--refresh] [--expect-no-changes]
-fort adopt    <host> [--yes]
 ```
 
 `provision` is `pulumi up -s <host>` with the credentials, backend,
@@ -149,10 +148,9 @@ The provision also records `forts:seed` on the stack (`linode-metadata`
 or `nocloud`): committed provenance of the channel the host was
 provisioned through, next to `forts:imageId`. The libvirt program
 declares the seed volume only when that key says `nocloud`, so a host
-provisioned before the channel existed — the three adopted lab VMs, and
-the dev fort provisioned from an image that carried the key — never sees
-an empty ISO proposed on a day-2 apply. Those hosts get the channel when
-they are re-provisioned.
+provisioned before the channel existed (from an image that carried the
+key) never sees an empty ISO proposed on a day-2 apply. Those hosts get
+the channel when they are re-provisioned.
 
 Whether this apply creates the host is the stack's answer, not the
 flags': `provision` runs `pulumi stack export` and looks for a resource
@@ -336,29 +334,6 @@ The read-only half: `pulumi preview -s <host> --diff`, same environment.
   `just iac-drift` = `--all --refresh --expect-no-changes`, the fleet
   drift check. `PENDING` is the in-between state after a dismantle merge.
 
-## adopt
-
-```
-fort adopt <host>          # a [libvirt] manifest, no stack yet
-```
-
-Brings a lab VM that predates the backend under it **without a
-re-provision**: refresh the pool (older images were copied in behind
-libvirt's back), import the live domain and volume into a new stack (`pulumi
-import` — reads the hypervisor, writes local state only), preview the
-program against them and refuse unless the only changes are the live
-properties (`autostart`, `running`), then one `pulumi up` you confirm
-converges those. The domain ignores its provision-time shape after creation
-(disks, the seed CD-ROM, consoles, graphics, the driver XSLT, the provider's
-defaults — each replace-forcing, none read back), while memory and vCPUs
-stay live so a resize still shows as the replace it is. `forts:imageId`
-records `adopted-<date>`, not an image, and no `forts:seed` is set: an
-adopted host has no seed volume and gets one at its re-provision. Stage the
-stack for its own PR (`<host>: adopted`).
-
-All three playbook-era lab VMs were adopted this way; `provision --image`
-creates a new lab fort, like a cloud one.
-
 ## What the backends realise
 
 **linode** (`[linode]` `region` + `type`, `[dns]` `zone` + `name`): the
@@ -433,7 +408,7 @@ The hypervisor comes from the fort: `[libvirt] uri` in its manifest
 (#27), which the CLI hands to the provider as it stands.
 `LIBVIRT_DEFAULT_URI` in the environment wins over it — the escape
 hatch, and the one place a URI with a credential path in it belongs.
-`fort provision` and `fort adopt` also record the URI on the stack as
+`fort provision` also records the URI on the stack as
 `forts:libvirtUri`, because `fort destroy` runs after the dismantle PR
 deletes the manifest and nothing else can say which machine holds the
 domain.

@@ -556,7 +556,7 @@ func (p *linkPlan) apply(tool secretsTool) error {
 
 func (p *linkPlan) report(w io.Writer, written bool) {
 	r := p.remote.est
-	fmt.Fprintf(w, "link add %s → %s   (mesh %s · %s · %s)\n", p.host, r.Ref(), orNone(r.Mesh.CIDR), p.link.Interface, p.link.Zone)
+	fmt.Fprintf(w, "link add ⛫ %s → %s   (mesh %s · %s · %s)\n", p.host, r.Ref(), orNone(r.Mesh.CIDR), p.link.Interface, p.link.Zone)
 	fmt.Fprintf(w, "  address    %-16s %s\n", p.link.Address, p.addressWhy)
 	fmt.Fprintf(w, "  port       %-16d %s\n", p.link.Port, p.portWhy)
 	fmt.Fprintf(w, "  public key %s\n", p.wg.public)
@@ -596,7 +596,7 @@ func (p *linkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "dry run — nothing written (link add --write).")
 		return
 	}
-	fmt.Fprintf(w, "staged. The private half is sops-encrypted in-repo; nothing is left on this machine.\nnext: PR → merge; then, in a checkout of %s: fort estate link %s --write\n", r.Ref(), p.est.Source.Repo)
+	fmt.Fprintf(w, "staged — commit the rendered files. next, in a checkout of %s: fort estate link %s --write\n", r.Ref(), p.est.Source.Repo)
 }
 
 func orNone(s string) string {

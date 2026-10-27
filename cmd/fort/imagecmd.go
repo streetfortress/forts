@@ -123,7 +123,7 @@ func plainImage(v variantSpec, host string, entry manifest.Host, src, out string
 	if err := copyPrivate(src, out); err != nil {
 		return err
 	}
-	fmt.Printf("== done. Plain build output, no secret inside: %s\n", out)
+	fmt.Printf("== done: %s\n", out)
 	if b := entry.Baremetal(); b != nil {
 		// No provider consumes this one: the writer is a human at the
 		// machine. The host key's channel for this platform is #658.
@@ -131,10 +131,10 @@ func plainImage(v variantSpec, host string, entry manifest.Host, src, out string
 		if disk == "" {
 			disk = "<disk>"
 		}
-		fmt.Printf("== next: write it to %s from a live ISO (docs/baremetal.md); the host key's channel for baremetal is #658, not built yet\n", disk)
+		fmt.Printf("== next: write it to %s from a live ISO (docs/baremetal.md)\n", disk)
 		return nil
 	}
-	fmt.Printf("== next: fort provision %s --image %s   (the host key arrives through the %s channel at first boot)\n", host, out, v.channel())
+	fmt.Printf("== next: fort provision %s --image %s\n", host, out)
 	return nil
 }
 

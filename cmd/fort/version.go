@@ -24,7 +24,7 @@ var buildRev = "dev"
 // or on an estate that pins a branch, there is no tag to print and the
 // line says which.
 func version(w io.Writer) error {
-	fmt.Fprintf(w, "fort %s\n", buildRev)
+	fmt.Fprintf(w, "⛫ fort %s\n", buildRev)
 
 	root, err := repoRoot()
 	if err != nil {

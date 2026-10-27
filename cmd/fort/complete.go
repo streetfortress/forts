@@ -123,11 +123,10 @@ var completions = map[string]verbSpec{
 		{name: "image", kind: paths},
 		yesFlag,
 	}, args: []candidates{realized}},
-	"adopt":            {flags: []flagSpec{yesFlag}, args: []candidates{adoptableHosts}},
 	"preview":          {flags: []flagSpec{{name: "all"}, {name: "refresh"}, {name: "expect-no-changes"}}, args: []candidates{realized}},
 	"mint":             {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
 	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
-	"check":            {flags: []flagSpec{{name: "all"}}, args: []candidates{manifests}, repeat: true},
+	"check":            {flags: []flagSpec{{name: "all"}, {name: "eval"}}, args: []candidates{manifests}, repeat: true},
 	"ssh-config":       {flags: []flagSpec{writeFlag}},
 	"wg-conf":          {args: []candidates{meshMembers}},
 	"--version":        {}, // a flag in the verb position (forts#135): completes, takes nothing
@@ -347,15 +346,6 @@ func realized(cx *completeCx) []string {
 // (fleet.go: a flux dir on one is an error of its own).
 func clusters(cx *completeCx) []string {
 	return manifestsWhere(cx, manifest.Host.IsCluster)
-}
-
-// adoptableHosts: a playbook-era lab VM — a [libvirt] manifest with no stack
-// yet (adopt.go). Usually an empty list, which is correct and
-// informative: adoption is a one-time act per VM.
-func adoptableHosts(cx *completeCx) []string {
-	pulumiDir := filepath.Join(cx.root, pulumiProject)
-	libvirt := manifestsWhere(cx, func(h manifest.Host) bool { return h.Provider == "libvirt" })
-	return slices.DeleteFunc(libvirt, func(name string) bool { return hasStack(pulumiDir, name) })
 }
 
 // destroyable: the inverse of the manifest list — a stack whose manifest

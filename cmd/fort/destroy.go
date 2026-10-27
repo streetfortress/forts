@@ -70,9 +70,9 @@ func destroy(args []string) error {
 	}
 	provider, problems := destroyGates(root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0, *noStack)
 	if *noStack {
-		fmt.Printf("%s   (no stack: a [baremetal] host, the machine goes by hand)\n", host)
+		fmt.Printf("⛫ %s   (no stack: a [baremetal] host, the machine goes by hand)\n", host)
 	} else {
-		fmt.Printf("%s   (provider %s, from the checkpoint)\n", host, provider)
+		fmt.Printf("⛫ %s   (provider %s, from the checkpoint)\n", host, provider)
 	}
 	if len(problems) > 0 {
 		for _, p := range problems {
@@ -83,8 +83,7 @@ func destroy(args []string) error {
 	if *noStack {
 		fmt.Println("  ✓ no manifest on origin/main or in the working tree; no stack")
 		revokeIdentities(root, host)
-		fmt.Printf("\n== done. Nothing to commit: the host had no state. Power the machine off and wipe its disk (docs/baremetal.md).\n")
-		fmt.Println("   Off-repo residue to check: the .files wireguard copy (ubuntu mesh members).")
+		fmt.Printf("\n== done. nothing to commit: the host had no state. power the machine off and wipe its disk.\n")
 		return nil
 	}
 	fmt.Println("  ✓ no manifest on origin/main or in the working tree; tree clean; stack exists")
@@ -141,8 +140,7 @@ func destroy(args []string) error {
 	// 6. stage the state removal; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
 	stage(root)
-	fmt.Printf("\n== done. Staged the state removal — commit it as its own PR (\"%s: destroyed\").\n", host)
-	fmt.Println("   Off-repo residue to check: the .files wireguard copy (ubuntu mesh members), ~/.local/share/nixos-provisioning/" + host + " on a playbook-era hypervisor.")
+	fmt.Println("\n== done. state removal staged — commit it.")
 	return nil
 }
 
@@ -188,7 +186,7 @@ func destroyGates(root, host string, onMain, clean, noStack bool) (provider stri
 		return "", problems
 	}
 	if err != nil {
-		problems = append(problems, "no stack "+host+" in provisioning/pulumi/state — never provisioned or adopted through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/baremetal.md)")
+		problems = append(problems, "no stack "+host+" in provisioning/pulumi/state — never provisioned through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/baremetal.md)")
 		return "", problems
 	}
 	provider, err = providerFromState(raw)
