@@ -77,7 +77,7 @@ func image(args []string) error {
 		if err := tools.Ensure("nix"); err != nil {
 			return fmt.Errorf("%w — the image build needs it (or pass --from <built image>)", err)
 		}
-		fmt.Printf("== nix build %s (KVM; any x86_64 Nix host)\n", v.attr)
+		fmt.Printf("== nix build %s\n", v.attr)
 		if src, err = nixBuildImage(root, v); err != nil {
 			return err
 		}
