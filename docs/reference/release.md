@@ -36,7 +36,7 @@ Every change to one of these surfaces is named in the release note:
 - **The channel:** the nixpkgs branch the framework pins (below).
 
 Outside the promise: the rendered files. An estate owns them from the
-commit `fort init` or `fort scaffold` wrote them (next section).
+commit `fort estate init` or `fort scaffold` wrote them (next section).
 
 Pre-1.0 the numbers mean what the knowledge base's release-engineering
 page gives them: a **minor** (`v0.1` → `v0.2`) may change a surface
@@ -86,7 +86,7 @@ is where a nixpkgs floor would be named.
 
 ## Templates are bootstrap only
 
-`fort init` and `fort scaffold` render a file once. From that commit the
+`fort estate init` and `fort scaffold` render a file once. From that commit the
 estate owns it: no verb rewrites it, `fort check` compares the tree
 against the manifests and the contracts and never against the
 templates, and a template change reaches the next estate, not an
@@ -128,7 +128,7 @@ have yet.
 ## The bump: how an estate adopts a release
 
 The estate's gate runs the CLI at the pin — `nix run ./nixos#fort --
-check --all`, in the workflow `fort init` rendered — so a bump PR runs
+check --all`, in the workflow `fort estate init` rendered — so a bump PR runs
 the **new** release's `fort check` over the estate before anyone reads
 it. The rules that release added fire first there. That is the whole
 mechanism: the migration a release needs from an estate is what its

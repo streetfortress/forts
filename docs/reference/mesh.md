@@ -20,7 +20,7 @@ Every `mesh_ip` in a manifest and every address in peers.json lies in it,
 and `fort check --all` says so (`estate.toml   mesh 10.2.0.0/24 — 3
 address(es) inside it`; an address outside is an error). Two estates
 link only when their meshes do not overlap, so the subnet is the first
-thing a new estate chooses: `fort init --mesh <cidr>`. The key is
+thing a new estate chooses: `fort estate init --mesh <cidr>`. The key is
 optional for an estate created before it existed; such an estate is checked
 by nothing, as before. The convention in the lab is that a fort's last
 octet follows its LAN address.
@@ -44,7 +44,7 @@ A fort of the estate gives its own mesh that interface, and a host of
 another estate that links here gives its link interface the same name
 ([links.md](links.md)), so `wg show wg-second` means the same thing on
 both. At most 15 characters from `A-Za-z0-9_=+.-`, the kernel's rule;
-`fort init --interface <name>` renders it. The modules read it through
+`fort estate init --interface <name>` renders it. The modules read it through
 `sfi.mesh.interface` (estate.nix): `wireguard.nix` builds the interface,
 hardened.nix and k3s-server.nix open the admin ports on it, the metrics
 carry it as the `interface` label. An estate that names none is on
@@ -71,7 +71,7 @@ a host that moves changes its entry, and every fort rebuilds. No resolver
 is on a fort's path. The default derives from the estate's name, so
 `luxor.staging.mesh` is luxor as sfi/staging reaches it and
 `luxor.infra.mesh` is luxor on its own mesh; `.mesh` is the fleet's one
-private TLD, and `fort init --zone <name>` overrides the default. A
+private TLD, and `fort estate init --zone <name>` overrides the default. A
 `clients` entry gets no name: a roaming device is dialed by nobody.
 
 An app on a lab fort is named `<app>.<fort>.<zone>`. A host

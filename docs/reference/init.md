@@ -63,7 +63,7 @@ operator_keys = [            # the devices that hold `deployer` on every fort of
 
 [source]                     # where the estate's tree comes from (forts#161)
 repo = "ssh://git@gitea.zen.lofi:30022/sfi/second-estate"   # flux's source, auto-rebuild's pull
-known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort init --known-hosts)
+known_hosts = "[forge.example]:22 ssh-ed25519 AAAA…"   # the forge's SSH host key: every clone a fort makes pins it (fort estate init --known-hosts)
 # forge = "gitea"            # the forge's kind; absent, the host of repo derives it (github.com: github)
 # auth = "ssh"               # the clone route; absent, the scheme of repo derives it: ssh:// is ssh, https:// is none
 
@@ -210,7 +210,7 @@ unless that estate wrote `lib.mkForce` — and nothing asked it to. The
 list is the estate's now, and the estate that holds a fort is the team
 that operates it.
 
-- `fort init --operator-key "ssh-ed25519 AAAA… macbook-air"`, once per
+- `fort estate init --operator-key "ssh-ed25519 AAAA… macbook-air"`, once per
   device, writes the list; a later device is a hand edit of this file.
 - A key with no comment names no device. `fort check --all` warns:
   vetting trims the list by device.

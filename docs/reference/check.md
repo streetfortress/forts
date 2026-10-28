@@ -102,7 +102,7 @@ Two red states are the gate working, not breakage:
 Inside Gitea Actions or GitHub Actions (`GITEA_ACTIONS` /
 `GITHUB_ACTIONS` set), every warning and error is also emitted as a
 workflow command (`::warning::`, `::error::`), so findings annotate the
-diff instead of hiding in a log. The workflow `fort init` renders runs
+diff instead of hiding in a log. The workflow `fort estate init` renders runs
 `fort check --all --eval` on every push — the static checks and the
 eval, one step — pinned to the framework version the estate's flake
 locks: the CLI that checks the tree is the one the forts run.

@@ -4,6 +4,53 @@
 
 # Forts — Getting Started
 
+Forts builds on intermidiate and advanced level topics, each a knowledge domain rabbit hole in their own right. You don't have to know _everything_ to get started with forts, but having a working knowledge of these topics will help you operate a forts estate:
+
+- `git`: Git is core to the whole concept. An estate is a git repository, changes are made through `git commit`, a git repository can be configured with **access controls** (tokens, private repos, SSH key authentication)
+- **Networking, Cryptography, Virtualization Primitives**: Forts leverages [wireguard](https://wireguard.com) for the **Mesh** and [sops](https://gitsops.io) to **encrypt and decrypt secrets**. Forts are typically deployed as **Virtual Machines** and run their workloads as **Containers**.
+- **Nix** (the package manger) and [**NixOS**](https://nixos.org/) (the operating system): Forts run NixOS, and you can freely configure them using the nix ecosystem.
+- **[Kubernetes](https://kubernetes.io/)**: Forts uses k3s under the hood. Every fort is a single-node kuberenetes cluster. Unlike traditional kuberenetes platforms, Forts primarily uses the kubernetes ecosystem for _configuration management_, not scale.
+- **[Helm](https://helm.sh/), and [FluxCD](https://fluxcd.io)**:  Kubernetes workloads are configured as Helm Charts. FluxCD] reconciles `HelmRelease` resources in a cluster.
+
+Fortunately, all of this has been documented extensively online. You **can learn as you go**, no problem. Use any sentence above as a starting google search, and you'll find your way.
+
+> AI _Does_ Help - Because these building blocks are **open source**, and an estate's full configuration is available as context, coding agents are remarkably effective at working in these environments. They can "read the system", spot misconfigurations, and carry out multi-file yaml edits with much more precision than you can do by hand.
+
+## Prerequisites
+
+- **Nix with flakes enabled.** The [Determinate Systems Nix installer](https://determinate.systems/) enables flakes by default. You can find up-to-date `nix` installation instructions for your system online, just make sure flakes are enabled.
+
+- **pulumi.** Install `pulumi-bin` or the upstream distribution. The `fort` cli doesn't package this, install it for your system using your package manager.
+
+> The `pulumi-bin` package is preferred because it includes built-in language plugins and resource providers out of the box. 
+
+- **An Admin AGE key** at `~/.config/sops/age/keys.txt`. Create it with `age-keygen` _and restrict the OS file permissions on it__.  [**!!! PROTECT THIS KEY !!!**](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#key-storage)
+
+- **A git host for the estate.** A private repo is recommended, though all secrets are encrypted at rest so a public estate is feasible. 
+
+- **A target.** A libvirt hypervisor reachable over `qemu+ssh`, or a `LINODE_TOKEN`.
+
+- **An SSH public key** for you to log in to a fort with
+
+- **A builder for `fort image`.** The host must be x86_64 Nix with KVM (`docs/reference/provision.md:79`). A Mac can run the other verbs but cannot build the image.
+
+### Install
+
+```sh
+nix profile install github:streetfortress/forts#fort
+fort --version
+```
+
+- The `fort` package carries `git`, `helm`, `jq`, `kustomize`, `mkisofs`, `mkpasswd`, `qemu-img`, `sops` and `xsltproc` on its own PATH.
+
+> It **does not** include `pulumi-bin` (see above, in Prerequisites, if you don't have `pulumi-bin`).
+
+- The package also installs the zsh and bash completions.
+
+- To try it first without an install: `nix run github:streetfortress/forts#fort -- --version`.
+
+- To pin a release, use `github:streetfortress/forts/v0.0.6#fort`.
+
 ## Configuration
 
 We tried to minimize the amount of new configuration when designing forts. Typically, when you're building out an environment, you're repeating a lot of manifest content with only a handful of differentiating factors: names, ip addresses, that kind of thing.
@@ -13,13 +60,16 @@ To that end, there's only two fort configuration files, and they both use `.toml
 **Estate.toml** holds the core estate-level facts:
 ```
 name = "estate"
-operator_keys = [ "ssh-ed25519 AAAA...", ] # ssh public keys for operator access after bootstrapping; configure later in default.nix
+operator_keys = [       # SSH public keys for operators to log in with
+  "ssh-ed25519 AAAA...",
+  "ssh-ed25519 BBBB...", 
+] 
 
-[source]
-repo = "https://forge.streetfortress.cloud/sfi/estate" # where the estate's forts will pull their configurations from
+[source]                # where the estate's forts will pull their configurations from
+repo = "https://github.com/<your>/<estate>" 
 
 [mesh]
-cidr = "10.1.0.0/16" # the mesh network topology
+cidr = "10.1.0.0/16"    # the mesh network topology
 ```
 
 **\<fort\>.toml** holds the core fort-level facts:
@@ -27,23 +77,23 @@ cidr = "10.1.0.0/16" # the mesh network topology
 mesh_ip = "10.1.0.2"
 
 
-[libvirt] # other backends: baremetal and linode (more to come)
+[libvirt]               # other backends: baremetal and linode (more to come)
 uri = "qemu+ssh://my-hypervisor/system"
 ip = "10.0.0.2" # LAN IP
 
-[shape] # some backend providers use a 'sku' instead of a shape
+[shape]                 # some backend providers use a 'sku' instead of a shape
 vcpus = 4
 memory = 8
 disk = "80G"
 
-[cluster] # enable k3s if you want to leverage flux for workload management
-datastore = "sqlite"
-audit_logging = true
+[cluster]               # run k3s and get a flux/ directory. (Rec: >= 2 cpu / 4GB ram)
+datastore = "sqlite"    # k3s can run with etcd if you prefer, sqlite works pretty well for one node
+audit_logging = true    # audit logging uses more disk space
 ```
 
 There's a bit more when **Estate Linking** gets involved, but that's the core of it. 
 
-Run `fort init` inside an empty directory with `estate.toml` to render out _the estate's_ boilerplate. Then, `fort scaffold <fort>` renders out _that fort's_ boilerplate.
+Run `fort estate init` inside an empty directory with `estate.toml` to render out _the estate's_ boilerplate. Then, `fort scaffold <fort>` renders out _that fort's_ boilerplate.
 
 ## Deploying a fort
 
@@ -76,10 +126,44 @@ The 'PR for every change' practice might feel like overkill, but it has a few up
 Start by creating an empty git repo. Write an `estate.toml` file describing the `[source]` repository, `[mesh]` network, and operator SSH public keys.
 
 ```
-fort init        ← once per estate: estate.toml, the flake, the rules, the layer. See [init.md](reference/init.md)
+fort estate init        ← once per estate: estate.toml See [init.md](reference/init.md)
 ```
 
 This command will render out _the estate's_ directory tree. Run `git add -A`, because nix refuses a flake with untracked files. Then run `nix flake lock ./nixos`, commit, and push to the repo.
+
+#### Encrypt Your Provisioning Secrets in `provisioning/secrets.yaml`
+
+The `fort` CLI needs to authenticate with your forts' __machine provider__, and it reads either ENV variables or from `provisioning/secrets.yaml` to do so.
+
+##### A quick SOPS Primer
+
+Forts uses [sops](https://getsops.io) to encrypt and decrypt **secrets**. A secret in this context means **Passwords, App Tokens, Certifiacates Private Keys, Private Data**. Traditionally, you may have used a `.env` file and `.gitignore` to keep these things _on a host_ but _not in git_.
+
+Forts flips that mentality on it's head: Secrets are recorded, encrypted, in git. Only the admin key, or a configured **recipient** (A fort, a workload, another user), can decrypt an estate's secrets.
+
+**The admin AGE key has a wide "blast radius"**. [**!!! PROTECT THIS KEY !!!**](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html#key-storage)
+
+##### Creating `provisioning/secrets.yaml`
+
+Have these Secrets Ready
+
+`github-token` or `gitea-token`: A PAT scoped to <x>
+`pulumi-passphrase` Generate with `openssl rand`
+`linode-token`: A PAT from linode - if you want to deploy a fort on there.
+
+```
+cd <estate>
+touch provisioning/secrets.yaml
+sops encrypt -i provisioning/secrets.yaml
+sops edit provisioning/secrets.yaml
+
+# github-token: ghA123123123123
+# pulumi-passphrase: 123123123123
+# linode-token: lnA123123123123
+
+cat provisioning/secrets.yaml (You should see the encrypted blobs, not plaintext)
+git add provisioning/secrets.yaml && git commit -m "provisioning secrets: encrypted" && git push
+```
 
 ### Scaffold a Fort
 
@@ -91,7 +175,7 @@ Then run:
 fort scaffold <host>  ← nixos/hosts/<host>/, flux/clusters/<host>/, apps root
 ```
 
-Like `fort init`, `fort scaffold` will render out _the fort's_ nixos and flux directory trees.
+Like `fort estate init`, `fort scaffold` will render out _the fort's_ nixos and flux directory trees.
 
 
 #### Mint the fort's identity
@@ -213,7 +297,7 @@ files."
 
 ## The estate layout 
 
-Here's what an estate typically looks like. These directories and files are generated by `fort init` and `fort scaffold` etc.
+Here's what an estate typically looks like. These directories and files are generated by `fort estate init` and `fort scaffold` etc.
 
 
 ```

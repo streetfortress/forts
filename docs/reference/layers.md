@@ -93,7 +93,7 @@ run first, and the core runs them itself:
 
 | step | core | then |
 |---|---|---|
-| create the estate | `fort init` | `fort layer add …` (runs the layer's init) |
+| create the estate | `fort estate init` | `fort layer add …` (runs the layer's init) |
 | a fort's files | `fort scaffold <fort>` | `fort <layer> scaffold <fort>` |
 | a fort's identity | `fort mint <fort>` | `fort <layer> mint <fort>` |
 | the gate | `fort check --all` | `fort <layer> check --all` |
