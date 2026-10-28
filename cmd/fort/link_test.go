@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -339,5 +340,30 @@ func TestTomlSetInTable(t *testing.T) {
 	spelled := strings.Replace(text, "[links.staging]", "[ links.staging ]   # by hand", 1)
 	if got := tomlSetInTable(spelled, "links.staging", "port", "51822"); strings.Count(got, "links.staging") != 1 || !strings.Contains(got, "[ links.staging ]   # by hand\nestate = \"x\"\naddress = \"10.2.0.1\"   # the claim\nport = 51822\n") {
 		t.Errorf("hand-spelled header:\n%s", got)
+	}
+}
+
+func TestPickAddressEdges(t *testing.T) {
+	mk := func(cidr string) estate.Estate {
+		var e estate.Estate
+		e.Mesh.CIDR = cidr
+		return e
+	}
+	for _, c := range []string{"10.0.0.0/32", "10.0.0.0/31"} {
+		if ip, err := pickAddress(mk(c), nil); err == nil {
+			t.Errorf("%s: picked %s, want an error", c, ip)
+		}
+	}
+	if ip, err := pickAddress(mk("10.0.0.0/30"), map[string]string{"10.0.0.2": "x"}); err != nil || ip != "10.0.0.1" {
+		t.Errorf("/30: got %s, %v", ip, err)
+	}
+	if _, err := pickAddress(mk("10.0.0.0/30"), map[string]string{"10.0.0.2": "x", "10.0.0.1": "y"}); err == nil {
+		t.Error("/30 full: want an error")
+	}
+	if ip, err := pickAddress(mk("10.1.0.5/24"), nil); err != nil || ip != "10.1.0.254" {
+		t.Errorf("unmasked /24: got %s, %v", ip, err)
+	}
+	if ip, err := pickAddress(mk("0.0.0.0/0"), nil); err != nil || ip != "255.255.255.254" {
+		t.Errorf("/0: got %s, %v", ip, err)
 	}
 }

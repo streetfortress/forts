@@ -396,17 +396,16 @@ func pickAddress(mesh estate.Estate, taken map[string]string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s's mesh %q: %w", mesh.Ref(), mesh.Mesh.CIDR, err)
 	}
-	// The last address of the prefix: the network address with the host
-	// bits set, which is the broadcast address; the candidates start one
-	// below it and end one above the network address.
-	bits := prefix.Bits()
-	a := prefix.Addr().As4()
-	hostBits := 32 - bits
-	if hostBits < 2 {
+	// The candidates run from one below the broadcast address down to one
+	// above the network address. The prefix is masked first, so a CIDR
+	// written with host bits set still starts at its network address.
+	prefix = prefix.Masked()
+	if !prefix.Addr().Is4() || prefix.Bits() > 30 {
 		return "", fmt.Errorf("%s's mesh %s has no host addresses to pick from — a mesh is a /30 or wider", mesh.Ref(), mesh.Mesh.CIDR)
 	}
-	base := uint32(a[0])<<24 | uint32(a[1])<<16 | uint32(a[2])<<8 | uint32(a[3])
-	size := uint32(1) << hostBits
+	a := prefix.Addr().As4()
+	base := uint64(a[0])<<24 | uint64(a[1])<<16 | uint64(a[2])<<8 | uint64(a[3])
+	size := uint64(1) << (32 - prefix.Bits())
 	for off := size - 2; off >= 1; off-- {
 		v := base + off
 		ip := netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}).String()
