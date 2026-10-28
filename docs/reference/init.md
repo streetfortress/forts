@@ -221,7 +221,8 @@ questions, two lists.
 
 ## After init
 
-1. `nix flake lock ./nixos` — pin the framework. `--override-input forts
+1. `git add -A`, then `nix flake lock ./nixos` — pin the framework. Nix
+   refuses a flake with untracked files. `--override-input forts
    path:../forts` develops against a local checkout.
 2. Provide the three files above and create `provisioning/secrets.yaml`.
 3. `forts/<host>.toml` ([manifest.md](manifest.md)), then `fort scaffold`,

@@ -79,7 +79,7 @@ Start by creating an empty git repo. Write an `estate.toml` file describing the 
 fort init        ← once per estate: estate.toml, the flake, the rules, the layer. See [init.md](reference/init.md)
 ```
 
-This command will render out _the estate's_ directory tree. Commit this and push to the repo.
+This command will render out _the estate's_ directory tree. Run `git add -A`, because nix refuses a flake with untracked files. Then run `nix flake lock ./nixos`, commit, and push to the repo.
 
 ### Scaffold a Fort
 

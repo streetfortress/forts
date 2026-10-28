@@ -226,7 +226,7 @@ func initCmd(args []string) error {
 		fmt.Println("\ndry run — nothing written.")
 		return nil
 	}
-	fmt.Printf("\n%d file(s) written. next: nix flake lock ./nixos\n", written)
+	fmt.Printf("\n%d file(s) written. next: git add -A, then nix flake lock ./nixos\n", written)
 	return nil
 }
 

@@ -30,7 +30,8 @@ justfile                     the estate's own verbs: fort (the CLI from this fla
 
 ## The first fort
 
-1. `nix flake lock ./nixos` — pin the framework.
+1. `git add -A`, then `nix flake lock ./nixos` — pin the framework. Nix refuses a
+   flake with untracked files.
 2. Provide `nixos/certs/ca-root.pem` when the estate runs a private CA, and seed
    `flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml`
    (the edge Alertmanager's webhook; `sops` it under the shared rule).
