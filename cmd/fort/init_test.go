@@ -93,6 +93,9 @@ func TestRenderInit(t *testing.T) {
 	if !strings.Contains(m["justfile"], "\nfetch-kubeconfig host:\n") || !strings.Contains(m["justfile"], "\nupdatekeys:\n") {
 		t.Errorf("justfile recipes:\n%s", m["justfile"])
 	}
+	if !strings.Contains(m["justfile"], "\nfort +ARGS:\n") || !strings.Contains(m["justfile"], "nix shell $installables -c fort {{ARGS}}") {
+		t.Errorf("justfile lacks the fort recipe:\n%s", m["justfile"])
+	}
 	if strings.Contains(m["justfile"], "go run ./cmd/fort") || strings.Contains(m["justfile"], "provisioning/forts/") {
 		t.Errorf("justfile:\n%s", m["justfile"])
 	}

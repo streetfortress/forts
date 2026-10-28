@@ -25,7 +25,7 @@ provisioning/
   secrets.yaml               the fleet secrets — create it (provisioning/README.md)
   pulumi/                    the project file, Pulumi.<host>.yaml per stack, state/
 .sops.yaml                   the flux rules: one per cluster, plus the shared infrastructure rule
-justfile                     the estate's own verbs: fetch-kubeconfig (a fort's read-only ops kubeconfig), updatekeys (the sops files)
+justfile                     the estate's own verbs: fort (the CLI from this flake), fetch-kubeconfig (a fort's read-only ops kubeconfig), updatekeys (the sops files)
 ```
 
 ## The first fort
