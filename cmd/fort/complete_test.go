@@ -65,7 +65,7 @@ func TestCompleteCandidates(t *testing.T) {
 		{line: []string{"link", "add", ""}, want: []string{"cloud-fort", "lab-fort", "metal-fort", "plain-cloud-fort", "plain-fort", "plain-metal-fort", "sfi-fort-e33e2d5"}},
 		{line: []string{"link", "add", "lab-fort", ""}},
 		{line: []string{"link", "add", "lab-fort", "ssh://x/y/z", "--"}, want: []string{"--address", "--dry-run", "--port"}},
-		{line: []string{"estate", ""}, want: []string{"link"}},
+		{line: []string{"estate", ""}, want: []string{"init", "link"}},
 		{line: []string{"estate", "link", ""}},
 
 		// Flag names, and the values that are closed.

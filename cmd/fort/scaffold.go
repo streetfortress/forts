@@ -178,6 +178,14 @@ func scaffold(args []string) error {
 		return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
 	}
 	host := args[0]
+	if strings.HasSuffix(host, ".toml") {
+		// A manifest path (forts/web3.toml, forts#197) names its fort.
+		h, err := hostFromManifestPath(host)
+		if err != nil {
+			return err
+		}
+		host = h
+	}
 	write := true
 	for _, a := range args[1:] {
 		switch a {
@@ -249,6 +257,24 @@ func scaffold(args []string) error {
 	}
 	fmt.Printf("\n%d file(s) written. next: fort mint %s\n", written, host)
 	return nil
+}
+
+// hostFromManifestPath is the fort a path to its manifest names:
+// <estate root>/forts/<fort>.toml, from any directory of the checkout.
+func hostFromManifestPath(p string) (string, error) {
+	root, err := repoRoot()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	host := strings.TrimSuffix(filepath.Base(abs), ".toml")
+	if abs != filepath.Join(root, manifest.Path(host)) {
+		return "", fmt.Errorf("%s is not a fort manifest of this estate — want %s", p, manifest.Path(host))
+	}
+	return host, nil
 }
 
 // scaffoldShape names the two decisions of a manifest, in the order

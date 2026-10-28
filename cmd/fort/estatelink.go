@@ -14,10 +14,13 @@ import (
 )
 
 // fort estate <verb>: what an estate does toward another estate. One
-// verb so far — link (forts#57).
+// verbs: init (forts#197) and link (forts#57).
 func estateCmd(args []string) error {
+	if len(args) >= 1 && args[0] == "init" {
+		return initCmd(args[1:])
+	}
 	if len(args) < 1 || args[0] != "link" {
-		return fmt.Errorf("usage: fort estate link <estate url> [--dry-run]")
+		return fmt.Errorf("usage: fort estate (init [estate.toml] … | link <estate url> [--dry-run])")
 	}
 	return estateLink(args[1:])
 }

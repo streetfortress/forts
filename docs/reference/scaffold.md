@@ -1,8 +1,12 @@
 # fort scaffold — the host's generated surface
 
 ```
-fort scaffold <host> [--dry-run]
+fort scaffold <host | forts/<host>.toml> [--dry-run]
 ```
+
+The argument is the host or the path of its manifest: write
+`forts/web3.toml` first, then run `fort scaffold forts/web3.toml`. The
+path must be the manifest of this estate.
 
 `scaffold` renders every file a host needs that is derivable from its
 [manifest](manifest.md), and nothing that is not. It is a pure template render:

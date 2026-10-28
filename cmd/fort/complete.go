@@ -139,7 +139,7 @@ var completions = map[string]verbSpec{
 		{name: "port", kind: opaque},
 		writeFlag,
 	}, args: []candidates{words("add"), manifests, nil}},
-	"estate": {flags: []flagSpec{writeFlag}, args: []candidates{words("link"), nil}},
+	"estate": {flags: []flagSpec{writeFlag}, args: []candidates{words("init", "link"), nil}},
 	// The layer verbs (#144): add takes a flake url nothing in the tree
 	// can offer; remove takes an installed layer, which the tree can.
 	"layer": {flags: []flagSpec{writeFlag}, args: []candidates{words("add", "remove"), layerNames}},

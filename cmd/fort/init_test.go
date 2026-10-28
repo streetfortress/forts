@@ -396,3 +396,70 @@ func TestRenderInitGateFollowsForge(t *testing.T) {
 		}
 	}
 }
+
+// An estate.toml written first is init's input (forts#197): from its own
+// place in the checkout it is kept as authored and the rest renders
+// around it; a flag beside the file overrides the file.
+func TestInitFromEstateToml(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Chdir(dir)
+	authored := "name = \"first\"\noperator_keys = [\"" + testOperatorKey + "\"]\n\n[source]\nrepo = \"" + testInitView.Repo + "\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "estate.toml"), []byte(authored), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tail := []string{"--forts", testInitView.Forts, "--admin", testInitView.Admins[0]}
+	if err := initCmd(append([]string{"estate.toml"}, tail...)); err != nil {
+		t.Fatalf("init from its own estate.toml: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "estate.toml"))
+	if err != nil || string(got) != authored {
+		t.Errorf("the authored estate.toml must stay as written: %v\n%s", err, got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "nixos/flake.nix")); err != nil {
+		t.Errorf("the rest of the estate must render: %v", err)
+	}
+
+	// A file elsewhere seeds a fresh checkout; a flag wins over it.
+	src := filepath.Join(t.TempDir(), "seed.toml")
+	if err := os.WriteFile(src, []byte(authored), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir2 := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir2, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Chdir(dir2)
+	if err := initCmd(append(append([]string{}, tail...), src, "--name", "second")); err != nil {
+		t.Fatalf("init from a seed file: %v", err)
+	}
+	est, err := estate.Load(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if est.Name != "second" || est.Source.Repo != testInitView.Repo || len(est.OperatorKeys) != 1 {
+		t.Errorf("flag over file, file over default: %+v", est)
+	}
+	if err := initCmd([]string{"a.toml", "b.toml"}); err == nil {
+		t.Error("two files must refuse")
+	}
+}
+
+func TestHostFromManifestPath(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "forts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if h, err := hostFromManifestPath("forts/web3.toml"); err != nil || h != "web3" {
+		t.Errorf("forts/web3.toml: %q, %v", h, err)
+	}
+	if _, err := hostFromManifestPath("other/web3.toml"); err == nil {
+		t.Error("a toml outside forts/ is not a manifest")
+	}
+}

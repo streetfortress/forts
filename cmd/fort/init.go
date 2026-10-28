@@ -106,6 +106,30 @@ type multiFlag []string
 func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
 func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 
+// initCmd is `fort estate init [estate.toml] [flags]` (forts#197;
+// `fort init` is the old spelling, kept as an alias):
+// the estate's name, repo, hubs and the rest can be written first, in
+// the file, and handed to init. A flag given beside the file overrides
+// the file's value. --admin and --forts are not estate.toml keys, so they
+// stay flags.
+// parseWithFile parses flags that may come before or after one positional
+// path (estate.toml, forts/<fort>.toml), which the flag package alone
+// would stop at.
+func parseWithFile(fl *flag.FlagSet, args []string) (file string, err error) {
+	for {
+		if err := fl.Parse(args); err != nil {
+			return "", err
+		}
+		if fl.NArg() == 0 {
+			return file, nil
+		}
+		if file != "" {
+			return "", fmt.Errorf("one file at most, got %q and %q", file, fl.Arg(0))
+		}
+		file, args = fl.Arg(0), fl.Args()[1:]
+	}
+}
+
 func initCmd(args []string) error {
 	fl := flag.NewFlagSet("init", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
@@ -126,13 +150,43 @@ func initCmd(args []string) error {
 	dryRun := fl.Bool("dry-run", false, "print the tree and write nothing (default: write the files)")
 	fl.Bool("write", true, "deprecated no-op: writing is the default")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "usage: fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--dry-run]")
 		fl.PrintDefaults()
 	}
-	if err := fl.Parse(args); err != nil {
+	file, err := parseWithFile(fl, args)
+	if err != nil {
 		return err
 	}
 	write := !*dryRun
+	set := map[string]bool{}
+	fl.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	var fromFile *estate.Estate
+	if file != "" {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		e, err := estate.Parse(raw)
+		if err != nil {
+			return fmt.Errorf("%s: %w", file, err)
+		}
+		fromFile = &e
+		pick := func(flagSet bool, flagVal *string, fileVal string) {
+			if !flagSet {
+				*flagVal = fileVal
+			}
+		}
+		pick(set["name"], name, e.Name)
+		pick(set["repo"], repo, e.Source.Repo)
+		pick(set["known-hosts"], knownHosts, e.Source.KnownHosts)
+		pick(set["mesh"], meshNet, e.Mesh.CIDR)
+		pick(set["interface"], iface, e.Mesh.Interface)
+		pick(set["zone"], zone, e.Mesh.Zone)
+		pick(set["acme-email"], acmeEmail, e.ACME.Email)
+		if !set["operator-key"] {
+			operatorKeys = e.OperatorKeys
+		}
+	}
 	if *name == "" || *repo == "" || len(admins) == 0 || *forts == "" {
 		fl.Usage()
 		return fmt.Errorf("--name, --repo, --forts and at least one --admin are required")
@@ -148,6 +202,10 @@ func initCmd(args []string) error {
 		Mesh:         estate.Mesh{CIDR: *meshNet, Interface: *iface, Zone: *zone},
 		ACME:         estate.ACME{Email: *acmeEmail},
 		OperatorKeys: operatorKeys,
+	}
+	if fromFile != nil && len(hubs) == 0 {
+		est.Hubs = fromFile.Hubs
+		est.Source.Forge, est.Source.Auth = fromFile.Source.Forge, fromFile.Source.Auth
 	}
 	for _, v := range hubs {
 		role, h, err := parseHubFlag(v)
@@ -177,7 +235,15 @@ func initCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("fort init renders into the root of a git checkout — git init first (%w)", err)
 	}
-	if exists(root, estate.Path) {
+	// The file handed in may be this checkout's own estate.toml, written
+	// first: init keeps it as authored and renders the rest around it.
+	own := false
+	if file != "" {
+		if abs, err := filepath.Abs(file); err == nil {
+			own = abs == filepath.Join(root, estate.Path)
+		}
+	}
+	if exists(root, estate.Path) && !own {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
 	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), ForgeKind: est.ForgeKind(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})

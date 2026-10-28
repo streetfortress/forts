@@ -39,6 +39,7 @@ func main() {
 	case "--version":
 		err = version(os.Stdout)
 	case "init":
+		// The old spelling of `fort estate init` (forts#197).
 		err = initCmd(os.Args[2:])
 	case "scaffold":
 		err = scaffold(os.Args[2:])
@@ -89,18 +90,18 @@ func usage() {
   Forts! A framework for building nixOS and fluxCD environments.
   Use the fort CLI to init an estate, scaffold, manage secrets and lifecyle a fort.
 
-  init -> scaffold -> mint -> add -> seed -> provision -> dismantle -> destroy
+  estate init -> scaffold -> mint -> add -> seed -> provision -> dismantle -> destroy
 
   ---
 
   --version
 	  Display version information about the fort cli and associated flake
 
-  init --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--dry-run]
+  estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--dry-run]
       Create an estate: render the files and directory structure expected by forts.
       See docs/reference/init.md for more information.
 
-  scaffold <fort> [--dry-run]
+  scaffold <fort | forts/<fort>.toml> [--dry-run]
 	  Create a fort: render the files and directory structure for a single fort.
 	  See docs/reference/scaffold.md for more information.
 

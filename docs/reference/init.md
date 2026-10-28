@@ -1,7 +1,7 @@
-# fort init — create an estate
+# fort estate init — create an estate
 
 ```
-fort init --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--dry-run]
+fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--dry-run]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -9,6 +9,15 @@ verb assumes are there. It is the first verb an estate runs and the only
 one that runs with no `estate.toml`. Like [`scaffold`](scaffold.md) it is a
 pure render: no secrets, no network, nothing overwritten — a re-run keeps
 every file that exists.
+
+**Write `estate.toml` first.** The file is an input. Write it, then run
+`fort estate init estate.toml --admin <age1…> --forts <flake url>`. The
+verb reads the name, `[source]`, `[mesh]`, `[acme]`, the hubs and the
+operator keys from the file. A flag beside the file overrides the value
+of the file. `--admin` and `--forts` are not keys of `estate.toml`, so
+they stay flags. When the file is the `estate.toml` at the root of the
+checkout, init keeps it as written and renders the rest around it. A file
+from another place is a seed: init renders a new `estate.toml` from it.
 
 ## What it renders
 
