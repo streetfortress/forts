@@ -70,6 +70,10 @@ type meshPeer struct {
 	Endpoint  string `json:"wg_endpoint_ip,omitempty"`
 	Port      int    `json:"wg_endpoint_port,omitempty"`
 	PublicKey string `json:"public_key"`
+	// Estate is the git URL of the estate that wrote a remotes entry
+	// (fort estate link), so a second estate cannot take the entry over
+	// (forts#101). Only remotes carry it.
+	Estate string `json:"estate,omitempty"`
 	// User is the account a hand-managed peer (no manifest) answers on,
 	// for mesh/ssh_config (forts#139). A fort answers as deployer and
 	// carries none; a peer that names none gets no User line.

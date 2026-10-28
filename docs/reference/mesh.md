@@ -128,7 +128,11 @@ Four fields, and no more: `wg_vpn_ip` (the address on this mesh),
 `wg_endpoint_ip` (where the others dial it: a LAN address for an
 always-on lab host, a public name for a cloud fort, absent for a device
 behind NAT), `wg_endpoint_port` (only when it is not 51820), and
-`public_key`. Private keys are never here: a fort's is in
+`public_key`. A `remotes` entry carries a fifth, `estate`: the git URL of
+the estate that wrote it. `fort estate link` refuses to overwrite an entry
+that names another estate, so two estates with a fort of one name cannot
+take each other's entry over. An entry with no `estate` field is adopted
+by the next link run, which records the field. Private keys are never here: a fort's is in
 `nixos/secrets/<host>.yaml`, a client's in its app.
 
 A hand-managed peer (no manifest) can carry `ssh_user`: the account

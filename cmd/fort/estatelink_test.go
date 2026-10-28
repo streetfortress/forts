@@ -37,7 +37,7 @@ func TestEstateLink(t *testing.T) {
 		t.Fatalf("plan: %+v errors=%d stale=%v", p.claims, p.errors, p.stale)
 	}
 	c := p.claims[0]
-	want := meshPeer{IP: "10.2.0.252", Endpoint: "10.0.0.5", Port: 51821, PublicKey: testWGPub}
+	want := meshPeer{IP: "10.2.0.252", Endpoint: "10.0.0.5", Port: 51821, PublicKey: testWGPub, Estate: infraURL}
 	if c.host != "hub" || c.status != "new" || c.entry != want {
 		t.Errorf("claim: %+v", c)
 	}
@@ -103,6 +103,27 @@ func TestEstateLink(t *testing.T) {
 	os.WriteFile(hub, []byte(strings.Replace(readFile(t, hub), testWGPub, "dwdtDXMYpX08FsFyUbJmRd9MLofrwJkqsXf7pR25LCo=", 1)), 0o644)
 	if p4, err := planEstateLink(root, infraURL, dirFetcher(moved)); err != nil || p4.claims[0].status != "update" || !strings.Contains(p4.claims[0].note, "re-minted") {
 		t.Errorf("re-minted key: %v %+v", err, p4.claims)
+	}
+
+	// another estate's entry of the same name is not taken over (#101)
+	raw := strings.Replace(readFile(t, filepath.Join(root, peersPath)), infraURL, "ssh://git@gitea.zen.lofi:30022/sfi/other-infra", 1)
+	os.WriteFile(filepath.Join(root, peersPath), []byte(raw), 0o644)
+	p5, err := planEstateLink(root, infraURL, dirFetcher(moved))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p5.errors != 1 || p5.claims[0].status != "error" || !strings.Contains(p5.claims[0].note, "belongs to sfi/other-infra") {
+		t.Errorf("takeover: errors=%d %+v", p5.errors, p5.claims)
+	}
+	if err := p5.apply(&fakeTool{}); err == nil || readFile(t, filepath.Join(root, peersPath)) != raw {
+		t.Errorf("takeover wrote: %v", err)
+	}
+
+	// an entry written before the field existed is adopted, and said
+	legacy := strings.Replace(raw, `"estate": "ssh://git@gitea.zen.lofi:30022/sfi/other-infra"`, `"x": 1`, 1)
+	os.WriteFile(filepath.Join(root, peersPath), []byte(legacy), 0o644)
+	if p6, err := planEstateLink(root, infraURL, dirFetcher(moved)); err != nil || p6.claims[0].status != "update" || !strings.Contains(p6.claims[0].note, "estate of origin") {
+		t.Errorf("legacy entry: %v %+v", err, p6.claims)
 	}
 }
 

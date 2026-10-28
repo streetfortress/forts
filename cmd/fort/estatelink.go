@@ -154,13 +154,17 @@ func planEstateLink(root, repo string, fetch estateFetcher) (*estateLinkPlan, er
 			continue
 		}
 		c := remoteClaim{host: host, link: l, status: "new"}
-		c.entry = meshPeer{IP: l.Address, Endpoint: h.Endpoint(), Port: l.Port, PublicKey: l.PublicKey}
+		c.entry = meshPeer{IP: l.Address, Endpoint: h.Endpoint(), Port: l.Port, PublicKey: l.PublicKey, Estate: other.est.Source.Repo}
 		refuse := func(why string) {
 			c.status, c.note = "error", why
 			p.errors++
 		}
 		have, recorded := local.Remotes[host]
 		switch {
+		case recorded && have.Estate != "" && !estate.SameRepo(have.Estate, c.entry.Estate):
+			// The entry belongs to another estate: a second estate's
+			// write would swap its address, endpoint and key (#101).
+			refuse(fmt.Sprintf("remotes.%s belongs to %s — %s cannot take it over; rename the fort in one of the estates, or remove the entry by hand first", host, estate.Ref(have.Estate), other.est.Ref()))
 		case c.entry.Endpoint == "":
 			refuse(fmt.Sprintf("%s has no endpoint — a linked host is always-on and dialed; set mesh_endpoint, [libvirt] ip or [dns] in %s's %s", host, other.est.Ref(), manifest.Path(host)))
 		case !manifest.ValidEndpoint(c.entry.Endpoint):
@@ -210,6 +214,9 @@ func peerDiff(have, want meshPeer) []string {
 	if have.PublicKey != want.PublicKey {
 		out = append(out, "public key "+abbrevKey(have.PublicKey)+" → "+abbrevKey(want.PublicKey)+" (the host re-minted its link key)")
 	}
+	if have.Estate == "" && want.Estate != "" {
+		out = append(out, "estate of origin "+estate.Ref(want.Estate)+" recorded")
+	}
 	return out
 }
 
@@ -254,8 +261,8 @@ func (p *estateLinkPlan) apply(tool secretsTool) error {
 // table is created when the file has none yet.
 func setRemote(text, host string, e meshPeer) (string, error) {
 	cmd, err := tools.Command("jq",
-		"--arg", "n", host, "--arg", "ip", e.IP, "--arg", "ep", e.Endpoint, "--argjson", "port", fmt.Sprint(e.endpointPort()), "--arg", "pub", e.PublicKey,
-		".remotes[$n] = {wg_vpn_ip: $ip, wg_endpoint_ip: $ep, wg_endpoint_port: $port, public_key: $pub}")
+		"--arg", "n", host, "--arg", "ip", e.IP, "--arg", "ep", e.Endpoint, "--argjson", "port", fmt.Sprint(e.endpointPort()), "--arg", "pub", e.PublicKey, "--arg", "est", e.Estate,
+		".remotes[$n] = {wg_vpn_ip: $ip, wg_endpoint_ip: $ep, wg_endpoint_port: $port, public_key: $pub, estate: $est}")
 	if err != nil {
 		return "", err
 	}
