@@ -202,7 +202,7 @@ Every change rolls out by itself: the forts pull main and rebuild
 | `estate.toml   zone <zone> — N name(s) from mesh/peers.json` | ok |
 | a host file that sets a `.lofi` name by hand (`networking.hosts`, `extraHosts`), or routes `~lofi` over the mesh (`wg-quick` `dns`) | warning, per line — the zone renders the names; the forge's address derives from `[hubs.forge]` |
 | `estate.toml   forge <host> at <ip> (<table>.<host> in mesh/peers.json)` | ok |
-| `estate.toml` names no `[hubs.forge]` | warning — no fort pins the forge's name |
+| `estate.toml` names no `[hubs.forge]` | warning — no fort pins the forge's name; silent on a `github` forge and on the anonymous route, where public DNS resolves it |
 | `[hubs.forge]` names a host that neither `peers` nor `remotes` carries | error — `modules/lab-dns.nix` refuses to evaluate; the finding names the entry to add |
 | a host file that sets `sfi.lab-dns.giteaAddress` | warning, per line — the address derives, and a hand-set line does not follow the mesh |
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |

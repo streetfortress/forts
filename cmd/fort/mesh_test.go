@@ -305,6 +305,17 @@ func TestForgeFindings(t *testing.T) {
 	if f := only(forgeFindings(root, est("", ""), hosts)); f.level != "warning" || f.dir != estate.Path || !strings.Contains(f.msg, "no [hubs.forge]") {
 		t.Errorf("no hub: %+v", f)
 	}
+	// A hosted forge with a public name needs no pin (forts#192).
+	gh := est("", "")
+	gh.Source.Repo = "https://github.com/acme/estate"
+	if fs := forgeFindings(root, gh, hosts); len(fs) != 0 {
+		t.Errorf("github forge: %+v", fs)
+	}
+	anon := est("", "")
+	anon.Source.Auth = "none"
+	if fs := forgeFindings(root, anon, hosts); len(fs) != 0 {
+		t.Errorf("anonymous route: %+v", fs)
+	}
 	// A forge in another estate: its remotes entry is its address here.
 	if f := only(forgeFindings(root, est("forge", otherRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge forge at 10.1.0.4 (remotes.forge") {
 		t.Errorf("linked forge: %+v", f)

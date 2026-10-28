@@ -579,7 +579,9 @@ func forgeAddress(m mesh, est estate.Estate) (host, table, ip string) {
 // reports the two ways the derivation reads nothing:
 //
 //   - the estate names no forge host: no fort pins the name, and a fort
-//     that cannot resolve it cannot clone, rebuild or pull an image;
+//     that cannot resolve it cannot clone, rebuild or pull an image.
+//     A github forge and the anonymous route are exempt: public DNS
+//     resolves them (forts#192);
 //   - [hubs.forge] names a host that neither table carries: the module
 //     refuses to evaluate, and this names the entry to add.
 //
@@ -599,8 +601,11 @@ func forgeFindings(root string, est estate.Estate, hosts map[string]manifest.Hos
 	h, declared := est.Hub(estate.RoleForge)
 	host, table, ip := forgeAddress(m, est)
 	switch {
+	case !declared && (est.ForgeKind() == estate.ForgeGitHub || est.Anonymous()):
+		// A hosted forge with a public name resolves by public DNS:
+		// there is no address to pin (docs/init.md).
 	case !declared:
-		out = append(out, finding{"warning", estate.Path, "no [hubs.forge]: no fort of this estate pins the forge's name to an address, so each one resolves it by whatever other DNS it has (docs/hub.md)"})
+		out = append(out, finding{"warning", estate.Path, "no [hubs.forge]: no fort of this estate pins the forge's name to an address, so each one resolves it by whatever other DNS it has. A forge that public DNS resolves needs no pin: set [source] auth = \"none\" for a public repo. A fort-hosted forge needs [hubs.forge] (docs/hub.md)"})
 	case table == "":
 		want := "peers." + host
 		if !h.Local(est) {
