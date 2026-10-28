@@ -293,6 +293,14 @@ var movedKeys = map[string]string{
 
 // Parse decodes the manifest text, strictly, and validates it.
 func Parse(raw []byte) (Estate, error) {
+	// A loose key whose name is now a table (mesh) fails the typed decode
+	// on the type, before the moved-key check below can name the fix.
+	var loose map[string]any
+	if _, err := toml.Decode(string(raw), &loose); err == nil {
+		if _, isString := loose["mesh"].(string); isString {
+			return Estate{}, fmt.Errorf("%s: mesh moved to %s", Path, movedKeys["mesh"])
+		}
+	}
 	var e Estate
 	md, err := toml.Decode(string(raw), &e)
 	if err != nil {

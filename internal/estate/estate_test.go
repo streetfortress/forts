@@ -143,6 +143,7 @@ func TestMovedKeys(t *testing.T) {
 		"repo = \"ssh://x/y\"":      "repo moved to [source] repo",
 		"known_hosts = \"h t k\"":   "known_hosts moved to [source] known_hosts",
 		"interface = \"wg-second\"": "interface moved to [mesh] interface",
+		"mesh = \"10.2.0.0/24\"":    "mesh moved to [mesh] cidr",
 		"zone = \"staging.mesh\"":   "zone moved to [mesh] zone",
 		"acme_email = \"ops@x\"":    "acme_email moved to [acme] email",
 	} {
@@ -150,12 +151,6 @@ func TestMovedKeys(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: want %q, got %v", key, want, err)
 		}
-	}
-	// The old loose `mesh` key collides with the [mesh] table's type, so
-	// the decoder refuses it before the moved-key map can: the error
-	// still names the key.
-	if _, err := Parse([]byte("name = \"e\"\nmesh = \"10.2.0.0/24\"\n" + src("ssh://x/y"))); err == nil || !strings.Contains(err.Error(), "mesh") {
-		t.Errorf("old loose mesh: want an error naming the key, got %v", err)
 	}
 }
 
