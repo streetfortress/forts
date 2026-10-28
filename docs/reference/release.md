@@ -17,13 +17,8 @@ and `nixos/flake.lock` records the commit it resolved to. Everything
 below is about what an estate may rely on when that line moves from one
 tag to the next, and what it has to do by hand.
 
-The tags to date, `v0.0.1`–`v0.0.5` (from 2026-10-14), are pre-releases
-on gitea so that a bump has a name. There is no `v0.1`: the semver plan
-is abandoned (#220). A release line is named after the NixOS stable
-release it pins — the model Clan (clan.lol) uses — and the first line is
-**26.11**, cut when NixOS 26.11 ships (late November 2026). Until then
-`main` stays on `nixos-unstable` and any tag it needs stays in the
-`v0.0.x` pre-release series.
+The first tag, `v0.0.1` (2026-10-14), is a pre-release on gitea so that
+a bump has a name. The first public release is `v0.1` (milestone 32).
 
 ## The contract
 
@@ -43,12 +38,10 @@ Every change to one of these surfaces is named in the release note:
 Outside the promise: the rendered files. An estate owns them from the
 commit `fort estate init` or `fort scaffold` wrote them (next section).
 
-A tag is `v<line>.<patch>`: `v26.11.0` is the first release of the
-26.11 line, `v26.11.1` the first patch on it. A **patch** changes no
-surface above, and an estate may take it blind. A **line switch**
-(`v26.11.x` → `v27.05.0`) is the only place a breaking change may land —
-and it always moves the channel; the release note says what changed,
-and the bump PR's gate says where (below).
+Pre-1.0 the numbers mean what the knowledge base's release-engineering
+page gives them: a **minor** (`v0.1` → `v0.2`) may change a surface
+above and says so; a **patch** (`v0.1.0` → `v0.1.1`) changes none, and
+an estate may take it blind. `v1.0.0` is a declaration, not a drift.
 
 ## Two kinds of tag
 
@@ -60,18 +53,10 @@ the release note is the input diff. An estate's bump PR for a patch tag
 carries no hand edit; its gate passing is the whole review, and an
 estate may let Renovate merge it.
 
-**A line switch: the channel moved, and a contract surface may have.**
-A person cuts it, on NixOS's cadence (May and November). The release
-note lists the hand edits, by surface, and what `fort check` will say
-about each one before the edit is made — the two halves of "a
-structural fix" below.
-
-One maintainer supports **one line at a time**, plus the overlap window
-NixOS itself keeps (about one month after a release, until the old
-channel's end of life). In that window a critical fix for the old line
-may get one more patch tag, cut from a short-lived branch off its last
-tag; outside it there are no parallel lines, no backports, and the fix
-is the bump.
+**A minor tag: a contract surface changed.** A person cuts it. The
+release note lists the hand edits, by surface, and what `fort check`
+will say about each one before the edit is made — the two halves of
+"a structural fix" below.
 
 Tags are immutable: a broken release gets the next number, never a
 re-tag. Small and often: a tag's suspect surface is everything in it.
@@ -88,18 +73,8 @@ the distro channel for a fort, and that is a promise the framework has
 to keep — the patch-tag cadence above is how. A security fix in nixpkgs
 reaches an estate exactly as fast as the next patch tag.
 
-The branch is the line's NixOS stable release: every tag of the 26.11
-line pins `nixos-26.11`, and the line switch is the commit that moves
-`flake.nix` to the next branch. (Before the first line it is still
-`nixos-unstable`.) The channel is a contract surface: only a line
-switch moves it, and the release note names the move.
-
-The first line is 26.11, not 26.05, on purpose. In October 2026 the
-unstable pin already carried k3s 1.36 and nixos-26.05 carries 1.35 — a
-switch would have downgraded k3s on live forts, and Kubernetes does not
-support a minor-version downgrade. 26.05 also reaches end of life
-2026-12-31. The first stable line is the first one the unstable pin can
-roll into without a downgrade.
+The branch is `nixos-unstable` (`flake.nix`). That is a contract surface:
+a release note names the move if it changes.
 
 The escape hatch, for an estate that must move nixpkgs on its own clock:
 drop the `follows` line and pin `nixpkgs.url` directly. The modules
@@ -162,9 +137,9 @@ path 1.
 
 ```
 # in the estate
-sed -i 's|refs/tags/v26.11.0|refs/tags/v26.11.1|' nixos/flake.nix
+sed -i 's|refs/tags/v0.0.1|refs/tags/v0.1.0|' nixos/flake.nix
 nix flake lock ./nixos          # the lock follows the ref: forts, and nixpkgs + sops-nix through it
-git checkout -b forts-v26.11.1 && git commit -am 'Pin sfi/forts v26.11.1' && git push
+git checkout -b forts-v0.1.0 && git commit -am 'Pin sfi/forts v0.1.0' && git push
 # open the PR; read the gate; make the edits it names and the release note lists
 ```
 
