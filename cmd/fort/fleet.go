@@ -222,9 +222,28 @@ func kustomizeBuild(root, rel string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-		return "", fmt.Errorf("kustomize build: %s", lines[len(lines)-1])
+		last := lines[len(lines)-1]
+		if f := missingSopsFile(last); f != "" {
+			return "", fmt.Errorf("not seeded: %s does not exist yet — run the seed of this layer (fort mint) to create it", f)
+		}
+		return "", fmt.Errorf("kustomize build: %s", last)
 	}
 	return string(out), nil
+}
+
+// missingSopsRE matches kustomize's error for a listed sops file that the
+// seed has not written yet: `lstat <path>/x.sops.yaml: no such file`.
+var missingSopsRE = regexp.MustCompile(`lstat (\S+\.sops\.yaml): no such file or directory`)
+
+// missingSopsFile returns the path of the sops file that a kustomize error
+// names as missing, or "" when the error is something else. The staged-but-
+// unseeded state is a deliberate gate (see the top of this file); the raw
+// kustomize message buries the cause under the accumulation chain.
+func missingSopsFile(msg string) string {
+	if m := missingSopsRE.FindStringSubmatch(msg); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 var docSep = regexp.MustCompile(`(?m)^---\s*$`)

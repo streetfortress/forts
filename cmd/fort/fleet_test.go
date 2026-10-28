@@ -156,8 +156,18 @@ func TestKustomizeBuild(t *testing.T) {
 	}
 	os.MkdirAll(filepath.Join(root, "bad"), 0o755)
 	os.WriteFile(filepath.Join(root, "bad/kustomization.yaml"), []byte("resources:\n  - secrets.sops.yaml\n"), 0o644)
-	if _, err := kustomizeBuild(root, "bad"); err == nil || !strings.HasPrefix(err.Error(), "kustomize build: ") {
+	if _, err := kustomizeBuild(root, "bad"); err == nil || !strings.HasPrefix(err.Error(), "not seeded: ") {
 		t.Errorf("bad: %v", err)
+	}
+}
+
+func TestMissingSopsFile(t *testing.T) {
+	msg := "Error: accumulating resources: lstat /w/flux/apps/x/secrets.sops.yaml: no such file or directory"
+	if got := missingSopsFile(msg); got != "/w/flux/apps/x/secrets.sops.yaml" {
+		t.Errorf("got %q", got)
+	}
+	if got := missingSopsFile("lstat /w/cm.yaml: no such file or directory"); got != "" {
+		t.Errorf("non-sops file must not match: %q", got)
 	}
 }
 
