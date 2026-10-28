@@ -162,8 +162,22 @@ type layerPlan struct {
 
 const (
 	flakePath = "nixos/flake.nix"
-	gatePath  = ".gitea/workflows/checks.yaml"
 )
+
+// The gate's two homes: fort init renders it for the estate's forge, and
+// each runner reads its own directory (forts#191).
+var gatePaths = []string{".gitea/workflows/checks.yaml", ".github/workflows/checks.yaml"}
+
+// gatePathIn is the gate the estate carries: the first of gatePaths that
+// exists, else the first (the error names it).
+func gatePathIn(root string) string {
+	for _, p := range gatePaths {
+		if exists(root, p) {
+			return p
+		}
+	}
+	return gatePaths[0]
+}
 
 func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	p := &layerPlan{root: root, ref: ref}
@@ -171,6 +185,7 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w — fort layer add runs in an estate fort init rendered", flakePath, err)
 	}
+	gatePath := gatePathIn(root)
 	gate, err := os.ReadFile(filepath.Join(root, gatePath))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w — the gate workflow fort init rendered", gatePath, err)
@@ -335,6 +350,7 @@ func planLayerRemove(root, role string) (*layerPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", flakePath, err)
 	}
+	gatePath := gatePathIn(root)
 	gate, err := os.ReadFile(filepath.Join(root, gatePath))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", gatePath, err)
@@ -371,7 +387,7 @@ func planLayerRemove(root, role string) (*layerPlan, error) {
 }
 
 func stageLayerFiles(root string) {
-	if git, err := tools.Command("git", "-C", root, "add", "-A", flakePath, gatePath, layersDir); err == nil {
+	if git, err := tools.Command("git", "-C", root, "add", "-A", flakePath, gatePathIn(root), layersDir); err == nil {
 		git.Run()
 	}
 }

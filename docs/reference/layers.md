@@ -70,7 +70,7 @@ The default applies and stages them; `--dry-run` only plans:
   the role's binary at the layer's pin, so `nix run ./nixos#fort-monitoring`
   is the same binary the gate runs. A flake rendered before layers has
   no such set; the verb refuses and says what to add.
-- **The gate step.** After the core's step in `.gitea/workflows/checks.yaml`:
+- **The gate step.** After the core's step in `.gitea/workflows/checks.yaml` (`.github/workflows/checks.yaml` in a github-forge estate):
   `nix run ./nixos#fort-<role> -- check --all`. The layer's check is the
   layer's gate, and the estate's gate runs both.
 

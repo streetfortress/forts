@@ -48,6 +48,10 @@ type initView struct {
 	// the [source] comments say so, and no known_hosts example is
 	// rendered — the route pins no host key.
 	Anonymous bool
+	// ForgeKind: the forge's kind, "gitea" or "github" (forts#1). It
+	// picks where the gate renders: .gitea/workflows/ or .github/workflows/.
+	// Empty reads as gitea.
+	ForgeKind string
 }
 
 // hubView is one [hubs.<role>] table as the template renders it.
@@ -176,7 +180,7 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
+	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), ForgeKind: est.ForgeKind(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -246,6 +250,7 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 		"provisioning/README.md":          "what secrets.yaml holds",
 		"provisioning/pulumi/Pulumi.yaml": "the project file: the program is fort-pulumi, beside fort",
 		".gitea/workflows/checks.yaml":    "the gate: fort check --all, nix eval of every host; a layer's step lands after it",
+		".github/workflows/checks.yaml":   "the gate: fort check --all, nix eval of every host; a layer's step lands after it",
 	}
 	var out []scaffoldFile
 	err := fs.WalkDir(initTemplates, "templates/init", func(path string, d fs.DirEntry, err error) error {
@@ -257,6 +262,15 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 			return err
 		}
 		rel := strings.TrimPrefix(path, "templates/init/")
+		// The gate renders for the estate's forge only: each runner reads
+		// its own directory (forts#191).
+		gate := ".gitea/workflows/checks.yaml.gotpl"
+		if v.ForgeKind == estate.ForgeGitHub {
+			gate = ".github/workflows/checks.yaml.gotpl"
+		}
+		if (rel == ".gitea/workflows/checks.yaml.gotpl" || rel == ".github/workflows/checks.yaml.gotpl") && rel != gate {
+			return nil
+		}
 		if strings.HasSuffix(rel, ".gotpl") {
 			rel = strings.TrimSuffix(rel, ".gotpl")
 			tpl, err := template.New(rel).Parse(string(raw))

@@ -1,0 +1,30 @@
+# The estate's gate, on every push: `fort check --all --eval` — tree ↔
+# manifests, kustomize builds, strict envsubst, the mesh and the links,
+# then a full module-system eval of every host that has a manifest. It
+# comes from the framework this estate pins: `nix run ./nixos#fort` is
+# the CLI at that pin. A layer's gate is its own step after the core's
+# (docs/layers.md; `fort layer add` appends it).
+#
+# GitHub's runners reach cache.nixos.org directly, so this gate carries
+# none of the closure-cache steps the Forgejo rendering has (forts#75).
+# The runner sets GITHUB_ACTIONS, which `fort check` reads.
+#
+# Two red-X states are DELIBERATE gates, not breakage: a staged-but-
+# unseeded app tree (listed-but-absent sops files fail kustomize) and a
+# staged-but-unprovisioned host (a missing mesh peer fails nix eval).
+# Such PRs go green when the provisioning replay seeds identity + secrets.
+name: checks
+
+on:
+  push:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: The gate (fort check --all --eval)
+        run: nix run ./nixos#fort -- check --all --eval

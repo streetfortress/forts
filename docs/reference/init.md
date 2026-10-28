@@ -28,7 +28,7 @@ every file that exists.
 ● provisioning/README.md          what secrets.yaml holds
 ● provisioning/pulumi/Pulumi.yaml the project file: `runtime: go`, `binary: fort-pulumi`
 ● flux/infrastructure/            the shared flux layer: controllers + configs, minus the two files below
-● .gitea/workflows/checks.yaml    the gate: `nix run ./nixos#fort -- check --all` + a nix eval of every host; a layer's step lands after (layers.md)
+● .gitea/workflows/checks.yaml    the gate: `nix run ./nixos#fort -- check --all` + a nix eval of every host; a layer's step lands after (layers.md). A github-forge estate gets `.github/workflows/checks.yaml` instead, without the closure-cache steps
 ● nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state   (.gitkeep)
 ```
 

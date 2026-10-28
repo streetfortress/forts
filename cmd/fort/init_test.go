@@ -352,3 +352,47 @@ func TestRenderInitAnonymous(t *testing.T) {
 		t.Errorf("the written estate is on the anonymous route: %+v %v", est.Source, err)
 	}
 }
+
+// The gate renders where the estate's forge runs it (forts#191): GitHub
+// reads .github/workflows/ only, and needs neither the closure-cache steps
+// nor GITEA_ACTIONS.
+func TestRenderInitGateFollowsForge(t *testing.T) {
+	gate := func(kind string) map[string]string {
+		v := testInitView
+		v.ForgeKind = kind
+		files, err := renderInit(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]string{}
+		for _, f := range files {
+			m[f.path] = string(f.content)
+		}
+		return m
+	}
+	for _, kind := range []string{"", "gitea"} {
+		m := gate(kind)
+		if _, ok := m[".gitea/workflows/checks.yaml"]; !ok {
+			t.Errorf("kind %q: no .gitea gate", kind)
+		}
+		if _, ok := m[".github/workflows/checks.yaml"]; ok {
+			t.Errorf("kind %q: a .github gate", kind)
+		}
+	}
+	m := gate("github")
+	if _, ok := m[".gitea/workflows/checks.yaml"]; ok {
+		t.Error("github: a .gitea gate")
+	}
+	g, ok := m[".github/workflows/checks.yaml"]
+	if !ok {
+		t.Fatal("github: no .github gate")
+	}
+	if !strings.Contains(g, "nix run ./nixos#fort -- check --all --eval") || !strings.Contains(g, "- name: The gate (fort check --all --eval)") {
+		t.Errorf("github gate:\n%s", g)
+	}
+	for _, bad := range []string{"GITEA_ACTIONS", "actions/cache", "nix-closure-cache"} {
+		if strings.Contains(g, bad) {
+			t.Errorf("github gate carries %q:\n%s", bad, g)
+		}
+	}
+}

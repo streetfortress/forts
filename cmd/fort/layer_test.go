@@ -60,11 +60,35 @@ func TestParseLayerRef(t *testing.T) {
 	}
 }
 
+const gatePath = ".gitea/workflows/checks.yaml"
+
 func layerEstate(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{flakePath: flakeFixture, gatePath: gateFixture})
 	return root
+}
+
+// A github-forge estate carries its gate under .github/ (forts#191); the
+// layer verbs find it there.
+func TestLayerAddFindsGithubGate(t *testing.T) {
+	root := t.TempDir()
+	gh := ".github/workflows/checks.yaml"
+	writeTree(t, root, map[string]string{flakePath: flakeFixture, gh: gateFixture})
+	ref, _ := parseLayerRef("git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring")
+	p, err := planLayerAdd(root, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.apply(); err != nil {
+		t.Fatal(err)
+	}
+	if g := readFile(t, filepath.Join(root, gh)); !strings.Contains(g, "The gate of the monitoring layer") {
+		t.Errorf("gate:\n%s", g)
+	}
+	if exists(root, gatePath) {
+		t.Error("a .gitea gate appeared")
+	}
 }
 
 func TestLayerAddAndRemove(t *testing.T) {
