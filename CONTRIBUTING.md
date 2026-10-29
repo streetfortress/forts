@@ -2,6 +2,11 @@
 
 Thanks for your interest in forts. Issues and pull requests are welcome.
 
+**Forts is primarily developed on a private forgejo instance.** We will transfer 
+your issue and/or pull request and bring it across the finish line on `main`. 
+Credit will be recorded in the repo's git history and be made public.
+(commit author's email, or user mention in the commit message)
+
 ## Before you start
 
 - For a bug, open an issue with the verb you ran, the output you got, and the
