@@ -25,6 +25,8 @@ from another place is a seed: init renders a new `estate.toml` from it.
 ● estate.toml                     the estate: name and the operator keys (if given), then [source], [mesh] and
                                   [acme] (as given), then the hubs by role (if any)
 ● README.md                       the layout and the first fort
+● AGENTS.md                       the agent's brief: the reference docs of the pinned tag, the verbs, the invariants, and
+                                  "done" as `fort check --all --eval` green (forts#217)
 ● justfile                        the estate's own verbs, which are not the CLI: fetch-kubeconfig (one fort's
                                   read-only ops kubeconfig) and updatekeys (re-encrypt every sops file)
 ● .sops.yaml                      the flux rules: provisioning/, the shared infrastructure rule,

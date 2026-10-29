@@ -30,7 +30,7 @@ func TestRenderInit(t *testing.T) {
 	for _, f := range files {
 		m[f.path] = string(f.content)
 	}
-	for _, p := range []string{"estate.toml", "README.md", "justfile", ".gitignore", ".sops.yaml", "nixos/.sops.yaml", "nixos/flake.nix", "nixos/certs/README.md",
+	for _, p := range []string{"estate.toml", "README.md", "AGENTS.md", "justfile", ".gitignore", ".sops.yaml", "nixos/.sops.yaml", "nixos/flake.nix", "nixos/certs/README.md",
 		"forts/.gitkeep", "nixos/hosts/.gitkeep", "nixos/secrets/.gitkeep", "mesh/peers.json", "provisioning/README.md", "provisioning/pulumi/Pulumi.yaml", "provisioning/pulumi/state/.gitkeep",
 		"flux/apps/.gitkeep", "flux/clusters/.gitkeep", "flux/infrastructure/controllers/kustomization.yaml", "flux/infrastructure/configs/kustomization.yaml", ".gitea/workflows/checks.yaml"} {
 		if _, ok := m[p]; !ok {
@@ -393,6 +393,61 @@ func TestRenderInitGateFollowsForge(t *testing.T) {
 	for _, bad := range []string{"GITEA_ACTIONS", "actions/cache", "nix-closure-cache"} {
 		if strings.Contains(g, bad) {
 			t.Errorf("github gate carries %q:\n%s", bad, g)
+		}
+	}
+}
+
+// AGENTS.md is the estate's brief for an agent that has no forts checkout
+// (forts#217): it names the invariants and the definition of done, and it
+// links the reference docs of the tag the estate pins.
+func TestInitAgentsMD(t *testing.T) {
+	v := testInitView
+	v.Forts = "git+https://github.com/streetfortress/forts?ref=refs/tags/v0.1.0"
+	v.ForgeTag, v.DocsURL = forgeRef(v.Forts)
+	files, err := renderInit(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	for _, f := range files {
+		if f.path == "AGENTS.md" {
+			got = string(f.content)
+		}
+	}
+	for _, want := range []string{
+		"https://github.com/streetfortress/forts/tree/v0.1.0/docs/reference",
+		"`v0.1.0`",
+		"fort check --all --eval",
+		"Do not hand-edit",
+		"Do not commit a decrypted secret",
+		"never overwrites",
+		"provisioning/pulumi/state/",
+		"--dry-run",
+		"fort scaffold <host>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("AGENTS.md lacks %q:\n%s", want, got)
+		}
+	}
+	// A URL that names no tag still renders, and points at the directory.
+	files, _ = renderInit(testInitView)
+	for _, f := range files {
+		if f.path == "AGENTS.md" && (strings.Contains(string(f.content), "<no value>") || !strings.Contains(string(f.content), "docs/reference/")) {
+			t.Errorf("untagged AGENTS.md:\n%s", f.content)
+		}
+	}
+}
+
+func TestForgeRef(t *testing.T) {
+	for url, want := range map[string][2]string{
+		"git+https://github.com/o/forts?ref=refs/tags/v1":        {"v1", "https://github.com/o/forts/tree/v1/docs/reference"},
+		"git+https://gitea.example/o/forts.git?ref=refs/tags/v2": {"v2", "https://gitea.example/o/forts/src/tag/v2/docs/reference"},
+		"github:o/forts/v3":                                    {"v3", "https://github.com/o/forts/tree/v3/docs/reference"},
+		"git+https://gitea.example/o/forts":                    {"", ""},
+		"git+ssh://git@gitea.example/o/forts?ref=refs/tags/v4": {"v4", ""},
+	} {
+		if tag, docs := forgeRef(url); tag != want[0] || docs != want[1] {
+			t.Errorf("forgeRef(%q) = %q, %q; want %q", url, tag, docs, want)
 		}
 	}
 }

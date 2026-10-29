@@ -52,6 +52,44 @@ type initView struct {
 	// picks where the gate renders: .gitea/workflows/ or .github/workflows/.
 	// Empty reads as gitea.
 	ForgeKind string
+	// ForgeTag and DocsURL: the release tag Forts pins and the reference
+	// docs of that tag, read off the flake URL (forgeRef). Either is empty
+	// when the URL does not say; AGENTS.md then names the directory.
+	ForgeTag, DocsURL string
+}
+
+// forgeRef reads the release tag out of the framework's flake URL and
+// builds the URL of that tag's reference docs. It knows two spellings:
+// git+https://<host>/<owner>/<repo>?ref=refs/tags/<tag>, and
+// github:<owner>/<repo>/<tag>. Anything else gives no tag.
+func forgeRef(flakeURL string) (tag, docs string) {
+	if rest, ok := strings.CutPrefix(flakeURL, "github:"); ok {
+		parts := strings.Split(strings.SplitN(rest, "?", 2)[0], "/")
+		if len(parts) == 3 && parts[2] != "" {
+			return parts[2], fmt.Sprintf("https://github.com/%s/%s/tree/%s/docs/reference", parts[0], parts[1], parts[2])
+		}
+		return "", ""
+	}
+	base, query, ok := strings.Cut(flakeURL, "?")
+	if !ok {
+		return "", ""
+	}
+	for _, kv := range strings.Split(query, "&") {
+		if t, ok := strings.CutPrefix(kv, "ref=refs/tags/"); ok && t != "" {
+			tag = t
+		}
+	}
+	if tag == "" {
+		return "", ""
+	}
+	base = strings.TrimSuffix(strings.TrimPrefix(base, "git+"), ".git")
+	if strings.HasPrefix(base, "https://github.com/") {
+		return tag, base + "/tree/" + tag + "/docs/reference"
+	}
+	if strings.HasPrefix(base, "https://") {
+		return tag, base + "/src/tag/" + tag + "/docs/reference" // gitea
+	}
+	return tag, ""
 }
 
 // hubView is one [hubs.<role>] table as the template renders it.
@@ -246,7 +284,8 @@ func initCmd(args []string) error {
 	if exists(root, estate.Path) && !own {
 		return fmt.Errorf("%s already has %s — this checkout is an estate; init creates one, it does not re-render", root, estate.Path)
 	}
-	files, err := renderInit(initView{Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), ForgeKind: est.ForgeKind(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
+	forgeTag, docsURL := forgeRef(*forts)
+	files, err := renderInit(initView{ForgeTag: forgeTag, DocsURL: docsURL, Name: est.Name, Repo: est.Source.Repo, RepoGit: est.RepoGit(), Anonymous: est.Anonymous(), ForgeKind: est.ForgeKind(), Hubs: hubsView(est), Mesh: est.Mesh.CIDR, Interface: est.Mesh.Interface, Zone: est.Mesh.Zone, Forge: est.Hubs[estate.RoleForge].Fort != "", Forts: *forts, KnownHosts: est.Source.KnownHosts, ACMEEmail: est.ACME.Email, ACMEDirectory: est.ACMEDirectory(), Admins: admins, OperatorKeys: est.OperatorKeys})
 	if err != nil {
 		return err
 	}
@@ -306,6 +345,7 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 	notes := map[string]string{
 		"estate.toml":                     "the estate: name and the operator keys, then [source], [mesh], [acme], the hubs",
 		"README.md":                       "the estate's README: the layout, the first fort",
+		"AGENTS.md":                       "the agent's rules: the pinned docs, the verbs, the invariants, what done means",
 		"justfile":                        "the estate's own verbs: fort (the CLI from the estate flake), fetch-kubeconfig, updatekeys",
 		".gitignore":                      "",
 		".sops.yaml":                      "the flux rules: provisioning/, the shared infrastructure rule (+ fort-managed cluster recipients)",

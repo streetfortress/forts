@@ -5,6 +5,7 @@ as a flake input. Rendered by `fort init`. The CLI handbook is sfi/forts'
 `docs/`; this file is yours.
 
 ```
+AGENTS.md                    the rules for an agent working in this estate: the verbs, the invariants, what done means
 estate.toml                  what this checkout is: its name, its git URL, its mesh and zone, its hubs by role (if any)
 forts/<host>.toml            the manifests: one file per fort, the declaration
 nixos/
