@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="readme-images/forts-banner.png" alt="Forts!" width="440" height="120">
+  <img src="readme-images/forts-banner.png" alt="Forts!" height="180">
 </p>
 
 <p align="center"><strong>A framework for bootstrapping GitOps environments, centered around nixOS and FluxCD</strong></p>
