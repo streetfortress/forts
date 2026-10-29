@@ -378,7 +378,7 @@ in an up-window; by hand it is
 until kubectl apply -f /var/lib/rancher/k3s/server/manifests/ccm.yaml; do sleep 1; done
 ```
 
-as deployer on a fort that enables ops/admin.nix: the first `kubectl`
+as deployer on a fort that sets sfi.ops.admin.enable: the first `kubectl`
 on the terminal runs the admin-key challenge and mints the cluster-admin
 credential, the loop rides it. Upstream: k3s-io/k3s#7328.
 

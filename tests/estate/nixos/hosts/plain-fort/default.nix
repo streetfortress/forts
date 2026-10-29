@@ -69,6 +69,13 @@
   # it with `--rotate`.
   sfi.ops.console.enable = true;
 
+  # BREAK-GLASS, off (sfi/forts#195): flip to true to give deployer
+  # `sudo -i` — and cluster-admin kubectl on a cluster fort — behind the
+  # admin-key challenge (modules/ops/admin.nix; docs/ops.md "Escalating
+  # to Admin"). The challenge options live at sfi.ops.admin.challenge.*;
+  # its enable defaults to true, and false is passwordless sudo.
+  sfi.ops.admin.enable = false;
+
   # Watch main; a changed host config lands within a minute or two of
   # merging — or now, via `sudo nixos-pull` as deployer (#93).
   # deployer holds the host's verbs (nixos-pull, nixos-rollback,

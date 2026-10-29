@@ -41,8 +41,8 @@
 # (zvm_after_init_commands), then the Ctrl-R widget that starts with an
 # empty query.
 #
-# The guard is the import, like modules/ops/admin.nix: a host gets
-# this only by naming the module and setting enable. The estate's dev role
+# The guard is the import: a host gets this only by naming the module
+# and setting enable. The estate's dev role
 # enables it for every dev fort; a cluster fort's own default.nix opts in (staging
 # does). the production fort imports it too: #558 weighed the cost against the
 # posture of hardened.nix, settled the zsh question above, and a person

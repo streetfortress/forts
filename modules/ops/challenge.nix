@@ -17,8 +17,9 @@
 # needs a password, and sudo's own timestamp is the window:
 #   - The pinned verbs (sfi.ops.commands, NOPASSWD) never reach PAM.
 #   - A verb declared with `challenge = true`, or named by the host in
-#     sfi.ops.challenge.verbs, gets a PASSWD line: the first such sudo on
-#     a terminal runs the ceremony, the next ones inside the window do not.
+#     sfi.ops.admin.challenge.verbs, gets a PASSWD line: the first such
+#     sudo on a terminal runs the ceremony, the next ones inside the
+#     window do not.
 #   - A host that enables the admin rung (ops/admin.nix) adds
 #     `deployer ALL=(ALL) ALL` without NOPASSWD: `sudo -i` is the shell,
 #     behind the same gate, and `admin-unlock` mints the kubectl
@@ -27,7 +28,16 @@
 # timestamp (`Defaults:deployer timestamp_timeout`, timestamp_type=tty: one
 # terminal, one window; `sudo -k` ends it). kubectl's window is a token's
 # expiry, which the API server enforces (ops/admin.nix). One option,
-# sfi.ops.challenge.timeout, sets both.
+# sfi.ops.admin.challenge.timeout, sets both.
+#
+# The options live under sfi.ops.admin.challenge (#195): the challenge is
+# the admin rung's gate, and the toggles read as one family in a host
+# file. `enable` defaults to TRUE — the gate is the posture, a host does
+# nothing to have it. Setting it false removes the PAM stack and turns
+# every line this framework would mark PASSWD into NOPASSWD: the
+# "passwordless sudo" posture, for a host whose operators want sudo's
+# stock behavior or their own user management. The old sfi.ops.challenge.*
+# names are renamed aliases and keep working.
 #
 # THE CEREMONY, once per window:
 #   1. sudo needs to authenticate and runs the auth stack. The first
@@ -87,7 +97,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.sfi.ops.challenge;
+  cfg = config.sfi.ops.admin.challenge;
 
   # Fold over .sops.yaml: collect `- age1…` recipients, but only the ones
   # outside a fort's marker block. `.*` trails each pattern because
@@ -227,9 +237,29 @@ let
   pam_exec = "${config.security.pam.package}/lib/security/pam_exec.so";
 in
 {
-  imports = [ ../estate.nix ];
+  imports = [
+    ../estate.nix
+    # The options moved under the admin rung (#195). The old names keep
+    # working so an estate pinned to them evaluates, with a rename notice.
+    (lib.mkRenamedOptionModule [ "sfi" "ops" "challenge" "recipients" ] [ "sfi" "ops" "admin" "challenge" "recipients" ])
+    (lib.mkRenamedOptionModule [ "sfi" "ops" "challenge" "ttl" ] [ "sfi" "ops" "admin" "challenge" "ttl" ])
+    (lib.mkRenamedOptionModule [ "sfi" "ops" "challenge" "timeout" ] [ "sfi" "ops" "admin" "challenge" "timeout" ])
+    (lib.mkRenamedOptionModule [ "sfi" "ops" "challenge" "verbs" ] [ "sfi" "ops" "admin" "challenge" "verbs" ])
+  ];
 
-  options.sfi.ops.challenge = {
+  options.sfi.ops.admin.challenge = {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        The admin-key challenge as sudo's authentication on this host.
+        On by default: the gate is the posture. Set it false for
+        "passwordless sudo" — the PAM stack stays NixOS's own, and every
+        sudoers line this framework would mark PASSWD (the admin rung's
+        `ALL`, the gated verbs) becomes NOPASSWD instead.
+      '';
+    };
+
     recipients = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = sharedRecipients;
@@ -281,10 +311,10 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf cfg.enable {
     assertions = [{
       assertion = cfg.recipients != [ ];
-      message = "sfi.ops.challenge.recipients is empty: no admin age key was found in nixos/.sops.yaml, so sudo could never authenticate on this host. Set it explicitly.";
+      message = "sfi.ops.admin.challenge.recipients is empty: no admin age key was found in nixos/.sops.yaml, so sudo could never authenticate on this host. Set it explicitly.";
     }];
 
     # The sudo service: the two pam_exec lines in place of pam_unix.

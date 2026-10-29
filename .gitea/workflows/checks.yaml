@@ -70,6 +70,7 @@ jobs:
           nix eval --raw .#nixosConfigurations.plain-cloud-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.admin-open-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.public-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
@@ -115,6 +116,23 @@ jobs:
           grep -q '^deployer .*PASSWD: /run/current-system/sw/bin/challenge, NOPASSWD: ' "$out/sudoers"
           grep -qx 'Defaults:deployer timestamp_timeout=15, timestamp_type=tty' "$out/sudoers"
           grep -qx 'Defaults!/run/current-system/sw/bin/challenge timestamp_timeout=0' "$out/sudoers"
+          # The open posture (#195): with the challenge switched off, the
+          # rung is NOPASSWD, the stock PAM stack is back, and the
+          # rehearsal verb is gone — passwordless sudo as a stated
+          # posture, read off the rendered files like the gate above.
+          nix eval --raw \
+            '.#nixosConfigurations.admin-open-fort.config.security.sudo.configFile' \
+            > "$out/sudoers-open"
+          test "$(grep '^deployer ' "$out/sudoers-open" | head -n1)" = "deployer     ALL=(ALL:ALL)    NOPASSWD: ALL"
+          ! grep -q ' PASSWD: ' "$out/sudoers-open"
+          ! grep -q 'timestamp_timeout' "$out/sudoers-open"
+          nix eval --raw \
+            '.#nixosConfigurations.admin-open-fort.config.security.pam.services.sudo.text' \
+            > "$out/pam-sudo-open"
+          ! grep -q sfi-challenge "$out/pam-sudo-open"
+          grep '^auth ' "$out/pam-sudo-open" | grep -q pam_unix
+          test "$(nix eval --json .#nixosConfigurations.admin-open-fort.config.sfi.ops.commands --apply builtins.attrNames)" \
+            = '["nixos-pull","nixos-revision","nixos-rollback"]'
 
       - name: nixos-pull builds main, from the estate's own repo
         # The rendered verb, not the module. `--ref <branch>` was a path

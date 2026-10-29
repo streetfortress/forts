@@ -167,7 +167,9 @@
       # The same fort with the admin rung enabled (modules/ops/admin.nix,
       # forts#115): CI evaluates it so the `deployer ALL` line, the PAM
       # stack of the sudo service and the challenge's sudoers Defaults
-      # compose with a hardened host, and reads the rendered files.
+      # compose with a hardened host, and reads the rendered files. The
+      # rung rides with the verbs since #195, so the flip is the option
+      # alone — no module import.
       nixosConfigurations.admin-fort = lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
@@ -175,8 +177,27 @@
           self.nixosModules.common
           ./tests/estate/nixos/hosts/plain-fort
           sops-nix.nixosModules.sops
-          self.nixosModules.ops-admin
-          { sfi.ops.admin.enable = true; }
+          # mkForce: the scaffolded host file writes the rung off (#195),
+          # and this config is that host with the word flipped.
+          { sfi.ops.admin.enable = lib.mkForce true; }
+        ];
+      };
+
+      # The same fort with the rung open (#195): the challenge switched
+      # off, so `deployer ALL` is NOPASSWD and the sudo PAM stack is
+      # NixOS's own. CI evaluates it and reads the rendered sudoers, so
+      # the passwordless posture stays a posture and not an accident.
+      nixosConfigurations.admin-open-fort = lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inputs = { forts = self; inherit nixpkgs sops-nix; }; };
+        modules = [
+          self.nixosModules.common
+          ./tests/estate/nixos/hosts/plain-fort
+          sops-nix.nixosModules.sops
+          {
+            sfi.ops.admin.enable = lib.mkForce true;
+            sfi.ops.admin.challenge.enable = false;
+          }
         ];
       };
 

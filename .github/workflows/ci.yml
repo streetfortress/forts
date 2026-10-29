@@ -51,6 +51,7 @@ jobs:
           nix eval --raw .#nixosConfigurations.plain-cloud-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.linked-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.admin-fort.config.system.build.toplevel.drvPath
+          nix eval --raw .#nixosConfigurations.admin-open-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.cloud-fort.config.system.build.toplevel.drvPath
           nix eval --raw .#nixosConfigurations.public-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort

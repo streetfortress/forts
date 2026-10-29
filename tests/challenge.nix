@@ -6,7 +6,7 @@
 #   - inside the window the same terminal's sudo asks nothing; another
 #     terminal's does; `sudo -k` closes it;
 #   - a wrong answer is refused, a pinned verb never asks, a verb the host
-#     names in sfi.ops.challenge.verbs does, and the rehearsal verb leaves
+#     names in sfi.ops.admin.challenge.verbs does, and the rehearsal verb leaves
 #     no window behind;
 #   - deployer's kubectl unlocks itself through `sudo admin-unlock`,
 #     and the credential it mints is the ops-admin service account for the
@@ -62,7 +62,10 @@ in
   name = "challenge";
 
   nodes.fort = { config, pkgs, ... }: {
-    imports = [ ../modules/ops/admin.nix ];
+    # ops-commands pulls in the whole ladder: the verbs, the challenge,
+    # deployer, and (since #195) the admin rung, disabled until the host
+    # sets sfi.ops.admin.enable.
+    imports = [ ../modules/ops/ops-commands.nix ];
 
     networking.hostName = "fort";
     # The fixture estate: estate.toml names the operator key deployer.nix
@@ -70,7 +73,7 @@ in
     # read by nothing here.
     sfi.estate.root = ./estate;
 
-    sfi.ops.challenge = {
+    sfi.ops.admin.challenge = {
       recipients = [ testPub ];
       timeout = 10;
     };
@@ -85,7 +88,7 @@ in
       description = "a verb this host gates";
       script = "echo the gated verb ran";
     };
-    sfi.ops.challenge.verbs = [ "gated" ];
+    sfi.ops.admin.challenge.verbs = [ "gated" ];
 
     # A cluster for the kubectl half. Nothing needs to schedule: the API
     # server, the service account and the TokenRequest are the test.

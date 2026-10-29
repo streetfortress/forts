@@ -9,7 +9,7 @@ every verb the core ships is on one rung (forts#151). `ops`, run as
 |---|---|---|
 | **observe** | read-only signals: what the host runs, what the journal says, what the cluster holds | the journal (`journalctl`, `deployer` is in `systemd-journal`); the read-only kubeconfig on a cluster fort (`KUBECONFIG` of every login shell, and `just fetch-kubeconfig` from an operator machine); `ops`; `sudo nixos-revision` |
 | **hands-on** | bounded actions on the pull loop, each one sudo-logged, each one a choice among states git already produced | `sudo nixos-pull` (pull main now; `--from <ip>` pulls the same main from the forge by address when the forge's name is what broke, forts#76); `sudo nixos-rollback` (a prior generation, pinned until `nixos-pull` or `--lift`) |
-| **break-glass** | the admin rung, behind the admin-key challenge that is sudo's authentication on a fort | `sudo -i` and the real `kubectl` on a host that enables `ops/admin.nix`; `sudo admin-unlock` (mints the kubectl credential, which `kubectl` runs for you); `sudo challenge` (the rehearsal); the console password where a host enables `ops/console.nix` |
+| **break-glass** | the admin rung, behind the admin-key challenge that is sudo's authentication on a fort | `sudo -i` and the real `kubectl` on a host that sets `sfi.ops.admin.enable = true` (scaffolded as `false`, forts#195); `sudo admin-unlock` (mints the kubectl credential, which `kubectl` runs for you); `sudo challenge` (the rehearsal); the console password where a host enables `ops/console.nix` |
 
 The hands-on verbs are pinned NOPASSWD lines in sudoers, on the exact
 path `/run/current-system/sw/bin/<verb>`, so they survive a generation
@@ -18,8 +18,12 @@ and `nixos-rollback` chooses from a menu of generations main already
 built. The break-glass rung is the opposite shape: `deployer ALL=(ALL)
 ALL` without NOPASSWD, so the first unpinned `sudo` on a terminal runs
 the admin-key ceremony (`modules/ops/challenge.nix`) and sudo's own
-timestamp is the window. One option, `sfi.ops.challenge.timeout`, sets
-the window for the shell and the life of the kubectl credential alike.
+timestamp is the window. One option, `sfi.ops.admin.challenge.timeout`,
+sets the window for the shell and the life of the kubectl credential
+alike. The challenge itself has a toggle, `sfi.ops.admin.challenge.enable`,
+on by default: a host that sets it false has passwordless sudo — the
+rung's `ALL` line and the gated verbs become NOPASSWD, and the sudo PAM
+stack stays NixOS's own.
 
 ## No verb for the cluster
 
@@ -87,7 +91,7 @@ in
 sudo-logged with its argument, and shows up in `ops`. A verb that
 widens reach rather than acting on machinery git already governs sets
 `challenge = true`, and a host puts any verb behind the challenge by
-naming it in `sfi.ops.challenge.verbs`.
+naming it in `sfi.ops.admin.challenge.verbs`.
 
 The verbs the core used to carry for the cluster — the flux status,
 suspend, resume, reconcile and restart verbs, the pod logs, the

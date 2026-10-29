@@ -53,17 +53,22 @@
 # terminal and window. The NOPASSWD verbs never reach it. A verb that
 # widens REACH rather than acting on the pull loop asks for it with
 # `challenge = true`, and a host can put any verb behind it with
-# `sfi.ops.challenge.verbs`. The gate is for UNAUTHORIZED OPERATORS, not
-# for a host whose root is already taken. `sudo challenge` rehearses the
-# ceremony and changes nothing.
+# `sfi.ops.admin.challenge.verbs`. The gate is for UNAUTHORIZED
+# OPERATORS, not for a host whose root is already taken. `sudo challenge`
+# rehearses the ceremony and changes nothing. A host that sets
+# sfi.ops.admin.challenge.enable = false has no gate: every verb's line
+# is NOPASSWD.
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.sfi.ops;
 
   # A verb is behind the challenge when its own module asked for it, or
-  # when this host named it in sfi.ops.challenge.verbs.
-  gated = name: c: c.challenge || lib.elem name cfg.challenge.verbs;
+  # when this host named it in sfi.ops.admin.challenge.verbs — and the
+  # host has not switched the challenge off, which turns every line into
+  # NOPASSWD (challenge.nix's enable option says why).
+  gated = name: c:
+    cfg.admin.challenge.enable && (c.challenge || lib.elem name cfg.admin.challenge.verbs);
 
   mkCommand = name: c:
     pkgs.writeShellApplication {
@@ -99,6 +104,9 @@ in
   imports = [
     ./challenge.nix # the admin-key gate: sudo's authentication
     ./deployer.nix # the account every rule below names (#647)
+    # The admin rung rides with the verbs, disabled (#195): enabling it is
+    # `sfi.ops.admin.enable = true` in the host file, never a module import.
+    ./admin.nix
   ];
 
   options.sfi.ops.commands = lib.mkOption {
@@ -153,8 +161,8 @@ in
     # say nothing — the one failure this option must not have.
     assertions = map (name: {
       assertion = cfg.commands ? ${name};
-      message = "sfi.ops.challenge.verbs names '${name}', but this host declares no such verb: the challenge would gate nothing. Verbs on this host: ${lib.concatStringsSep ", " (lib.attrNames cfg.commands)}.";
-    }) cfg.challenge.verbs;
+      message = "sfi.ops.admin.challenge.verbs names '${name}', but this host declares no such verb: the challenge would gate nothing. Verbs on this host: ${lib.concatStringsSep ", " (lib.attrNames cfg.commands)}.";
+    }) cfg.admin.challenge.verbs;
 
     # Pin the stable current-system path per verb, deployer only. The tag
     # is written on EVERY command: a sudoers tag carries over to the next

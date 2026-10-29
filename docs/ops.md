@@ -16,11 +16,12 @@ More specific documentation can be found in [the reference docs](reference/ops.m
   - [Commit SHAs: The "version" of config sets](#commit-shas-the-version-of-config-sets)
   - [Rolling back a change in `nixos/`](#rolling-back-a-change-in-nixos)
   - [Rolling back a change in `flux/`](#rolling-back-a-change-in-flux)
-- [A Minimal, Declared, Network Surface](#a-minimal-declared-network-surface)
-  - [There is no public facing "front door" on a fort](#there-is-no-public-facing-front-door-on-a-fort)
-  - [Leverage the Estate mesh for fort-to-fort communication](#leverage-the-estate-mesh-for-fort-to-fort-communication)
+  - [Pro Tip: Use Squash Style Merge in an Estate](#pro-tip-use-the-squash-style-merge-in-an-estate)
+- [The Estate Mesh](#the-estate-mesh)
 - [Secrets in an Estate](#secrets-in-an-estate)
   - [Rotating Secrets](#rotating-secrets)
+- [Accessing A Fort](#accessing-a-fort)
+- [Escalating to Admin](#escalating-to-admin)
 
 ## Forts are 'Cattle' Machines
 
@@ -42,7 +43,7 @@ However, because _All_ changes must go through git, your abilities as an operato
 
 ## Ops is about Recovery - Not Repairs
 
-Forts is centered around NixOS and FluxCD: two systems that _continuously_ attempt to apply the declared state. If you try to change something manually, the forts machinery will _fight you_, automatically un-doing your changes. Therefore if something goes wrong, your first and usually best/quickest option to resume service is to _roll back to a known good config_. Recovering the service first allows operators to defer triaging and root-causing until an opportune time (ideally within a day or two - not at 3 am on a random Sunday).
+Forts is centered around NixOS and FluxCD: two systems that _continuously_ attempt to apply the declared state. If you try to change something manually, the forts machinery will _fight you_, automatically undoing your changes. Therefore if something goes wrong, your first and usually best/quickest option to resume service is to _roll back to a known good config_. Recovering the service first allows operators to defer triaging and root-causing until an opportune time (ideally within a day or two - not at 3 am on a random Sunday).
 
 ### Commit SHAs: The "version" of config sets
 
@@ -68,9 +69,13 @@ It's possible for a nixos/ change to **sever the mesh**, and the way back from t
 
 A Flux change shouldn't ever _break the fort_, so the PR -> FluxCD reconciliation loop should always remain active. Therefore the fort ops module does not have a built-in `flux-rollback` command like it does for nixos. Recovery for a flux app is achieved through git operations.
 
+### Pro Tip: Use the Squash Style Merge in an Estate
+
+Sometimes a pull request is composed of several individual commits. When operating an estate, it's **unlikely** that you would want to roll back to a sub-commit of a pull request. Using the 'Squash' style merge results in a linear history of CI-passing configuration versions that greatly simplifies estate operations.
+
 ---
 
-## The Estate Mesh: A Minimal, Declared, Network Surface
+## The Estate Mesh
 
 A fort only exposes its **Wireguard Mesh** port(s) by default. Enabling `[cluster]` in `forts/<fort>.toml` opens 80/443 as a part of the k3s server scaffold.
 
@@ -101,7 +106,7 @@ NixOS, and FluxCD both integrate cleanly with [SOPS](https://getsops.io), so for
 
 Because every secret's location is declared, secrets are a rotatable inventory — a rotation is a PR with automatic rollout, and "what do we rotate if X leaks" is a grep, not archaeology.
 
-> Almost every secret in an estate is rotate-able. The one exception is **a fort's identity secrets**. A fort's host key, wireguard key, etc are intrinsically tied to the lifecycle of that fort. If you need to change a fort's identity, provision a new one and tear down the old.
+> Almost every secret in an estate is rotatable. The one exception is **a fort's identity secrets**. A fort's host key, wireguard key, etc are intrinsically tied to the lifecycle of that fort. If you need to change a fort's identity, provision a new one and tear down the old.
 
 #### The Secrets that can be easily rotated:
 
@@ -110,4 +115,75 @@ Because every secret's location is declared, secrets are a rotatable inventory �
 3. The console passphrase: the one the fort CLI owns end-to-end — `fort console-password <host> --rotate`
 4. The recipient set (adding or removing an admin or other secret readers): `just updatekeys`. We've implemented this as a justfile recipe for now, it calls `sops updatekeys` on all sops-encrypted secrets in the estate.
 
+---
+
+## Accessing A Fort
+
+In order to get onto a fort you must login by:
+
+- SSH on the **Mesh**
+- "Out of band" via the machine provider's **console interface**
+
+### SSH over the Mesh
+
+In `estate.toml`, add your SSH **public key** to `operator_keys`. Then, add your machine to the estate's `mesh/peers.json` `clients` section:
+
+```
+# mesh/peers.json
+{ ...
+  "clients": {
+    "macmini": {
+      "wg_vpn_ip": "<a valid mesh IP address>",
+      "public_key": "<your wireguard public key>"
+    },
+  },
+}
+```
+
+Commit `peers.json` and merge it to main in the estate. Forts will pick up the configuration automatically, and you can then SSH to them at their mesh addresses.
+
+### Out of Band Console Access
+
+If _the mesh ever breaks_ (wireguard fails, invalid system configuration (interface typo, etc)), you can still recover a fort.
+
+Compute providers provide a **console interface** which requires no network connectivity on the fort. In order to login with this method, you must use a fort's **generated console password**, stored encrypted in `provisioning/console-passwords.yaml`.
+
+```
+fort console-password <fort> --show
+virsh console <fort> # (deployer user & decrypted console password)
+```
+
+---
+
+## Escalating to Admin
+
+A fort's `deployer` user does not have root access by default. You can enable it in the fort's nix config:
+
+```nix
+# In <estate>/nixos/hosts/<fort>/default.nix
+
+sfi.ops.admin.enable = true;
+```
+
+Once merged and applied on the fort:
+
+- You can use `sudo` and `sudo -i` to escalate to root privileges
+- `kubectl` will use the admin kubeconfig (for write and delete actions you cannot normally do as ops)
+
+> By default, forts will _challenge_ you to prove possession of the estate's admin AGE key before allowing escalation. You can disable that for a "passwordless sudo" experience with `sfi.ops.admin.challenge.enable = false;`, or declare your own user management freely because **"it's just NixOS"**.
+
+### The Challenge-Response Semantics
+
+Instead of just broadly allowing root to anyone with access to the 'deployer' user, the forts flake provides a mechanism to **prove Admin AGE Key Possession** first.
+
+The challenge integrates **natively** with the operating system's sudo mechanics as an PAM module.
+
+Running `sudo` or `kubectl` for the first time as admin will invoke the challenge. An encrypted 'number used once' (nonce)  and instructions will be displayed.
+
+1. **Decrypt** the nonce with the estate's admin AGE Key
+2. **Paste** the decrypted nonce in the fort's terminal
+
+A valid nonce is accepted and the terminal session behaves exactly as if you'd just authenticated with 'sudo ... types password ...'.
+
+You can configure `sfi.ops.admin.challenge.{timeout,ttl}` (Default: 15minutes, 60s to complete challenge).
 

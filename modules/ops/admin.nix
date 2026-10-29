@@ -13,7 +13,7 @@
 # so a gate anywhere else read as a control and was none. Here the host
 # adds one sudoers line, `deployer ALL=(ALL) ALL` WITHOUT NOPASSWD, and
 # sudo's PAM stack is the gate: the first unpinned sudo on a terminal
-# runs the ceremony, and sudo's timestamp (sfi.ops.challenge.timeout,
+# runs the ceremony, and sudo's timestamp (sfi.ops.admin.challenge.timeout,
 # timestamp_type=tty) is the window. The pinned verbs stay NOPASSWD: that
 # rule is placed BEFORE theirs (lib.mkBefore), because sudo takes the
 # tags of the LAST matching line, and an ALL line after the pinned ones
@@ -44,14 +44,16 @@
 # machine uses from outside, and what every login shell on the host
 # reads by default: this module's kubectl steps in for deployer alone,
 # and `--kubeconfig <file>` on the command line bypasses it. The guard is
-# the import, as before: a host gets this only by naming the module in
-# its own default.nix and setting enable, with the reason in the comment
-# beside it. Every sudo is logged with its argument list; a shell's
-# commands are not, and the module does not claim otherwise.
+# the option (#195): ops-commands.nix imports this module on every host
+# that carries verbs, so the rung is one word in the host file —
+# `sfi.ops.admin.enable = true`, which the scaffold writes as false, with
+# the reason for a flip in the comment beside it. Every sudo is logged
+# with its argument list; a shell's commands are not, and the module does
+# not claim otherwise.
 { config, lib, pkgs, ... }:
 let
   cfg = config.sfi.ops.admin;
-  timeout = config.sfi.ops.challenge.timeout;
+  timeout = cfg.challenge.timeout;
 
   ns = "ops-admin";
   sa = "ops-admin";
@@ -63,7 +65,7 @@ let
   manifest = pkgs.writeText "ops-admin.yaml" ''
     # The admin rung's service account (sfi/forts, modules/ops/admin.nix).
     # No standing token: admin-unlock mints one through the
-    # TokenRequest API for sfi.ops.challenge.timeout minutes.
+    # TokenRequest API for sfi.ops.admin.challenge.timeout minutes.
     apiVersion: v1
     kind: Namespace
     metadata:
@@ -146,7 +148,10 @@ let
   };
 in
 {
-  imports = [ ./ops-commands.nix ];
+  # No import of ops-commands.nix here: ops-commands.nix imports THIS
+  # module (#195), so the rung's option exists wherever the verbs do and
+  # the host file never juggles imports. (The flake still exposes
+  # ops-admin, and importing it again is a harmless duplicate.)
 
   options.sfi.ops.admin.enable = lib.mkOption {
     type = lib.types.bool;
@@ -156,18 +161,24 @@ in
       admin-key challenge, so `sudo -i` is the root shell and, on a
       cluster fort, `kubectl` is cluster-admin behind `sudo
       admin-unlock`. One ceremony opens a terminal for
-      sfi.ops.challenge.timeout minutes. For a host whose operators are
-      the fleet admins; a disposable fort, a migration window.
+      sfi.ops.admin.challenge.timeout minutes. For a host whose operators
+      are the fleet admins; a disposable fort, a migration window.
     '';
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
       # Before the pinned NOPASSWD rules (see the header): sudo's tags
-      # come from the last line that matches.
+      # come from the last line that matches. With the challenge switched
+      # off (sfi.ops.admin.challenge.enable = false) the rung is
+      # passwordless sudo, stated as NOPASSWD rather than left to a PAM
+      # stack with no prompt to give.
       security.sudo.extraRules = lib.mkBefore [{
         users = [ "deployer" ];
-        commands = [{ command = "ALL"; options = [ "PASSWD" ]; }];
+        commands = [{
+          command = "ALL";
+          options = [ (if cfg.challenge.enable then "PASSWD" else "NOPASSWD") ];
+        }];
       }];
     }
 
