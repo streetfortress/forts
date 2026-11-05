@@ -20,35 +20,48 @@ func TestDestroyGates(t *testing.T) {
 	const lab = "[libvirt]\nip = \"10.0.0.1\"\n"
 	write(manifest.Path("other"), lab)
 	write("provisioning/pulumi/state/.pulumi/stacks/forts/gone.json", checkpoint)
+	// the repo's backend, as stateBackendFor renders it for an estate
+	// with no [state] table
+	b := fileBackend(filepath.Join(tmp, "provisioning/pulumi/state"))
+	pulumiDir := filepath.Join(tmp, pulumiProject)
 
 	// the happy path: no manifest anywhere, clean, stack exists
-	if p, problems := destroyGates(tmp, "gone", false, true, false); p != "libvirt" || len(problems) != 0 {
+	if p, problems := destroyGates(b, pulumiDir, tmp, "gone", false, true, false); p != "libvirt" || len(problems) != 0 {
 		t.Errorf("want libvirt + no problems, got %q %v", p, problems)
 	}
 	// still on main
-	if _, problems := destroyGates(tmp, "gone", true, true, false); len(problems) != 1 || !strings.Contains(problems[0], "origin/main") {
+	if _, problems := destroyGates(b, pulumiDir, tmp, "gone", true, true, false); len(problems) != 1 || !strings.Contains(problems[0], "origin/main") {
 		t.Errorf("main gate: %v", problems)
 	}
 	// still in the working tree + dirty
 	write(manifest.Path("gone"), lab)
-	if _, problems := destroyGates(tmp, "gone", false, false, false); len(problems) != 2 {
+	if _, problems := destroyGates(b, pulumiDir, tmp, "gone", false, false, false); len(problems) != 2 {
 		t.Errorf("tree gates: %v", problems)
 	}
 	os.Remove(filepath.Join(tmp, manifest.Path("gone")))
-	// no stack
-	if p, problems := destroyGates(tmp, "never", false, true, false); p != "" || len(problems) != 1 || !strings.Contains(problems[0], "no stack") {
+	// no stack: the refusal names where it would be
+	if p, problems := destroyGates(b, pulumiDir, tmp, "never", false, true, false); p != "" || len(problems) != 1 || !strings.Contains(problems[0], "no stack never in provisioning/pulumi/state") {
 		t.Errorf("stack gate: %q %v", p, problems)
 	}
 	// --no-stack (a [baremetal] host): the stack gate inverts — none is
 	// the happy path, one is a wrong flag
-	if p, problems := destroyGates(tmp, "never", false, true, true); p != "" || len(problems) != 0 {
+	if p, problems := destroyGates(b, pulumiDir, tmp, "never", false, true, true); p != "" || len(problems) != 0 {
 		t.Errorf("no-stack happy path: %q %v", p, problems)
 	}
-	if _, problems := destroyGates(tmp, "gone", false, true, true); len(problems) != 1 || !strings.Contains(problems[0], "drop --no-stack") {
+	if _, problems := destroyGates(b, pulumiDir, tmp, "gone", false, true, true); len(problems) != 1 || !strings.Contains(problems[0], "drop --no-stack") {
 		t.Errorf("no-stack with a stack: %v", problems)
 	}
 	if _, err := providerFromState([]byte(`{"checkpoint":{"latest":{"resources":[]}}}`)); err == nil {
 		t.Error("empty checkpoint should have no provider")
+	}
+	// the local backend (forts#248): the same file reads, another directory
+	local := fileBackend(filepath.Join(tmp, "elsewhere"))
+	write("elsewhere/.pulumi/stacks/forts/gone.json", checkpoint)
+	if p, problems := destroyGates(local, pulumiDir, tmp, "gone", false, true, false); p != "libvirt" || len(problems) != 0 {
+		t.Errorf("local backend: want libvirt + no problems, got %q %v", p, problems)
+	}
+	if _, problems := destroyGates(local, pulumiDir, tmp, "never", false, true, false); len(problems) != 1 || !strings.Contains(problems[0], "elsewhere (outside the git tree)") {
+		t.Errorf("local backend, no stack: the refusal must name the directory: %v", problems)
 	}
 }
 
@@ -70,14 +83,24 @@ func TestRevokeDeployKey(t *testing.T) {
 	}
 }
 
-func TestStacksInState(t *testing.T) {
+func TestStacksInDir(t *testing.T) {
 	tmp := t.TempDir()
 	for _, f := range []string{"a.json", "a.json.bak", "b.json", "b.json.attrs"} {
-		os.MkdirAll(filepath.Join(tmp, "state/.pulumi/stacks/forts"), 0o755)
-		os.WriteFile(filepath.Join(tmp, "state/.pulumi/stacks/forts", f), nil, 0o644)
+		os.MkdirAll(filepath.Join(tmp, ".pulumi/stacks/forts"), 0o755)
+		os.WriteFile(filepath.Join(tmp, ".pulumi/stacks/forts", f), nil, 0o644)
 	}
-	if got := strings.Join(stacksInState(tmp), ","); got != "a,b" {
+	if got := strings.Join(stacksInDir(tmp), ","); got != "a,b" {
 		t.Errorf("stacks: %s", got)
+	}
+	b := fileBackend(tmp)
+	if got, err := b.stacks("unused"); err != nil || strings.Join(got, ",") != "a,b" {
+		t.Errorf("file backend stacks: %v %v", got, err)
+	}
+	if got := strings.Join(b.stacksOffline(), ","); got != "a,b" {
+		t.Errorf("file backend offline: %s", got)
+	}
+	if !b.hasStackOffline("a") || b.hasStackOffline("c") {
+		t.Error("hasStackOffline on a file backend reads the checkpoint")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	hostseed "gitea.zen.lofi/sfi/forts/internal/seed"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
@@ -71,14 +72,28 @@ func provision(args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: nixos/hosts/%s/default.nix missing — `fort scaffold %s` first?\n", host, host)
 	}
 
-	pulumiDir := filepath.Join(root, "provisioning", "pulumi")
+	pulumiDir := filepath.Join(root, pulumiProject)
 	ctx := context.Background()
 
-	initNeeded, err := stackGate(pulumiDir, host, *imagePath != "")
+	// The state backend is the estate's (forts#248); the gate asks it
+	// whether the stack exists, so it is in the environment before the
+	// gate and before any provider is.
+	est, err := estate.Load(root)
 	if err != nil {
 		return err
 	}
-	if err := cloudEnv(root, entry.Provider, entry.LibvirtURI()); err != nil {
+	backend, err := stateBackendFor(root, est)
+	if err != nil {
+		return err
+	}
+	if err := backendEnv(root, backend); err != nil {
+		return err
+	}
+	initNeeded, err := stackGate(backend, pulumiDir, host, *imagePath != "")
+	if err != nil {
+		return err
+	}
+	if err := cloudEnv(root, backend, entry.Provider, entry.LibvirtURI()); err != nil {
 		return err
 	}
 	if initNeeded {
@@ -159,8 +174,9 @@ func provision(args []string) error {
 		}
 		return err
 	}
-	// The apply verbs stage the file backend: the checkpoint (and, at the
-	// first provision, Pulumi.<host>.yaml) is the state PR.
+	// The apply verbs stage the project dir: the checkpoint on the repo
+	// backend, and, at the first provision, Pulumi.<host>.yaml on every
+	// backend, are the state PR.
 	stage(root)
 
 	if flow != nil {
@@ -207,24 +223,24 @@ func needsTTYOrYes(verb string, yes bool) error {
 	return fmt.Errorf("fort %s: no TTY to confirm the pulumi apply — pass --yes (an agent, a script, CI), or run it from a terminal", verb)
 }
 
-// hasStack reports whether the file backend holds a checkpoint for host —
-// the same test destroy makes.
-func hasStack(pulumiDir, host string) bool {
-	return exists(pulumiDir, filepath.Join("state/.pulumi/stacks/forts", host+".json"))
-}
-
 // stackGate decides, before anything touches the provider, whether
 // provision creates the host's stack. The first provision (--image)
 // creates it when absent, so `pulumi stack init` is no longer a by-hand
 // step (#250 finding 15). A day-2 apply on a host with no stack refuses:
 // that is a typo or a host not yet provisioned, and an empty stack would
-// put a host that never was on `preview --all`.
-func stackGate(pulumiDir, host string, first bool) (initNeeded bool, err error) {
-	if hasStack(pulumiDir, host) {
+// put a host that never was on `preview --all`. The backend answers
+// whether the stack exists: a file read on the repo's and the local
+// backend, `pulumi stack ls` on s3 (state.go).
+func stackGate(b stateBackend, pulumiDir, host string, first bool) (initNeeded bool, err error) {
+	has, err := b.hasStack(pulumiDir, host)
+	if err != nil {
+		return false, err
+	}
+	if has {
 		return false, nil
 	}
 	if !first {
-		return false, fmt.Errorf("host %q has no stack — the first provision needs --image (fort image %s, then fort provision %s --image …)", host, host, host)
+		return false, fmt.Errorf("host %q has no stack in %s — the first provision needs --image (fort image %s, then fort provision %s --image …)", host, b.where(), host, host)
 	}
 	return true, nil
 }
@@ -339,9 +355,11 @@ func outputPulumi(dir string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// stage puts the file backend in the index: the checkpoint (and, at the
-// first provision, Pulumi.<host>.yaml) is the state PR. Best effort, as
-// it was before the tool set — the apply already happened, and the commit is
+// stage puts the project dir in the index: the checkpoint on the repo
+// backend, and Pulumi.<host>.yaml at the first provision on every
+// backend, are the state PR. (A bucket or a local directory lies outside
+// the tree, so there the config is all this stages.) Best effort, as it
+// was before the tool set — the apply already happened, and the commit is
 // the operator's either way.
 func stage(root string) {
 	if git, err := tools.Command("git", "-C", root, "add", "-A", "provisioning/pulumi"); err == nil {

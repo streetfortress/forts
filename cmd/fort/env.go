@@ -9,19 +9,12 @@ import (
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
 
-// cloudEnv puts the credentials a pulumi run needs into the environment
-// for one provider (the manifest's, or — for destroy — the one the stack's
-// checkpoint records: the manifest is gone by then)
-// of this process — and so of the pulumi (and its provider) we exec.
-// Explicit env wins; otherwise each value is sops-decrypted from
-// provisioning/secrets.yaml, the same home as the forge's provisioning
-// token: repo-driven, no per-machine env setup, and the values are
-// never printed.
-//
-// libvirtURI is the hypervisor the fort records — its manifest's
-// [libvirt] uri, or, for a destroy, the value the stack recorded at the
-// provision (the manifest is gone by then). "" for every other provider.
-func cloudEnv(root string, provider string, libvirtURI string) error {
+// backendEnv is the half of the environment every pulumi run needs
+// before any provider is known: the pinned plugins, the program, the
+// state backend (forts#248) and the passphrase. The gates of provision
+// and destroy ask the backend whether a stack exists before anything
+// touches the provider, so this runs first; cloudEnv adds the provider.
+func backendEnv(root string, b stateBackend) error {
 	// The nixpkgs pulumi-bin bundle puts its own provider binaries on
 	// PATH, and pulumi PREFERS ambient plugins — we ran a v6 provider
 	// against v4-generated SDK code, which mis-shapes outputs (specs as
@@ -37,15 +30,44 @@ func cloudEnv(root string, provider string, libvirtURI string) error {
 		os.Setenv("PATH", filepath.Dir(exe)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
 
-	// The state backend is THIS checkout's committed file:// dir, always.
-	// `pulumi login` records a global "current backend" in
-	// ~/.pulumi/credentials.json; a login run from a worktree leaves every
-	// later run — from any checkout — writing state into that worktree
-	// (2026-09-13: a `just provision` from the primary checkout landed its
-	// state in ~/worktrees/…/fort-wildcard-dns). PULUMI_BACKEND_URL takes
-	// precedence over the recorded login, so the one-time `pulumi login`
-	// in forts/README.md becomes unnecessary for fort commands.
-	os.Setenv("PULUMI_BACKEND_URL", "file://"+filepath.Join(root, "provisioning", "pulumi", "state"))
+	// The state backend is the estate's ([state] in estate.toml): the
+	// committed file:// dir of THIS checkout by default, a bucket or a
+	// directory outside the tree when the estate says so (state.go).
+	// PULUMI_BACKEND_URL takes precedence over the login `pulumi login`
+	// recorded in ~/.pulumi/credentials.json, so no fort command depends
+	// on one, and no worktree's login redirects another checkout's state.
+	if err := b.env(root); err != nil {
+		return err
+	}
+	// Pulumi.yaml: passphrase secrets provider, passphrase itself
+	// sops-managed.
+	if os.Getenv("PULUMI_CONFIG_PASSPHRASE") == "" {
+		v, err := secret(root, "pulumi-passphrase")
+		if err != nil {
+			return fmt.Errorf("PULUMI_CONFIG_PASSPHRASE not set and no pulumi-passphrase in provisioning/secrets.yaml")
+		}
+		os.Setenv("PULUMI_CONFIG_PASSPHRASE", v)
+	}
+	return nil
+}
+
+// cloudEnv puts the credentials a pulumi run needs into the environment
+// for one provider (the manifest's, or — for destroy — the one the stack's
+// checkpoint records: the manifest is gone by then)
+// of this process — and so of the pulumi (and its provider) we exec.
+// Explicit env wins; otherwise each value is sops-decrypted from
+// provisioning/secrets.yaml, the same home as the forge's provisioning
+// token: repo-driven, no per-machine env setup, and the values are
+// never printed. backendEnv's half comes first and is idempotent, so a
+// `preview --all` calling this once per fort is fine.
+//
+// libvirtURI is the hypervisor the fort records — its manifest's
+// [libvirt] uri, or, for a destroy, the value the stack recorded at the
+// provision (the manifest is gone by then). "" for every other provider.
+func cloudEnv(root string, b stateBackend, provider string, libvirtURI string) error {
+	if err := backendEnv(root, b); err != nil {
+		return err
+	}
 
 	// The hypervisor, reached over ssh from wherever fort runs. The fort
 	// names it in its manifest ([libvirt] uri, forts#27) and the CLI
@@ -71,15 +93,6 @@ func cloudEnv(root string, provider string, libvirtURI string) error {
 			return fmt.Errorf("LINODE_TOKEN not set and no linode-token in provisioning/secrets.yaml — add it with: sops --config .sops.yaml set provisioning/secrets.yaml '[\"linode-token\"]' '\"<token>\"'")
 		}
 		os.Setenv("LINODE_TOKEN", v)
-	}
-	// Pulumi.yaml: passphrase secrets provider, passphrase itself
-	// sops-managed.
-	if os.Getenv("PULUMI_CONFIG_PASSPHRASE") == "" {
-		v, err := secret(root, "pulumi-passphrase")
-		if err != nil {
-			return fmt.Errorf("PULUMI_CONFIG_PASSPHRASE not set and no pulumi-passphrase in provisioning/secrets.yaml")
-		}
-		os.Setenv("PULUMI_CONFIG_PASSPHRASE", v)
 	}
 	return nil
 }

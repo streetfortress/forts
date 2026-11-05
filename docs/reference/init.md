@@ -79,6 +79,12 @@ email = "ops@example"   # set, the shared layer carries an ACME ClusterIssuer; a
 # directory = "https://acme-v02.api.letsencrypt.org/directory"   # absent: Let's Encrypt. A private directory
                              # (a step-ca) goes with the estate's CA file (nixos/certs/ca-root.pem)
 
+[state]                      # where pulumi keeps the stacks (provision.md); absent: the file backend
+backend = "s3"               # committed under provisioning/pulumi/state. "s3": a bucket. "local": a
+bucket = "estate-state/second-estate"   # directory outside the git tree. The bucket, with a prefix per estate
+endpoint = "https://us-east-1.linodeobjects.com"   # the S3 API endpoint, with its scheme; absent: AWS S3
+region = "us-east-1"         # the bucket's region ("auto" on R2)
+
 [hubs.forge]                  # the roles another fort serves this estate (hub.md)
 estate = "ssh://git@gitea.zen.lofi:30022/sfi/infra"   # the estate that holds the hub, by its git URL
 fort = "sfi-fort-zenbook"
@@ -143,6 +149,16 @@ the shared layer carry an ACME ClusterIssuer for the estate's public
 names; without it, no public issuer is rendered. The issuer speaks to
 `[acme] directory`, Let's Encrypt's production directory when the estate
 names none.
+
+`[state]` picks the pulumi state backend (forts#248;
+[provision.md](provision.md#the-state-backend)). An estate with no
+`[state]` table commits its state under `provisioning/pulumi/state`, as
+before. `backend = "s3"` names an S3-compatible bucket (`bucket`,
+`region`, and `endpoint` for a store other than AWS S3); its credentials
+are `state-access-key-id` and `state-secret-access-key` in
+`provisioning/secrets.yaml`. `backend = "local"` keeps a file backend
+under the user's config dir, outside the tree. A `bucket`, `endpoint`
+or `region` on another backend is refused: nothing reads it.
 
 `[hubs.forge]` buys the forge pin. `modules/lab-dns.nix` pins the forge's
 one name on every mesh (`forge.streetfortress.cloud`) to the address `fort` has in

@@ -31,8 +31,9 @@ only the durable surface (instance, disks, boot config, firewall, DNS;
 or volume + domain in the lab). `--image` runs the provision flow around the
 apply:
 
-0. **The stack.** A host with no checkpoint under
-   `provisioning/pulumi/state/` gets `pulumi stack init` (passphrase secrets
+0. **The stack.** A host with no checkpoint in the state backend
+   ([below](#the-state-backend); `provisioning/pulumi/state/` by default)
+   gets `pulumi stack init` (passphrase secrets
    provider); `pulumi stack init` writes its `Pulumi.<host>.yaml`. Only
    the first provision creates a stack: without `--image` a stackless
    host is refused, so a typo can never put an empty stack on
@@ -236,8 +237,9 @@ every process on the host until stage 2 blackholes it; this one was never
 open to anyone but root.
 
 **The state copy.** `user_data` is a resource input on both backends, so
-the key now has a second home: the committed checkpoint under
-`provisioning/pulumi/state/`, as a pulumi secret. The passphrase provider
+the key now has a second home: the stack's checkpoint — committed under
+`provisioning/pulumi/state/`, or in the bucket or directory the estate's
+`[state]` names — as a pulumi secret. The passphrase provider
 encrypts it, and the passphrase is sops-managed in
 `provisioning/secrets.yaml`, so the same admin keys gate this copy as
 gate the sops file — a second encryption scheme on the same secret,
@@ -247,7 +249,7 @@ names the channel, not the value). After the first provision, before the
 state PR, confirm the checkpoint holds ciphertext and not the key:
 
 ```
-f=provisioning/pulumi/state/.pulumi/stacks/forts/<host>.json
+f=provisioning/pulumi/state/.pulumi/stacks/forts/<host>.json   # the repo backend; on another: pulumi stack export -s <host> > f, then .deployment for .checkpoint.latest
 # linode: the instance's metadatas; libvirt: the cloud-init disk's userData
 jq '.checkpoint.latest.resources[] | select(.type=="linode:index/instance:Instance") | .inputs.metadatas, .outputs.metadatas' "$f"
 jq '.checkpoint.latest.resources[] | select(.type=="libvirt:index/cloudInitDisk:CloudInitDisk") | .inputs.userData, .outputs.userData' "$f"
@@ -397,12 +399,88 @@ sudo systemctl restart flux-bootstrap                                      # the
 The chart's resources survive the delete and the fresh install adopts
 them.
 
+## The state backend
+
+Pulumi keeps one checkpoint per stack and rewrites it on every apply and
+every refresh. Where it keeps them is the estate's choice, in
+`estate.toml`'s `[state]` table (forts#248; [init.md](init.md#estatetoml)):
+
+| `backend` | where the checkpoints are | for |
+|---|---|---|
+| `repo` (absent) | `provisioning/pulumi/state/`, committed — the state PR after every apply | one operator: the owning repo is where state lives, and a new estate needs no store before its first fort |
+| `s3` | an S3-compatible bucket, read and written by pulumi directly | a team, or an operator and a CI runner: two writers of one committed JSON blob conflict in git, a bucket serialises them |
+| `local` | `<config dir>/forts/states/<estate>/` — `~/.config` on Linux, `~/Library/Application Support` on a Mac — outside the git tree | an estate that wants neither. Nothing backs the directory up: every apply verb warns, and a lost directory is a lost stack |
+
+Only the checkpoint moves. `Pulumi.<host>.yaml` — the stack's config:
+its encryption salt, `forts:imageId`, `forts:seed`, `forts:libvirtUri` —
+is the project's file on every backend, and `fort provision` and `fort
+destroy` stage it beside `Pulumi.yaml` as before. The passphrase stays
+in `provisioning/secrets.yaml` on every backend: a bucket holds
+ciphertext, as the repo did.
+
+The `s3` backend:
+
+```toml
+[state]
+backend = "s3"
+bucket = "estate-state/second-estate"   # the bucket, with an optional prefix
+endpoint = "https://us-east-1.linodeobjects.com"   # the S3 API endpoint; absent: AWS S3
+region = "us-east-1"
+```
+
+- **Any bucket that already exists.** AWS S3, Linode Object Storage,
+  Cloudflare R2 (`endpoint = "https://<account>.r2.cloudflarestorage.com"`,
+  `region = "auto"`), MinIO or RustFS in the lab
+  (`endpoint = "http://minio.lab:9000"`). No fort has to host the store
+  first, which is what keeps the first fort of an estate out of a
+  bootstrap circle. The bucket needs `ListBucket` on itself and
+  `GetObject`, `PutObject`, `DeleteObject` on its objects.
+- **The endpoint is a URL with its scheme.** Pulumi's S3 backend hands
+  the value to the AWS SDK v2 as it stands, and a bare host name does not
+  resolve there. The verbs render
+  `s3://<bucket>?endpoint=<url>&region=<region>&s3ForcePathStyle=true`:
+  path style (the bucket in the path, not the host name) is what every
+  S3-compatible store accepts. Without an endpoint the URL names AWS S3
+  and the region alone.
+- **The region is required.** The SDK signs every request with one,
+  even where the store ignores it (`auto` on R2; any name on MinIO).
+- **One prefix per estate** in a shared bucket. The pulumi project is
+  `forts` in every estate, so two estates on one prefix collide on a
+  stack name (`hub` in both).
+- **The credentials** are `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+  in the environment, else `state-access-key-id` and
+  `state-secret-access-key` in `provisioning/secrets.yaml`, next to
+  `pulumi-passphrase` and `linode-token`:
+  `sops --config .sops.yaml set provisioning/secrets.yaml '["state-access-key-id"]' '"<key>"'`.
+- **What the verbs do differently.** The stack list (`preview --all`'s
+  destroy-pending scan), "does this host have a stack" (the gates of
+  provision and destroy) and the provider a destroy needs are
+  `pulumi stack ls --json` and `pulumi stack export` against the bucket,
+  where the repo backend reads files. Completion and `fort dismantle`
+  never touch the network: on `s3`, `fort destroy <TAB>` offers no stack,
+  and the dismantle plan reads `Pulumi.<host>.yaml` only. `pulumi stack
+  rm` leaves `.pulumi/history/forts/<host>` and
+  `.pulumi/backups/forts/<host>` in the bucket; the CLI sweeps that
+  residue on a file backend and has no S3 client to sweep a bucket — it
+  is harmless there.
+
+**Moving an estate's state** is pulumi's own `stack export` and `stack
+import`, per stack, from `provisioning/pulumi`, with the old backend
+in `PULUMI_BACKEND_URL` for the export and the new one for the import
+(`pulumi stack init <host> --secrets-provider passphrase` first on the
+new backend; the passphrase is the same, so the ciphertext imports as it
+is). Then the `[state]` edit, and on a move off the repo backend, the
+removal of `provisioning/pulumi/state/` in the same PR.
+
 ## Environment
 
-Every verb here forces `PULUMI_BACKEND_URL` to this checkout's
-`provisioning/pulumi/state` and `PULUMI_IGNORE_AMBIENT_PLUGINS=true` (the
+Every verb here forces `PULUMI_BACKEND_URL` to the estate's state
+backend ([above](#the-state-backend); this checkout's
+`provisioning/pulumi/state` by default) and
+`PULUMI_IGNORE_AMBIENT_PLUGINS=true` (the
 nixpkgs bundle's ambient providers mis-shape outputs against the pinned
-SDK). `PULUMI_CONFIG_PASSPHRASE` and `LINODE_TOKEN` come from the
+SDK). `PULUMI_CONFIG_PASSPHRASE`, `LINODE_TOKEN` and, on the s3
+backend, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` come from the
 environment, else sops-decrypted from `provisioning/secrets.yaml`.
 The hypervisor comes from the fort: `[libvirt] uri` in its manifest
 (#27), which the CLI hands to the provider as it stands.

@@ -10,11 +10,15 @@ was raised.
   estate's forge (mint: the deploy key; destroy: its revocation) on the
   ssh route; an estate that clones anonymously over https needs none —
   `pulumi-passphrase` (provision),
-  `linode-token` (a cloud fort). A layer's verbs add the keys they read
-  (the backups layer: `restic-password`, `b2-minting-key-id`).
+  `linode-token` (a cloud fort),
+  `state-access-key-id` and `state-secret-access-key` (the s3 state
+  backend, when `estate.toml` names one). A layer's verbs add the keys
+  they read (the backups layer: `restic-password`, `b2-minting-key-id`).
 - `console-passwords.yaml` — the console registry, one passphrase per
   fort: `fort mint` adds a fort's entry at the first provision, `fort
   console-password --rotate` replaces it, `fort dismantle` withdraws it.
 - `pulumi/` — the project file (the program is `fort-pulumi`, built
   beside `fort`), one `Pulumi.<host>.yaml` per stack, and `state/`, the
-  committed file:// backend.
+  committed file:// backend — the default. An estate whose `estate.toml`
+  names a `[state]` backend keeps its checkpoints in that bucket or
+  directory instead, and `state/` stays empty.

@@ -56,7 +56,7 @@ Run a verb as `just fort <verb>` or `nix run ./nixos#fort -- <verb>`.
 - Do not hand-edit a file that a verb regenerates. Change the manifest and run the verb again.
 - Do not commit a decrypted secret. Encrypt a secret file with `sops` before `git add`.
 - `fort scaffold` never overwrites a file that exists. To change a rendered file, edit it by hand or delete it first.
-- Commit `provisioning/pulumi/state/` after every `fort provision`.
+- Commit `provisioning/pulumi/` after every `fort provision` and every `fort destroy`.
 - A verb that writes files takes `--dry-run`. `--dry-run` previews and writes nothing.
 - Do not read, print or edit a WireGuard private key.
 

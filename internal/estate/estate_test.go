@@ -364,3 +364,51 @@ func TestForgeNameNeedsADomain(t *testing.T) {
 		t.Errorf("one label: %v", err)
 	}
 }
+
+// The state backend (forts#248): absent is the repo's committed file
+// backend; s3 needs a bucket and a region and renders one URL; an s3 key
+// on another backend is refused, because nothing would read it.
+func TestState(t *testing.T) {
+	min := "name = \"second-estate\"\n" + src("ssh://x/sfi/second-estate")
+	e, err := Parse([]byte(min))
+	if err != nil || e.StateBackend() != StateRepo {
+		t.Fatalf("no [state]: want %s, got %q %v", StateRepo, e.StateBackend(), err)
+	}
+	e, err = Parse([]byte(min + "[state]\nbackend = \"local\"\n"))
+	if err != nil || e.StateBackend() != StateLocal {
+		t.Fatalf("local: %q %v", e.StateBackend(), err)
+	}
+	// an S3-compatible store: endpoint, region, path style
+	e, err = Parse([]byte(min + "[state]\nbackend = \"s3\"\nbucket = \"estate-state/second-estate\"\nendpoint = \"https://us-east-1.linodeobjects.com\"\nregion = \"us-east-1\"\n"))
+	if err != nil || e.StateBackend() != StateS3 {
+		t.Fatalf("s3: %q %v", e.StateBackend(), err)
+	}
+	if got, want := e.State.S3URL(), "s3://estate-state/second-estate?endpoint=https%3A%2F%2Fus-east-1.linodeobjects.com&region=us-east-1&s3ForcePathStyle=true"; got != want {
+		t.Errorf("S3URL:\n got %s\nwant %s", got, want)
+	}
+	// AWS S3 itself: no endpoint, no path style
+	e, err = Parse([]byte(min + "[state]\nbackend = \"s3\"\nbucket = \"estate-state\"\nregion = \"eu-west-1\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := e.State.S3URL(), "s3://estate-state?region=eu-west-1"; got != want {
+		t.Errorf("S3URL (AWS): got %s, want %s", got, want)
+	}
+	for _, c := range []struct{ table, want string }{
+		{"[state]\nbackend = \"git\"\n", "backend \"git\""},
+		{"[state]\nbackend = \"s3\"\nregion = \"us-east-1\"\n", "names no bucket"},
+		{"[state]\nbackend = \"s3\"\nbucket = \"estate-state\"\n", "names no region"},
+		{"[state]\nbackend = \"s3\"\nbucket = \"s3://estate-state\"\nregion = \"us-east-1\"\n", "no scheme"},
+		{"[state]\nbackend = \"s3\"\nbucket = \"estate-state/\"\nregion = \"us-east-1\"\n", "trailing slash"},
+		{"[state]\nbackend = \"s3\"\nbucket = \"estate-state\"\nregion = \"us-east-1\"\nendpoint = \"us-east-1.linodeobjects.com\"\n", "with its scheme"},
+		{"[state]\nbackend = \"s3\"\nbucket = \"estate-state\"\nregion = \"us-east-1\"\nendpoint = \"https://minio.lab:9000/?x=1\"\n", "with its scheme"},
+		{"[state]\nbucket = \"estate-state\"\n", "read on the s3 backend only"},
+		{"[state]\nbackend = \"local\"\nregion = \"us-east-1\"\n", "read on the s3 backend only"},
+		{"[state]\nbackend = \"repo\"\nendpoint = \"https://minio.lab:9000\"\n", "read on the s3 backend only"},
+	} {
+		_, err := Parse([]byte(min + c.table))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q: want a refusal naming %q, got %v", c.table, c.want, err)
+		}
+	}
+}

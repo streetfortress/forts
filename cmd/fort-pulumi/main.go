@@ -1,7 +1,8 @@
 // Cloud provisioning (#42/#87): one Pulumi micro-stack per host, stack
 // name == the manifest's hostname (forts/<host>.toml). The program is a declaration — it registers
 // the host's desired resources and the engine diffs against this stack's
-// state (file:// backend, committed). Apply is always the stock CLI —
+// state (the file:// backend committed in the estate, or the bucket or
+// local directory estate.toml's [state] names). Apply is always the stock CLI —
 // `fort provision` execs it with inherited stdio, so a human still reads
 // the preview:
 //

@@ -78,6 +78,9 @@ type Estate struct {
 	Mesh Mesh `toml:"mesh"`
 	// ACME is the [acme] table: the estate's public ACME issuer (forts#161).
 	ACME ACME `toml:"acme"`
+	// State is the [state] table: where pulumi keeps the estate's stacks
+	// (forts#248). Absent, the file backend committed in the repo.
+	State State `toml:"state"`
 }
 
 // Source is the [source] table: the estate's git URL, the forge kind,
@@ -158,6 +161,104 @@ type ACME struct {
 	// directory (a step-ca) goes here; the estate's CA file
 	// (nixos/certs/ca-root.pem) is what makes the hosts trust it.
 	Directory string `toml:"directory"`
+}
+
+// State is the [state] table: the pulumi state backend (forts#248).
+// Pulumi rewrites a stack's checkpoint on every apply and every refresh,
+// so state committed in the repo is one operator's: two operators, or an
+// operator and a CI runner, conflict on a JSON blob. A team names a
+// bucket instead; an estate that wants neither keeps state in a
+// directory outside the git tree.
+type State struct {
+	// Backend is the kind of backend: "repo" (the file backend under
+	// provisioning/pulumi/state, committed; the default), "s3" (an
+	// S3-compatible bucket: AWS S3, Linode Object Storage, Cloudflare
+	// R2, MinIO) or "local" (a file backend outside the git tree, under
+	// the user's config dir; nothing backs it up).
+	Backend string `toml:"backend"`
+	// Bucket is the s3 backend's bucket, with an optional prefix
+	// ("estate-state" or "estate-state/second-estate"). Every estate in
+	// one bucket needs a prefix of its own: the project is `forts` in
+	// every estate, so two estates on one prefix collide on a stack
+	// name. Read on the s3 backend only.
+	Bucket string `toml:"bucket"`
+	// Endpoint is the S3 API endpoint of an S3-compatible store, as a
+	// URL with its scheme (https://us-east-1.linodeobjects.com,
+	// https://<account>.r2.cloudflarestorage.com, http://minio.lab:9000).
+	// Absent, the bucket is on AWS S3. Read on the s3 backend only.
+	Endpoint string `toml:"endpoint"`
+	// Region is the bucket's region ("us-east-1"; "auto" on R2). The
+	// AWS SDK signs every request with one, so the s3 backend needs it
+	// even where the store ignores it. Read on the s3 backend only.
+	Region string `toml:"region"`
+}
+
+// The state backends (forts#248).
+const (
+	StateRepo  = "repo"
+	StateS3    = "s3"
+	StateLocal = "local"
+)
+
+// StateBackend is the estate's state backend: the backend key, repo
+// when none is named.
+func (e Estate) StateBackend() string {
+	if e.State.Backend == "" {
+		return StateRepo
+	}
+	return e.State.Backend
+}
+
+// S3URL is the pulumi backend URL of the s3 backend: the bucket and its
+// prefix, the region, and — for an S3-compatible store — the endpoint,
+// addressed path-style (bucket in the path, not the host name), which
+// every such store accepts. Validate has refused a [state] table this
+// cannot render.
+func (s State) S3URL() string {
+	q := url.Values{}
+	q.Set("region", s.Region)
+	if s.Endpoint != "" {
+		q.Set("endpoint", s.Endpoint)
+		q.Set("s3ForcePathStyle", "true")
+	}
+	return "s3://" + s.Bucket + "?" + q.Encode()
+}
+
+// validateState is the [state] matrix (forts#248): a backend the core
+// knows; a bucket and a region on the s3 backend, the endpoint a URL
+// when named; and no s3 key on another backend, where it would be read
+// by nothing.
+func (e Estate) validateState() error {
+	s := e.State
+	switch s.Backend {
+	case "", StateRepo, StateS3, StateLocal:
+	default:
+		return fmt.Errorf("[state] backend %q — want %q (the file backend committed under provisioning/pulumi/state; absent: the same), %q (an S3-compatible bucket) or %q (a file backend outside the git tree)", s.Backend, StateRepo, StateS3, StateLocal)
+	}
+	if s.Backend != StateS3 {
+		for key, v := range map[string]string{"bucket": s.Bucket, "endpoint": s.Endpoint, "region": s.Region} {
+			if v != "" {
+				return fmt.Errorf("[state] %s is read on the s3 backend only — set backend = %q, or drop the key", key, StateS3)
+			}
+		}
+		return nil
+	}
+	if s.Bucket == "" {
+		return fmt.Errorf("[state] backend %q names no bucket — want bucket = \"<bucket>\" or \"<bucket>/<prefix>\"", StateS3)
+	}
+	if strings.Contains(s.Bucket, "://") || strings.HasPrefix(s.Bucket, "/") || strings.HasSuffix(s.Bucket, "/") || strings.ContainsAny(s.Bucket, "?#") {
+		return fmt.Errorf("[state] bucket %q — want the bucket's name with an optional prefix (\"estate-state\" or \"estate-state/%s\"), no scheme, no leading or trailing slash", s.Bucket, e.Name)
+	}
+	if s.Region == "" {
+		return fmt.Errorf("[state] backend %q names no region — want region = \"<region>\" (the bucket's; \"auto\" on R2, any on MinIO): the AWS SDK signs every request with one", StateS3)
+	}
+	if s.Endpoint != "" {
+		u, err := url.Parse(s.Endpoint)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" {
+			return fmt.Errorf("[state] endpoint %q — want the S3 API endpoint as a URL with its scheme (https://us-east-1.linodeobjects.com); absent: AWS S3", s.Endpoint)
+		}
+	}
+	return nil
 }
 
 // The forge kinds: whose deploy-key API fort mint speaks (forts#1).
@@ -321,7 +422,8 @@ func Parse(raw []byte) (Estate, error) {
 // Validate: a name that is a repo name, a [source] table the matrix
 // accepts (validateSource), the hubs and the served estates well-formed
 // (validateHubs), the operator keys readable as authorized_keys lines
-// (validateOperatorKeys).
+// (validateOperatorKeys), a [state] table the CLI can point pulumi at
+// (validateState).
 func (e Estate) Validate() error {
 	if !nameRE.MatchString(e.Name) {
 		return fmt.Errorf("name %q — want a repo name (%s)", e.Name, nameRE)
@@ -333,6 +435,9 @@ func (e Estate) Validate() error {
 		return err
 	}
 	if err := e.validateOperatorKeys(); err != nil {
+		return err
+	}
+	if err := e.validateState(); err != nil {
 		return err
 	}
 	if e.ACME.Email != "" && !strings.Contains(e.ACME.Email, "@") {

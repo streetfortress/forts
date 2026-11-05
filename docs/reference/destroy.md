@@ -61,14 +61,19 @@ missing manifest is no obstacle.
    the check that step 4 finished (a declined preview leaves them).
 6. **Clear the file backend's residue** `stack rm` does not touch: the
    stack's history, backups, `.bak` and `.attrs`, `Pulumi.<host>.yaml`
-   (the image-id provenance lives on in git history).
+   (the image-id provenance lives on in git history). On the `s3` state
+   backend ([provision.md](provision.md#the-state-backend)) the same
+   residue stays in the bucket under `.pulumi/history/forts/<host>` and
+   `.pulumi/backups/forts/<host>`: the CLI has no S3 client to sweep it,
+   and it is harmless. `Pulumi.<host>.yaml` goes on every backend.
 7. **Revoke the deploy key** `flux-<host>` on the forge — every key under
    that title. Not found is fine (no flux cluster, or removed by hand).
    On the anonymous route (an `https://` repo, forts#167) mint registered
    none: the step reports that and makes no call to the forge.
    An identity the estate minted for an account of its own on the fort is
    the estate's to revoke; destroy knows only the fort's.
-8. **Stage the state removal.** Commit it as its own PR
+8. **Stage the removal** — the checkpoint on the repo backend, the
+   stack's config on every backend. Commit it as its own PR
    (`<host>: destroyed`); `just iac-drift` is green again since the
    stack no longer exists to report on.
 
@@ -89,7 +94,7 @@ The verb execs the stock CLI, so the same sequence by hand from
 `provisioning/pulumi` is always available:
 
 ```
-export PULUMI_BACKEND_URL=file://$PWD/state PULUMI_IGNORE_AMBIENT_PLUGINS=true
+export PULUMI_BACKEND_URL=file://$PWD/state PULUMI_IGNORE_AMBIENT_PLUGINS=true   # the repo backend; an s3 or local estate: the URL fort renders (provision.md)
 export PULUMI_CONFIG_PASSPHRASE=$(sops --config ../../.sops.yaml -d --extract '["pulumi-passphrase"]' ../../provisioning/secrets.yaml)
 export LINODE_TOKEN=$(sops --config ../../.sops.yaml -d --extract '["linode-token"]' ../../provisioning/secrets.yaml)   # cloud
 pulumi refresh -s <host>
@@ -99,5 +104,5 @@ pulumi stack rm <host>
 ```
 
 Then the deploy key through the repo's settings or the keys API, and the
-residue above. This is exactly what `cloudEnv` sets for every fort
-command; the difference is only who types it.
+residue above. This is exactly what `backendEnv` and `cloudEnv` set for
+every fort command; the difference is only who types it.

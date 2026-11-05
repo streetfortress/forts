@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 )
 
@@ -39,6 +40,15 @@ func preview(args []string) error {
 	if err != nil {
 		return err
 	}
+	est, err := estate.Load(root)
+	if err != nil {
+		return err
+	}
+	backend, err := stateBackendFor(root, est)
+	if err != nil {
+		return err
+	}
+	pulumiDir := filepath.Join(root, pulumiProject)
 	var targets, skipped []string
 	hosts := map[string]manifest.Host{}
 	if *all {
@@ -95,10 +105,10 @@ func preview(args []string) error {
 	failed := 0
 	results := make([]string, 0, len(targets))
 	for _, name := range targets {
-		if err := cloudEnv(root, hosts[name].Provider, hosts[name].LibvirtURI()); err != nil {
+		if err := cloudEnv(root, backend, hosts[name].Provider, hosts[name].LibvirtURI()); err != nil {
 			return err
 		}
-		err := runPulumi(filepath.Join(root, "provisioning", "pulumi"), append(append([]string{}, pulumiArgs...), "--stack", name)...)
+		err := runPulumi(pulumiDir, append(append([]string{}, pulumiArgs...), "--stack", name)...)
 		if !*all {
 			return err
 		}
@@ -119,8 +129,13 @@ func preview(args []string) error {
 		}
 		// State without a manifest means destroy pending (#217): the
 		// dismantle PR merged, `fort destroy` has not run. Say so rather
-		// than silently skipping a stack no manifest names.
-		for _, name := range stacksInState(filepath.Join(root, "provisioning", "pulumi")) {
+		// than silently skipping a stack no manifest names. The backend
+		// is in the environment: the loop above ran cloudEnv at least once.
+		stacks, err := backend.stacks(pulumiDir)
+		if err != nil {
+			return err
+		}
+		for _, name := range stacks {
 			if _, ok := hosts[name]; !ok {
 				failed++
 				results = append(results, fmt.Sprintf("%-6s %s   destroy pending: state without a manifest — fort destroy %s", "PENDING", name, name))
@@ -132,17 +147,4 @@ func preview(args []string) error {
 		return fmt.Errorf("%d stack(s) not clean", failed)
 	}
 	return nil
-}
-
-// stacksInState lists the stacks the committed file backend holds
-// (state/.pulumi/stacks/<project>/<stack>.json; .bak and .attrs are
-// the backend's own residue, not stacks).
-func stacksInState(pulumiDir string) []string {
-	matches, _ := filepath.Glob(filepath.Join(pulumiDir, "state/.pulumi/stacks/*/*.json"))
-	var out []string
-	for _, m := range matches {
-		out = append(out, strings.TrimSuffix(filepath.Base(m), ".json"))
-	}
-	sort.Strings(out)
-	return out
 }

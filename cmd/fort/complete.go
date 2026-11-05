@@ -417,10 +417,11 @@ func clusters(cx *completeCx) []string {
 // destroyable: the inverse of the manifest list — a stack whose manifest
 // is gone, which is exactly what destroy's gate wants (destroy.go: it
 // refuses a host still declared). The gate also reads origin/main; this
-// reads the working tree only, because a <TAB> must not `git fetch`.
+// reads the working tree only, because a <TAB> must not `git fetch` —
+// nor list a bucket: on the s3 backend this completes nothing.
 func destroyable(cx *completeCx) []string {
 	var out []string
-	for _, stack := range stacksInState(filepath.Join(cx.root, pulumiProject)) {
+	for _, stack := range offlineBackend(cx.root).stacksOffline() {
 		if !exists(cx.root, manifest.Path(stack)) {
 			out = append(out, stack)
 		}

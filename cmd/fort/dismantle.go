@@ -204,7 +204,10 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	// therefore does not remove it: withdraw the registry entry too, or
 	// a retired fort's passphrase outlives the fort.
 	p.consolePass = sopsHasKey(filepath.Join(root, consoleRegistry), host)
-	p.stack = exists(root, stackConfigPath(host)) || exists(root, stackStatePath(host))
+	// The stack's config is in the tree on every backend; the checkpoint
+	// is, on a file backend. A bucket is not read here: the plan must
+	// not block on the network (state.go).
+	p.stack = exists(root, stackConfigPath(host)) || offlineBackend(root).hasStackOffline(host)
 
 	// 6. residue: everything else that still names the host — counted
 	// on the post-edit text for the files this plan edits, so a dry run

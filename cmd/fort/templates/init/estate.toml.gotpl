@@ -86,6 +86,20 @@ email = "{{ .ACMEEmail }}"    # the public ACME account's contact: the shared la
                              # the ACME directory the issuer speaks to; absent, Let's Encrypt.
 {{- end }}
 
+# The state backend (docs/provision.md): where pulumi keeps the stacks.
+# Absent, the file backend under provisioning/pulumi/state, committed —
+# one operator's setup, because pulumi rewrites a checkpoint on every
+# apply and two operators conflict on it. A team names an S3-compatible
+# bucket (AWS S3, Linode Object Storage, Cloudflare R2, MinIO); the
+# credentials are `state-access-key-id` and `state-secret-access-key` in
+# provisioning/secrets.yaml. "local" keeps a file backend outside the
+# git tree, under the user's config dir, which nothing backs up.
+# [state]
+# backend = "s3"              # "repo" (the default), "s3" or "local"
+# bucket = "estate-state/{{ .Name }}"   # the bucket, with a prefix of its own per estate
+# endpoint = "https://us-east-1.linodeobjects.com"   # the S3 API endpoint, with its scheme; absent: AWS S3
+# region = "us-east-1"        # the bucket's region ("auto" on R2)
+
 # The hubs (docs/hub.md): the roles another fort serves this estate. The
 # forge every fort clones from is the one role the framework renders for
 # (its name is pinned to the fort's address on this mesh). Every other

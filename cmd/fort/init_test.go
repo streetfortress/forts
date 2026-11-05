@@ -421,7 +421,7 @@ func TestInitAgentsMD(t *testing.T) {
 		"Do not hand-edit",
 		"Do not commit a decrypted secret",
 		"never overwrites",
-		"provisioning/pulumi/state/",
+		"Commit `provisioning/pulumi/` after every `fort provision`",
 		"--dry-run",
 		"fort scaffold <host>",
 	} {

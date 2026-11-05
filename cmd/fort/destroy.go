@@ -52,6 +52,20 @@ func destroy(args []string) error {
 		return err
 	}
 	pulumiDir := filepath.Join(root, pulumiProject)
+	// The state backend (forts#248): the stack gate reads it, so it is in
+	// the environment before the gates. estate.toml is still in the tree
+	// — the dismantle PR deletes the host's files, not the estate's.
+	est, err := estate.Load(root)
+	if err != nil {
+		return err
+	}
+	backend, err := stateBackendFor(root, est)
+	if err != nil {
+		return err
+	}
+	if err := backendEnv(root, backend); err != nil {
+		return err
+	}
 
 	git, err := tools.Runner("git")
 	if err != nil {
@@ -68,11 +82,11 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-	provider, problems := destroyGates(root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0, *noStack)
+	provider, problems := destroyGates(backend, pulumiDir, root, host, strings.TrimSpace(string(onMain)) != "", len(strings.TrimSpace(string(status))) == 0, *noStack)
 	if *noStack {
 		fmt.Printf("⛫ %s   (no stack: a [baremetal] host, the machine goes by hand)\n", host)
 	} else {
-		fmt.Printf("⛫ %s   (provider %s, from the checkpoint)\n", host, provider)
+		fmt.Printf("⛫ %s   (provider %s, from the stack's state in %s)\n", host, provider, backend.where())
 	}
 	if len(problems) > 0 {
 		for _, p := range problems {
@@ -90,7 +104,7 @@ func destroy(args []string) error {
 
 	// The hypervisor comes from the stack, not the manifest: the
 	// dismantle PR deleted the manifest before this verb may run.
-	if err := cloudEnv(root, provider, recordedLibvirtURI(root, host)); err != nil {
+	if err := cloudEnv(root, backend, provider, recordedLibvirtURI(root, host)); err != nil {
 		return err
 	}
 	ctx := context.Background()
@@ -127,20 +141,23 @@ func destroy(args []string) error {
 	if err := runPulumi(pulumiDir, "stack", "rm", "--stack", host, "--yes"); err != nil {
 		return rerun("stack rm (resources remain?)", err)
 	}
-	// The file backend keeps residue stack rm does not touch (web3 left
+	// A file backend keeps residue stack rm does not touch (web3 left
 	// its .bak behind): the stack's history, backups, and .bak/.attrs.
-	for _, rel := range stateResidue(host) {
-		os.RemoveAll(filepath.Join(pulumiDir, rel))
-	}
+	backend.forget(host)
 	os.Remove(filepath.Join(root, stackConfigPath(host)))
 
 	// 5. the off-repo identities mint registered.
 	revokeIdentities(root, host)
 
-	// 6. stage the state removal; the commit + PR stay with you (git
+	// 6. stage the removal — the checkpoint on the repo backend, the
+	// stack's config on every backend; the commit + PR stay with you (git
 	// history is the provenance of the destroy).
 	stage(root)
-	fmt.Println("\n== done. state removal staged — commit it.")
+	if backend.kind == estate.StateRepo {
+		fmt.Println("\n== done. state removal staged — commit it.")
+	} else {
+		fmt.Printf("\n== done. the stack is gone from %s; its config removal is staged — commit it.\n", backend.where())
+	}
 	return nil
 }
 
@@ -166,8 +183,10 @@ func revokeIdentities(root, host string) {
 // removal lands as its own commit), and the stack must exist — a host
 // nothing raised through the CLI has none and goes by hand. With
 // noStack the last gate inverts: a stack that DOES exist means the
-// flag is wrong, and the pulumi path must run instead.
-func destroyGates(root, host string, onMain, clean, noStack bool) (provider string, problems []string) {
+// flag is wrong, and the pulumi path must run instead. The stack and
+// its provider come from the backend: a file read on the repo's and the
+// local backend, a bucket call on s3 (state.go).
+func destroyGates(b stateBackend, pulumiDir, root, host string, onMain, clean, noStack bool) (provider string, problems []string) {
 	if onMain {
 		problems = append(problems, "still declared on origin/main ("+manifest.Path(host)+") — merge the `fort dismantle "+host+"` PR first (this refuses to unprotect a declared host)")
 	}
@@ -177,46 +196,71 @@ func destroyGates(root, host string, onMain, clean, noStack bool) (provider stri
 	if !clean {
 		problems = append(problems, "working tree not clean — the state removal must land as its own commit")
 	}
-	state := filepath.Join(root, stackStatePath(host))
-	raw, err := os.ReadFile(state)
+	has, err := b.hasStack(pulumiDir, host)
+	if err != nil {
+		problems = append(problems, "state backend: "+err.Error())
+		return "", problems
+	}
 	if noStack {
-		if err == nil {
-			problems = append(problems, "stack "+host+" exists in provisioning/pulumi/state — this host was raised by a backend; drop --no-stack")
+		if has {
+			problems = append(problems, "stack "+host+" exists in "+b.where()+" — this host was raised by a backend; drop --no-stack")
 		}
 		return "", problems
 	}
-	if err != nil {
-		problems = append(problems, "no stack "+host+" in provisioning/pulumi/state — never provisioned through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/baremetal.md)")
+	if !has {
+		problems = append(problems, "no stack "+host+" in "+b.where()+" — never provisioned through the CLI? (a VM raised by hand goes by hand: virsh destroy + undefine on the hypervisor; a [baremetal] host never has one: fort destroy "+host+" --no-stack, docs/baremetal.md)")
 		return "", problems
 	}
-	provider, err = providerFromState(raw)
+	provider, err = b.provider(pulumiDir, host)
 	if err != nil {
-		problems = append(problems, "checkpoint: "+err.Error())
+		problems = append(problems, "stack state: "+err.Error())
 	}
 	return provider, problems
 }
 
-// providerFromState reads the provider the stack's checkpoint records
-// (its pulumi:providers:<name> resource).
+// providerFromState reads the provider the stack's checkpoint file
+// records (its pulumi:providers:<name> resource) — the file backend's
+// layout: checkpoint.latest.resources.
 func providerFromState(raw []byte) (string, error) {
 	var cp struct {
 		Checkpoint struct {
 			Latest struct {
-				Resources []struct {
-					Type string `json:"type"`
-				} `json:"resources"`
+				Resources []typedResource `json:"resources"`
 			} `json:"latest"`
 		} `json:"checkpoint"`
 	}
 	if err := json.Unmarshal(raw, &cp); err != nil {
 		return "", err
 	}
-	for _, r := range cp.Checkpoint.Latest.Resources {
+	return providerOf(cp.Checkpoint.Latest.Resources, "the checkpoint")
+}
+
+// providerFromExport reads the same resource out of `pulumi stack
+// export`, the one read that works on every backend:
+// deployment.resources.
+func providerFromExport(raw []byte) (string, error) {
+	var doc struct {
+		Deployment struct {
+			Resources []typedResource `json:"resources"`
+		} `json:"deployment"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return "", fmt.Errorf("not a stack export: %w", err)
+	}
+	return providerOf(doc.Deployment.Resources, "the stack export")
+}
+
+type typedResource struct {
+	Type string `json:"type"`
+}
+
+func providerOf(resources []typedResource, in string) (string, error) {
+	for _, r := range resources {
 		if strings.HasPrefix(r.Type, "pulumi:providers:") {
 			return strings.TrimPrefix(r.Type, "pulumi:providers:"), nil
 		}
 	}
-	return "", fmt.Errorf("no pulumi:providers:* resource in the checkpoint (empty stack?)")
+	return "", fmt.Errorf("no pulumi:providers:* resource in %s (empty stack?)", in)
 }
 
 // recordedLibvirtURI reads the hypervisor the provision recorded on the
@@ -251,29 +295,14 @@ func libvirtURIFromStackConfig(raw []byte) string {
 }
 
 // pulumiProject is the estate's pulumi project directory, and
-// stackConfigPath and stackStatePath are the two files it holds for one
-// stack: the stack's config and its checkpoint under the file backend.
-// `fort destroy` deletes both. `fort dismantle` only reads them, to say
-// whether a stack is still there.
+// stackConfigPath is the one file it holds for a stack on every
+// backend: the stack's config. The checkpoint is the backend's
+// (state.go). `fort destroy` deletes both. `fort dismantle` only reads
+// them, to say whether a stack is still there.
 const pulumiProject = "provisioning/pulumi"
 
 func stackConfigPath(host string) string {
 	return filepath.Join(pulumiProject, "Pulumi."+host+".yaml")
-}
-
-func stackStatePath(host string) string {
-	return filepath.Join(pulumiProject, "state/.pulumi/stacks/forts", host+".json")
-}
-
-// stateResidue: what the file backend leaves behind after stack rm.
-func stateResidue(host string) []string {
-	return []string{
-		"state/.pulumi/stacks/forts/" + host + ".json.bak",
-		"state/.pulumi/stacks/forts/" + host + ".json.bak.attrs",
-		"state/.pulumi/stacks/forts/" + host + ".json.attrs",
-		"state/.pulumi/history/forts/" + host,
-		"state/.pulumi/backups/forts/" + host,
-	}
 }
 
 // linodePowerOff shuts the instance labelled <host> down and waits for
