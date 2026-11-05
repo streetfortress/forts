@@ -104,8 +104,13 @@ type mesh struct {
 
 func parseMesh(text string) (mesh, error) {
 	var m mesh
-	if err := json.Unmarshal([]byte(text), &m); err != nil {
-		return m, fmt.Errorf("%s: %w", peersPath, err)
+	// An unknown field is an error: a wrong name (wg_public_key for
+	// public_key) would otherwise decode to an empty value, silently
+	// (forts#259).
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&m); err != nil {
+		return m, fmt.Errorf("%s: %w (a peer entry has wg_vpn_ip, public_key and optional wg_endpoint_ip, wg_endpoint_port, ssh_user, estate)", peersPath, err)
 	}
 	if m.Peers == nil {
 		m.Peers = map[string]meshPeer{}
@@ -382,6 +387,9 @@ func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, 
 		if self, ok = m.Clients[member]; !ok {
 			return "", fmt.Errorf("%s is not in %s — register it first (docs/mesh.md, \"Joining\"): the address and public key come from there", member, peersPath)
 		}
+	}
+	if self.IP == "" || self.PublicKey == "" {
+		return "", fmt.Errorf("%s: %s needs wg_vpn_ip and public_key — the entry has %q and %q", peersPath, member, self.IP, self.PublicKey)
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# %s for %s — rendered by `fort wg-conf %s` from %s.\n", iface, member, member, peersPath)

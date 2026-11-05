@@ -468,3 +468,17 @@ func TestPlanSSHConfig(t *testing.T) {
 		t.Errorf("broken manifest: want refusal, got %v", err)
 	}
 }
+
+func TestParseMeshRefusesUnknownField(t *testing.T) {
+	_, err := parseMesh(`{"peers":{"a":{"wg_vpn_id":"10.1.0.2","wg_public_key":"K="}}}`)
+	if err == nil || !strings.Contains(err.Error(), "wg_vpn_id") || !strings.Contains(err.Error(), "public_key") {
+		t.Fatalf("want an error naming the field and the expected names, got %v", err)
+	}
+}
+
+func TestRenderWGConfRefusesEmptyEntry(t *testing.T) {
+	m := mesh{Peers: map[string]meshPeer{"a": {}}}
+	if _, err := renderWGConf(m, "wg0", 24, "a"); err == nil || !strings.Contains(err.Error(), "wg_vpn_ip and public_key") {
+		t.Fatalf("want a refusal naming the fields, got %v", err)
+	}
+}

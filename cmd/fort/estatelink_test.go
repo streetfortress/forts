@@ -120,7 +120,7 @@ func TestEstateLink(t *testing.T) {
 	}
 
 	// an entry written before the field existed is adopted, and said
-	legacy := strings.Replace(raw, `"estate": "ssh://git@gitea.zen.lofi:30022/sfi/other-infra"`, `"x": 1`, 1)
+	legacy := strings.Replace(raw, `"estate": "ssh://git@gitea.zen.lofi:30022/sfi/other-infra"`, `"ssh_user": ""`, 1)
 	os.WriteFile(filepath.Join(root, peersPath), []byte(legacy), 0o644)
 	if p6, err := planEstateLink(root, infraURL, dirFetcher(moved)); err != nil || p6.claims[0].status != "update" || !strings.Contains(p6.claims[0].note, "estate of origin") {
 		t.Errorf("legacy entry: %v %+v", err, p6.claims)
