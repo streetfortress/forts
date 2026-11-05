@@ -474,7 +474,11 @@ func checkVars(root, dir string, inv *inventory.Inventory) []finding {
 			return
 		}
 		rel, dotted := s.Sops[0], s.Sops[1]
-		path := filepath.Join(dir, rel)
+		path, err := sopsRefPath(dir, rel)
+		if err != nil {
+			out = append(out, finding{"error", dir, what + ": " + err.Error()})
+			return
+		}
 		if !exists(root, path) {
 			out = append(out, finding{"error", dir, what + ": sops ref " + rel + " does not exist (seed its dir first)"})
 			return

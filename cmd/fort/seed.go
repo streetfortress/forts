@@ -533,7 +533,11 @@ func (r *resolver) resolve(s inventory.Spec, what string) (string, error) {
 		return v, nil
 	case s.Sops != nil:
 		rel, dotted := s.Sops[0], s.Sops[1]
-		path := filepath.Join(r.root, r.dir, rel)
+		rp, err := sopsRefPath(r.dir, rel)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", what, err)
+		}
+		path := filepath.Join(r.root, rp)
 		doc, ok := r.sopsDocs[path]
 		if !ok {
 			raw, err := r.tool.Decrypt(path)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,21 @@ import (
 func exists(root, rel string) bool {
 	_, err := os.Stat(filepath.Join(root, rel))
 	return err == nil
+}
+
+// sopsRefPath joins a sops: ref's rel onto the dir that declares it. A
+// ref may climb to a sibling app or to another fort, so the bound is
+// flux/apps, not the dir; a rel that is absolute or that leaves flux/apps
+// is refused before anything reads it.
+func sopsRefPath(dir, rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("sops ref %s is an absolute path", rel)
+	}
+	path := filepath.Join(dir, rel)
+	if up, err := filepath.Rel("flux/apps", path); err != nil || up == ".." || strings.HasPrefix(up, "../") {
+		return "", fmt.Errorf("sops ref %s leaves flux/apps", rel)
+	}
+	return path, nil
 }
 
 // secretKeyNames reads the key NAMES of a Secret file — stringData and
