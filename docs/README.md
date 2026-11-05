@@ -153,9 +153,8 @@ Have these Secrets Ready
 
 ```
 cd <estate>
-touch provisioning/secrets.yaml
-sops encrypt -i provisioning/secrets.yaml
-sops edit provisioning/secrets.yaml
+# sops opens your editor and writes the encrypted file on save
+sops provisioning/secrets.yaml
 
 # github-token: ghA123123123123
 # pulumi-passphrase: 123123123123
@@ -163,6 +162,14 @@ sops edit provisioning/secrets.yaml
 
 cat provisioning/secrets.yaml (You should see the encrypted blobs, not plaintext)
 git add provisioning/secrets.yaml && git commit -m "provisioning secrets: encrypted" && git push
+```
+
+To keep the plaintext off the disk, pipe the first key through sops instead. `sops encrypt` refuses an empty file, so do not `touch` the file first. Add the other keys later with `sops provisioning/secrets.yaml`.
+
+```
+echo "pulumi-passphrase: $(openssl rand -base64 32)" \
+  | sops encrypt --filename-override provisioning/secrets.yaml /dev/stdin \
+  > provisioning/secrets.yaml
 ```
 
 ### Scaffold a Fort
