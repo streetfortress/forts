@@ -1,0 +1,31 @@
+# gallery — HelmRelease rendered by `fort add` from the chart's contract:
+# the Secret keys ride the gallery-env Secret, named by the contract's
+# `secret.values` path. Retry forever: the first install
+# races its providers (and a preview pin races the images) — never park
+# on a failed release waiting for an ops nudge. Refine in place after
+# add: replicas for the node shape, non-secret env as values (never in
+# the Secret — a values change rolls pods), app-specific knobs.
+#
+# The chart requires postgres.db: a platform service the core
+# does not render. A layer does (sfi/fort-layers), and wires its
+# endpoints into these values; until then the release waits on it.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gallery
+  namespace: gallery
+spec:
+  interval: 1h
+  releaseName: gallery
+  chartRef:
+    kind: OCIRepository
+    name: gallery
+    namespace: flux-system
+  install:
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1
+  values:
+    existingSecret: gallery-env

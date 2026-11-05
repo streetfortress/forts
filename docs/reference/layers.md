@@ -111,6 +111,18 @@ loses its manifest while a layer still declares it — the half-done
 retirement that left a dead man's switch on a hub for a cluster already
 gone is what #180 paged on.
 
+A chart's needs follow the same order (forts#250). `fort add` renders
+one chart's app dir — the OCIRepository, the HelmRelease, the route,
+the inventory — from the blocks of its contract the core reads
+([add](add.md), [contracts](contracts.md)); a layer's `add` runs after
+it for the `requires` block: the platform service, its tenant, the
+endpoints wired into `release.yaml`, and the inventory's provider keys
+rewritten to `sops:` refs into the tenant's Secret. The layer writes an
+[inventory](inventory.md) of its own into the directories it owns, and
+the core's `fort seed` executes every inventory of the fort, in
+dependency order, whoever rendered it ([seed](seed.md)); the core's
+`fort check` gates every one of them.
+
 Everywhere else there is no hook in the core: the order is this table.
 A layer that needs the core to call it at a point this table does not
 name has found a gap in the core, and that is an issue there — the

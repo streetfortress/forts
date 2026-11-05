@@ -1,0 +1,21 @@
+flux/apps/lab-fort/   (chart 0.1.0)
+● gateway/
+  ● certificate-moment-tally-website.yaml letsencrypt, moment-tally-website.lab-fort.deployments.mesh
+  ● gateway.yaml                 http listener only
+  ● kustomization.yaml           patches: listener-moment-tally-website.yaml
+  ● listener-moment-tally-website.yaml JSON6902 add /spec/listeners/- (https-moment-tally-website)
+  ● redirect-https.yaml          catch-all http→https 301
+○ kustomization.yaml             + gateway, moment-tally-website
+● moment-tally-website/
+  ● kustomization.yaml           
+  ● namespace.yaml               
+  ● release.yaml                 values: none; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/moment-tally-website, tag 0.1.0
+  ● route.yaml                   HTTPRoute moment-tally-website.lab-fort.deployments.mesh → moment-tally-website:3000
+
+note: estate.toml names no [acme] email, so the shared layer carries no
+      ClusterIssuer `letsencrypt`. The certificate waits until one exists;
+      the listener serves its self-signed placeholder meanwhile.
+
+staged. nothing to seed: the chart contract declares no keys, so the app has no Secret.
+then: review, commit, PR — flux applies on merge.

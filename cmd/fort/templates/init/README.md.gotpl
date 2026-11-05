@@ -16,7 +16,7 @@ nixos/
   .sops.yaml                 the per-host rules
 flux/
   clusters/<host>/           the FluxInstance and the cluster's Kustomizations
-  apps/<host>/               the apps root: the estate's flux, or what a layer renders into it
+  apps/<host>/               the apps root: what fort add renders into it, the estate's own flux, or a layer's
   hub/<hub host>/            what this estate asks of its monitoring hub, one file per fort
   infrastructure/            the shared layer every cluster applies
 mesh/

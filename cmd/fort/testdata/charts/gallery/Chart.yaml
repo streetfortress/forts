@@ -1,0 +1,9 @@
+# Test fixture: a chart whose contract REQUIRES a platform service. The
+# core renders the app dir and names what a layer must resolve: the
+# postgres instance, and the DATABASE_URL key that composes its outputs
+# (forts#250). The layer rewrites that key's spec in the fort-side
+# contract; the overlay can name it too (seed_test.go).
+apiVersion: v2
+name: gallery
+version: 0.2.0
+appVersion: "0.2.0"

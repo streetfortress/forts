@@ -12,8 +12,8 @@ import (
 
 // The small helpers every author verb shares: a file's presence, the
 // key names of a committed Secret, and the action a plan is made of.
-// They lived in the apps layer's files until forts#143 moved that layer
-// out (sfi/fort-layers); the layers copy what they need of these.
+// add, seed, check and dismantle all read them; the layers copy what
+// they need of these (sfi/fort-layers).
 
 // exists says whether a repo-relative path is there.
 func exists(root, rel string) bool {

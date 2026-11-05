@@ -32,6 +32,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -91,8 +92,9 @@ type verbSpec struct {
 
 // write, yes and the other switches every verb spells the same way.
 var (
-	writeFlag = flagSpec{name: "dry-run"}
-	yesFlag   = flagSpec{name: "yes"}
+	writeFlag    = flagSpec{name: "dry-run"}
+	yesFlag      = flagSpec{name: "yes"}
+	chartDirFlag = flagSpec{name: "chart-dir", kind: dirsOnly}
 )
 
 // completions is the table — the third reader of the verb list, after
@@ -127,11 +129,33 @@ var completions = map[string]verbSpec{
 	"mint":             {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
 	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
 	"check":            {flags: []flagSpec{{name: "all"}, {name: "eval"}}, args: []candidates{manifests}, repeat: true},
-	"ssh-config":       {flags: []flagSpec{writeFlag}},
-	"wg-conf":          {args: []candidates{meshMembers}},
-	"--version":        {}, // a flag in the verb position (forts#135): completes, takes nothing
-	"dismantle":        {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
-	"destroy":          {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
+	// The apps verbs (forts#250): add takes a cluster fort, then an OCI
+	// ref nothing in the tree can offer (a chart lives in a registry);
+	// seed takes a cluster fort, then the dirs of its apps root that
+	// carry an inventory or a pinned chart.
+	"add": {flags: []flagSpec{
+		{name: "version", kind: opaque},
+		{name: "follow-pr", kind: opaque},
+		{name: "follow-main"},
+		{name: "name", kind: opaque},
+		{name: "hostname", kind: opaque},
+		{name: "http", kind: opaque},
+		chartDirFlag,
+		writeFlag,
+	}, args: []candidates{clusters, nil}},
+	"seed": {flags: []flagSpec{
+		{name: "set", kind: opaque},
+		chartDirFlag,
+		writeFlag,
+	}, args: []candidates{clusters, seedDirs}, repeat: true},
+	// remove takes a cluster fort, then one of the app dirs add rendered
+	// under its apps root (forts#251).
+	"remove":     {flags: []flagSpec{writeFlag}, args: []candidates{clusters, appNames}},
+	"ssh-config": {flags: []flagSpec{writeFlag}},
+	"wg-conf":    {args: []candidates{meshMembers}},
+	"--version":  {}, // a flag in the verb position (forts#135): completes, takes nothing
+	"dismantle":  {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
+	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
 	// The link verbs (#55): a sub-verb word first, then the fort, then
 	// the other estate's git URL, which nothing in the tree can offer.
 	"link": {flags: []flagSpec{
@@ -149,6 +173,48 @@ var completions = map[string]verbSpec{
 func layerNames(cx *completeCx) []string {
 	names, _ := installedLayers(cx.root)
 	return names
+}
+
+// seedDirs: the dirs of the fort's apps root that seed would plan, in
+// the short form it accepts (`symbology`, `forts/postgres`). The same
+// reader seed enumerates with.
+func seedDirs(cx *completeCx) []string {
+	if len(cx.args) == 0 {
+		return nil
+	}
+	apps := filepath.Join("flux/apps", cx.args[0])
+	dirs, err := inventoryDirs(cx.root, apps)
+	if err != nil {
+		return nil
+	}
+	for i, d := range dirs {
+		dirs[i] = strings.TrimPrefix(d, apps+"/")
+	}
+	sort.Strings(dirs)
+	return dirs
+}
+
+// appNames: the dirs one level under the fort's apps root that carry an
+// OCIRepository pin — what fort remove takes.
+func appNames(cx *completeCx) []string {
+	if len(cx.args) == 0 {
+		return nil
+	}
+	apps := filepath.Join("flux/apps", cx.args[0])
+	entries, err := os.ReadDir(filepath.Join(cx.root, apps))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == "gateway" {
+			continue
+		}
+		if pin, _ := readChartPin(filepath.Join(cx.root, apps, e.Name(), "repository.yaml")); pin != nil {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }
 
 // words is a closed positional: the sub-verb words a verb takes.

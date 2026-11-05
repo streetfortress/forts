@@ -20,7 +20,7 @@ import (
 //
 // Two red states are deliberate gates, not breakage: a staged-but-unseeded
 // app tree (a kustomization lists sops files that only exist after
-// a layer's seed / `fort mint`, so kustomize build fails — that red X is the
+// `fort seed` / `fort mint`, so kustomize build fails — that red X is the
 // guard working, and the PR is not mergeable until the ◆ files land) and a
 // host dir with no manifest (a retired or renamed host's lingering config
 // — a warning, so a dismantle in flight does not go red on its residue).
@@ -224,7 +224,7 @@ func kustomizeBuild(root, rel string) (string, error) {
 		lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
 		last := lines[len(lines)-1]
 		if f := missingSopsFile(last); f != "" {
-			return "", fmt.Errorf("not seeded: %s does not exist yet — run the seed of this layer (fort mint) to create it", f)
+			return "", fmt.Errorf("not seeded: %s does not exist yet — fort seed creates it (fort mint, for the sops canary)", f)
 		}
 		return "", fmt.Errorf("kustomize build: %s", last)
 	}

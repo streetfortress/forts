@@ -1,0 +1,17 @@
+# https listener for {{ .App }} — appended to the Gateway by the patch
+# entry in kustomization.yaml. The hostname follows the fort's convention
+# <app>.<fort>.{{ .Zone }}; the certificate is certificate-{{ .App }}.yaml.
+- op: add
+  path: /spec/listeners/-
+  value:
+    name: https-{{ .App }}
+    port: 8443
+    protocol: HTTPS
+    hostname: {{ .Hostname }}
+    tls:
+      mode: Terminate
+      certificateRefs:
+        - name: {{ .App }}-tls
+    allowedRoutes:
+      namespaces:
+        from: All

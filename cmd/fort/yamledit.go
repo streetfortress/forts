@@ -108,3 +108,117 @@ func ensureClusterVar(text, key, value string) (string, error) {
 	}
 	return appendMapEntry(text, "data:", "  "+key+": "+value)
 }
+
+// appendPatch adds a JSON6902 patch entry to a kustomization: inside
+// the existing patches: list, or as a new block (with its comment) at
+// the end. The entry goes inside the list, not at the end of the file:
+// appendBlock would put it under whatever block follows — `kustomize
+// build` then reads `path` as a field of a trailing configMapGenerator
+// and fails the whole apps layer with `unknown field "path"`.
+func appendPatch(text, comment, path, group, version, kind, name, namespace string) string {
+	entry := fmt.Sprintf(`  - path: %s
+    target:
+      group: %s
+      version: %s
+      kind: %s
+      name: %s
+      namespace: %s
+`, path, group, version, kind, name, namespace)
+	if out, err := insertIntoBlock(text, "patches", entry); err == nil {
+		return out
+	}
+	return appendBlock(text, comment+"patches:\n"+entry)
+}
+
+// removeListItem deletes the `  - <item>` line of the top-level block
+// under <key> — the inverse of appendListItem, for fort remove. An
+// entry that is not there is an error: the tree is not the shape the
+// verb wrote, and the operator must look.
+func removeListItem(text, key, item string) (string, error) {
+	lines := strings.Split(text, "\n")
+	start := -1
+	for i, l := range lines {
+		if l == key+":" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", fmt.Errorf("no top-level %s: block", key)
+	}
+	for i := start + 1; i < len(lines); i++ {
+		l := lines[i]
+		if l != "" && !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "#") {
+			break
+		}
+		if l == "  - "+item {
+			return strings.Join(append(lines[:i:i], lines[i+1:]...), "\n"), nil
+		}
+	}
+	return "", fmt.Errorf("no `- %s` entry under %s:", item, key)
+}
+
+// removePatchEntry deletes the JSON6902 patch entry whose path is
+// <path> from the top-level patches: list — its `  - path:` line and
+// the deeper-indented lines beneath it — the inverse of appendPatch.
+// When the list is then empty, the patches: key goes too, with the
+// comment lines directly above it, so the file is the shape appendPatch
+// starts from (appendBlock re-adds both on the next listener).
+func removePatchEntry(text, path string) (string, error) {
+	lines := strings.Split(text, "\n")
+	start := -1
+	for i, l := range lines {
+		if l == "patches:" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", fmt.Errorf("no top-level patches: block")
+	}
+	end := start // the last line the block owns
+	for i := start + 1; i < len(lines); i++ {
+		l := lines[i]
+		if l != "" && !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "#") {
+			break
+		}
+		if strings.HasPrefix(l, " ") && strings.TrimSpace(l) != "" {
+			end = i
+		}
+	}
+	entry := -1
+	for i := start + 1; i <= end; i++ {
+		if lines[i] == "  - path: "+path {
+			entry = i
+			break
+		}
+	}
+	if entry < 0 {
+		return "", fmt.Errorf("no patch entry for %s under patches:", path)
+	}
+	next := entry + 1
+	for next <= end && strings.HasPrefix(lines[next], "    ") {
+		next++
+	}
+	out := append(lines[:entry:entry], lines[next:]...)
+	// The list is empty when no `  - ` item remains in the block.
+	empty := true
+	for i := start + 1; i < len(out); i++ {
+		l := out[i]
+		if l != "" && !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "#") {
+			break
+		}
+		if strings.HasPrefix(l, "  - ") {
+			empty = false
+			break
+		}
+	}
+	if !empty {
+		return strings.Join(out, "\n"), nil
+	}
+	first := start
+	for first > 0 && strings.HasPrefix(out[first-1], "#") {
+		first--
+	}
+	return strings.Join(append(out[:first:first], out[start+1:]...), "\n"), nil
+}

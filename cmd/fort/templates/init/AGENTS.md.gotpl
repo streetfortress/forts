@@ -28,6 +28,9 @@ Run a verb as `just fort <verb>` or `nix run ./nixos#fort -- <verb>`.
 | --- | --- |
 | `fort scaffold <host>` | Render the files of a fort from `forts/<host>.toml`. |
 | `fort mint <host>` | Make the keys of a new fort. Run it once per fort. |
+| `fort add <host> <oci-ref> --version <tag>` | Render one chart's app dir under `flux/apps/<host>/` from the chart's contract. |
+| `fort seed <host>` | Make the Secrets that the inventories of a fort declare. Run it after `fort add`. |
+| `fort remove <host> <app>` | Remove one app that `fort add` rendered. Flux prunes the workload after the merge. |
 | `fort check <host>` or `fort check --all` | Validate the estate. Add `--eval` to evaluate the NixOS configuration. |
 | `fort image <host>` | Build a bootable disk image. |
 | `fort provision <host>` | Create or update the machine. It wraps `pulumi up`. |
@@ -43,8 +46,10 @@ Run a verb as `just fort <verb>` or `nix run ./nixos#fort -- <verb>`.
 1. Write or edit `forts/<host>.toml`. The manifest is the declaration.
 2. Run `fort scaffold <host> --dry-run`. Read the preview.
 3. Run `fort scaffold <host>`.
-4. Put the workload in `flux/apps/<host>/`, or in the file that the layer names.
-5. Run `fort check --all --eval`. Fix every error.
+4. Run `fort add <host> <oci-ref> --version <tag> --dry-run`. Read the preview, then run it without `--dry-run`.
+   A workload that is not a chart goes in `flux/apps/<host>/` by hand, or in the file that the layer names.
+5. Run `fort seed <host>`. It makes the Secrets that the report marks `◆`.
+6. Run `fort check --all --eval`. Fix every error.
 
 ## Invariants
 

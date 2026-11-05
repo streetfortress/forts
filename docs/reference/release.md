@@ -32,7 +32,7 @@ Every change to one of these surfaces is named in the release note:
   enforces. A new rule is a contract change — it is what turns a gap
   into a finding (below).
 - **The schemas:** `estate.toml`, `forts/<name>.toml`, and what a
-  layer's `forts.contract.yaml` may say.
+  chart's `forts.contract.yaml` and an app dir's `forts.inventory.yaml` may say.
 - **The channel:** the nixpkgs branch the framework pins (below).
 
 Outside the promise: the rendered files. An estate owns them from the

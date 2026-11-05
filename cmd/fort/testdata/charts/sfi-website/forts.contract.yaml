@@ -1,0 +1,13 @@
+# DRAFT contract for sfi-website (test fixture — see Chart.yaml).
+contract: v1
+secret:
+  values: existingSecret
+  keys:
+    BETTER_AUTH_SECRET: {generate: b64_32}
+    RESEND_API_KEY: {external: "Resend → API keys (re_)", optional: true}
+http:
+  service: sfi-website-ui
+  port: 3000
+metrics:
+  port: metrics
+  selector: {app.kubernetes.io/component: ui}

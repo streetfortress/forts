@@ -14,6 +14,9 @@
 //	fort image web3                     # (after the merge) nix build; the output is the artifact
 //	fort provision web3 --image <path>  # stage image → pulumi up → release it
 //	                                    # flux owns everything above it
+//	fort add web3 oci://…/app --version 0.1.0   # one chart's app dir (+ its route)
+//	fort seed web3                      # the Secrets its contract declares
+//	fort remove web3 app                # the inverse of add, one app
 //	fort preview web3 [--refresh]       # read the diff (day-2 edits, drift)
 //	fort dismantle web3         # retire: repo half → PR (merge)
 //	fort destroy web3                   # then the side-effects half
@@ -53,6 +56,12 @@ func main() {
 		err = mint(os.Args[2:])
 	case "console-password":
 		err = consolePassword(os.Args[2:])
+	case "add":
+		err = add(os.Args[2:])
+	case "seed":
+		err = seed(os.Args[2:])
+	case "remove":
+		err = remove(os.Args[2:])
 	case "check":
 		err = check(os.Args[2:])
 	case "ssh-config":
@@ -118,7 +127,7 @@ func usage() {
 	  See docs/reference/provision.md for more information.
 
   dismantle <fort> [--dry-run]
-	  Remove a fort's files that were rendered by fort cli. Used when preparing a fort for decomission.
+	  Remove a fort's files that were rendered by the fort cli. Used when preparing a fort for decomission.
 	  See docs/reference/provision.md for more information.
 
   destroy <fort> [--yes] [--no-stack]
@@ -126,10 +135,24 @@ func usage() {
 	  Wrapper around 'pulumi destroy'
 	  See docs/reference/provision.md for more information.
 
+  add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path] [--dry-run]
+	  Install a helm chart onto a fort. Writes to the flux/apps/<fort>/ directory tree
+	  See docs/reference/add.md for more information.
+
+  seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--dry-run]
+	  Execute the fort's inventories into sops-encrypted Secrets. Never rewrites a file;
+	  never prints a value. --set takes one value from stdin for an external key.
+	  See docs/reference/seed.md for more information.
+
+  remove <fort> <app | oci-ref> [--dry-run]
+	  Remove the app directory tree content that was rendered by 'fort add'
+	  See docs/reference/remove.md for more information.
+
   check (<fort>... | --all) [--eval]
 	  Static validation of the estate repo:
 	  - kustomize build of flux/
 	  - validation of forts-managed configuration paths
+	  - every inventory's Secret carries the keys it declares
 	  - with --eval: nix-eval of each checked fort's nixos configuration
 	  See docs/reference/check.md for more information.
 

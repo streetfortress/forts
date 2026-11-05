@@ -1,0 +1,17 @@
+# Serving cert for the https-moment-tally-website listener; issued by the estate's
+# ClusterIssuer `letsencrypt` (https://acme-v02.api.letsencrypt.org/directory) via the ACME http01
+# gateway solver. Gated on DNS: until moment-tally-website.lab-fort.deployments.mesh resolves to this
+# fort where the ACME server looks, cert-manager retries harmlessly and
+# the listener serves its self-signed placeholder.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: moment-tally-website
+  namespace: traefik
+spec:
+  secretName: moment-tally-website-tls
+  dnsNames:
+    - moment-tally-website.lab-fort.deployments.mesh
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt

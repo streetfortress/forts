@@ -11,6 +11,9 @@ acts on the provider only once main says the host is gone. Git is the
 record and the merge is the gate — the irreversible half never runs on an
 unreviewed intent.
 
+For one app rather than the fort, [`fort remove`](remove.md) is the
+same shape scoped to a chart.
+
 ## The layers go first
 
 A fort a layer still declares must not retire by halves (#180): before

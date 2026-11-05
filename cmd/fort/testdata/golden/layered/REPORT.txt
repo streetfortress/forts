@@ -1,0 +1,26 @@
+flux/apps/lab-fort/   (chart 0.2.0)
+● gallery/
+  ● forts.inventory.yaml         the inventory: 2 keys and their sources
+  ● kustomization.yaml           
+  ● namespace.yaml               
+  ● release.yaml                 values: gallery-env as the Secret; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/gallery, tag 0.2.0
+  ● route.yaml                   HTTPRoute gallery.lab-fort.deployments.mesh → gallery:8080
+  ◆ secrets.sops.yaml            seeded
+● gateway/
+  ● certificate-gallery.yaml     letsencrypt, gallery.lab-fort.deployments.mesh
+  ● gateway.yaml                 http listener only
+  ● kustomization.yaml           patches: listener-gallery.yaml
+  ● listener-gallery.yaml        JSON6902 add /spec/listeners/- (https-gallery)
+  ● redirect-https.yaml          catch-all http→https 301
+○ kustomization.yaml             + gateway, gallery
+
+note: the chart requires postgres.db — a platform service the core does not render.
+      A layer renders it and wires it into release.yaml (sfi/fort-layers);
+      until then the release waits on it.
+note: DATABASE_URL (postgres.db) composes provider outputs the core does not resolve. The
+      layer rewrites the key to a source in forts.inventory.yaml; `fort seed` waits for it.
+
+staged. next: the layer that renders postgres.db rewrites the inventory, then seed the ◆ files:
+  fort seed lab-fort
+then: review, commit, PR — flux applies on merge.

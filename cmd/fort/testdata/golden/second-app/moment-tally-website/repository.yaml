@@ -1,0 +1,14 @@
+# moment-tally-website's chart as a single-chart OCI artifact (OCIRepository +
+# HelmRelease.chartRef, ref.tag pinned = chart version). Published by the
+# app repo's release workflow; Renovate's flux manager tracks ref.tag for
+# bump PRs.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: moment-tally-website
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: oci://gitea.zen.lofi/sfi/moment-tally-website
+  ref:
+    tag: "0.1.0"

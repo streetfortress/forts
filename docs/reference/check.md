@@ -35,6 +35,14 @@ Per fort (every run):
   fails quietly
 - a `[libvirt]` fort names its hypervisor URI, and that URI carries no
   `keyfile=` path that only one operator machine owns
+- every committed inventory ([inventory](inventory.md)) under the
+  fort's apps root: its Secret files exist and carry the keys it
+  declares (key names are plaintext under the repo's `encrypted_regex`,
+  so no age key is involved), a required `external` key unset is an
+  error and an optional one a warning, and every `sops:` ref lands on a
+  committed file that carries the key; a fort-side `forts.contract.yaml`
+  that carries a `secrets:` block is an inventory under the old name,
+  and the finding says to rename it
 
 `--all` adds the fleet section, the estate-wide facts no single fort
 owns:
@@ -92,8 +100,9 @@ last line is `all checks passed`.
 Two red states are the gate working, not breakage:
 
 - a staged-but-unseeded app tree: a kustomization lists sops files that
-  only exist after `fort mint` or a layer's seed, so the build fails
-  until the ◆ files land — exactly what keeps that PR unmergeable
+  only exist after `fort seed` (or `fort mint`, for the canary), so the
+  build fails until the ◆ files land — exactly what keeps that PR
+  unmergeable
 - an orphan warning during a decommission: the dismantle PR removes the
   manifest first, and the residue scan names what is left to delete
 

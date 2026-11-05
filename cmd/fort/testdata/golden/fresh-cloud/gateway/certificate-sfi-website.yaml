@@ -1,0 +1,17 @@
+# Serving cert for the https-sfi-website listener; issued by the estate's
+# ClusterIssuer `letsencrypt` (https://acme-v02.api.letsencrypt.org/directory) via the ACME http01
+# gateway solver. Gated on DNS: until sfi-website.cloud-fort.example.cloud resolves to this
+# fort where the ACME server looks, cert-manager retries harmlessly and
+# the listener serves its self-signed placeholder.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sfi-website
+  namespace: traefik
+spec:
+  secretName: sfi-website-tls
+  dnsNames:
+    - sfi-website.cloud-fort.example.cloud
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt

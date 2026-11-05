@@ -12,7 +12,7 @@
 # Two red-X states are DELIBERATE gates, not breakage: a staged-but-
 # unseeded app tree (listed-but-absent sops files fail kustomize) and a
 # staged-but-unprovisioned host (a missing mesh peer fails nix eval).
-# Such PRs go green when the provisioning replay seeds identity + secrets.
+# Such PRs go green when fort seed and fort mint land the ◆ files.
 name: checks
 
 on:

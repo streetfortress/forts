@@ -1,0 +1,23 @@
+flux/apps/lab-fort/   (chart 0.3.0)
+● gateway/
+  ● certificate-sfi-website.yaml letsencrypt, sfi-website.lab-fort.deployments.mesh
+  ● gateway.yaml                 http listener only
+  ● kustomization.yaml           patches: listener-sfi-website.yaml
+  ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
+  ● redirect-https.yaml          catch-all http→https 301
+○ kustomization.yaml             + gateway, sfi-website
+● sfi-website/
+  ● forts.inventory.yaml         the inventory: 2 keys and their sources
+  ● kustomization.yaml           
+  ● monitoring.yaml              PodMonitor sfi-website-ui (rules are policy: by hand)
+  ● namespace.yaml               
+  ● release.yaml                 values: sfi-website-env as the Secret; retry forever — refine replicas/env in place
+  ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/sfi-website, tag 0.3.0
+  ● route.yaml                   HTTPRoute sfi-website.lab-fort.deployments.mesh → sfi-website-ui:3000
+  ◆ secrets.sops.yaml            seeded
+
+staged. next: seed the ◆ files:
+  fort seed lab-fort
+external keys — absent from the Secret until set (fort seed --set, or a sops/env ref in the inventory):
+  RESEND_API_KEY           Resend → API keys (re_) (optional)
+then: review, commit, PR — flux applies on merge.

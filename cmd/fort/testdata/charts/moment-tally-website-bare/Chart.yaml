@@ -1,0 +1,14 @@
+# Test fixture: the same chart as ../moment-tally-website, at the pin in
+# the question behind #461 — before sfi/moment-tally-website#51 shipped
+# the contract. There is deliberately NO forts.contract.yaml beside this
+# file: it exercises the contract-less shape, where `fort add` plans
+# from the empty contract and renders the app dir alone.
+#
+# The real chart stamps version/appVersion at `helm package` time; the
+# fixture pins the preview tag the issue names so the golden is stable.
+apiVersion: v2
+name: moment-tally-website
+description: Moment Tally marketing/docs website. Stateless SvelteKit SSR.
+type: application
+version: 0.0.0-pr.48.108.g42d6bce
+appVersion: "0.0.0-pr.48.108.g42d6bce"

@@ -1,0 +1,45 @@
+{{ if .NoContract -}}
+# {{ .App }} — HelmRelease rendered by `fort add`. The chart ships no
+# contract, so there is nothing to wire and no Secret key here:
+# `values` stays empty. Retry forever: the first install
+{{ else if .HasSecret -}}
+# {{ .App }} — HelmRelease rendered by `fort add` from the chart's contract:
+# the Secret keys ride the {{ .SecretName }} Secret, named by the contract's
+# `secret.values` path. Retry forever: the first install
+{{ else -}}
+# {{ .App }} — HelmRelease rendered by `fort add` from the chart's contract:
+# the contract declares no Secret key, so `values` stays empty. Retry
+# forever: the first install
+{{ end -}}
+# races its providers (and a preview pin races the images) — never park
+# on a failed release waiting for an ops nudge. Refine in place after
+# add: replicas for the node shape, non-secret env as values (never in
+# the Secret — a values change rolls pods), app-specific knobs.
+{{- if .Required }}
+#
+# The chart requires {{ join .Required ", " }}: a platform service the core
+# does not render. A layer does (sfi/fort-layers), and wires its
+# endpoints into these values; until then the release waits on it.
+{{- end }}
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: {{ .App }}
+  namespace: {{ .App }}
+spec:
+  interval: 1h
+  releaseName: {{ .App }}
+  chartRef:
+    kind: OCIRepository
+    name: {{ .App }}
+    namespace: flux-system
+  install:
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1
+{{- if .ValuesYAML }}
+  values:
+{{ .ValuesYAML }}
+{{- end }}

@@ -1,0 +1,25 @@
+# moment-tally-website — HelmRelease rendered by `fort add`. The chart ships no
+# contract, so there is nothing to wire and no Secret key here:
+# `values` stays empty. Retry forever: the first install
+# races its providers (and a preview pin races the images) — never park
+# on a failed release waiting for an ops nudge. Refine in place after
+# add: replicas for the node shape, non-secret env as values (never in
+# the Secret — a values change rolls pods), app-specific knobs.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: moment-tally-website
+  namespace: moment-tally-website
+spec:
+  interval: 1h
+  releaseName: moment-tally-website
+  chartRef:
+    kind: OCIRepository
+    name: moment-tally-website
+    namespace: flux-system
+  install:
+    remediation:
+      retries: -1
+  upgrade:
+    remediation:
+      retries: -1

@@ -1,0 +1,17 @@
+# https listener for moment-tally-website — appended to the Gateway by the patch
+# entry in kustomization.yaml. The hostname follows the fort's convention
+# <app>.<fort>.deployments.mesh; the certificate is certificate-moment-tally-website.yaml.
+- op: add
+  path: /spec/listeners/-
+  value:
+    name: https-moment-tally-website
+    port: 8443
+    protocol: HTTPS
+    hostname: moment-tally-website.lab-fort.deployments.mesh
+    tls:
+      mode: Terminate
+      certificateRefs:
+        - name: moment-tally-website-tls
+    allowedRoutes:
+      namespaces:
+        from: All

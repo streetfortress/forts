@@ -227,6 +227,7 @@ The fort CLI has a few more commands that can help with the workload boilerplate
 
 - `fort add <fort> oci://…/<chart>`: Render a HelmRelease and optionally the associated Gateway API CRs
 - `fort seed <fort>`: Generate and encrypt strong secrets for your workloads
+- `fort remove <fort> <app>`: The inverse of `add` — take one app out; flux prunes it on merge
 - `fort check <host>`: Run `kustomize build` and static validation against the `flux/` tree and the manifests; `--eval` adds a full nix evaluation of the host ([reference/check](reference/check.md)).
 
 ## Day 2 Stuff

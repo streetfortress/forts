@@ -1,0 +1,8 @@
+# Test fixture: sfi-website's chart identity. The contract beside this
+# file is a DRAFT written for the golden trees (the chart does not ship
+# one yet); it exercises a generated key, an optional external key, a
+# metrics block and the http block — every block the core reads.
+apiVersion: v2
+name: sfi-website
+version: 0.3.0
+appVersion: "0.3.0"

@@ -9,3 +9,6 @@ repo = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
 [hubs.monitoring]
 estate = "ssh://git@gitea.zen.lofi:30022/sfi/deployments"
 fort = "luxor"
+
+[acme]
+email = "ops@example"

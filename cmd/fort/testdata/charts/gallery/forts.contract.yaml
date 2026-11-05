@@ -1,0 +1,16 @@
+# Test fixture contract (see Chart.yaml).
+contract: v1
+secret:
+  values: existingSecret
+  keys:
+    APP_SECRET: {generate: hex32}
+    DATABASE_URL: {template: "postgresql://${postgres.db.user}:${postgres.db.password}@${postgres.db.host}:${postgres.db.port}/${postgres.db.name}"}
+requires:
+  postgres:
+    db:
+      extensions: [vector]
+      wire:
+        host: database.host
+http:
+  service: gallery
+  port: 8080

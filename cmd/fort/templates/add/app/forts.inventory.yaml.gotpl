@@ -1,0 +1,22 @@
+# Inventory — NON-SECRET; `fort seed` executes it.
+#
+# The Secret values this directory holds and where each comes from,
+# written by `fort add` from the chart's own forts.contract.yaml
+# ({{ .ChartRepo }} {{ .Version }}): one entry per Secret file with its metadata
+# and a source per key (docs/reference/inventory.md).
+# Key set = the chart contract's `secret.keys`. `external` keys stay
+# ABSENT from the Secret until a human sets them — replace the spec with
+# a sops/env ref (a source the seeder can read), or `fort seed {{ .Fort }}
+# {{ .App }} --set KEY` after seeding. A `template` key composes a provider
+# output (${postgres.db.password}): the layer that renders the provider
+# rewrites it to a sops ref into the provider's Secret; `fort seed` waits
+# for that.
+secrets:
+  secrets.sops.yaml:
+    metadata:
+      name: {{ .SecretName }}
+      namespace: {{ .App }}
+    keys:
+{{- range .Keys }}
+      {{ .Name }}: {{ .Spec.YAML }}
+{{- end }}

@@ -10,7 +10,9 @@ import (
 	"sort"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/contract"
 	"gitea.zen.lofi/sfi/forts/internal/estate"
+	"gitea.zen.lofi/sfi/forts/internal/inventory"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
@@ -18,9 +20,11 @@ import (
 // check is the merge gate over the core's tree: every manifest parses,
 // the tree matches the manifests, every flux layer builds, strict
 // envsubst is satisfiable (fleet.go), the mesh, the links, the forge and
-// the operator keys hold. The contract gate over an app's Secrets was
-// the apps layer's and left with it (forts#143, sfi/fort-layers): a
-// layer's check is its own gate step after this one (docs/layers.md).
+// the operator keys hold, and every committed inventory's Secret
+// carries the keys it declares (inventoryFindings — key names are
+// plaintext under the repo's encrypted_regex, so no age key is
+// involved). A layer's check is its own gate step after this one
+// (docs/layers.md).
 //
 // Strict on every fort: every fort is the hardened host profile (that is
 // what a fort is, not "serves users"), so there is no lenient tier to
@@ -107,6 +111,8 @@ func check(args []string) error {
 		findings = append(findings, consoleFindings(root, fort)...)
 		// Which hypervisor a lab fort lives on (forts#27).
 		findings = append(findings, hypervisorFindings(fort, entry)...)
+		// The inventories against their Secrets (forts#250, #88).
+		findings = append(findings, inventoryFindings(root, fort)...)
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
 	}
 	if *eval {
@@ -353,4 +359,147 @@ func reportFindings(w io.Writer, fort string, findings []finding, annotate bool)
 		}
 	}
 	return errors
+}
+
+// inventoryFindings is the gate over a fort's inventories: for every dir
+// of the apps root that commits an forts.inventory.yaml, each Secret file it
+// describes exists and carries its non-external keys, and every sops:
+// ref lands on a committed file that carries the key. It reads the
+// committed tree alone — no chart pull, no network — so a dir that
+// commits no inventory has nothing here; the kustomize build (fleet.go)
+// still fails on its listed-but-absent Secret. A fort-side
+// forts.contract.yaml is read as the overlay it must be, so the
+// pre-#88 shape — an inventory under the contract's name — is named
+// once, with the rename as the fix.
+func inventoryFindings(root, fort string) []finding {
+	apps := filepath.Join("flux/apps", fort)
+	if !exists(root, apps) {
+		return nil
+	}
+	dirs, err := inventoryDirs(root, apps)
+	if err != nil {
+		return []finding{{"error", apps, err.Error()}}
+	}
+	var out []finding
+	for _, dir := range dirs {
+		if raw, _, err := contract.Read(filepath.Join(root, dir)); err == nil {
+			if _, err := parseOverlay(raw); err != nil {
+				out = append(out, finding{"error", dir, err.Error()})
+			}
+		}
+		inv, err := inventory.Load(filepath.Join(root, dir))
+		if err != nil {
+			out = append(out, finding{"error", dir, err.Error()})
+			continue
+		}
+		if inv == nil {
+			continue
+		}
+		before := len(out)
+		out = append(out, checkSecrets(root, dir, inv)...)
+		out = append(out, checkVars(root, dir, inv)...)
+		if len(out) == before {
+			out = append(out, finding{"ok", dir, inventory.FileName + ": every declared key is seeded"})
+		}
+	}
+	return out
+}
+
+// checkSecrets: each Secret file the inventory describes exists and
+// carries its non-external keys; required externals are errors, optional
+// ones and extras are warnings.
+func checkSecrets(root, dir string, inv *inventory.Inventory) []finding {
+	var out []finding
+	for _, sf := range inv.Secrets {
+		path := filepath.Join(dir, sf.File)
+		if !exists(root, path) {
+			out = append(out, finding{"error", dir, sf.File + ": not seeded (fort seed)"})
+			continue
+		}
+		names, err := secretKeyNames(filepath.Join(root, path))
+		if err != nil {
+			out = append(out, finding{"error", dir, sf.File + ": " + err.Error()})
+			continue
+		}
+		have := map[string]bool{}
+		for _, n := range names {
+			have[n] = true
+		}
+		want := map[string]bool{}
+		var missing, missingOpt, missingExt []string
+		for _, k := range sf.Keys {
+			want[k.Name] = true
+			if have[k.Name] {
+				continue
+			}
+			switch {
+			case k.Spec.External != "" && k.Spec.Optional:
+				missingOpt = append(missingOpt, k.Name)
+			case k.Spec.External != "":
+				missingExt = append(missingExt, k.Name+" ("+k.Spec.External+")")
+			default:
+				missing = append(missing, k.Name)
+			}
+		}
+		var extra []string
+		for n := range have {
+			if !want[n] {
+				extra = append(extra, n)
+			}
+		}
+		sort.Strings(extra)
+		if len(missing) > 0 {
+			out = append(out, finding{"error", dir, sf.File + ": missing " + strings.Join(missing, ", ") + " — fort seed adds them"})
+		}
+		if len(missingExt) > 0 {
+			out = append(out, finding{"error", dir, sf.File + ": required external key(s) not set: " + strings.Join(missingExt, "; ") + " — fort seed --set KEY"})
+		}
+		if len(missingOpt) > 0 {
+			out = append(out, finding{"warning", dir, sf.File + ": optional external key(s) unset: " + strings.Join(missingOpt, ", ")})
+		}
+		if len(extra) > 0 {
+			out = append(out, finding{"warning", dir, sf.File + ": extra key(s) not in the inventory: " + strings.Join(extra, ", ") + " (migration superset?)"})
+		}
+	}
+	return out
+}
+
+// checkVars: every sops: ref (vars and keys) points at a committed file
+// that carries the key — a source seeded before its reader, or a
+// cross-fort source still present.
+func checkVars(root, dir string, inv *inventory.Inventory) []finding {
+	var out []finding
+	check := func(what string, s inventory.Spec) {
+		if s.Sops == nil {
+			return
+		}
+		rel, dotted := s.Sops[0], s.Sops[1]
+		path := filepath.Join(dir, rel)
+		if !exists(root, path) {
+			out = append(out, finding{"error", dir, what + ": sops ref " + rel + " does not exist (seed its dir first)"})
+			return
+		}
+		parts := strings.SplitN(dotted, ".", 2)
+		if len(parts) == 2 && (parts[0] == "stringData" || parts[0] == "data") {
+			names, err := secretKeyNames(filepath.Join(root, path))
+			if err != nil {
+				return
+			}
+			for _, n := range names {
+				if n == parts[1] {
+					return
+				}
+			}
+			out = append(out, finding{"error", dir, what + ": " + rel + " has no key " + parts[1]})
+		}
+	}
+	for _, v := range inv.Vars {
+		check("var "+v.Name, v.Spec)
+	}
+	for _, sf := range inv.Secrets {
+		for _, k := range sf.Keys {
+			check(sf.File+"/"+k.Name, k.Spec)
+		}
+	}
+	return out
 }
