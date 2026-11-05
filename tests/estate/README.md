@@ -23,7 +23,7 @@ no pin.
 `estate.toml` also names one operator device (`operator_keys`, a
 throwaway key): the framework ships no operator key, so a fort of an
 estate that names none does not evaluate (forts#81,
-`modules/ops/deployer.nix`).
+`modules/ops/account.nix`).
 
 `nixos/hosts/<host>/` is what `fort scaffold <host>` renders into
 this tree; `TestFixtureEstateIsScaffoldOutput` keeps it so, and that test

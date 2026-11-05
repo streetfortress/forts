@@ -72,8 +72,8 @@ in
     description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
   };
 
-  # The operator keys: the devices that hold `deployer`, the operator
-  # account of every fort (ops/deployer.nix). The framework ships none
+  # The operator keys: the devices that hold `ops`, the operator
+  # account of every fort (ops/account.nix). The framework ships none
   # (forts#81). It used to carry the list itself, and a NixOS list
   # option MERGES across modules: an estate that named its own operator
   # devices ADDED them to ours, so our seven devices held the operator
@@ -89,15 +89,15 @@ in
   # one team's keys alone. Who may DISPATCH and who may OPERATE stay two
   # questions: the agent accounts of a dev fort are the estate's dev
   # role, with a list of its own.
-  options.sfi.ops.deployer.authorizedKeys = lib.mkOption {
+  options.sfi.ops.account.authorizedKeys = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = estateToml.operator_keys or [ ];
     defaultText = "estate.toml's `operator_keys`, else no key at all";
     example = [ "ssh-ed25519 AAAAC3Nza… macbook-air" ];
     description = ''
-      The SSH public keys that hold the operator account `deployer` on
+      The SSH public keys that hold the operator account `ops` on
       this host, one line per device in authorized_keys form. An empty
-      list is refused (ops/deployer.nix): the ops verbs are pinned to
+      list is refused (ops/account.nix): the ops verbs are pinned to
       this account, so a fort no operator device can reach carries
       verbs nobody can run.
     '';

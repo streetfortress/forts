@@ -1,7 +1,7 @@
 # Shared base configuration for every SFI NixOS host — cluster forts,
 # dev forts and hubs alike — so only genuinely user-agnostic settings
-# belong here. Accounts are the profile's: `deployer` from
-# modules/ops/deployer.nix, `agent` from the estate's dev role.
+# belong here. Accounts are the profile's: `ops` from
+# modules/ops/account.nix, `agent` from the estate's dev role.
 # Host-specific settings live in hosts/<name>/; opt-in role modules in modules/.
 { pkgs, ... }:
 
@@ -39,7 +39,7 @@
   # second one is why KbdInteractiveAuthentication is here (#78):
   # NixOS defaults it to true and defaults UsePAM to true, and PAM's
   # keyboard-interactive path reads the same /etc/shadow hash that
-  # ops/console.nix installs for `deployer`. PasswordAuthentication
+  # ops/console.nix installs for `ops`. PasswordAuthentication
   # alone therefore left the console password good over the mesh.
   services.openssh = {
     enable = true;

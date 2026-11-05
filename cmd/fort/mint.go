@@ -288,7 +288,7 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 	// getty reads is what `fort check` warns about. Nothing is hashed
 	// until apply, so a dry run needs no mkpasswd.
 	if p.console {
-		if _, ok := take(keyDeployerPasswordHash); !ok {
+		if _, ok := take(keyOpsPasswordHash); !ok {
 			p.consoleMint = true
 			p.newRegistry = !exists(root, consoleRegistry)
 		} else if !sopsHasKey(filepath.Join(root, consoleRegistry), host) {
@@ -533,7 +533,7 @@ func (p *mintPlan) value(key string) string {
 		return p.cluster.identity
 	case keyDeploy:
 		return p.deploy.private
-	case keyDeployerPasswordHash:
+	case keyOpsPasswordHash:
 		return p.consoleHash
 	}
 	return ""
@@ -584,7 +584,7 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	case p.consoleMint:
 		fmt.Fprintf(w, "○ %-36s + %s: its console passphrase (sops set; the host holds the hash)\n", consoleRegistry, p.host)
 	case p.consoleOrphan:
-		fmt.Fprintf(w, "! %-36s has NO entry for %s — the host carries %s and nothing can read it back; a new passphrase is a deliberate act: fort console-password %s --rotate\n", consoleRegistry, p.host, keyDeployerPasswordHash, p.host)
+		fmt.Fprintf(w, "! %-36s has NO entry for %s — the host carries %s and nothing can read it back; a new passphrase is a deliberate act: fort console-password %s --rotate\n", consoleRegistry, p.host, keyOpsPasswordHash, p.host)
 	}
 	if p.sshConfig != "" {
 		fmt.Fprintf(w, "◆ %-36s re-rendered — %s\n", sshConfigPath, p.sshNote)

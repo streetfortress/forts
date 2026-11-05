@@ -67,7 +67,7 @@ type hostView struct {
 	// log line the fort emits (forts#50).
 	Estate string
 	// Plain: a fort with no [cluster] table — the baseline host shape
-	// (hardened, the mesh, deployer + the ops verbs, the shell; no
+	// (hardened, the mesh, the ops account + the ops verbs, the shell; no
 	// k3s/flux) and no fleet surface at all.
 	Plain bool
 	// Links is the manifest's [links.<name>] tables (forts#55): one
@@ -386,7 +386,7 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 				runtime += " by MAC"
 			}
 		}
-		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape ("+runtime+", deployer + the ops verbs; no k3s/flux)"
+		hostTpl, hostNote = "host-plain.nix.gotpl", "plain fort shape ("+runtime+", the ops account + the ops verbs; no k3s/flux)"
 	}
 	hostDir := filepath.Join("nixos/hosts", host)
 	plan := []struct{ path, tpl, note string }{

@@ -1,7 +1,7 @@
 // Package estate reads the estate manifest: estate.toml at the root of an
 // estate checkout. It is the one file that says what the checkout IS —
 // its name, its git URL (flux's source and auto-rebuild's pull), its mesh,
-// its operator keys (the devices that hold `deployer` on every fort of
+// its operator keys (the devices that hold `ops` on every fort of
 // the estate; forts#81), and its hubs: the forts, in this estate or
 // another, that serve it a role (the forge the core knows, and any role
 // a layer or the estate names; forts#38, #105). Per-host facts
@@ -40,9 +40,9 @@ type Estate struct {
 	// Source is the [source] table: where the estate's tree comes from
 	// and how a fort reaches it (forts#161).
 	Source Source `toml:"source"`
-	// OperatorKeys are the SSH public keys that hold `deployer`, the
+	// OperatorKeys are the SSH public keys that hold `ops`, the
 	// operator account of every fort of this estate
-	// (modules/ops/deployer.nix): one line per operator device, in
+	// (modules/ops/account.nix): one line per operator device, in
 	// authorized_keys form, with the device's name as the key's comment
 	// (forts#81). The framework ships none, so this list is the one
 	// place an operator key enters an estate: a fort of this estate
@@ -51,7 +51,7 @@ type Estate struct {
 	// estate writes it before its first fort, and `fort check --all`
 	// says so — because the refusal belongs to the host that would
 	// carry an operator account nobody can reach (the assertion in
-	// modules/ops/deployer.nix).
+	// modules/ops/account.nix).
 	OperatorKeys []string `toml:"operator_keys"`
 	// Hubs is the set of roles another fort serves this estate, by role
 	// ([hubs.forge], and any role the estate names; forts#38, #105). Each

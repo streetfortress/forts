@@ -27,13 +27,13 @@ One `Host` block per mesh peer, in name order. Roaming clients (the
 # plain fort, libvirt — the dev role
 Host dev dev-831c637
   Hostname 10.1.0.61
-  User deployer
+  User ops
   HostKeyAlias dev-831c637
 ```
 
 **The account is the fort's, not a field.** Every fort answers as
-`deployer`, the operator account the framework gives each host
-(`ops/deployer.nix`, #647) and the estate fills with keys (`estate.toml`
+`ops`, the operator account the framework gives each host
+(`ops/account.nix`, #647) and the estate fills with keys (`estate.toml`
 `operator_keys`, [init.md](init.md#the-operators)), and a peer with no
 manifest is a hand-managed
 interactive host — on the account its peers.json entry names (`ssh_user`;

@@ -9,9 +9,9 @@
 #
 # No admin wrappers (forts#151). The two verbs this replaces, an admin
 # shell and an admin kubectl, each carried a copy of a tool
-# behind a NOPASSWD line — the shell module handed deployer ALL NOPASSWD,
+# behind a NOPASSWD line — the shell module handed ops ALL NOPASSWD,
 # so a gate anywhere else read as a control and was none. Here the host
-# adds one sudoers line, `deployer ALL=(ALL) ALL` WITHOUT NOPASSWD, and
+# adds one sudoers line, `ops ALL=(ALL) ALL` WITHOUT NOPASSWD, and
 # sudo's PAM stack is the gate: the first unpinned sudo on a terminal
 # runs the ceremony, and sudo's timestamp (sfi.ops.admin.challenge.timeout,
 # timestamp_type=tty) is the window. The pinned verbs stay NOPASSWD: that
@@ -19,7 +19,7 @@
 # tags of the LAST matching line, and an ALL line after the pinned ones
 # would put every verb behind the challenge.
 #
-# kubectl is native, behind one unlock. deployer's PATH carries a
+# kubectl is native, behind one unlock. the operator's PATH carries a
 # `kubectl` (this module's, ahead of k3s's symlink by priority) that
 # execs the real one when ~/.kube/admin.config holds a credential that
 # has not expired, and runs `sudo admin-unlock` first when it does
@@ -42,7 +42,7 @@
 #
 # The read-only kubeconfig (ops-kubeconfig.nix) stays what an operator
 # machine uses from outside, and what every login shell on the host
-# reads by default: this module's kubectl steps in for deployer alone,
+# reads by default: this module's kubectl steps in for ops alone,
 # and `--kubeconfig <file>` on the command line bypasses it. The guard is
 # the option (#195): ops-commands.nix imports this module on every host
 # that carries verbs, so the rung is one word in the host file —
@@ -94,7 +94,7 @@ let
 
   realKubectl = lib.getExe pkgs.kubectl;
 
-  # deployer's kubectl. Everyone else, root included, gets the real one
+  # the operator's kubectl. Everyone else, root included, gets the real one
   # untouched: root's break-glass stays an explicit
   # KUBECONFIG=/etc/rancher/k3s/k3s.yaml (ops-kubeconfig.nix).
   kubectlWrapper = pkgs.writeShellApplication {
@@ -102,7 +102,7 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.gnused pkgs.gnugrep ];
     text = ''
       real=${realKubectl}
-      if [ "$(id -un)" != deployer ]; then
+      if [ "$(id -un)" != ops ]; then
         exec "$real" "$@"
       fi
       for a in "$@"; do
@@ -157,7 +157,7 @@ in
     type = lib.types.bool;
     default = false;
     description = ''
-      The ADMIN rung on this host: `deployer ALL=(ALL) ALL` behind the
+      The ADMIN rung on this host: `ops ALL=(ALL) ALL` behind the
       admin-key challenge, so `sudo -i` is the root shell and, on a
       cluster fort, `kubectl` is cluster-admin behind `sudo
       admin-unlock`. One ceremony opens a terminal for
@@ -174,7 +174,7 @@ in
       # passwordless sudo, stated as NOPASSWD rather than left to a PAM
       # stack with no prompt to give.
       security.sudo.extraRules = lib.mkBefore [{
-        users = [ "deployer" ];
+        users = [ "ops" ];
         commands = [{
           command = "ALL";
           options = [ (if cfg.challenge.enable then "PASSWD" else "NOPASSWD") ];
@@ -188,7 +188,7 @@ in
       environment.systemPackages = [ (lib.hiPrio kubectlWrapper) ];
 
       sfi.ops.commands.admin-unlock = {
-        description = "ADMIN RUNG: mint the cluster-admin credential kubectl uses, good for ${toString timeout} minutes; deployer's kubectl runs this itself when it holds none";
+        description = "ADMIN RUNG: mint the cluster-admin credential kubectl uses, good for ${toString timeout} minutes; the operator's kubectl runs this itself when it holds none";
         challenge = true;
         runtimeInputs = [ pkgs.kubectl pkgs.coreutils pkgs.util-linux pkgs.glibc ];
         script = ''

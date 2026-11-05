@@ -159,10 +159,10 @@ func (l *Libvirt) Provision(ctx *pulumi.Context, name string, host manifest.Host
 		// things in turn. First the GRUB menu, for 3 s, because
 		// modules/runtime/qemu.nix gives GRUB its own serial
 		// terminal (#523) — a previous generation, or init=/bin/sh, on
-		// a host that does not start. Then a `deployer` login, not a
+		// a host that does not start. Then an `ops` login, not a
 		// root one, and only where the host imports
 		// modules/ops/console.nix and carries
-		// deployer-password-hash (#524). Without that import the
+		// ops-password-hash (#524). Without that import the
 		// login prompt appears and no account can answer it.
 		Consoles: libvirt.DomainConsoleArray{
 			&libvirt.DomainConsoleArgs{Type: pulumi.String("pty"), TargetType: pulumi.String("serial"), TargetPort: pulumi.String("0")},

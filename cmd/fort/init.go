@@ -33,7 +33,7 @@ var initTemplates embed.FS
 type initView struct {
 	Name, Repo, RepoGit, Mesh, Interface, Zone, Forts, KnownHosts, ACMEEmail, ACMEDirectory string
 	Admins                                                                                  []string
-	// OperatorKeys: the devices that hold `deployer` on every fort of
+	// OperatorKeys: the devices that hold `ops` on every fort of
 	// the estate (estate.toml operator_keys, forts#81). Empty renders
 	// the commented example, and no fort of the estate evaluates until
 	// the estate names one — the framework ships no operator key.
@@ -184,7 +184,7 @@ func initCmd(args []string) error {
 	var admins multiFlag
 	fl.Var(&admins, "admin", "an admin age recipient (age1…); repeat for each")
 	var operatorKeys multiFlag
-	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `deployer`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
+	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `ops`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
 	dryRun := fl.Bool("dry-run", false, "print the tree and write nothing (default: write the files)")
 	fl.Bool("write", true, "deprecated no-op: writing is the default")
 	fl.Usage = func() {
@@ -322,9 +322,9 @@ func initCmd(args []string) error {
 	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")
 	if len(est.OperatorKeys) == 0 {
 		// The framework ships no operator key (forts#81), so an estate
-		// that names none has a `deployer` nobody can reach: the host
+		// that names none has an `ops` nobody can reach: the host
 		// asserts it at evaluation, and so does `fort check --all`.
-		fmt.Printf("· %-44s operator_keys — the devices that hold `deployer` on every fort of this estate. No\n", estate.Path)
+		fmt.Printf("· %-44s operator_keys — the devices that hold `ops` on every fort of this estate. No\n", estate.Path)
 		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
 	}
 	if est.Source.KnownHosts == "" && !est.Anonymous() {

@@ -3,11 +3,11 @@
 # NOW opens one terminal for a bounded window; inside it sudo asks nothing.
 #
 # Why a second factor at all. A fort's ops ladder (ops-commands.nix) is
-# held up by one credential: the deployer SSH key on the mesh. The pinned
+# held up by one credential: the operator SSH key on the mesh. The pinned
 # verbs are safe under that credential alone because each one only
 # retriggers machinery git already governs. The admin rung is not: a root
 # shell, arbitrary kubectl against the cluster. For those, "whoever holds
-# the deployer key" is the wrong authorization, and the right one already
+# the operator key" is the wrong authorization, and the right one already
 # exists: the fleet admin age key, which decrypts every fort's secrets
 # and never touches a fort.
 #
@@ -21,11 +21,11 @@
 #     sudo on a terminal runs the ceremony, the next ones inside the
 #     window do not.
 #   - A host that enables the admin rung (ops/admin.nix) adds
-#     `deployer ALL=(ALL) ALL` without NOPASSWD: `sudo -i` is the shell,
+#     `ops ALL=(ALL) ALL` without NOPASSWD: `sudo -i` is the shell,
 #     behind the same gate, and `admin-unlock` mints the kubectl
 #     credential behind it.
 # The framework builds no window of its own. The shell's window is sudo's
-# timestamp (`Defaults:deployer timestamp_timeout`, timestamp_type=tty: one
+# timestamp (`Defaults:ops timestamp_timeout`, timestamp_type=tty: one
 # terminal, one window; `sudo -k` ends it). kubectl's window is a token's
 # expiry, which the API server enforces (ops/admin.nix). One option,
 # sfi.ops.admin.challenge.timeout, sets both.
@@ -71,13 +71,13 @@
 # What this does NOT control: a root-compromised host. The scripts, the
 # PAM stack and the journal are all the host's, so a host with root
 # already taken can fake the whole ceremony. This gate controls
-# UNAUTHORIZED OPERATORS — someone with the deployer key and the mesh —
+# UNAUTHORIZED OPERATORS — someone with the operator key and the mesh —
 # and that is the threat the hardened profile (#86/#90) is shaped
 # around.
 #
 # What it changes for every account on the host: sudo's password
 # authentication IS the challenge. pam_unix leaves the sudo service, so a
-# shadow password (the console-only one ops/console.nix gives deployer,
+# shadow password (the console-only one ops/console.nix gives ops,
 # or any other) does not authenticate to sudo on a fort. That is the
 # posture of hardened.nix made true for sudo: no account here has a
 # password that reaches root.
@@ -287,7 +287,7 @@ in
       default = 15;
       description = ''
         Minutes one proof keeps a terminal open: sudo's
-        `timestamp_timeout` for deployer (one terminal, one window —
+        `timestamp_timeout` for ops (one terminal, one window —
         `timestamp_type=tty`; `sudo -k` ends it early), and the life of
         the kubectl credential `admin-unlock` mints (ops/admin.nix),
         which the API server enforces. At least 10, because the
@@ -347,7 +347,7 @@ in
     # which would be a lie here; badpass_message says what happens next
     # (sudo re-runs the stack, so a fresh block follows).
     security.sudo.extraConfig = ''
-      Defaults:deployer timestamp_timeout=${toString cfg.timeout}, timestamp_type=tty
+      Defaults:ops timestamp_timeout=${toString cfg.timeout}, timestamp_type=tty
       Defaults lecture=never
       Defaults passprompt="   nonce for %u@%h: "
       Defaults badpass_message="that was not the nonce; a fresh challenge follows"

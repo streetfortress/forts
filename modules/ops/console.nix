@@ -1,9 +1,9 @@
-# sfi.ops.console: a password for `deployer` that ONLY a getty accepts, so
+# sfi.ops.console: a password for `ops` that ONLY a getty accepts, so
 # an operator who reaches the provider console can still run
 # `sudo nixos-rollback` after the mesh breaks (#524).
 #
 #   Lish (linode) / `virsh console <host>` (the hypervisor)
-#   <host> login: deployer          # `fort console-password <host> --show`
+#   <host> login: ops          # `fort console-password <host> --show`
 #   sudo nixos-rollback         # the menu, then the generation
 #
 # WHY. A merge to main IS the rollout (auto-rebuild.nix), and
@@ -12,7 +12,7 @@
 # answer SSH on wg0 alone (hardened.nix), so one merged change that
 # breaks wireguard, or one generation that does not answer sshd, locks
 # every operator out of every fort at the same time. The policy this
-# module amends — "no account has a password" (ops/deployer.nix, root.nix)
+# module amends — "no account has a password" (ops/account.nix, root.nix)
 # — assumes a fort is replaceable. The fleet is one estate now, and a
 # re-provision is not a remedy for a fault that the next host inherits.
 #
@@ -26,7 +26,7 @@
 #   - The console is already behind one authentication: Lish needs the
 #     Linode account, `virsh console` needs SSH to the hypervisor. This is the
 #     second factor of a path that has one, not a new front door.
-#   - deployer keeps no wheel (ops/deployer.nix). After the login the
+#   - ops keeps no wheel (ops/account.nix). After the login the
 #     operator holds the OBSERVE rung (the journal, the read-only
 #     kubeconfig) and the HANDS-ON rung (the pinned NOPASSWD verbs,
 #     ops/ops-commands.nix). nixos-rollback chooses among generations
@@ -41,7 +41,7 @@
 # only by naming the module in its own hosts/<host>/default.nix and setting
 # enable. EVERY fort does, by default: the host shapes `fort scaffold`
 # renders import and enable it (sfi/forts#24), and a host that wants no
-# door takes the two lines out. The account is ops/deployer.nix's, which
+# door takes the two lines out. The account is ops/account.nix's, which
 # ops-commands.nix imports, so a dev fort has the same door as a cluster
 # fort (#647 — #524 had left dev forts out and this module refused them
 # at evaluation; that assertion is gone with the reason for it). The
@@ -59,7 +59,7 @@
 # nowhere, so it is true today, and under true this failsafe SILENTLY
 # does not exist: update-users-groups.pl applies a declared hash to a
 # user that already has an /etc/shadow row only when mutableUsers is
-# false, and `deployer` has such a row (it holds `!`). The hash would be
+# false, and `ops` has such a row (it holds `!`). The hash would be
 # read and discarded, with no warning, and the operator would learn it at
 # the console during the incident. So the module sets mutableUsers = false
 # and /etc/shadow becomes fully declarative on this host: a password set
@@ -75,7 +75,7 @@ in
   options.sfi.ops.console.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "Give `deployer` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `deployer-password-hash` in the host's sops file (`fort console-password <host> --write`).";
+    description = "Give `ops` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `ops-password-hash` in the host's sops file (`fort console-password <host> --write`).";
   };
 
   config = lib.mkIf cfg.enable {
@@ -87,7 +87,7 @@ in
     # (modules/runtime/seed.nix) and sops-nix finds it at the first boot
     # (docs/mint.md, and the knowledge base's
     # config-management/pre-seeded-identity.md for why).
-    sops.secrets.deployer-password-hash.neededForUsers = true;
+    sops.secrets.ops-password-hash.neededForUsers = true;
 
     # Load-bearing — see the header. Without it the declared hash is
     # discarded on a host that is already provisioned, and nothing says so.
@@ -98,14 +98,14 @@ in
     # /etc/shadow can lock an operator out. On a fort that is the
     # DECLARED posture and not an accident: root logins are off
     # (common.nix), root has no password and no authorized key, and
-    # `deployer` has no wheel (ops/deployer.nix). mutableUsers = true hides
+    # `ops` has no wheel (ops/account.nix). mutableUsers = true hides
     # the same fact rather than changing it — the assertion is what
     # NOTICES it. The console login this module adds is the answer to it:
     # the lockout the assertion warns about is what #524 is about, and
-    # `deployer` + the ops verbs is the way back in.
+    # `ops` + the ops verbs is the way back in.
     users.allowNoPasswordLogin = true;
 
-    users.users.deployer.hashedPasswordFile =
-      config.sops.secrets.deployer-password-hash.path;
+    users.users.ops.hashedPasswordFile =
+      config.sops.secrets.ops-password-hash.path;
   };
 }

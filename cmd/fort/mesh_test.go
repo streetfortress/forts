@@ -79,10 +79,10 @@ func TestRenderSSHConfig(t *testing.T) {
 		t.Fatal("render is not deterministic")
 	}
 	for _, want := range []string{
-		// the plain fort: role alias, deployer, key by name
-		"# plain fort, libvirt — the sfi-dev role\nHost sfi-dev sfi-dev-abc1234\n  Hostname 10.1.0.61\n  User deployer\n  HostKeyAlias sfi-dev-abc1234\n",
+		// the plain fort: role alias, ops, key by name
+		"# plain fort, libvirt — the sfi-dev role\nHost sfi-dev sfi-dev-abc1234\n  Hostname 10.1.0.61\n  User ops\n  HostKeyAlias sfi-dev-abc1234\n",
 		// a cluster fort outside the naming convention: no alias
-		"# cluster fort, libvirt\nHost luxor\n  Hostname 10.1.0.5\n  User deployer\n  HostKeyAlias luxor\n",
+		"# cluster fort, libvirt\nHost luxor\n  Hostname 10.1.0.5\n  User ops\n  HostKeyAlias luxor\n",
 		// two forts on one stem: neither gets the alias
 		"# cluster fort, linode\nHost sfi-prod-1111111\n  Hostname 10.1.0.54\n",
 		"# cluster fort, linode\nHost sfi-prod-2222222\n  Hostname 10.1.0.55\n",
@@ -110,7 +110,7 @@ func TestRenderSSHConfig(t *testing.T) {
 	if got := renderSSHConfig(m, hosts); !strings.Contains(got, "Host sfi-prod sfi-prod-1111111\n") {
 		t.Errorf("alias not restored with one prod fort:\n%s", got)
 	}
-	if got := sshConfigLine("sfi-dev-abc1234", hosts, "10.1.0.61"); got != "Host sfi-dev sfi-dev-abc1234 → deployer@10.1.0.61" {
+	if got := sshConfigLine("sfi-dev-abc1234", hosts, "10.1.0.61"); got != "Host sfi-dev sfi-dev-abc1234 → ops@10.1.0.61" {
 		t.Errorf("summary line: %q", got)
 	}
 }

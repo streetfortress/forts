@@ -1,4 +1,4 @@
-# `deployer`: the operator account of EVERY fort (#647) — the one login
+# `ops`: the operator account of EVERY fort (#647) — the one login
 # the ops verbs are pinned to (ops-commands.nix) and the one a getty
 # accepts where the host enables ops/console.nix (#524).
 #
@@ -7,9 +7,9 @@
 # the verbs auto-rebuild.nix declared there were present and unreachable,
 # and console.nix refused the host at evaluation. #647 decided the other
 # way — "dev fort" is one of our implementations ON TOP OF a fort, and
-# deployer is the maintenance hatch of a fort, not of a cluster — so the
+# ops is the maintenance hatch of a fort, not of a cluster — so the
 # account moved here, beside the verbs that name it. ops-commands.nix
-# imports this module: wherever a sudoers rule says `deployer`, the
+# imports this module: wherever a sudoers rule says `ops`, the
 # account exists. Both profiles import it too, so a reader of either
 # sees the account set in one place.
 #
@@ -21,15 +21,15 @@
 #     the only readable evidence is `systemctl show`'s exit code (#185).
 #   - HANDS-ON: the pinned NOPASSWD verbs on the pull loop, `nixos-pull`
 #     and `nixos-rollback`, declared through ops-commands.nix; plus
-#     whatever verbs the estate or a layer declares the same way. `ops`
-#     lists what this host has.
+#     whatever verbs the estate or a layer declares the same way. The `ops`
+#     command lists what this host has.
 #
 # WHAT IT DOES NOT HOLD. No wheel, so no path to root from SSH: writes go
 # through git, not a shell, and ops/admin.nix is the opt-in ADMIN rung —
 # `sudo -i` and kubectl behind the admin-key challenge, which is sudo's
 # authentication on every fort (ops/challenge.nix). No nix daemon access (hardened.nix keeps allowed-users to
 # root; a profile whose accounts build appends THEM, never this one):
-# deployer observes the host, not the store. No password — sshd refuses
+# ops observes the host, not the store. No password — sshd refuses
 # every password (common.nix) and the only hash it can carry is the
 # console-only one ops/console.nix reads. No Home Manager payload; the
 # shell is users.defaultUserShell, which is bashInteractive on a fort
@@ -48,7 +48,7 @@
 # estate wrote lib.mkForce, which nothing asked it to. The framework
 # ships no key now. The estate names its devices in estate.toml
 # (`operator_keys`, read by modules/estate.nix into
-# sfi.ops.deployer.authorizedKeys), one list for every fort of that
+# sfi.ops.account.authorizedKeys), one list for every fort of that
 # estate, and a host file replaces the list for one host by setting the
 # option. Vetting (#415) trims a list that is now the estate's to trim.
 # The estate's dev role carries a list of its own for the agent accounts
@@ -69,9 +69,9 @@
   # is built from a host nobody can operate.
   assertions = [
     {
-      assertion = config.sfi.ops.deployer.authorizedKeys != [ ];
+      assertion = config.sfi.ops.account.authorizedKeys != [ ];
       message = ''
-        sfi.ops.deployer.authorizedKeys is empty: no device holds `deployer`, the
+        sfi.ops.account.authorizedKeys is empty: no device holds `ops`, the
         operator account of this fort, so the ops verbs are unreachable. The
         framework ships no operator key (forts#81). Name the estate's operator
         devices in estate.toml:
@@ -81,18 +81,18 @@
           ]
 
         `fort check --all` reports the same gap. One host that must carry a
-        different set sets sfi.ops.deployer.authorizedKeys in its own file.
+        different set sets sfi.ops.account.authorizedKeys in its own file.
       '';
     }
   ];
 
-  users.users.deployer = {
+  users.users.ops = {
     isNormalUser = true;
     # No colon — the GECOS field is colon-separated.
     description = "fort operator — the ops verbs and the console door";
     extraGroups = [ "systemd-journal" ];
     # The estate's keys, verbatim: this is the one definition of the
     # list, so nothing merges a key in that the estate did not name.
-    openssh.authorizedKeys.keys = config.sfi.ops.deployer.authorizedKeys;
+    openssh.authorizedKeys.keys = config.sfi.ops.account.authorizedKeys;
   };
 }

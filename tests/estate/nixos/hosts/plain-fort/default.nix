@@ -11,10 +11,10 @@
 # is no hand-written hardware.nix.
 # PLAIN FORT (no [cluster] table in the manifest): no k3s, no flux.
 # What the framework gives every fort and nothing more — the
-# hardened host, the mesh, the operator account `deployer` with the ops
-# verbs (modules/ops/deployer.nix, #647), the shell at a pane, the rebuild
+# hardened host, the mesh, the operator account `ops` with the ops
+# verbs (modules/ops/account.nix, #647), the shell at a pane, the rebuild
 # loop. Ideally nobody logs in; the prescribed access is
-# `deployer@10.1.0.96` over the mesh for the ops verbs, and the console
+# `ops@10.1.0.96` over the mesh for the ops verbs, and the console
 # password (ops/console.nix) as the break-glass. What this host does beyond
 # that — accounts, services, a role — is plain NixOS, written below by the
 # estate.
@@ -39,13 +39,13 @@
     inputs.forts.nixosModules.lab-dns      # the forge's name pin ([hubs.forge] + mesh/peers.json), and the LAN zone's forward on a lab fort
     # The baseline, which the cluster profile also builds on: the
     # hardening every fort shares, the operator account and its verbs.
-    # The keys of `deployer` are the estate's, not the framework's:
+    # The keys of `ops` are the estate's, not the framework's:
     # estate.toml's operator_keys (sfi/forts#81). This host carries that
-    # list unless it sets sfi.ops.deployer.authorizedKeys itself.
+    # list unless it sets sfi.ops.account.authorizedKeys itself.
     inputs.forts.nixosModules.hardened
-    inputs.forts.nixosModules.ops-deployer
+    inputs.forts.nixosModules.ops-account
     inputs.forts.nixosModules.shell        # the prompt, keys and aliases at a pane (#557)
-    # The console door (sfi/forts#24, #524): a password for `deployer` that
+    # The console door (sfi/forts#24, #524): a password for `ops` that
     # only a getty accepts. fort mint minted the hash into this host's sops
     # file and the passphrase into provisioning/console-passwords.yaml.
     inputs.forts.nixosModules.ops-console
@@ -63,13 +63,13 @@
   # zsh and the shared prompt for whoever reads a pane here (#576).
   sfi.shell.enable = true;
 
-  # The console door (#524): the getty reads deployer-password-hash from
+  # The console door (#524): the getty reads ops-password-hash from
   # this host's sops file, and sshd still refuses the password. Read the
   # passphrase with `fort console-password plain-fort --show`; replace
   # it with `--rotate`.
   sfi.ops.console.enable = true;
 
-  # BREAK-GLASS, off (sfi/forts#195): flip to true to give deployer
+  # BREAK-GLASS, off (sfi/forts#195): flip to true to give ops
   # `sudo -i` — and cluster-admin kubectl on a cluster fort — behind the
   # admin-key challenge (modules/ops/admin.nix; docs/ops.md "Escalating
   # to Admin"). The challenge options live at sfi.ops.admin.challenge.*;
@@ -77,8 +77,8 @@
   sfi.ops.admin.enable = false;
 
   # Watch main; a changed host config lands within a minute or two of
-  # merging — or now, via `sudo nixos-pull` as deployer (#93).
-  # deployer holds the host's verbs (nixos-pull, nixos-rollback,
+  # merging — or now, via `sudo nixos-pull` as ops (#93).
+  # ops holds the host's verbs (nixos-pull, nixos-rollback,
   # nixos-revision; `ops` lists them); the loop is the only other way
   # config reaches this host.
   sfi.auto-rebuild.enable = true;

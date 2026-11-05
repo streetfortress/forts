@@ -137,7 +137,7 @@ by the next link run, which records the field. Private keys are never here: a fo
 
 A hand-managed peer (no manifest) can carry `ssh_user`: the account
 `mesh/ssh_config` reaches it on ([ssh-config.md](ssh-config.md)). A fort
-carries none and answers as `deployer`.
+carries none and answers as `ops`.
 
 ## Linking: a host on another estate's mesh (deployments#674)
 

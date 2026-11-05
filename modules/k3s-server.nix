@@ -12,8 +12,8 @@
 # The surface of a k3s host is here too (#154; production.nix held it
 # until then, under a name from #86 that stopped meaning anything once
 # every fort was hardened, #272): the baseline every fort imports —
-# hardened.nix and ops/deployer.nix — plus what a CLUSTER fort adds to
-# both, the cluster grant for deployer and the ports, declared once
+# hardened.nix and ops/account.nix — plus what a CLUSTER fort adds to
+# both, the cluster grant for ops and the ports, declared once
 # below instead of opened here, collapsed by hardened.nix and re-opened
 # by a third module.
 { config, lib, pkgs, ... }:
@@ -45,10 +45,10 @@ in
   imports = [
     # The baseline every fort imports (the plain shape names the same
     # pair): the hardening — mesh-only admin surface, root-only nix, the
-    # closure trims — and the operator account `deployer` with the ops
+    # closure trims — and the operator account `ops` with the ops
     # verbs. The cluster grant and the ports are below.
     ./hardened.nix
-    ./ops/deployer.nix
+    ./ops/account.nix
     # The estate's files under one root, and the CA root it carries.
     ./estate.nix
     # The mesh, and with it the names of the mesh (mesh-dns.nix): a k3s
@@ -97,7 +97,7 @@ in
         "--kubelet-arg=read-only-port=10255"
         # Admin kubeconfig is root-only (0600 default): daily ops use the
         # read-only config rendered by ops/ops-kubeconfig.nix (#90); the
-        # admin rung is deployer's kubectl behind the admin-key challenge
+        # admin rung is the operator's kubectl behind the admin-key challenge
         # on a host that enables ops/admin.nix; touching k3s.yaml
         # directly is the break-glass event.
       ] ++ lib.optional (meshIp != null) "--tls-san=${meshIp}";
@@ -180,13 +180,13 @@ in
       '';
     };
 
-    # What a cluster fort adds to the operator account (ops/deployer.nix
+    # What a cluster fort adds to the operator account (ops/account.nix
     # holds the account itself — isNormalUser, the journal, the keys):
-    # the ops-ro kubeconfig (ops/ops-kubeconfig.nix, #90), so deployer
+    # the ops-ro kubeconfig (ops/ops-kubeconfig.nix, #90), so ops
     # observes the cluster as well as the host. Still no wheel and no nix
     # daemon access: writes go through git, and rebuilds arrive through
     # the pull loop.
-    users.users.deployer.extraGroups = [ "kubeops" ];
+    users.users.ops.extraGroups = [ "kubeops" ];
 
     # The public face of a cluster fort is exactly 80/443, the ingress;
     # hardened.nix collapses every other merged opening to this list.

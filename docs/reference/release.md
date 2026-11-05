@@ -27,7 +27,11 @@ Every change to one of these surfaces is named in the release note:
 
 - **The modules:** the names under `nixosModules.*` and their options.
   `nixosModules.production` dissolving into `hardened` + `ops-deployer`
-  (#154) is the shape of a contract change.
+  (#154) is the shape of a contract change, and so is the rename of the
+  operator account from `deployer` to `ops` (#253): the module is
+  `ops-account`, the option is `sfi.ops.account.authorizedKeys`, the
+  sops key is `ops-password-hash`, and the home directory moves from
+  `/home/deployer` to `/home/ops`. Nothing persistent lives there.
 - **The CLI:** the verbs, their flags, and the rules `fort check`
   enforces. A new rule is a contract change — it is what turns a gap
   into a finding (below).

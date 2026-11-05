@@ -22,7 +22,7 @@ import (
 //   - mesh/ssh_config   one Host block per peer — the fort name, a
 //                            stable role alias where one fort holds the
 //                            role (dev, prod, stage), the mesh
-//                            address, the account (deployer). Committed;
+//                            address, the account (ops). Committed;
 //                            consumers Include it. mint and dismantle
 //                            re-render it, fort check --all fails when it
 //                            is stale.
@@ -40,8 +40,8 @@ import (
 //                            this CLI never handles one.
 //
 // The account comes from the manifest, never from peers.json: a fort
-// answers as deployer, the operator account the framework gives every
-// host (ops/deployer.nix), and a peer with no manifest is a hand-managed
+// answers as ops, the operator account the framework gives every
+// host (ops/account.nix), and a peer with no manifest is a hand-managed
 // interactive host — on its own account (a hand-managed machine; no NixOS interactive
 // profile exists). peers.json stays three fields per peer, plus the
 // endpoint port where it is not the default; nothing is added to it
@@ -55,7 +55,7 @@ const (
 	knownHostsPath = "mesh/known_hosts"
 	peersPath      = "mesh/peers.json"
 
-	userDeployer = "deployer"
+	userOps = "ops"
 
 	wgPort = 51820
 )
@@ -75,7 +75,7 @@ type meshPeer struct {
 	// (forts#101). Only remotes carry it.
 	Estate string `json:"estate,omitempty"`
 	// User is the account a hand-managed peer (no manifest) answers on,
-	// for mesh/ssh_config (forts#139). A fort answers as deployer and
+	// for mesh/ssh_config (forts#139). A fort answers as ops and
 	// carries none; a peer that names none gets no User line.
 	User string `json:"ssh_user,omitempty"`
 }
@@ -144,7 +144,7 @@ func sortedNames[T any](m map[string]T) []string {
 // --- ssh_config
 
 // sshUser is the account that answers on a peer's 22 under the peer's own
-// name (the header of this file has the why): deployer on every fort, the
+// name (the header of this file has the why): ops on every fort, the
 // operator account the framework gives each host; whatever account its
 // peers.json entry names (ssh_user) on a hand-managed peer, and no line
 // when it names none. An estate that adds accounts to a fort reaches them
@@ -153,7 +153,7 @@ func sshUser(entry *manifest.Host, p meshPeer) string {
 	if entry == nil {
 		return p.User
 	}
-	return userDeployer
+	return userOps
 }
 
 // roleStemRE: a fort named by the convention <role>-<7-hex sha>
@@ -202,7 +202,7 @@ const sshConfigHeader = `# SSH over the SFI mesh — rendered by ` + "`fort ssh-
 #   Include ~/<estate>/mesh/ssh_config
 #   UserKnownHostsFile ~/.ssh/known_hosts ~/<estate>/mesh/known_hosts
 #
-# Every fort answers as deployer, the operator account the framework
+# Every fort answers as ops, the operator account the framework
 # gives each host; a peer with no manifest is a hand-managed host, on the
 # account its peers.json entry names. A role alias (dev, prod, …) exists while exactly
 # one fort claims the stem. Other accounts on a fort are the estate's:
@@ -255,13 +255,13 @@ func renderSSHConfig(m mesh, hosts map[string]manifest.Host) string {
 }
 
 // sshConfigLine is the one-line summary a report prints for a fort's
-// block ("Host dev dev-831c637 → deployer@10.1.0.61").
+// block ("Host dev dev-831c637 → ops@10.1.0.61").
 func sshConfigLine(host string, hosts map[string]manifest.Host, ip string) string {
 	patterns := host
 	if a := roleAliases(hosts)[host]; a != "" {
 		patterns = a + " " + host
 	}
-	return fmt.Sprintf("Host %s → %s@%s", patterns, userDeployer, ip)
+	return fmt.Sprintf("Host %s → %s@%s", patterns, userOps, ip)
 }
 
 // renderSSHConfigFrom renders from the tree: peers.json as given (a

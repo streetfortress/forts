@@ -58,7 +58,7 @@ func TestOperatorFindings(t *testing.T) {
 	}
 	// One device: an ok that names it.
 	fs = operatorFindings(root, est(laptop), hosts)
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "1 operator device(s) hold `deployer` on every fort of this estate: macbook-air") {
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "1 operator device(s) hold `ops` on every fort of this estate: macbook-air") {
 		t.Errorf("one device: %+v", fs)
 	}
 	// A key with no comment: a warning beside the ok, because vetting
@@ -72,7 +72,7 @@ func TestOperatorFindings(t *testing.T) {
 	hostNix := filepath.Join("nixos/hosts/luxor/default.nix")
 	os.MkdirAll(filepath.Join(root, filepath.Dir(hostNix)), 0o755)
 	os.WriteFile(filepath.Join(root, hostNix),
-		[]byte("{\n  # sfi.ops.deployer.authorizedKeys is the estate's\n  sfi.ops.deployer.authorizedKeys = [ \"ssh-ed25519 AAAA other\" ];\n}\n"), 0o644)
+		[]byte("{\n  # sfi.ops.account.authorizedKeys is the estate's\n  sfi.ops.account.authorizedKeys = [ \"ssh-ed25519 AAAA other\" ];\n}\n"), 0o644)
 	fs = operatorFindings(root, est(laptop), hosts)
 	if len(fs) != 2 || fs[0].level != "warning" || fs[0].dir != hostNix || !strings.Contains(fs[0].msg, "line 3 sets the operator keys of this fort alone") || fs[1].level != "ok" {
 		t.Errorf("a host that overrides: %+v", fs)

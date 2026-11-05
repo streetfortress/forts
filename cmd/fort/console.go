@@ -16,14 +16,14 @@ import (
 )
 
 // `fort console-password <host>` mints the credential
-// modules/ops/console.nix reads: a passphrase for `deployer` that
+// modules/ops/console.nix reads: a passphrase for `ops` that
 // only a getty accepts, so an operator on Lish or `virsh console`
 // reaches `sudo nixos-rollback` after the mesh breaks (#524).
 //
 // It writes the credential in two halves, to two files, because the two
 // readers are different:
 //
-//	nixos/secrets/<host>.yaml   deployer-password-hash — the HOST reads
+//	nixos/secrets/<host>.yaml   ops-password-hash — the HOST reads
 //	                            it, so it is encrypted to the host too
 //	provisioning/console-passwords.yaml
 //	                            <host>: the PASSPHRASE — an OPERATOR
@@ -68,7 +68,7 @@ import (
 // the first provision.
 //
 // SCOPE: every fort. ops/ops-commands.nix pins every verb's sudo rule to
-// `deployer`, and the account is ops/deployer.nix's on cluster forts and
+// `ops`, and the account is ops/account.nix's on cluster forts and
 // plain forts alike (#647) — whatever an estate builds on top of a fort,
 // the hatch is the fort's. This verb used to refuse a fort with no
 // cluster while #524 left that question open; it no longer does.
@@ -110,9 +110,9 @@ func consolePassword(args []string) error {
 }
 
 const (
-	// keyDeployerPasswordHash is the key modules/ops/console.nix
+	// keyOpsPasswordHash is the key modules/ops/console.nix
 	// declares and `fort check` looks for.
-	keyDeployerPasswordHash = "deployer-password-hash"
+	keyOpsPasswordHash = "ops-password-hash"
 
 	// consoleRegistry holds the other half: one plaintext passphrase per
 	// fort, keyed by host name. Admin recipients only — the rule in
@@ -155,7 +155,7 @@ func (p *consolePlan) mints() bool { return !p.haveHash || p.rotate }
 // file, the same property `fort check` relies on. So a dry run needs no
 // age key. Only the apply and --show do.
 func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
-	// A manifest is the gate — cluster or plain, both carry deployer.
+	// A manifest is the gate — cluster or plain, both carry ops.
 	if _, err := manifest.Load(root, host); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
 	if !exists(root, p.secretsPath) {
 		return nil, fmt.Errorf("%s does not exist — the host has no identity yet; run `fort mint %s` first", p.secretsPath, host)
 	}
-	p.haveHash = sopsHasKey(filepath.Join(root, p.secretsPath), keyDeployerPasswordHash)
+	p.haveHash = sopsHasKey(filepath.Join(root, p.secretsPath), keyOpsPasswordHash)
 	p.newRegistry = !exists(root, consoleRegistry)
 	p.haveEntry = sopsHasKey(filepath.Join(root, consoleRegistry), host)
 	if nix, err := os.ReadFile(filepath.Join(root, p.hostNix)); err == nil {
@@ -193,7 +193,7 @@ func (p *consolePlan) apply(tool secretsTool) error {
 	if err := recordPassphrase(tool, p.root, p.host, pass); err != nil {
 		return err
 	}
-	if err := tool.SetWith(filepath.Join(p.root, "nixos/.sops.yaml"), filepath.Join(p.root, p.secretsPath), `["`+keyDeployerPasswordHash+`"]`, hash); err != nil {
+	if err := tool.SetWith(filepath.Join(p.root, "nixos/.sops.yaml"), filepath.Join(p.root, p.secretsPath), `["`+keyOpsPasswordHash+`"]`, hash); err != nil {
 		return err
 	}
 	if err := tool.GitAdd(p.secretsPath); err != nil {
@@ -263,11 +263,11 @@ func (p *consolePlan) report(w io.Writer, written bool) {
 	fmt.Fprintf(w, "console-password ⛫ %s   (the getty door to `sudo nixos-rollback`; ssh never accepts it)\n", p.host)
 	switch {
 	case p.haveHash && !p.rotate:
-		fmt.Fprintf(w, "○ %-40s carries %s already\n", p.secretsPath, keyDeployerPasswordHash)
+		fmt.Fprintf(w, "○ %-40s carries %s already\n", p.secretsPath, keyOpsPasswordHash)
 	case p.haveHash:
-		fmt.Fprintf(w, "○ %-40s %s REPLACED (--rotate)\n", p.secretsPath, keyDeployerPasswordHash)
+		fmt.Fprintf(w, "○ %-40s %s REPLACED (--rotate)\n", p.secretsPath, keyOpsPasswordHash)
 	default:
-		fmt.Fprintf(w, "○ %-40s + %s (sops set)\n", p.secretsPath, keyDeployerPasswordHash)
+		fmt.Fprintf(w, "○ %-40s + %s (sops set)\n", p.secretsPath, keyOpsPasswordHash)
 	}
 	switch {
 	case p.newRegistry:
@@ -342,15 +342,15 @@ func consoleFindings(root, fort string) []finding {
 	secretsPath := filepath.Join("nixos/secrets", fort+".yaml")
 	nix, err := os.ReadFile(filepath.Join(root, hostNix))
 	enabled := err == nil && consoleModuleRE.Match(nix)
-	hash := sopsHasKey(filepath.Join(root, secretsPath), keyDeployerPasswordHash)
+	hash := sopsHasKey(filepath.Join(root, secretsPath), keyOpsPasswordHash)
 	entry := sopsHasKey(filepath.Join(root, consoleRegistry), fort)
 	switch {
 	case enabled && !hash:
-		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyDeployerPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " (fort console-password " + fort + " mints it alone)"}}
+		return []finding{{"error", secretsPath, "sfi.ops.console.enable is set in " + hostNix + " but " + keyOpsPasswordHash + " is absent — sops-nix fails the activation on a declared-but-absent key. Mint it: fort mint " + fort + " (fort console-password " + fort + " mints it alone)"}}
 	case enabled && !entry:
-		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyDeployerPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate"}}
+		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyOpsPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate"}}
 	case enabled:
-		return []finding{{"ok", hostNix, "console login: the module, " + keyDeployerPasswordHash + ", and the passphrase in " + consoleRegistry}}
+		return []finding{{"ok", hostNix, "console login: the module, " + keyOpsPasswordHash + ", and the passphrase in " + consoleRegistry}}
 	case hash || entry:
 		return []finding{{"warning", hostNix, "this host does not set sfi.ops.console.enable, but a console credential exists for it (" + strings.Join(consoleHalves(hash, entry), " + ") + ") — no getty reads it. Enable the module, or withdraw the credential with fort dismantle"}}
 	}
@@ -362,7 +362,7 @@ func consoleFindings(root, fort string) []finding {
 func consoleHalves(hash, entry bool) []string {
 	var out []string
 	if hash {
-		out = append(out, keyDeployerPasswordHash)
+		out = append(out, keyOpsPasswordHash)
 	}
 	if entry {
 		out = append(out, consoleRegistry)

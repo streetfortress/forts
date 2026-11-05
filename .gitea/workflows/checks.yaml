@@ -79,7 +79,7 @@ jobs:
         # The rendered config, not the option. NixOS defaults
         # KbdInteractiveAuthentication to yes and UsePAM to yes, and PAM
         # reads the same /etc/shadow hash that ops/console.nix installs for
-        # `deployer` (forts#78). A regression makes the console password
+        # `ops` (forts#78). A regression makes the console password
         # good over the mesh, so CI reads the file sshd gets.
         run: |
           set -euo pipefail
@@ -111,10 +111,10 @@ jobs:
           nix eval --raw \
             '.#nixosConfigurations.admin-fort.config.security.sudo.configFile' \
             > "$out/sudoers"
-          grep -n '^deployer ' "$out/sudoers"
-          test "$(grep '^deployer ' "$out/sudoers" | head -n1)" = "deployer     ALL=(ALL:ALL)    PASSWD: ALL"
-          grep -q '^deployer .*PASSWD: /run/current-system/sw/bin/challenge, NOPASSWD: ' "$out/sudoers"
-          grep -qx 'Defaults:deployer timestamp_timeout=15, timestamp_type=tty' "$out/sudoers"
+          grep -n '^ops ' "$out/sudoers"
+          test "$(grep '^ops ' "$out/sudoers" | head -n1)" = "ops     ALL=(ALL:ALL)    PASSWD: ALL"
+          grep -q '^ops .*PASSWD: /run/current-system/sw/bin/challenge, NOPASSWD: ' "$out/sudoers"
+          grep -qx 'Defaults:ops timestamp_timeout=15, timestamp_type=tty' "$out/sudoers"
           grep -qx 'Defaults!/run/current-system/sw/bin/challenge timestamp_timeout=0' "$out/sudoers"
           # The open posture (#195): with the challenge switched off, the
           # rung is NOPASSWD, the stock PAM stack is back, and the
@@ -123,7 +123,7 @@ jobs:
           nix eval --raw \
             '.#nixosConfigurations.admin-open-fort.config.security.sudo.configFile' \
             > "$out/sudoers-open"
-          test "$(grep '^deployer ' "$out/sudoers-open" | head -n1)" = "deployer     ALL=(ALL:ALL)    NOPASSWD: ALL"
+          test "$(grep '^ops ' "$out/sudoers-open" | head -n1)" = "ops     ALL=(ALL:ALL)    NOPASSWD: ALL"
           ! grep -q ' PASSWD: ' "$out/sudoers-open"
           ! grep -q 'timestamp_timeout' "$out/sudoers-open"
           nix eval --raw \
@@ -136,7 +136,7 @@ jobs:
 
       - name: nixos-pull builds main, from the estate's own repo
         # The rendered verb, not the module. `--ref <branch>` was a path
-        # from the deployer key to root (forts#76) and the `--from`
+        # from the operator key to root (forts#76) and the `--from`
         # handler named /sfi/deployments in a literal, so every estate's
         # recovery hatch recovered the first estate (forts#77). Both
         # regress silently: the module still evaluates, and the verb is

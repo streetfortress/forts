@@ -297,7 +297,7 @@ func TestACME(t *testing.T) {
 	}
 }
 
-// The operator keys (forts#81): the devices that hold `deployer` on
+// The operator keys (forts#81): the devices that hold `ops` on
 // every fort of the estate. The framework ships none, so a line that
 // sshd cannot read is a key no fort accepts and nobody reports — the
 // manifest refuses it here instead.

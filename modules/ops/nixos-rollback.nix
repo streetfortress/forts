@@ -10,7 +10,7 @@
 # Why: a merge to main IS the rollout (auto-rebuild.nix), and a merged
 # host-config change that misbehaves on one fort — a firewall rule, a
 # peer set, a module split like #417 — had no way back short of a
-# provider console: deployer has no root shell, `nixos-rebuild
+# provider console: ops has no root shell, `nixos-rebuild
 # --rollback` is root's, and the only lever was "merge a revert and wait
 # for the loop". Every generation on disk was built from a vetted main
 # commit — `nixos-pull` builds main and nothing else, and its

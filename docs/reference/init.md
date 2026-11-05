@@ -59,7 +59,7 @@ TOML reads a loose key after a table header as that table's key
 
 ```toml
 name = "second-estate"
-operator_keys = [            # the devices that hold `deployer` on every fort of this estate
+operator_keys = [            # the devices that hold `ops` on every fort of this estate
   "ssh-ed25519 AAAAC3Nza… macbook-air",
 ]
 
@@ -210,14 +210,14 @@ carries the new forge's root moves in one commit (sfi/estate-hub#69).
 
 ## The operators
 
-`deployer` is the operator account of every fort: the ops verbs
+`ops` is the operator account of every fort: the ops verbs
 ([ops.md](ops.md)) are pinned to it, and `ops/console.nix` opens the
 console door for it.
 **The framework ships no operator key** (forts#81). `operator_keys` is
 the one place a key enters an estate — one line per device, in
 `authorized_keys` form, with the device as the key's comment — and
 `modules/estate.nix` reads the list into
-`sfi.ops.deployer.authorizedKeys`, which `modules/ops/deployer.nix`
+`sfi.ops.account.authorizedKeys`, which `modules/ops/account.nix`
 puts in the account's `authorized_keys` and nothing else adds to.
 
 The list was the framework's until forts#81, and that was a defect: a
@@ -233,12 +233,12 @@ that operates it.
 - A key with no comment names no device. `fort check --all` warns:
   vetting trims the list by device.
 - **An estate that names none has forts that do not evaluate.** The
-  assertion in `ops/deployer.nix` refuses a host whose operator account
+  assertion in `ops/account.nix` refuses a host whose operator account
   no device can reach — the ops verbs would be present and
   unreachable. `fort check --all` reports the same gap against
   `estate.toml`, before the eval.
 - One fort that must carry a different set sets
-  `sfi.ops.deployer.authorizedKeys` in its own host file, which
+  `sfi.ops.account.authorizedKeys` in its own host file, which
   *replaces* the estate's list for that host. `check` names the line: a
   device added to the estate does not reach that fort.
 

@@ -8,7 +8,7 @@
 // hardened host profile and a mesh member (#272); what a fort IS beyond
 // that is the [cluster] table (#426) — a flux cluster: k3s, flux, the
 // fleet tree — or nothing: a PLAIN fort, the baseline the framework gives
-// every host (the hardened profile, the mesh, deployer with the ops verbs,
+// every host (the hardened profile, the mesh, the ops account with the ops verbs,
 // the shell, the rebuild loop) and no more. What a plain fort does is
 // plain NixOS in its host file, estate work; the manifest names no user
 // and no role. A cluster-only key has no neutral level to sit at

@@ -115,13 +115,13 @@ func TestMint(t *testing.T) {
 		t.Errorf("gitea: %+v", *registered)
 	}
 	for _, want := range []string{"● nixos/secrets/" + host + ".yaml", "○ nixos/.sops.yaml", "○ mesh/peers.json", "○ .sops.yaml", "◆ flux/infrastructure/", "◆ flux/apps/" + host + "/sops-canary.yaml", "registered flux-" + host, "staged.",
-		"◆ mesh/ssh_config", "Host " + host + " → deployer@10.1.0.97", "◆ mesh/known_hosts", "+ " + host + ",10.1.0.97"} {
+		"◆ mesh/ssh_config", "Host " + host + " → ops@10.1.0.97", "◆ mesh/known_hosts", "+ " + host + ",10.1.0.97"} {
 		if !strings.Contains(rep, want) {
 			t.Errorf("report lacks %q:\n%s", want, rep)
 		}
 	}
 	// the client side (#434): the fort's Host block and its host key, by name
-	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); !strings.Contains(sc, "Host "+host+"\n  Hostname 10.1.0.97\n  User deployer\n  HostKeyAlias "+host+"\n") {
+	if sc := readFile(t, filepath.Join(tmp, sshConfigPath)); !strings.Contains(sc, "Host "+host+"\n  Hostname 10.1.0.97\n  User ops\n  HostKeyAlias "+host+"\n") {
 		t.Errorf("ssh_config:\n%s", sc)
 	}
 	if kh := parseKnownHosts(readFile(t, filepath.Join(tmp, knownHostsPath))); kh[host].ip != "10.1.0.97" || kh[host].key != hostKeyLine(p.hostKey.public) {
@@ -340,11 +340,11 @@ func mintPlainFort(t *testing.T, provider, table, endpoint string) {
 	if got := readFile(t, filepath.Join(tmp, ".sops.yaml")); got != original[".sops.yaml"] {
 		t.Error("a plain fort must not touch the fleet .sops.yaml")
 	}
-	// The fort answers as deployer, like every fort, and the comment
+	// The fort answers as ops, like every fort, and the comment
 	// names the provider the manifest carries.
 	sc := readFile(t, filepath.Join(tmp, sshConfigPath))
-	if !strings.Contains(sc, "# plain fort, "+provider+"\nHost "+host+"\n  Hostname 10.1.0.96\n  User deployer\n") {
-		t.Errorf("a plain fort answers as deployer:\n%s", sc)
+	if !strings.Contains(sc, "# plain fort, "+provider+"\nHost "+host+"\n  Hostname 10.1.0.96\n  User ops\n") {
+		t.Errorf("a plain fort answers as ops:\n%s", sc)
 	}
 	// The peer's endpoint is the provider's: the lab host's static LAN
 	// address, the cloud host's public name.
@@ -427,7 +427,7 @@ func TestMintConsole(t *testing.T) {
 		t.Fatalf("plan: console=%v mint=%v newRegistry=%v orphan=%v", p.console, p.consoleMint, p.newRegistry, p.consoleOrphan)
 	}
 	// The plain fort's four keys and the hash, the hash last.
-	if len(p.missing) != 5 || p.missing[4] != keyDeployerPasswordHash {
+	if len(p.missing) != 5 || p.missing[4] != keyOpsPasswordHash {
 		t.Fatalf("missing: %v", p.missing)
 	}
 	var sb strings.Builder
@@ -471,8 +471,8 @@ func TestMintConsole(t *testing.T) {
 	if err := yamlUnmarshalFile(secrets, &have); err != nil {
 		t.Fatal(err)
 	}
-	if have[keyDeployerPasswordHash] != "$y$j9T$fake$hash" {
-		t.Fatalf("secrets file holds %q under %s — the HOST holds the hash, never the passphrase", have[keyDeployerPasswordHash], keyDeployerPasswordHash)
+	if have[keyOpsPasswordHash] != "$y$j9T$fake$hash" {
+		t.Fatalf("secrets file holds %q under %s — the HOST holds the hash, never the passphrase", have[keyOpsPasswordHash], keyOpsPasswordHash)
 	}
 	if strings.Contains(readFile(t, secrets), pass) {
 		t.Fatal("the passphrase reached the secrets file")
@@ -486,7 +486,7 @@ func TestMintConsole(t *testing.T) {
 	if strings.Contains(rep, pass) || strings.Contains(rep, "$y$j9T$fake$hash") {
 		t.Fatalf("the report printed a value:\n%s", rep)
 	}
-	if !strings.Contains(rep, "● "+consoleRegistry) || !strings.Contains(rep, "console-password "+host+" --show") || !strings.Contains(rep, keyDeployerPasswordHash) {
+	if !strings.Contains(rep, "● "+consoleRegistry) || !strings.Contains(rep, "console-password "+host+" --show") || !strings.Contains(rep, keyOpsPasswordHash) {
 		t.Fatalf("report:\n%s", rep)
 	}
 

@@ -4,8 +4,8 @@
 # loose keys (name, operator_keys) stay above the first table.
 name = "{{ .Name }}"
 
-# The operators (docs/init.md): the devices that hold `deployer`, the
-# operator account of every fort of this estate (ops/deployer.nix). The
+# The operators (docs/init.md): the devices that hold `ops`, the
+# operator account of every fort of this estate (ops/account.nix). The
 # framework ships no key, so this list is the one place an operator key
 # enters: a fort accepts these keys and no others, and a fort you hand
 # to another team is that team's estate with that team's keys. One line

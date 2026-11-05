@@ -34,8 +34,8 @@
           (map (attr: lib.getAttrFromPath (lib.splitString "." attr) pkgs) toolAttrs);
 
       # Every module under modules/ is an output, by file name; a module in
-      # a subdirectory carries the directory as a prefix (ops/deployer.nix
-      # → ops-deployer). Modules import each other by relative path and
+      # a subdirectory carries the directory as a prefix (ops/account.nix
+      # → ops-account). Modules import each other by relative path and
       # read the estate through sfi.estate.root (modules/estate.nix), so a
       # host file imports what it is — inputs.forts.nixosModules.k3s-server
       # — and the flake needs no edit when a module is added.
@@ -165,7 +165,7 @@
       };
 
       # The same fort with the admin rung enabled (modules/ops/admin.nix,
-      # forts#115): CI evaluates it so the `deployer ALL` line, the PAM
+      # forts#115): CI evaluates it so the `ops ALL` line, the PAM
       # stack of the sudo service and the challenge's sudoers Defaults
       # compose with a hardened host, and reads the rendered files. The
       # rung rides with the verbs since #195, so the flip is the option
@@ -184,7 +184,7 @@
       };
 
       # The same fort with the rung open (#195): the challenge switched
-      # off, so `deployer ALL` is NOPASSWD and the sudo PAM stack is
+      # off, so `ops ALL` is NOPASSWD and the sudo PAM stack is
       # NixOS's own. CI evaluates it and reads the rendered sudoers, so
       # the passwordless posture stays a posture and not an accident.
       nixosConfigurations.admin-open-fort = lib.nixosSystem {

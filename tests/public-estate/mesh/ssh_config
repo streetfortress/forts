@@ -10,7 +10,7 @@
 #   Include ~/<estate>/mesh/ssh_config
 #   UserKnownHostsFile ~/.ssh/known_hosts ~/<estate>/mesh/known_hosts
 #
-# Every fort answers as deployer, the operator account the framework
+# Every fort answers as ops, the operator account the framework
 # gives each host; a peer with no manifest is a hand-managed host, on the
 # account its peers.json entry names. A role alias (dev, prod, …) exists while exactly
 # one fort claims the stem. Other accounts on a fort are the estate's:
@@ -19,5 +19,5 @@
 # cluster fort, linode
 Host public-fort
   Hostname 10.5.0.2
-  User deployer
+  User ops
   HostKeyAlias public-fort

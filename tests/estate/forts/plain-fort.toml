@@ -1,5 +1,5 @@
 # Test fixture: a plain fort — a lab VM with no [cluster] table: the
-# baseline host (hardened, the mesh, deployer + the ops verbs, the shell)
+# baseline host (hardened, the mesh, the ops account + the ops verbs, the shell)
 # and nothing else the framework names.
 mesh_ip = "10.1.0.96"
 

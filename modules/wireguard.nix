@@ -5,7 +5,7 @@
 #
 # Mesh observability (#121): a root-side timer exports per-peer WireGuard
 # state (`wg show <iface> dump`) as node_exporter textfile metrics — the
-# deployer-safe replacement for `sudo wg show`, which no longer exists on
+# An operator-safe replacement for `sudo wg show`, which no longer exists on
 # the all-prod fleet. Labels use peer names from the same peers.json the
 # config is built from, so drift alerts read as hostnames, not pubkeys.
 # The WireGuardPeerSilent / WireGuardMetricsStale rules live in the edge

@@ -8,7 +8,7 @@
 #   - a wrong answer is refused, a pinned verb never asks, a verb the host
 #     names in sfi.ops.admin.challenge.verbs does, and the rehearsal verb leaves
 #     no window behind;
-#   - deployer's kubectl unlocks itself through `sudo admin-unlock`,
+#   - the operator's kubectl unlocks itself through `sudo admin-unlock`,
 #     and the credential it mints is the ops-admin service account for the
 #     timeout and nothing longer.
 #
@@ -38,7 +38,7 @@ let
     expect {
       -re {-----BEGIN AGE ENCRYPTED FILE-----.*?-----END AGE ENCRYPTED FILE-----} {
         set block $expect_out(0,string)
-        expect -re {nonce for deployer@fort: }
+        expect -re {nonce for ops@fort: }
         incr challenges
         if {$mode eq "good"} {
           set f [open /tmp/ceremony-block.age w]
@@ -63,12 +63,12 @@ in
 
   nodes.fort = { config, pkgs, ... }: {
     # ops-commands pulls in the whole ladder: the verbs, the challenge,
-    # deployer, and (since #195) the admin rung, disabled until the host
+    # ops, and (since #195) the admin rung, disabled until the host
     # sets sfi.ops.admin.enable.
     imports = [ ../modules/ops/ops-commands.nix ];
 
     networking.hostName = "fort";
-    # The fixture estate: estate.toml names the operator key deployer.nix
+    # The fixture estate: estate.toml names the operator key account.nix
     # requires; the recipients are overridden below, so its .sops.yaml is
     # read by nothing here.
     sfi.estate.root = ./estate;
@@ -114,14 +114,14 @@ in
     import json
     import shlex
 
-    def as_deployer(cmd):
-        """Run cmd as deployer with no terminal: the shape of a script or a
+    def as_ops(cmd):
+        """Run cmd as ops with no terminal: the shape of a script or a
         pipe, where sudo cannot ask."""
-        return fort.execute("su - deployer -c " + shlex.quote(cmd + " 2>&1"))
+        return fort.execute("su - ops -c " + shlex.quote(cmd + " 2>&1"))
 
     def ceremony(mode, cmd):
-        """Run cmd as deployer on a pty, answering sudo's challenges."""
-        return as_deployer(f"expect /etc/ceremony.exp {mode} bash -c {shlex.quote(cmd)}")
+        """Run cmd as ops on a pty, answering sudo's challenges."""
+        return as_ops(f"expect /etc/ceremony.exp {mode} bash -c {shlex.quote(cmd)}")
 
     fort.wait_for_unit("multi-user.target")
 
@@ -135,13 +135,13 @@ in
         assert "pam_unix" not in "\n".join(auth), auth
 
     with subtest("a pinned verb runs with no terminal and no challenge"):
-        rc, out = as_deployer("sudo -n hello")
+        rc, out = as_ops("sudo -n hello")
         assert rc == 0 and "hello from root" in out, (rc, out)
 
     with subtest("an unpinned sudo with no terminal is refused, not asked"):
-        rc, out = as_deployer("sudo -n true")
+        rc, out = as_ops("sudo -n true")
         assert rc != 0 and "password is required" in out, (rc, out)
-        rc, out = as_deployer("sudo -n gated")
+        rc, out = as_ops("sudo -n gated")
         assert rc != 0 and "password is required" in out, (rc, out)
 
     with subtest("the admin key opens the terminal, and the window holds for the next sudo on it"):
@@ -151,7 +151,7 @@ in
         assert "the gated verb ran" in out and "\nroot" in out.replace("\r", ""), out
 
     with subtest("another terminal has no window of its own"):
-        rc, out = as_deployer("sudo -n true")
+        rc, out = as_ops("sudo -n true")
         assert rc != 0 and "password is required" in out, (rc, out)
 
     with subtest("sudo -k closes the window"):
@@ -186,21 +186,21 @@ in
     with subtest("root's kubectl is the real one, untouched"):
         fort.succeed("kubectl version --client")
 
-    with subtest("deployer's kubectl unlocks itself through the challenge and runs as ops-admin"):
+    with subtest("the operator's kubectl unlocks itself through the challenge and runs as ops-admin"):
         rc, out = ceremony("good", "kubectl auth whoami")
         assert rc == 0, (rc, out)
         assert "challenges=1 " in out, out
         assert "unlocking (sudo admin-unlock)" in out, out
-        assert "kubectl is cluster-admin for deployer" in out, out
+        assert "kubectl is cluster-admin for ops" in out, out
         assert "system:serviceaccount:ops-admin:ops-admin" in out, out
 
     with subtest("the minted credential is the operator's file, and it serves with no terminal"):
-        fort.succeed("stat -c '%U %a' /home/deployer/.kube/admin.config | grep -qx 'deployer 600'")
-        rc, out = as_deployer("kubectl get namespace ops-admin")
+        fort.succeed("stat -c '%U %a' /home/ops/.kube/admin.config | grep -qx 'ops 600'")
+        rc, out = as_ops("kubectl get namespace ops-admin")
         assert rc == 0 and "ops-admin" in out, (rc, out)
 
     with subtest("the token expires with the timeout"):
-        token = fort.succeed("sed -n 's/^ *token: *//p' /home/deployer/.kube/admin.config").strip()
+        token = fort.succeed("sed -n 's/^ *token: *//p' /home/ops/.kube/admin.config").strip()
         payload = token.split(".")[1]
         payload += "=" * (-len(payload) % 4)
         claims = json.loads(base64.urlsafe_b64decode(payload))
@@ -208,12 +208,12 @@ in
         assert life == 10 * 60, claims
 
     with subtest("an expired credential sends kubectl back to the unlock, which a terminal-less call cannot pass"):
-        fort.succeed("sed -i 's/^\\( *token: *\\).*/\\1eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjF9.x/' /home/deployer/.kube/admin.config")
-        rc, out = as_deployer("kubectl get ns")
+        fort.succeed("sed -i 's/^\\( *token: *\\).*/\\1eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjF9.x/' /home/ops/.kube/admin.config")
+        rc, out = as_ops("kubectl get ns")
         assert rc != 0 and "unlocking" in out and "password is required" in out, (rc, out)
 
     with subtest("the unlock is in the journal"):
         journal = fort.succeed("journalctl -t sfi-admin-unlock --no-pager")
-        assert "admin credential minted: user=deployer sa=ops-admin/ops-admin role=cluster-admin" in journal, journal
+        assert "admin credential minted: user=ops sa=ops-admin/ops-admin role=cluster-admin" in journal, journal
   '';
 }

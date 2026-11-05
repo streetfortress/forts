@@ -46,12 +46,12 @@ Consequences worth knowing:
 | ● | `nixos/secrets/<host>.yaml` — `k3s-token`, `wireguard-private-key`, `ssh-host-key` + `.pub`, `flux-sops-age-key`, `flux-git-deploy-key` (ssh route only) | new file written whole and encrypted once; missing keys added with `sops set` |
 | ○ | `nixos/.sops.yaml` — a `# BEGIN/END fort sops rule: <host>` block for `secrets/<host>.yaml`, recipients = the shared admin set + the host | always |
 | ○ | `mesh/peers.json` — `.peers.<host>` with `wg_vpn_ip`, `public_key`, and `wg_endpoint_ip` (the manifest's `mesh_endpoint`, else the lab `[libvirt] ip`, else `[dns]` name.zone) | always |
-| ◆ | `mesh/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `deployer`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
+| ◆ | `mesh/ssh_config` — re-rendered with the host's `Host` block: name + role alias, mesh address, `ops`, `HostKeyAlias` ([ssh-config.md](ssh-config.md)) | the render differs from the file |
 | ◆ | `mesh/known_hosts` — the host's ssh host key, keyed by name and mesh address; a line under another key is refused | the line is absent |
 | ○ | `.sops.yaml` — the fleet rule for `flux/(clusters\|apps)/<host>/` (admin + the cluster key) and a `# cluster: <host>` recipient line in the shared `flux/infrastructure` rule | always |
 | ◆ | `flux/infrastructure/**/*.sops.yaml` — `sops updatekeys`, so the shared files gain the new recipient | that line was added |
 | ◆ | `flux/apps/<host>/sops-canary.yaml` — encrypted under the new rule | always |
-| ● | `nixos/secrets/<host>.yaml` — `deployer-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
+| ● | `nixos/secrets/<host>.yaml` — `ops-password-hash`; `provisioning/console-passwords.yaml` — `<host>: <passphrase>` | when the host's `default.nix` sets `sfi.ops.console.enable = true` (every scaffolded host does, sfi/forts#24) and the file has no hash; the registry is created for the first fort, set for the next |
 | · | the deploy key `flux-<host>`, read-only, on the estate's repo at its forge — gitea or GitHub, the kind the host of estate.toml's `[source] repo` derives | on the ssh route; registered on the apply only. The anonymous route (an `https://` repo, forts#167) mints none, registers none and needs no forge token — the report says so |
 
 The marker blocks were named `ANSIBLE` until 2026-09-15, after the playbook
@@ -145,7 +145,7 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ○ nixos/.sops.yaml                     + rule secrets/sfi-x.yaml → 3 shared recipient(s) + host age1…
 ○ mesh/peers.json                 + .peers.sfi-x (10.1.0.55, endpoint sfi-x.streetfortress.cloud)
 ○ provisioning/console-passwords.yaml   + sfi-x: its console passphrase (sops set; the host holds the hash)
-◆ mesh/ssh_config                 re-rendered — Host sfi-x → deployer@10.1.0.55
+◆ mesh/ssh_config                 re-rendered — Host sfi-x → ops@10.1.0.55
 ◆ mesh/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
 ○ .sops.yaml                           + rule flux/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
 ◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (gains the sfi-x recipient)

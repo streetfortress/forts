@@ -3,8 +3,8 @@
 #
 # The ladder (forts#151) has three rungs, and every verb the core ships
 # is on one of them:
-#   OBSERVE      read-only signals. The host journal (deployer is in
-#                systemd-journal, ops/deployer.nix), the read-only
+#   OBSERVE      read-only signals. The host journal (ops is in
+#                systemd-journal, ops/account.nix), the read-only
 #                kubeconfig on a cluster fort (ops-kubeconfig.nix), and
 #                the verbs marked READ ONLY: `ops` (this index) and
 #                `nixos-revision` (what the host runs).
@@ -33,11 +33,11 @@
 # Declaring `sfi.ops.commands.<name> = { description, script }` yields:
 #   - a script `<name>` on the system PATH (writeShellApplication, so
 #     `set -euo pipefail` and shellcheck at build time);
-#   - a sudoers rule letting `deployer` run exactly
+#   - a sudoers rule letting `ops` run exactly
 #     /run/current-system/sw/bin/<name> — matched on the current-system
 #     link so it survives generation switches. The rule is NOPASSWD
 #     unless the verb is behind the challenge (below). The account is
-#     ./deployer.nix's, imported below, so the rule's subject exists on
+#     ./account.nix's, imported below, so the rule's subject exists on
 #     every host that declares a verb (#647) — there is no host where the
 #     verbs are present and unreachable;
 #   - a row in `ops`, the index verb that lists every available command
@@ -103,7 +103,7 @@ in
 {
   imports = [
     ./challenge.nix # the admin-key gate: sudo's authentication
-    ./deployer.nix # the account every rule below names (#647)
+    ./account.nix # the account every rule below names (#647)
     # The admin rung rides with the verbs, disabled (#195): enabling it is
     # `sfi.ops.admin.enable = true` in the host file, never a module import.
     ./admin.nix
@@ -147,7 +147,7 @@ in
     default = { };
     description = ''
       The ops verbs of this host. Each attribute <name> becomes a
-      `<name>` command on PATH, runnable by deployer as `sudo <name>`
+      `<name>` command on PATH, runnable by ops as `sudo <name>`
       (NOPASSWD, exact current-system path, unless the verb is behind
       the challenge), and listed by `ops`. The name must not be the
       name of a tool the host already carries.
@@ -164,12 +164,12 @@ in
       message = "sfi.ops.admin.challenge.verbs names '${name}', but this host declares no such verb: the challenge would gate nothing. Verbs on this host: ${lib.concatStringsSep ", " (lib.attrNames cfg.commands)}.";
     }) cfg.admin.challenge.verbs;
 
-    # Pin the stable current-system path per verb, deployer only. The tag
+    # Pin the stable current-system path per verb, ops only. The tag
     # is written on EVERY command: a sudoers tag carries over to the next
     # command in a list, so an untagged gated verb after a NOPASSWD one
     # would inherit NOPASSWD and meet no challenge.
     security.sudo.extraRules = [{
-      users = [ "deployer" ];
+      users = [ "ops" ];
       commands = lib.mapAttrsToList (name: c: {
         command = "/run/current-system/sw/bin/${name}";
         options = [ (if gated name c then "PASSWD" else "NOPASSWD") ];

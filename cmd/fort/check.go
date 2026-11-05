@@ -175,16 +175,16 @@ func manifestFindings(problems map[string]error) []finding {
 	return out
 }
 
-// operatorFindings (forts#81): who holds `deployer`, the operator
+// operatorFindings (forts#81): who holds `ops`, the operator
 // account of every fort. The framework ships no operator key — the key
 // list it carried MERGED with the estate's, so SFI's devices reached
 // every estate's forts — so estate.toml's operator_keys is what
-// modules/ops/deployer.nix puts in the account's authorized_keys. An
+// modules/ops/account.nix puts in the account's authorized_keys. An
 // estate that names none has a fort that does not evaluate (the
 // assertion in that module), and the gate says so here, where a reader
 // is already looking.
 //
-// A host file that sets sfi.ops.deployer.authorizedKeys REPLACES the
+// A host file that sets sfi.ops.account.authorizedKeys REPLACES the
 // estate's list for that one fort, which is how a fort of a shared
 // estate carries one team's keys alone. That is a positive declaration,
 // so the gate names it per host: a device added to the estate does not
@@ -203,7 +203,7 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 			if j := strings.Index(code, "#"); j >= 0 {
 				code = strings.TrimSpace(code[:j])
 			}
-			if !strings.Contains(code, "sfi.ops.deployer.authorizedKeys") {
+			if !strings.Contains(code, "sfi.ops.account.authorizedKeys") {
 				continue
 			}
 			overrides[name] = true
@@ -222,11 +222,11 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 	}
 	switch {
 	case len(ops) > 0:
-		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("%d operator device(s) hold `deployer` on every fort of this estate: %s", len(ops), strings.Join(devices, ", "))})
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("%d operator device(s) hold `ops` on every fort of this estate: %s", len(ops), strings.Join(devices, ", "))})
 	case len(hosts) > 0 && len(overrides) == len(hosts):
 		out = append(out, finding{"warning", estate.Path, "no operator_keys, and every host file names its own operator keys — the next fort of this estate carries no operator key, and does not evaluate until a host file or this file names one"})
 	default:
-		out = append(out, finding{"error", estate.Path, "no operator_keys: the framework ships no operator key, so `deployer` holds none and no fort of this estate evaluates (the assertion in modules/ops/deployer.nix). Add one line per operator device, the device as the key's comment: operator_keys = [ \"ssh-ed25519 AAAAC3Nza… macbook-air\" ]"})
+		out = append(out, finding{"error", estate.Path, "no operator_keys: the framework ships no operator key, so `ops` holds none and no fort of this estate evaluates (the assertion in modules/ops/account.nix). Add one line per operator device, the device as the key's comment: operator_keys = [ \"ssh-ed25519 AAAAC3Nza… macbook-air\" ]"})
 	}
 	return out
 }

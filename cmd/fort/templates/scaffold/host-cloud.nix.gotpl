@@ -13,9 +13,9 @@
 # static-LAN block.
 #
 # HARDENED (every fort, modules/hardened.nix): SSH answers on the
-# wireguard mesh address ONLY — reach it as `deployer@{{ .MeshIP }}`,
+# wireguard mesh address ONLY — reach it as `ops@{{ .MeshIP }}`,
 # not the public IP. No personal account, no home stack, no wheel: the
-# one login is `deployer` (modules/ops/deployer.nix). Public surface is the {{ .Provider }} cloud firewall
+# one login is `ops` (modules/ops/account.nix). Public surface is the {{ .Provider }} cloud firewall
 # (default-deny + 80/443 + wireguard, forts/pulumi) in front of the host's
 # own firewall. Break-glass is the console password (ops/console.nix)
 # at Lish in the Linode console.
@@ -34,11 +34,11 @@
     inputs.forts.nixosModules.wireguard    # mesh member (mesh_ip in the manifest)
     # The baseline every fort imports, which k3s-server names too: the
     # hardening (mesh-only SSH, no home stack, #86/#417) and the operator
-    # account `deployer` with the ops verbs (#647). k3s-server adds the
-    # cluster grant and the ports. The keys of `deployer` are the estate's,
+    # account `ops` with the ops verbs (#647). k3s-server adds the
+    # cluster grant and the ports. The keys of `ops` are the estate's,
     # not the framework's: estate.toml's operator_keys (sfi/forts#81).
     inputs.forts.nixosModules.hardened
-    inputs.forts.nixosModules.ops-deployer
+    inputs.forts.nixosModules.ops-account
     # Day-0 flux: fort scaffold rendered
 {{- if .Anonymous }}
     # flux/clusters/{{ .Hostname }}/ and the identity pre-seed put
@@ -52,7 +52,7 @@
     inputs.forts.nixosModules.flux-bootstrap
     inputs.forts.nixosModules.auto-rebuild # pull-based OS updates (#93)
     # The operator defaults every fort carries (sfi/forts#24): the shell at
-    # a pane, and the console door — a password for `deployer` that only a
+    # a pane, and the console door — a password for `ops` that only a
     # getty accepts, so an operator reaches `sudo nixos-rollback` after
     # the mesh breaks (#524). fort mint minted the hash into this host's
     # sops file and the passphrase into provisioning/console-passwords.yaml.
@@ -74,13 +74,13 @@
   # another sets sfi.shell.starshipSettings.hostname.style here (#582).
   sfi.shell.enable = true;
 
-  # The console door (#524): the getty reads deployer-password-hash from
+  # The console door (#524): the getty reads ops-password-hash from
   # this host's sops file, and sshd still refuses the password. Read the
   # passphrase with `fort console-password {{ .Hostname }} --show`; replace
   # it with `--rotate`.
   sfi.ops.console.enable = true;
 
-  # BREAK-GLASS, off (sfi/forts#195): flip to true to give deployer
+  # BREAK-GLASS, off (sfi/forts#195): flip to true to give ops
   # `sudo -i` — and cluster-admin kubectl on a cluster fort — behind the
   # admin-key challenge (modules/ops/admin.nix; docs/ops.md "Escalating
   # to Admin"). The challenge options live at sfi.ops.admin.challenge.*;

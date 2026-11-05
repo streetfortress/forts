@@ -29,7 +29,7 @@ func TestConsoleFindings(t *testing.T) {
 	const enabled = "{ ... }:\n{\n  imports = [ ../../modules/ops/console.nix ];\n  sfi.ops.console.enable = true;\n}\n"
 	// Key names are plaintext in a sops file; the values here stand in
 	// for ciphertext, which nothing in the check ever reads.
-	const withHash = "wireguard-private-key: ENC[x]\ndeployer-password-hash: ENC[y]\nsops: {}\n"
+	const withHash = "wireguard-private-key: ENC[x]\nops-password-hash: ENC[y]\nsops: {}\n"
 	const withoutHash = "wireguard-private-key: ENC[x]\nsops: {}\n"
 
 	one := func(t *testing.T, want string) finding {
@@ -54,7 +54,7 @@ func TestConsoleFindings(t *testing.T) {
 	// The module without the hash: sops-nix fails the activation on a
 	// declared-but-absent key, so this is an error, not a warning.
 	write(hostNix, enabled)
-	if f := one(t, "error"); !strings.Contains(f.msg, keyDeployerPasswordHash) {
+	if f := one(t, "error"); !strings.Contains(f.msg, keyOpsPasswordHash) {
 		t.Fatalf("want the key named, got %q", f.msg)
 	}
 
@@ -73,11 +73,11 @@ func TestConsoleFindings(t *testing.T) {
 	// the registry that opens nothing is the same defect as a hash on a
 	// host that no getty consults.
 	write(hostNix, "{ }\n")
-	if f := one(t, "warning"); !strings.Contains(f.msg, keyDeployerPasswordHash) || !strings.Contains(f.msg, consoleRegistry) {
+	if f := one(t, "warning"); !strings.Contains(f.msg, keyOpsPasswordHash) || !strings.Contains(f.msg, consoleRegistry) {
 		t.Fatalf("want both halves named, got %q", f.msg)
 	}
 	write(secrets, withoutHash)
-	if f := one(t, "warning"); strings.Contains(f.msg, keyDeployerPasswordHash) {
+	if f := one(t, "warning"); strings.Contains(f.msg, keyOpsPasswordHash) {
 		t.Fatalf("the hash is gone; the warning must not name it: %q", f.msg)
 	}
 }
@@ -103,7 +103,7 @@ func TestConsolePassword(t *testing.T) {
 	}
 
 	// No identity yet: mint first. A plain fort is a fort (#647): it meets
-	// the same gate and no refusal — deployer is ops/deployer.nix's on
+	// the same gate and no refusal — ops is ops/account.nix's on
 	// both shapes.
 	for _, host := range []string{"lab-fort", "plain-fort"} {
 		if _, err := planConsolePassword(tmp, host, false); err == nil || !strings.Contains(err.Error(), "fort mint") {
@@ -143,7 +143,7 @@ func TestConsolePassword(t *testing.T) {
 	if got := readFile(t, registry); got != "lab-fort: "+p.passphrase+"\n" {
 		t.Fatalf("registry holds %q — want the passphrase under the host name", got)
 	}
-	if len(tool.sets) != 1 || tool.sets[0][0] != secrets || tool.sets[0][1] != `["`+keyDeployerPasswordHash+`"]` {
+	if len(tool.sets) != 1 || tool.sets[0][0] != secrets || tool.sets[0][1] != `["`+keyOpsPasswordHash+`"]` {
 		t.Fatalf("apply: want one sops set of the hash, got %v", tool.sets)
 	}
 	if tool.sets[0][2] != "$y$j9T$fake$hash" {
@@ -166,7 +166,7 @@ func TestConsolePassword(t *testing.T) {
 
 	// Second run: both halves are there, so nothing is minted.
 	// Rotation is the deliberate act.
-	write(secrets, "wireguard-private-key: ENC[x]\n"+keyDeployerPasswordHash+": ENC[y]\nsops: {}\n")
+	write(secrets, "wireguard-private-key: ENC[x]\n"+keyOpsPasswordHash+": ENC[y]\nsops: {}\n")
 	write(registry, "lab-fort: ENC[z]\nsops: {}\n")
 	p, err = planConsolePassword(tmp, "lab-fort", false)
 	if err != nil {

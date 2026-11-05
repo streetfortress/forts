@@ -132,10 +132,10 @@ interim has served through the name.
 6. **Delete the artifact** on devbox when you like: it holds no secret,
    and the host does not need it again. With a provider this is `fort
    provision`'s release step.
-7. **Verify** from a mesh member: `ssh deployer@<mesh_ip>`, then
+7. **Verify** from a mesh member: `ssh ops@<mesh_ip>`, then
    `kubectl get gitrepository -n flux-system` through the ops-ro
    kubeconfig — or `kubectl get nodes` behind the admin-key challenge if
-   the host sets sfi.ops.admin.enable, where deployer's kubectl is
+   the host sets sfi.ops.admin.enable, where the operator's kubectl is
    cluster-admin after one unlock.
 
 Nothing is registered anywhere: no stack, no `Pulumi.<host>.yaml`, no

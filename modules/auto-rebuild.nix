@@ -1,7 +1,7 @@
 # Pull-based OS updates (#93): a root-side timer watches main and runs
 # `nixos-rebuild switch --flake` when the host's config changes — flux for
 # the k8s layer, this loop for the nix layer. No interactive root, no new
-# SSH surface; deployer stays read-only on every fort (the pinned
+# SSH surface; ops stays read-only on every fort (the pinned
 # sudo carve-out comes from the ops framework, ops/ops-commands.nix) and
 # the no-SSH end-state stays viable.
 #
@@ -44,12 +44,12 @@
 #     rollback.nix) switches to a prior generation and PINS the loop
 #     there — the gate skips while the host is on that generation, a
 #     textfile metric shows the hold, and this verb lifts it.
-#   - Escape hatch: `sudo nixos-pull` as deployer clears the
+#   - Escape hatch: `sudo nixos-pull` as ops clears the
 #     attempted-rev marker and starts nixos-upgrade.service immediately —
 #     the moral equivalent of `flux reconcile --with-source`. Declared via
 #     the ops framework (ops/ops-commands.nix), which generates the same
 #     pinned NOPASSWD sudoers rule this module used to carry directly; the
-#     host still only ever pulls vetted main, so deployer gains no write
+#     host still only ever pulls vetted main, so ops gains no write
 #     path. The verb is not named `nixos-rebuild`: that is NixOS's own
 #     tool on every host's PATH, and the system path resolves a name
 #     collision silently (forts#151).
@@ -466,7 +466,7 @@ in
     };
 
     # The HANDS-ON rung's first verb (forts#151): run the same pull loop,
-    # now, as deployer, who has no wheel. The framework generates the
+    # now, as ops, who has no wheel. The framework generates the
     # PATH wrapper, the pinned NOPASSWD sudoers rule, and the `ops`
     # index row. `--wait` makes it synchronous: the operator's prompt
     # blocks through eval+switch and the exit status reflects the unit's
@@ -494,7 +494,7 @@ in
     # does. The branch
     # is always main — this verb has no way to name another one (#76).
     # It used to take `--ref <branch>`, and that was a path from the
-    # deployer key to root: a branch is an unvetted closure that
+    # operator key to root: a branch is an unvetted closure that
     # nixos-rebuild runs as root, every member of sfi-agentic-dev can
     # push one, and the pinned sudoers rule restricts no argument. The
     # way back from a bad main is nixos-rollback

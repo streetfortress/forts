@@ -150,14 +150,14 @@ Compute providers provide a **console interface** which requires no network conn
 
 ```
 fort console-password <fort> --show
-virsh console <fort> # (deployer user & decrypted console password)
+virsh console <fort> # (ops user & decrypted console password)
 ```
 
 ---
 
 ## Escalating to Admin
 
-A fort's `deployer` user does not have root access by default. You can enable it in the fort's nix config:
+A fort's `ops` user does not have root access by default. You can enable it in the fort's nix config:
 
 ```nix
 # In <estate>/nixos/hosts/<fort>/default.nix
@@ -174,7 +174,7 @@ Once merged and applied on the fort:
 
 ### The Challenge-Response Semantics
 
-Instead of just broadly allowing root to anyone with access to the 'deployer' user, the forts flake provides a mechanism to **prove Admin AGE Key Possession** first.
+Instead of just broadly allowing root to anyone with access to the 'ops' user, the forts flake provides a mechanism to **prove Admin AGE Key Possession** first.
 
 The challenge integrates **natively** with the operating system's sudo mechanics as an PAM module.
 

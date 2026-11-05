@@ -2,9 +2,9 @@
 # hub in another estate, no monitoring hub.
 name = "fixture"
 
-# The operators (forts#81): the devices that hold `deployer` on every
+# The operators (forts#81): the devices that hold `ops` on every
 # fort of this estate. The framework ships none, so this list is what
-# modules/ops/deployer.nix puts in the account's authorized_keys, and a
+# modules/ops/account.nix puts in the account's authorized_keys, and a
 # fort of an estate that names none does not evaluate. The key below is
 # a throwaway pair, like everything else here.
 operator_keys = [

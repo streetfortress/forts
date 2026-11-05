@@ -43,8 +43,8 @@ func TestRenderScaffold(t *testing.T) {
 				t.Errorf("%s default.nix lacks the operator default %q", name, s)
 			}
 		}
-		if !strings.Contains(m["nixos/hosts/"+name+"/secrets.nix"], keyDeployerPasswordHash) {
-			t.Errorf("%s secrets.nix does not name %s", name, keyDeployerPasswordHash)
+		if !strings.Contains(m["nixos/hosts/"+name+"/secrets.nix"], keyOpsPasswordHash) {
+			t.Errorf("%s secrets.nix does not name %s", name, keyOpsPasswordHash)
 		}
 	}
 	for _, s := range []string{"runtime-linode", "modules/interactive.nix", "modules/dotfiles.nix"} {
@@ -154,7 +154,7 @@ func TestRenderScaffold(t *testing.T) {
 	// when the manifest names one, everything else as the lab VM.
 	metal := byPath(render(t, "metal-fort", hosts["metal-fort"]))
 	m := metal["nixos/hosts/metal-fort/default.nix"]
-	for _, s := range append([]string{"inputs.forts.nixosModules.runtime-baremetal", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.flux-bootstrap", "deployer@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", "docs/baremetal.md"}, operatorDefaults...) {
+	for _, s := range append([]string{"inputs.forts.nixosModules.runtime-baremetal", "metal-fort-baremetal", `matchConfig.MACAddress = "f8:ce:72:02:05:07"`, `address = [ "10.0.0.97/24" ]`, "inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.ops-account", "inputs.forts.nixosModules.flux-bootstrap", "ops@10.1.0.97", `sfi.k3s.datastore = "sqlite";`, "zramSwap", "docs/baremetal.md"}, operatorDefaults...) {
 		if !strings.Contains(m, s) {
 			t.Errorf("metal default.nix lacks %q", s)
 		}
@@ -252,7 +252,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 		return m
 	}
 	// Every plain shape, whatever its provider: the baseline and nothing
-	// else — the hardened profile, the mesh, deployer with the ops verbs
+	// else — the hardened profile, the mesh, the ops account with the ops verbs
 	// (#647), the shell, the rebuild loop; no k3s, no flux, no fleet dir.
 	plain := map[string]string{}
 	for _, name := range []string{"plain-fort", "plain-cloud-fort", "plain-metal-fort"} {
@@ -263,7 +263,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 		m := byPath(files)
 		d := m["nixos/hosts/"+name+"/default.nix"]
 		plain[name] = d
-		for _, s := range append([]string{"inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-deployer", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", `networking.hostName = "` + name + `"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
+		for _, s := range append([]string{"inputs.forts.nixosModules.hardened", "inputs.forts.nixosModules.estate", "inputs.forts.nixosModules.metrics", "inputs.forts.nixosModules.lab-dns", "inputs.forts.nixosModules.ops-account", "inputs.forts.nixosModules.wireguard", "inputs.forts.nixosModules.auto-rebuild", `networking.hostName = "` + name + `"`, "zramSwap", "PLAIN FORT"}, operatorDefaults...) {
 			if !strings.Contains(d, s) {
 				t.Errorf("%s default.nix lacks %q", name, s)
 			}
@@ -280,7 +280,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	}
 	// The lab VM: the qcow runtime and the static LAN block.
 	lab := plain["plain-fort"]
-	for _, s := range []string{"inputs.forts.nixosModules.runtime-qemu", "plain-fort-qcow", "deployer@10.1.0.96", `matchConfig.Name = "en*"`, `address = [ "10.0.0.96/24" ]`, "NoCloud cidata"} {
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-qemu", "plain-fort-qcow", "ops@10.1.0.96", `matchConfig.Name = "en*"`, `address = [ "10.0.0.96/24" ]`, "NoCloud cidata"} {
 		if !strings.Contains(lab, s) {
 			t.Errorf("plain lab default.nix lacks %q", s)
 		}
@@ -290,7 +290,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	// needs. The lab-dns import stays — on a cloud fort it pins the
 	// forge's name and forwards nothing (modules/lab-dns.nix).
 	cloud := plain["plain-cloud-fort"]
-	for _, s := range []string{"inputs.forts.nixosModules.runtime-linode", "plain-cloud-fort-linode", "deployer@10.1.0.95", "{ inputs, lib, ... }:", `services.openssh.settings.PermitRootLogin = lib.mkForce "no";`, "services.resolved.enable = true;", "Lish in the Linode console", "Linode Metadata"} {
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-linode", "plain-cloud-fort-linode", "ops@10.1.0.95", "{ inputs, lib, ... }:", `services.openssh.settings.PermitRootLogin = lib.mkForce "no";`, "services.resolved.enable = true;", "Lish in the Linode console", "Linode Metadata"} {
 		if !strings.Contains(cloud, s) {
 			t.Errorf("plain cloud default.nix lacks %q", s)
 		}
@@ -303,7 +303,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	// The machine on the LAN: the baremetal runtime, the LAN block
 	// matched by MAC, and no key in the image (#658).
 	metal := plain["plain-metal-fort"]
-	for _, s := range []string{"inputs.forts.nixosModules.runtime-baremetal", "plain-metal-fort-baremetal", "deployer@10.1.0.94", "{ inputs, ... }:", `matchConfig.MACAddress = "f8:ce:72:02:05:08"`, `address = [ "10.0.0.94/24" ]`, "docs/baremetal.md", "the image carries no key"} {
+	for _, s := range []string{"inputs.forts.nixosModules.runtime-baremetal", "plain-metal-fort-baremetal", "ops@10.1.0.94", "{ inputs, ... }:", `matchConfig.MACAddress = "f8:ce:72:02:05:08"`, `address = [ "10.0.0.94/24" ]`, "docs/baremetal.md", "the image carries no key"} {
 		if !strings.Contains(metal, s) {
 			t.Errorf("plain metal default.nix lacks %q", s)
 		}
@@ -316,9 +316,9 @@ func TestRenderScaffoldPlain(t *testing.T) {
 	// The note `fort scaffold` prints names the provider, so the two
 	// decisions are both readable in the dry run.
 	for name, want := range map[string]string{
-		"plain-fort":       "plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)",
-		"plain-cloud-fort": "plain fort shape (linode runtime, no LAN, deployer + the ops verbs; no k3s/flux)",
-		"plain-metal-fort": "plain fort shape (baremetal runtime, static LAN by MAC, deployer + the ops verbs; no k3s/flux)",
+		"plain-fort":       "plain fort shape (qcow runtime, static LAN, the ops account + the ops verbs; no k3s/flux)",
+		"plain-cloud-fort": "plain fort shape (linode runtime, no LAN, the ops account + the ops verbs; no k3s/flux)",
+		"plain-metal-fort": "plain fort shape (baremetal runtime, static LAN by MAC, the ops account + the ops verbs; no k3s/flux)",
 	} {
 		files := render(t, name, hosts[name])
 		if files[0].note != want {

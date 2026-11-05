@@ -79,13 +79,13 @@ is a plain fort.
 A manifest with no `[cluster]` table renders the host dir alone:
 
 ```
-● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, deployer + the ops verbs; no k3s/flux)
+● nixos/hosts/sfi-lab-x/default.nix   plain fort shape (qcow runtime, static LAN, the ops account + the ops verbs; no k3s/flux)
 ● nixos/hosts/sfi-lab-x/secrets.nix   sops-nix wiring (host key → age)
 ```
 
 `default.nix` imports the baseline without `k3s-server.nix` and
 `flux-bootstrap.nix`: `hardened.nix`,
-`ops/deployer.nix`, `shell.nix` and `ops/console.nix`, with the four
+`ops/account.nix`, `shell.nix` and `ops/console.nix`, with the four
 modules a role names — `estate.nix`, `wireguard.nix`, `metrics.nix`,
 `lab-dns.nix` (forts#60) — plus `auto-rebuild.nix` and the zram block.
 Nothing under `flux/`: there is no cluster to sync and no canary to
@@ -115,7 +115,7 @@ name and forwards nothing.
 Every shape imports `shell.nix` and `ops/console.nix` and sets
 `sfi.shell.enable = true` and `sfi.ops.console.enable = true`
 (sfi/forts#24). Both are the operator's, not the role's: every fort
-carries `deployer` (`ops/deployer.nix`, #647), the shell is what a
+carries `ops` (`ops/account.nix`, #647), the shell is what a
 person reads at a pane as that account, and the console password is
 the one door that survives a broken mesh — hosts answer SSH on the
 mesh alone, so a merged change that breaks wireguard locks every

@@ -1,6 +1,6 @@
 # The hardening every fort shares (#417): mesh-only admin surface and
 # the closure trims. Carries NO account: the operator account every fort
-# shares is ops/deployer.nix (#647), and what imports this adds the rest
+# shares is ops/account.nix (#647), and what imports this adds the rest
 # — k3s-server.nix the cluster grant and the public/cluster ports (#154;
 # production.nix until then), the estate's dev role the agent accounts
 # and nothing public. Split out of production.nix so the shapes are the
@@ -17,7 +17,7 @@
 #     explicitly.)
 #   - Only root talks to the nix daemon by default. A profile whose
 #     accounts build (the dev role's agent accounts) appends them;
-#     deployer never builds.
+#     ops never builds.
 { config, lib, ... }:
 
 let

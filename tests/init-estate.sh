@@ -23,7 +23,7 @@ init_and_eval() {
   cd "$tmp"
   git init -q -b main
   # --operator-key: the framework ships no operator key (forts#81), so the
-  # estate names the devices that hold `deployer`. A fort of an estate that
+  # estate names the devices that hold `ops`. A fort of an estate that
   # names none does not evaluate, which is what the eval below would show.
   "$fort" init --name test-estate "$@" \
     --admin age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m \
