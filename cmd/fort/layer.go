@@ -527,9 +527,31 @@ func nixDropLayerExport(text, attr string) (string, string) {
 
 const layersBlock = "layers = sys: {"
 
+// nixBraceDelta is the net change of brace depth over one line of code:
+// `{` opens, `}` closes, and neither counts inside a "string" or after
+// a `#` comment. A foreign multi-line input (`home-manager = {` … `};`)
+// nests one level, so its `};` is not the close of the set around it.
+func nixBraceDelta(code string) int {
+	delta, inStr := 0, false
+	for _, r := range code {
+		switch {
+		case r == '"':
+			inStr = !inStr
+		case inStr:
+		case r == '#':
+			return delta
+		case r == '{':
+			delta++
+		case r == '}':
+			delta--
+		}
+	}
+	return delta
+}
+
 // nixEnsureInBlock inserts line as the last entry of the attribute set
-// that opens with the line open (trimmed) and closes at the first `};`
-// after it, indented one level deeper than open, unless a line of the
+// that opens with the line open (trimmed) and closes at the `};` that
+// balances it, indented one level deeper than open, unless a line of the
 // set already sets attr.
 func nixEnsureInBlock(text, open, attr, line string) (string, error) {
 	lines := strings.Split(text, "\n")
@@ -544,17 +566,19 @@ func nixEnsureInBlock(text, open, attr, line string) (string, error) {
 		return "", fmt.Errorf("no `%s` block", open)
 	}
 	indent := strings.TrimSuffix(lines[start], strings.TrimLeft(lines[start], " "))
+	depth := 0
 	for i := start + 1; i < len(lines); i++ {
 		code := strings.TrimSpace(lines[i])
-		if code == "};" {
+		if depth == 0 && code == "};" {
 			out := append([]string{}, lines[:i]...)
 			out = append(out, indent+"  "+line)
 			out = append(out, lines[i:]...)
 			return strings.Join(out, "\n"), nil
 		}
-		if rest, ok := strings.CutPrefix(code, attr); ok && rest != "" && strings.ContainsRune(" =", rune(rest[0])) {
+		if rest, ok := strings.CutPrefix(code, attr); ok && depth == 0 && rest != "" && strings.ContainsRune(" =", rune(rest[0])) {
 			return text, nil
 		}
+		depth += nixBraceDelta(code)
 	}
 	return "", fmt.Errorf("`%s` is not closed by `};`", open)
 }
@@ -571,16 +595,18 @@ func nixDropFromBlock(text, open, attr string) (string, error) {
 	if start < 0 {
 		return "", fmt.Errorf("no `%s` block", open)
 	}
+	depth := 0
 	for i := start + 1; i < len(lines); i++ {
 		code := strings.TrimSpace(lines[i])
-		if code == "};" {
+		if depth == 0 && code == "};" {
 			return text, nil
 		}
-		if rest, ok := strings.CutPrefix(code, attr); ok && rest != "" && strings.ContainsRune(" =", rune(rest[0])) {
+		if rest, ok := strings.CutPrefix(code, attr); ok && depth == 0 && rest != "" && strings.ContainsRune(" =", rune(rest[0])) {
 			out := append([]string{}, lines[:i]...)
 			out = append(out, lines[i+1:]...)
 			return strings.Join(out, "\n"), nil
 		}
+		depth += nixBraceDelta(code)
 	}
 	return "", fmt.Errorf("`%s` is not closed by `};`", open)
 }

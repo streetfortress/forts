@@ -220,3 +220,33 @@ func TestExecLayerNamesBoth(t *testing.T) {
 		t.Errorf("a bad name is not a binary lookup: %v", err)
 	}
 }
+
+func TestNixEnsureInputSkipsForeignBlock(t *testing.T) {
+	flake := `{
+  inputs = {
+    forts.url = "github:sfi/forts";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+}
+`
+	got, err := nixEnsureInput(flake, "fort-layers", `fort-layers.url = "git+ssh://x/y";`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "      inputs.nixpkgs.follows = \"nixpkgs\";\n    };\n    fort-layers.url = \"git+ssh://x/y\";\n  };\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("the new input is not a sibling of the foreign block:\n%s", got)
+	}
+	// A url inside the foreign block is not the layer's input.
+	again, _ := nixEnsureInput(flake, "url", `url.url = "x";`)
+	if !strings.Contains(again, "url.url") {
+		t.Errorf("a nested url hid a top-level insert:\n%s", again)
+	}
+	dropped, err := nixDropInput(got, "fort-layers")
+	if err != nil || dropped != flake {
+		t.Errorf("drop did not restore the flake: %v\n%s", err, dropped)
+	}
+}
