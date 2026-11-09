@@ -27,8 +27,7 @@ func TestMint(t *testing.T) {
 	repo := estateRoot(t)
 	const host = "mint-fort"
 	tmp := t.TempDir()
-	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
-		"flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"}
+	files := []string{".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json"}
 	for _, rel := range files {
 		copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 	}
@@ -40,6 +39,10 @@ func TestMint(t *testing.T) {
 		os.MkdirAll(filepath.Dir(filepath.Join(tmp, rel)), 0o755)
 		os.WriteFile(filepath.Join(tmp, rel), []byte(content), 0o644)
 	}
+	// One committed file under the shared fort-managed rule, so the
+	// rekey set has a member (the core itself ships none, #270).
+	const sharedSops = "flux/infrastructure/configs/shared-test.sops.yaml"
+	write(sharedSops, "data: x\nsops:\n  version: 3\n")
 	write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.97\"\n[cluster]\n[dns]\nzone = \"example.cloud\"\nname = \""+host+"\"\n[linode]\nregion = \"us-sea\"\ntype = \"g6-standard-2\"\n")
 

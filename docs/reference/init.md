@@ -38,7 +38,7 @@ from another place is a seed: init renders a new `estate.toml` from it.
 ● mesh/peers.json                 empty; mint adds the first peer
 ● provisioning/README.md          what secrets.yaml holds
 ● provisioning/pulumi/Pulumi.yaml the project file: `runtime: go`, `binary: fort-pulumi`
-● flux/infrastructure/            the shared flux layer: controllers + configs, minus the two files below
+● flux/infrastructure/            the shared flux layer: controllers (gateway-api, traefik, cert-manager) + configs
 ● .gitea/workflows/checks.yaml    the gate: `nix run ./nixos#fort -- check --all` + a nix eval of every host; a layer's step lands after (layers.md). A github-forge estate gets `.github/workflows/checks.yaml` instead, without the closure-cache steps
 ● nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state   (.gitkeep)
 ```
@@ -48,8 +48,25 @@ from another place is a seed: init renders a new `estate.toml` from it.
 The estate's own, named in the report:
 
 - `nixos/certs/ca-root.pem` — the estate's CA root, when it runs a private CA. `estate.nix` trusts the first file on every host of the estate where the file exists; an estate with no CA provides neither.
-- `flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml` — the edge Alertmanager's webhook.
 - `provisioning/secrets.yaml` — the fleet secrets (`provisioning/README.md` lists the keys).
+
+## No observability opinion (#270)
+
+The tree init renders watches nothing, by design. The hosts run a
+node exporter on the mesh (`modules/metrics.nix`), but no Prometheus
+scrapes it, no rule fires on a flux failure, and no Alertmanager
+pages: that whole edge stack — prometheus-operator, its CRDs,
+kube-state-metrics, the edge Prometheus and Alertmanager, the
+monitors, the rules, the mesh NodePorts — is a monitoring layer's to
+add, with one verb (`fort layer add …#monitoring`, [layers](layers.md)).
+The rationale for the edge shape (a fort that pages when the mesh and
+every hub is down, forts#53) is real, and it is the layer's.
+
+An estate rendered before #270 carries the stack in
+`flux/infrastructure/` and owns it: init wrote the tree once, and
+nothing in an upgrade removes or breaks it. Such an estate installs
+the monitoring layer when it wants the layer's shape, and deletes its
+own copy in that PR.
 
 ## estate.toml
 

@@ -187,25 +187,26 @@ func clusterVars(root, fort string) (map[string]string, error) {
 // clusterVarFindings: the identity labels' VALUES (forts#50). A key the
 // shared layer references and cluster-vars lacks is envsubstFindings'
 // to report; a key that is there with the wrong value passes envsubst
-// and mislabels every series and log line the fort emits, which only
-// the hub would notice — so the gate reads the two names. ESTATE_NAME
-// is the estate's (estate.toml `name`); a cluster scaffolded before it
-// existed gains the line from `fort scaffold <fort>`.
-// CLUSTER_NAME is the fort's own.
+// and misnames the fort in whatever reads the label — a monitoring
+// layer stamps both names on every series and log line (#270), and
+// only the hub would notice the lie — so the gate reads the two names.
+// ESTATE_NAME is the estate's (estate.toml `name`); a cluster
+// scaffolded before it existed gains the line from `fort scaffold
+// <fort>`. CLUSTER_NAME is the fort's own.
 func clusterVarFindings(fort string, vars map[string]string, estateName string) []finding {
 	var out []finding
 	file := filepath.Join("flux/clusters", fort, "cluster-vars.yaml")
 	if v, ok := vars["CLUSTER_NAME"]; ok && v != fort {
-		out = append(out, finding{"error", file, fmt.Sprintf("CLUSTER_NAME is %q, not %q — the cluster label is the fort's name on every metric and log line it emits", v, fort)})
+		out = append(out, finding{"error", file, fmt.Sprintf("CLUSTER_NAME is %q, not %q — the cluster label is the fort's name, the identity a monitoring layer stamps on everything the fort emits", v, fort)})
 	}
 	if estateName == "" {
 		return out
 	}
 	switch v, ok := vars["ESTATE_NAME"]; {
 	case !ok:
-		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate label beside cluster on every metric and log line; fort scaffold %s adds ESTATE_NAME: %s", fort, estateName)})
+		out = append(out, finding{"error", file, fmt.Sprintf("no ESTATE_NAME — the estate's identity label beside cluster; fort scaffold %s adds ESTATE_NAME: %s", fort, estateName)})
 	case v != estateName:
-		out = append(out, finding{"error", file, fmt.Sprintf("ESTATE_NAME is %q, not %q — the estate label is this estate's name (estate.toml) on every metric and log line the fort emits", v, estateName)})
+		out = append(out, finding{"error", file, fmt.Sprintf("ESTATE_NAME is %q, not %q — the estate label is this estate's name (estate.toml), the identity beside cluster", v, estateName)})
 	}
 	return out
 }

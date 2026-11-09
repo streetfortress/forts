@@ -318,7 +318,6 @@ func initCmd(args []string) error {
 	fmt.Println()
 	fmt.Println("yours to provide (init cannot write them):")
 	fmt.Printf("· %-44s the estate's CA root, when it runs a private CA (estate.nix trusts it where it exists)\n", "nixos/certs/ca-root.pem")
-	fmt.Printf("· %-44s the edge Alertmanager's webhook, sops-encrypted under the shared rule\n", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml")
 	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")
 	if len(est.OperatorKeys) == 0 {
 		// The framework ships no operator key (forts#81), so an estate

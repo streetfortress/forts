@@ -32,9 +32,9 @@ spec:
   #
   # Traefik is the only chart this tree pins that ships a crds/ directory.
   # Every other chart here renders its CRDs as templates (cert-manager,
-  # flux-operator), or takes them from a
-  # CRD-only release (prometheus-operator-crds, with crds.enabled=false on
-  # the stack chart), or ships none. The Gateway API CRDs have no upstream
+  # flux-operator) or ships none; a chart that needs a CRD-only release
+  # beside it (prometheus-operator-crds, with crds.enabled=false on the
+  # stack chart) is a layer's pattern now (#270). The Gateway API CRDs have no upstream
   # chart, so ../gateway-api keeps the vendored bundle. The test is two
   # commands: `helm template <r> <chart> --version <v>` against the same
   # command with --include-crds; a larger second count means the chart needs

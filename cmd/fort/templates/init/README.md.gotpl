@@ -33,9 +33,7 @@ justfile                     the estate's own verbs: fort (the CLI from this fla
 
 1. `git add -A`, then `nix flake lock ./nixos` — pin the framework. Nix refuses a
    flake with untracked files.
-2. Provide `nixos/certs/ca-root.pem` when the estate runs a private CA, and seed
-   `flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml`
-   (the edge Alertmanager's webhook; `sops` it under the shared rule).
+2. Provide `nixos/certs/ca-root.pem` when the estate runs a private CA.
 3. Create `provisioning/secrets.yaml` (provisioning/README.md).
 4. Write `forts/<host>.toml` (sfi/forts `docs/manifest.md`), then
    `fort scaffold <host>`, `fort mint <host>`, a PR,

@@ -37,7 +37,7 @@ func TestRenderInit(t *testing.T) {
 			t.Errorf("init lacks %s", p)
 		}
 	}
-	for _, p := range []string{"flux/infrastructure/configs/step-ca-root.pem", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+	for _, p := range []string{"flux/infrastructure/configs/step-ca-root.pem"} {
 		if _, ok := m[p]; ok {
 			t.Errorf("init must not write %s — the estate's", p)
 		}
@@ -103,25 +103,28 @@ func TestRenderInit(t *testing.T) {
 		t.Errorf("fetch-kubeconfig must read mesh/ssh_config:\n%s", m["justfile"])
 	}
 	// The read-only ops identity takes a layer's rules by aggregation
-	// (#169): the aggregated role and its binding, and the
-	// prometheus-operator kinds the hub runs.
-	if ops := m["flux/infrastructure/configs/ops-readonly.yaml"]; !strings.Contains(ops, "name: ops-ro-layers-read") || !strings.Contains(ops, `sfi.ops/read: "true"`) || strings.Count(ops, "name: ops-ro-layers-read") != 3 || !strings.Contains(ops, "thanosrulers") {
-		t.Error("ops-readonly.yaml lacks the aggregated layers role, its binding, or thanosrulers")
+	// (#169): the aggregated role and its binding. The
+	// monitoring.coreos.com rule left with the edge stack (#270) — the
+	// monitoring layer ships it labelled, and the seam picks it up.
+	if ops := m["flux/infrastructure/configs/ops-readonly.yaml"]; !strings.Contains(ops, "name: ops-ro-layers-read") || !strings.Contains(ops, `sfi.ops/read: "true"`) || strings.Count(ops, "name: ops-ro-layers-read") != 3 || strings.Contains(ops, "- apiGroups: [monitoring.coreos.com]") {
+		t.Error("ops-readonly.yaml lacks the aggregated layers role or its binding, or still reads monitoring.coreos.com")
 	}
-	// The core pushes nowhere: a monitoring layer adds the remote_write,
-	// the log shipper and the variable they read (forts#143).
-	if strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "remoteWrite") || strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], "fluent-bit") {
-		t.Error("the core must carry neither remote_write nor fluent-bit")
+	// The core ships no observability opinion (#270): no edge stack, no
+	// operator, no shipper — a monitoring layer brings all of it.
+	for p := range m {
+		if strings.Contains(p, "/monitoring/") {
+			t.Errorf("init renders %s — the edge stack is the monitoring layer's", p)
+		}
+	}
+	for _, word := range []string{"prometheus", "kube-state-metrics", "fluent-bit"} {
+		if strings.Contains(m["flux/infrastructure/controllers/kustomization.yaml"], word) {
+			t.Errorf("controllers kustomization still lists %s", word)
+		}
 	}
 	for p, c := range m {
 		if strings.HasPrefix(p, "flux/infrastructure/") && strings.Contains(c, "${HUB_MESH_IP}") {
 			t.Errorf("%s references HUB_MESH_IP, a layer's variable", p)
 		}
-	}
-	// The two identity labels (forts#50): estate beside cluster on every
-	// series the edge keeps; a monitoring layer pushes them on.
-	if !strings.Contains(m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"], "  externalLabels:\n    cluster: ${CLUSTER_NAME}\n    estate: ${ESTATE_NAME}\n") {
-		t.Errorf("prometheus-edge external labels:\n%s", m["flux/infrastructure/configs/monitoring/prometheus-edge.yaml"])
 	}
 	// hubs in another estate: the forge with its name, and a role the
 	// estate names (a layer's, forts#143); the commented examples give

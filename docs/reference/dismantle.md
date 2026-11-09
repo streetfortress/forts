@@ -39,7 +39,7 @@ dismantle sfi-x   (cloud: linode)
 ✗ forts/sfi-x.toml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
 ○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the fort-managed rule(s)
-◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
+◆ layers/monitoring/webhook.sops.yaml   sops updatekeys (lost the sfi-x recipient) — one line per file the fort-managed rules cover; a bare estate has none
 ○ mesh/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
 ◆ mesh/ssh_config           re-rendered without sfi-x
 ◆ mesh/known_hosts          - the sfi-x line

@@ -148,7 +148,7 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ◆ mesh/ssh_config                 re-rendered — Host sfi-x → ops@10.1.0.55
 ◆ mesh/known_hosts                + sfi-x,10.1.0.55 (its ssh host key; first login is prompt-free)
 ○ .sops.yaml                           + rule flux/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
-◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (gains the sfi-x recipient)
+◆ layers/monitoring/webhook.sops.yaml  sops updatekeys (gains the sfi-x recipient) — one line per file the fort-managed rules cover; a bare estate has none
 ◆ flux/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
 · gitea deploy key flux-sfi-x: would register (read-only)
 

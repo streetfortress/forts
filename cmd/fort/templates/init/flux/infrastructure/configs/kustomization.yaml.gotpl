@@ -13,4 +13,3 @@ resources:
   # prune-disabled annotation the file now carries — removing it earlier
   # would race the prune against the host's first apply.
   - ops-readonly.yaml
-  - monitoring

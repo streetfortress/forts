@@ -6,8 +6,9 @@
 # whose charts ship aggregate-to-view roles — flux, flux-operator,
 # cert-manager. The ones that DON'T are granted read explicitly below
 # (verified with `kubectl auth can-i`, 2026-09-13):
-# Gateway API (vendored CRDs, no roles at all), traefik Middlewares, and
-# the prometheus-operator kinds. A layer's CRDs are the layer's rule. What it deliberately lacks: Secrets (helm
+# Gateway API (vendored CRDs, no roles at all) and traefik Middlewares.
+# A layer's CRDs are the layer's rule; the prometheus-operator kinds
+# reach the identity that way, from the monitoring layer (#270). What it deliberately lacks: Secrets (helm
 # release state is inspected via HelmRelease status / `flux` CLI, NOT a
 # secret carve-out — "the RO config cannot read any Secret" stays an
 # absolute), and cluster-scoped objects, added narrowly below (nodes,
@@ -78,9 +79,9 @@ rules:
   - apiGroups: [traefik.io]
     resources: [middlewares]
     verbs: [get, list, watch]
-  - apiGroups: [monitoring.coreos.com]
-    resources: [podmonitors, servicemonitors, probes, scrapeconfigs, prometheusrules, prometheuses, alertmanagers, alertmanagerconfigs]
-    verbs: [get, list, watch]
+  # monitoring.coreos.com left with the edge stack (#270): the
+  # monitoring layer ships the read rule as a labelled ClusterRole, and
+  # ops-ro-layers-read below aggregates it.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

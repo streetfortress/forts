@@ -26,7 +26,7 @@ func TestDismantle(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			tmp := t.TempDir()
 			for _, rel := range []string{manifest.Path(tc.host), manifest.Path("luxor"), ".sops.yaml", "nixos/.sops.yaml", "mesh/peers.json",
-				"nixos/secrets/" + tc.host + ".yaml", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+				"nixos/secrets/" + tc.host + ".yaml"} {
 				copyFile(t, filepath.Join(repo, rel), filepath.Join(tmp, rel))
 			}
 			for _, rel := range []string{"nixos/hosts/" + tc.host, "flux/clusters/" + tc.host, "flux/apps/" + tc.host, "flux/apps/luxor/rustfs-central"} {
@@ -39,6 +39,9 @@ func TestDismantle(t *testing.T) {
 			}
 			// a doc that names the host, so residue reporting has something to find
 			write("README.md", "# fleet\n\nthe fort "+tc.host+" is mentioned here\n")
+			// one committed file under the shared fort-managed rule, so
+			// the rekey set has a member (the core ships none, #270)
+			write("flux/infrastructure/configs/shared-test.sops.yaml", "data: x\nsops:\n  version: 3\n")
 			write("estate.toml", "name = \"deployments\"\n[source]\nrepo = \"ssh://git@gitea.zen.lofi:30022/sfi/deployments\"\n")
 			// the client side (#434), as the tree before the dismantle has it
 			m, _ := loadMesh(tmp)
@@ -64,7 +67,7 @@ func TestDismantle(t *testing.T) {
 					t.Errorf("%s still exists", rel)
 				}
 			}
-			for _, rel := range []string{"flux/apps/luxor/rustfs-central/release.yaml", "nixos/secrets/", "flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml"} {
+			for _, rel := range []string{"flux/apps/luxor/rustfs-central/release.yaml", "nixos/secrets/", "flux/infrastructure/configs/shared-test.sops.yaml"} {
 				if _, err := os.Stat(filepath.Join(tmp, rel)); err != nil {
 					t.Errorf("%s was removed", rel)
 				}
@@ -93,7 +96,7 @@ func TestDismantle(t *testing.T) {
 			if strings.Contains(peers, `"`+tc.host+`"`) || !strings.Contains(peers, `"luxor"`) {
 				t.Errorf("peers.json wrong:\n%s", peers[:200])
 			}
-			if len(tool.rekeyed) != 1 || !strings.HasSuffix(tool.rekeyed[0], "alertmanager-edge-config.sops.yaml") {
+			if len(tool.rekeyed) != 1 || !strings.HasSuffix(tool.rekeyed[0], "shared-test.sops.yaml") {
 				t.Errorf("updatekeys: %v", tool.rekeyed)
 			}
 			sc := readFile(t, filepath.Join(tmp, sshConfigPath))
