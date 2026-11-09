@@ -669,9 +669,9 @@ func layerFindings(root string) []finding {
 		return []finding{{"error", layersDir, err.Error()}}
 	}
 	if len(names) == 0 {
-		return []finding{{"ok", layersDir, "no layer installed (docs/layers.md)"}}
+		return []finding{{"info", "layers", "none"}}
 	}
-	out := []finding{{"ok", layersDir, "installed: " + strings.Join(names, ", ") + " — each runs its own gate (fort <layer> check --all)"}}
+	out := []finding{{"info", "layers", strings.Join(names, ", ") + "(fort <layer> check --all)"}}
 	// The one seam a layer has into the read-only ops identity (#169):
 	// the aggregated role in the estate's ops-readonly.yaml. init never
 	// rewrites that file, so an estate rendered before the seam adds the

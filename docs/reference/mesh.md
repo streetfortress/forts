@@ -17,8 +17,8 @@ cidr = "10.2.0.0/24"
 ```
 
 Every `mesh_ip` in a manifest and every address in peers.json lies in it,
-and `fort check --all` says so (`estate.toml   mesh 10.2.0.0/24 — 3
-address(es) inside it`; an address outside is an error). Two estates
+and `fort check --all` says so (the `mesh  10.2.0.0/24` line and
+`✓ 3 addresses inside the mesh`; an address outside is an error). Two estates
 link only when their meshes do not overlap, so the subnet is the first
 thing a new estate chooses: `fort estate init --mesh <cidr>`. The key is
 optional for an estate created before it existed; such an estate is checked
@@ -202,16 +202,17 @@ Every change rolls out by itself: the forts pull main and rebuild
 
 | finding | level |
 |---|---|
-| `estate.toml   mesh <cidr> — N address(es) inside it` | ok |
-| `estate.toml   zone <zone> — N name(s) from mesh/peers.json` | ok |
+| `mesh  <cidr>` with `✓ N addresses inside the mesh` | info + ok |
+| `zone  <zone>` | info |
+| in the fort's section: `mesh  <mesh_ip> → <fort>.<zone>`, and `link <name>  <address> → <fort>.<link zone> (<interface>, port <port>)` per link | info |
 | a host file that sets a `.lofi` name by hand (`networking.hosts`, `extraHosts`), or routes `~lofi` over the mesh (`wg-quick` `dns`) | warning, per line — the zone renders the names; the forge's address derives from `[hubs.forge]` |
-| `estate.toml   forge <host> at <ip> (<table>.<host> in mesh/peers.json)` | ok |
+| `✓ forge <host> pinned at <ip> (<table>.<host>) on every fort` | ok |
 | `estate.toml` names no `[hubs.forge]` | warning — no fort pins the forge's name; silent on a `github` forge and on the anonymous route, where public DNS resolves it |
 | `[hubs.forge]` names a host that neither `peers` nor `remotes` carries | error — `modules/lab-dns.nix` refuses to evaluate; the finding names the entry to add |
 | a host file that sets `sfi.lab-dns.giteaAddress` | warning, per line — the address derives, and a hand-set line does not follow the mesh |
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |
 | a `remotes` entry with no `wg_endpoint_ip` | error (the file does not parse) |
-| `forts   N link(s) — tables and host files agree, public keys match the sops secrets` (or `not verified (no age key here)`) | ok ([links.md](links.md)) |
+| `✓ N links — tables, host files and keys agree` (or `keys unverified: no age key here`) | ok ([links.md](links.md)) |
 | a `[links.<name>]` whose estate is this one, or whose interface or zone is this mesh's; a host file with no `sfi.links.<name>` for a table; a `public_key` the sops secret does not derive, or a secret that is gone | error |
 | a fort that serves an estate a role with no `[links.<estate>]` in its manifest | warning ([hub.md](hub.md)) |
 | `ssh_config` / `known_hosts` stale or missing | error ([ssh-config.md](ssh-config.md#what-fort-check---all-says)) |

@@ -241,12 +241,12 @@ func TestLinkFindings(t *testing.T) {
 		return out
 	}
 	fs := linkFindings(root, est, hosts, withKey)
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "public keys match") {
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "host files and keys agree") {
 		t.Errorf("verified: %+v", fs)
 	}
 	// no age key here: the decrypt fails, the key is not verified, nothing is red
 	fs = linkFindings(root, est, hosts, &fakeTool{})
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "not verified (no age key here)") {
+	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "keys unverified: no age key here") {
 		t.Errorf("unverified: %+v", fs)
 	}
 	// a host with no links contributes nothing

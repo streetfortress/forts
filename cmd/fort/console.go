@@ -350,7 +350,7 @@ func consoleFindings(root, fort string) []finding {
 	case enabled && !entry:
 		return []finding{{"warning", consoleRegistry, "no entry for " + fort + ", which carries " + keyOpsPasswordHash + " and enables the console login — the getty accepts a passphrase nobody can read, so the failsafe opens for nobody. Mint a new one: fort console-password " + fort + " --rotate"}}
 	case enabled:
-		return []finding{{"ok", hostNix, "console login: the module, " + keyOpsPasswordHash + ", and the passphrase in " + consoleRegistry}}
+		return []finding{{"ok", hostNix, "console login: module + hash + passphrase"}}
 	case hash || entry:
 		return []finding{{"warning", hostNix, "this host does not set sfi.ops.console.enable, but a console credential exists for it (" + strings.Join(consoleHalves(hash, entry), " + ") + ") — no getty reads it. Enable the module, or withdraw the credential with fort dismantle"}}
 	}

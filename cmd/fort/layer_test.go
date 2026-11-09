@@ -155,12 +155,12 @@ func TestLayerAddAndRemove(t *testing.T) {
 	// Without the aggregated role in ops-readonly.yaml a layer's read
 	// rule has no taker (#169): a warning that names the file.
 	fs := layerFindings(root)
-	if levelsOf(fs) != "ok,warning,warning" || !strings.Contains(fs[0].msg, "installed: backups, monitoring") || fs[1].dir != opsReadFile || !strings.Contains(fs[1].msg, opsAggregatedRole) || fs[2].dir != "layers/backups" {
+	if levelsOf(fs) != "info,warning,warning" || !strings.Contains(fs[0].msg, "backups, monitoring") || fs[1].dir != opsReadFile || !strings.Contains(fs[1].msg, opsAggregatedRole) || fs[2].dir != "layers/backups" {
 		t.Errorf("findings: %+v", fs)
 	}
 	writeTree(t, root, map[string]string{opsReadFile: "kind: ClusterRole\nmetadata:\n  name: ops-ro-layers-read\naggregationRule: {}\n"})
 	fs = layerFindings(root)
-	if levelsOf(fs) != "ok,warning" || fs[1].dir != "layers/backups" {
+	if levelsOf(fs) != "info,warning" || fs[1].dir != "layers/backups" {
 		t.Errorf("findings with the aggregated role: %+v", fs)
 	}
 
@@ -195,7 +195,7 @@ func TestLayerAddAndRemove(t *testing.T) {
 	if strings.Contains(flake, "fort-layers") || !strings.Contains(flake, "      layers = sys: {\n      };") {
 		t.Errorf("flake after the last remove:\n%s", flake)
 	}
-	if fs := layerFindings(root); levelsOf(fs) != "ok" || !strings.Contains(fs[0].msg, "no layer installed") {
+	if fs := layerFindings(root); levelsOf(fs) != "info" || !strings.Contains(fs[0].msg, "none") {
 		t.Errorf("findings after remove: %+v", fs)
 	}
 }

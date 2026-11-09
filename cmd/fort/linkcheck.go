@@ -86,11 +86,11 @@ func linkFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 	if len(out) == 0 {
 		switch {
 		case unverified == 0:
-			out = append(out, finding{"ok", manifest.Dir, fmt.Sprintf("%d link(s) — tables and host files agree, public keys match the sops secrets", links)})
+			out = append(out, finding{"ok", manifest.Dir, count(links, "link", "links") + " — tables, host files and keys agree"})
 		case unverified == links:
-			out = append(out, finding{"ok", manifest.Dir, fmt.Sprintf("%d link(s) — tables and host files agree; public keys not verified (no age key here)", links)})
+			out = append(out, finding{"ok", manifest.Dir, count(links, "link", "links") + " — tables and host files agree (keys unverified: no age key here)"})
 		default:
-			out = append(out, finding{"ok", manifest.Dir, fmt.Sprintf("%d link(s) — tables and host files agree; %d public key(s) match the sops secrets, %d not verified (no age key here)", links, links-unverified, unverified)})
+			out = append(out, finding{"ok", manifest.Dir, fmt.Sprintf("%s — tables and host files agree; %d of %d keys verified (no age key here)", count(links, "link", "links"), links-unverified, links)})
 		}
 	}
 	return out

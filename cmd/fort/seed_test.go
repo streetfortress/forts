@@ -445,7 +445,7 @@ func TestInventoryFindings(t *testing.T) {
 		"a": "error: secrets.sops.yaml: not seeded (fort seed)",
 		"b": "error: secrets.sops.yaml: missing Y — fort seed adds them|warning: secrets.sops.yaml: extra key(s) not in the inventory: Z (migration superset?)",
 		"c": "error: var pw: sops ref ../forts/db/secrets.sops.yaml does not exist (seed its dir first)|error: secrets.sops.yaml/K: ../b/secrets.sops.yaml has no key nope",
-		"d": "ok: forts.inventory.yaml: every declared key is seeded",
+		"d": "ok: d: every inventory key seeded",
 		"e": "error: forts.inventory.yaml: secrets.secrets.sops.yaml: metadata.name and namespace are required",
 		"f": "error: forts.contract.yaml carries a secrets: block — that is an inventory, not a contract; rename the file to forts.inventory.yaml (forts#88)",
 	}

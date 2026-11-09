@@ -76,7 +76,7 @@ func TestHypervisorFindings(t *testing.T) {
 		return h
 	}
 	named := parse(t, "[libvirt]\nuri = \"qemu+ssh://soundship/system\"\nip = \"10.0.0.9\"\n")
-	if f := hypervisorFindings("lab", named); len(f) != 1 || f[0].level != "ok" || !strings.Contains(f[0].msg, "pool images") {
+	if f := hypervisorFindings("lab", named); len(f) != 1 || f[0].level != "info" || !strings.Contains(f[0].msg, "pool images") {
 		t.Errorf("a named hypervisor: %+v", f)
 	}
 	bare := parse(t, "[libvirt]\nip = \"10.0.0.9\"\n")
@@ -85,7 +85,7 @@ func TestHypervisorFindings(t *testing.T) {
 	}
 	keyed := parse(t, "[libvirt]\nuri = \"qemu+ssh://s/system?sshauth=privkey&keyfile=/Users/me/.ssh/id_ed25519\"\nip = \"10.0.0.9\"\n")
 	f := hypervisorFindings("lab", keyed)
-	if len(f) != 2 || f[0].level != "ok" || f[1].level != "warning" || !strings.Contains(f[1].msg, "keyfile") {
+	if len(f) != 2 || f[0].level != "info" || f[1].level != "warning" || !strings.Contains(f[1].msg, "keyfile") {
 		t.Errorf("a key path in the manifest: %+v", f)
 	}
 	// Every other provider has no hypervisor to name.

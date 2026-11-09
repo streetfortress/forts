@@ -44,7 +44,7 @@ Per fort (every run):
   that carries a `secrets:` block is an inventory under the old name,
   and the finding says to rename it
 
-`--all` adds the fleet section, the estate-wide facts no single fort
+`--all` adds the estate section, the estate-wide facts no single fort
 owns:
 
 - every manifest in `forts/` parses — a host with a bad manifest is
@@ -79,7 +79,8 @@ owns:
 With `--eval`, after the static checks, each checked fort's whole
 module system evaluates through to its toplevel derivation
 (`nix eval --raw ./nixos#nixosConfigurations.<host>…drvPath`), and the
-derivation path prints as the proof. This is the expensive half: it
+derivation's name prints as the proof (the store hash is trimmed — it
+says nothing a reader verifies by eye). This is the expensive half: it
 needs `nix` on the host ([the tool set](tools.md)) and the framework
 closure, which a cold store fetches first. The static checks stay
 sub-second without it, which is why the flag is opt-in rather than part
@@ -91,11 +92,23 @@ fort the mesh does not know.
 
 ## Reading the output
 
-One `== ⛫ <section>` block per fort, plus `forts/` (under `--all`) and
-`fleet`. Within a block, `✓` is a passing fact worth stating, `!` a
-warning, `✗` an error. Errors fail the run — the exit is non-zero and
-the last line counts them — while warnings never do. On a clean run the
-last line is `all checks passed`.
+One `== ⛫ <section>` block per fort, plus `estate` and (under `--all`,
+when a manifest is broken) `forts`. A section with nothing to say
+prints nothing, not even its header. Within a block, two kinds of line:
+
+- an unmarked `label  value` line is a fact — a config touchpoint the
+  gate read on its way through (the repo and its route, the mesh
+  subnet and zone, the operator devices; per fort, its hypervisor, its
+  mesh address with the name the zone renders for it, and each link).
+  A fact cannot fail; it is there so a reviewer reads the estate off
+  the gate — a typo'd address catches an eye in CI before a provision
+  trips over it.
+- `✓` marks a check that could have failed and did not; `!` a warning,
+  `✗` an error, each with the path to look at and what to do.
+
+Errors fail the run — the exit is non-zero and the last line counts
+them — while warnings never do. On a clean run the last line is
+`all checks passed`.
 
 Two red states are the gate working, not breakage:
 

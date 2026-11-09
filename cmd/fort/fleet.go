@@ -76,7 +76,7 @@ func checkFleetShared(root string, hosts map[string]bool, orphans bool) fleetSha
 		if ff := dataSizeFindings(layer, built); len(ff) > 0 {
 			s.findings = append(s.findings, ff...)
 		} else {
-			s.findings = append(s.findings, finding{"ok", layer, "kustomize build + data sizes"})
+			s.findings = append(s.findings, finding{"ok", layer, layer + " builds"})
 		}
 	}
 	if orphans {
@@ -120,7 +120,7 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 			}
 		}
 		if len(out) == 0 {
-			out = append(out, finding{"ok", filepath.Join("nixos/hosts", fort), "plain fort: host dir present, no fleet surface expected"})
+			out = append(out, finding{"ok", filepath.Join("nixos/hosts", fort), "plain fort: host dir present, no flux tree"})
 		}
 		return out
 	}
@@ -153,7 +153,7 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 		if len(ff) > 0 {
 			out = append(out, ff...)
 		} else {
-			out = append(out, finding{"ok", layer, fmt.Sprintf("kustomize build + namespaces + data sizes + strict envsubst (%d cluster vars)", len(vars))})
+			out = append(out, finding{"ok", layer, fmt.Sprintf("%s builds (%s)", layer, count(len(vars), "cluster var", "cluster vars"))})
 		}
 	}
 	for _, layer := range infraLayers {

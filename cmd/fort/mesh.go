@@ -479,12 +479,12 @@ func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifes
 	if err != nil {
 		return nil
 	}
-	var out []finding
+	out := []finding{{"info", "mesh", est.Mesh.CIDR}}
 	n := 0
 	check := func(table, name, ip string) {
 		n++
 		if !est.Contains(ip) {
-			out = append(out, finding{"error", peersPath, fmt.Sprintf("%s.%s is %s, outside the estate's mesh %s (estate.toml)", table, name, ip, est.Mesh)})
+			out = append(out, finding{"error", peersPath, fmt.Sprintf("%s.%s is %s, outside the estate's mesh %s (estate.toml)", table, name, ip, est.Mesh.CIDR)})
 		}
 	}
 	for _, name := range sortedNames(m.Peers) {
@@ -498,11 +498,11 @@ func meshSubnetFindings(root string, est estate.Estate, hosts map[string]manifes
 	}
 	for _, h := range sortedNames(hosts) {
 		if !est.Contains(hosts[h].MeshIP) {
-			out = append(out, finding{"error", manifest.Path(h), fmt.Sprintf("mesh_ip %s is outside the estate's mesh %s (estate.toml)", hosts[h].MeshIP, est.Mesh)})
+			out = append(out, finding{"error", manifest.Path(h), fmt.Sprintf("mesh_ip %s is outside the estate's mesh %s (estate.toml)", hosts[h].MeshIP, est.Mesh.CIDR)})
 		}
 	}
-	if len(out) == 0 {
-		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("mesh %s — %d address(es) inside it", est.Mesh, n)})
+	if len(out) == 1 {
+		out = append(out, finding{"ok", estate.Path, count(n, "address", "addresses") + " inside the mesh"})
 	}
 	return out
 }
@@ -521,9 +521,8 @@ func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 	if err != nil {
 		return nil // meshFindings reports it
 	}
-	m, err := parseMesh(peersText)
-	if err != nil {
-		return nil
+	if _, err := parseMesh(peersText); err != nil {
+		return nil // meshFindings reports it
 	}
 	var out []finding
 	for _, h := range sortedNames(hosts) {
@@ -556,8 +555,25 @@ func zoneFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 			}
 		}
 	}
-	if len(out) == 0 {
-		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("zone %s — %d name(s) from %s", est.ZoneName(), len(m.Peers)+len(m.Remotes), peersPath)})
+	zone := finding{"info", "zone", est.ZoneName()}
+	return append([]finding{zone}, out...)
+}
+
+// fortMeshInfo is one fort's mesh touchpoints, stated in that fort's
+// own section (forts#267): its address and the name the zone renders
+// for it, and each link — this host's identity on another estate's
+// mesh. Facts, not checks: the subnet gate, the link gate and nix eval
+// judge them. The lines exist so a reviewer reads the addresses where
+// CI shows them — a typo'd IP is caught by an eye here before a
+// provision trips over it.
+func fortMeshInfo(fort string, entry manifest.Host, est estate.Estate) []finding {
+	var out []finding
+	if entry.MeshIP != "" {
+		out = append(out, finding{"info", "mesh", fmt.Sprintf("%s → %s.%s", entry.MeshIP, fort, est.ZoneName())})
+	}
+	for _, name := range entry.LinkNames() {
+		l := entry.Links[name]
+		out = append(out, finding{"info", "link " + name, fmt.Sprintf("%s → %s.%s (%s, port %d)", l.Address, fort, l.ZoneName(), l.InterfaceName(), l.Port)})
 	}
 	return out
 }
@@ -625,7 +641,7 @@ func forgeFindings(root string, est estate.Estate, hosts map[string]manifest.Hos
 		}
 		out = append(out, finding{"error", peersPath, "[hubs.forge] names " + host + ", and no entry carries its address on this mesh; add " + want})
 	default:
-		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("forge %s at %s (%s.%s in %s) — pinned to the forge's name on every fort", host, ip, table, host, peersPath)})
+		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("forge %s pinned at %s (%s.%s) on every fort", host, ip, table, host)})
 	}
 	if declared && h.Local(est) {
 		if _, ok := hosts[host]; !ok {
@@ -686,7 +702,7 @@ func meshFindings(root string, hosts map[string]manifest.Host) []finding {
 	case have != want:
 		out = append(out, finding{"error", sshConfigPath, "stale — differs from what peers.json + the manifests render; `fort ssh-config`"})
 	default:
-		out = append(out, finding{"ok", sshConfigPath, fmt.Sprintf("%d peer(s) rendered", len(m.Peers))})
+		out = append(out, finding{"ok", sshConfigPath, fmt.Sprintf("%s matches the tree (%s)", sshConfigPath, count(len(m.Peers), "peer", "peers"))})
 	}
 	khText, err := readOrEmpty(root, knownHostsPath)
 	if err != nil {
@@ -714,7 +730,7 @@ func meshFindings(root string, hosts map[string]manifest.Host) []finding {
 		}
 	}
 	if khText != "" && missing == 0 {
-		out = append(out, finding{"ok", knownHostsPath, fmt.Sprintf("%d fort key(s)", len(entries))})
+		out = append(out, finding{"ok", knownHostsPath, fmt.Sprintf("%s: %s", knownHostsPath, count(len(entries), "fort key", "fort keys"))})
 	}
 	return out
 }

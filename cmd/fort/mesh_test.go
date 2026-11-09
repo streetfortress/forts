@@ -229,7 +229,7 @@ func TestMeshSubnetFindings(t *testing.T) {
 		t.Errorf("no mesh declared: want nothing, got %v", out)
 	}
 	out := meshSubnetFindings(root, estate.Estate{Mesh: estate.Mesh{CIDR: "10.1.0.0/24"}}, hosts)
-	if len(out) != 1 || out[0].level != "ok" || !strings.Contains(out[0].msg, "8 address(es)") {
+	if len(out) != 2 || out[0].level != "info" || out[0].dir != "mesh" || out[0].msg != "10.1.0.0/24" || out[1].level != "ok" || !strings.Contains(out[1].msg, "8 addresses inside the mesh") {
 		t.Errorf("inside: %+v", out)
 	}
 	out = meshSubnetFindings(root, estate.Estate{Mesh: estate.Mesh{CIDR: "10.2.0.0/24"}}, hosts)
@@ -245,16 +245,16 @@ func TestMeshSubnetFindings(t *testing.T) {
 	}
 }
 
-// The zone (forts#45): one ok line naming it and counting the names
-// peers.json gives it; a host file that pins a .lofi name by hand, or
-// routes .lofi over the mesh, is a warning per line — and the forge URL
-// in auto-rebuild's repoUrl is not one.
+// The zone (forts#45): one info line naming it; a host file that pins
+// a .lofi name by hand, or routes .lofi over the mesh, is a warning
+// per line — and the forge URL in auto-rebuild's repoUrl is not one.
+// The names the zone renders are per-fort facts (fortMeshInfo).
 func TestZoneFindings(t *testing.T) {
 	root := testTree(t)
 	hosts := testHosts(t)
 	est := estate.Estate{Name: "deployments"}
 	fs := zoneFindings(root, est, hosts)
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "zone deployments.mesh — 7 name(s)") {
+	if len(fs) != 1 || fs[0].level != "info" || fs[0].dir != "zone" || fs[0].msg != "deployments.mesh" {
 		t.Errorf("clean tree: %+v", fs)
 	}
 	write := func(rel, content string) {
@@ -267,6 +267,9 @@ func TestZoneFindings(t *testing.T) {
 	fs = zoneFindings(root, est, hosts)
 	var lines []string
 	for _, f := range fs {
+		if f.level == "info" {
+			continue // the zone line states the facts beside the warnings
+		}
 		if f.level != "warning" {
 			t.Errorf("want warnings only, got %+v", f)
 		}
@@ -274,6 +277,28 @@ func TestZoneFindings(t *testing.T) {
 	}
 	if want := []string{"nixos/hosts/luxor/default.nix:line 5 ", "nixos/hosts/luxor/default.nix:line 7 ", "nixos/hosts/luxor/default.nix:line 8 ", "nixos/hosts/sfi-prod-1111111/default.nix:line 3 "}; strings.Join(lines, ",") != strings.Join(want, ",") {
 		t.Errorf("hand lines: got %v, want %v\n%+v", lines, want, fs)
+	}
+}
+
+// The fort's own touchpoints (forts#267): the mesh address and the
+// name the zone renders, in the fort's own section, one line per link
+// — this host's identity on another estate's mesh.
+func TestFortMeshInfo(t *testing.T) {
+	est := estate.Estate{Name: "demo", Mesh: estate.Mesh{Zone: "demo.mesh"}}
+	h, err := manifest.Parse("outpost", []byte("mesh_ip = \"10.10.0.10\"\n\n[libvirt]\nip = \"10.0.0.10\"\n\n[links.staging]\nestate = \"ssh://git@forge.example:30022/sfi/staging\"\naddress = \"10.2.0.252\"\nport = 51821\nzone = \"staging.mesh\"\npublic_key = \"GBt0fJZQQnM2JBVmSXs2mPPzf4vXBcW9fcRJfTUzLFU=\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := fortMeshInfo("outpost", h, est)
+	if len(fs) != 2 || fs[0].level != "info" || fs[0].dir != "mesh" || fs[0].msg != "10.10.0.10 → outpost.demo.mesh" {
+		t.Errorf("mesh line: %+v", fs)
+	}
+	if fs[1].level != "info" || fs[1].dir != "link staging" || fs[1].msg != "10.2.0.252 → outpost.staging.mesh (wg-staging, port 51821)" {
+		t.Errorf("link line: %+v", fs)
+	}
+	// No mesh_ip (a manifest the gate elsewhere refuses): no line here.
+	if fs := fortMeshInfo("bare", manifest.Host{}, est); len(fs) != 0 {
+		t.Errorf("no mesh_ip: %+v", fs)
 	}
 }
 
@@ -317,11 +342,11 @@ func TestForgeFindings(t *testing.T) {
 		t.Errorf("anonymous route: %+v", fs)
 	}
 	// A forge in another estate: its remotes entry is its address here.
-	if f := only(forgeFindings(root, est("forge", otherRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge forge at 10.1.0.4 (remotes.forge") {
+	if f := only(forgeFindings(root, est("forge", otherRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge forge pinned at 10.1.0.4 (remotes.forge)") {
 		t.Errorf("linked forge: %+v", f)
 	}
 	// A forge that is a fort of this estate: its peers entry.
-	if f := only(forgeFindings(root, est("luxor", ownRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge luxor at 10.1.0.5 (peers.luxor") {
+	if f := only(forgeFindings(root, est("luxor", ownRepo), hosts)); f.level != "ok" || !strings.Contains(f.msg, "forge luxor pinned at 10.1.0.5 (peers.luxor)") {
 		t.Errorf("in-estate forge: %+v", f)
 	}
 	// Named and in neither table: the error names the entry to add, and

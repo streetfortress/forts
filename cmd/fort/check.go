@@ -87,17 +87,20 @@ func check(args []string) error {
 	}
 	shared.estate = est.Name
 	if *all {
+		// The source facts lead, then who operates, then the mesh — the
+		// info lines print in this order, and that is the order an
+		// operator reads the estate in.
+		shared.findings = append(shared.findings, sourceFindings(est)...)
+		shared.findings = append(shared.findings, knownHostsFindings(est)...)
+		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, meshFindings(root, parsed)...)
 		shared.findings = append(shared.findings, meshSubnetFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, zoneFindings(root, est, parsed)...)
 		shared.findings = append(shared.findings, forgeFindings(root, est, parsed)...)
-		shared.findings = append(shared.findings, operatorFindings(root, est, parsed)...)
-		shared.findings = append(shared.findings, knownHostsFindings(est)...)
-		shared.findings = append(shared.findings, sourceFindings(est)...)
 		shared.findings = append(shared.findings, linkFindings(root, est, parsed, sopsCLI{root: root})...)
 		shared.findings = append(shared.findings, layerFindings(root)...)
 	}
-	errors += reportFindings(os.Stdout, "fleet", shared.findings, o.annotate)
+	errors += reportFindings(os.Stdout, "estate", shared.findings, o.annotate)
 	for _, fort := range forts {
 		entry, ok := parsed[fort]
 		if !ok {
@@ -105,7 +108,9 @@ func check(args []string) error {
 				return err
 			}
 		}
-		findings := checkFleetFort(root, fort, entry, shared)
+		// The fort's mesh touchpoints lead its section: the facts a
+		// reviewer reads off CI (mesh.go, fortMeshInfo).
+		findings := append(fortMeshInfo(fort, entry, est), checkFleetFort(root, fort, entry, shared)...)
 		// The console failsafe (#524): its two halves live in different
 		// files, and either one alone fails quietly (console.go).
 		findings = append(findings, consoleFindings(root, fort)...)
@@ -130,35 +135,48 @@ func check(args []string) error {
 	return nil
 }
 
-// nixEval execs the one eval; a variable so the test needs no nix store
-// behind it.
-var nixEval = func(root, host string) error {
+// nixEval execs the one eval and returns the derivation path; a
+// variable so the test needs no nix store behind it.
+var nixEval = func(root, host string) (string, error) {
 	cmd, err := tools.Command("nix", "eval", "--raw", "./nixos#nixosConfigurations."+host+".config.system.build.toplevel.drvPath")
 	if err != nil {
-		return err
+		return "", err
 	}
 	cmd.Dir = root
-	cmd.Stdout = os.Stdout
+	var out strings.Builder
+	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err = cmd.Run()
+	return out.String(), err
 }
 
 // evalHost is the nix half of the gate (--eval): the host's whole
 // module system evaluates, through to the toplevel derivation, whose
-// path prints as the proof. A staged-but-unprovisioned host fails here
-// by design — its mesh peer does not exist until mint — the same
-// deliberate red the workflow comment documents.
+// name prints as the proof (the store hash says nothing a reader
+// verifies by eye, so it is trimmed). A staged-but-unprovisioned host
+// fails here by design — its mesh peer does not exist until mint — the
+// same deliberate red the workflow comment documents.
 func evalHost(root, fort string, annotate bool) int {
 	fmt.Printf("== nix eval ⛫ %s\n", fort)
-	if err := nixEval(root, fort); err != nil {
+	drv, err := nixEval(root, fort)
+	if err != nil {
 		fmt.Printf("  ✗ nixos/hosts/%s: %v\n", fort, err)
 		if annotate {
 			fmt.Printf("::error::nix eval failed for %s\n", fort)
 		}
 		return 1
 	}
-	fmt.Println()
+	fmt.Printf("  ✓ %s\n", drvName(drv))
 	return 0
+}
+
+// drvName strips /nix/store/<hash>- from a derivation path.
+func drvName(path string) string {
+	base := filepath.Base(strings.TrimSpace(path))
+	if i := strings.IndexByte(base, '-'); i == 32 {
+		return base[i+1:]
+	}
+	return base
 }
 
 // manifestFindings: every manifest parses and validates — exactly one
@@ -222,7 +240,7 @@ func operatorFindings(root string, est estate.Estate, hosts map[string]manifest.
 	}
 	switch {
 	case len(ops) > 0:
-		out = append(out, finding{"ok", estate.Path, fmt.Sprintf("%d operator device(s) hold `ops` on every fort of this estate: %s", len(ops), strings.Join(devices, ", "))})
+		out = append(out, finding{"info", "ops", strings.Join(devices, ", ")})
 	case len(hosts) > 0 && len(overrides) == len(hosts):
 		out = append(out, finding{"warning", estate.Path, "no operator_keys, and every host file names its own operator keys — the next fort of this estate carries no operator key, and does not evaluate until a host file or this file names one"})
 	default:
@@ -257,7 +275,7 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 	if spec.URI == "" {
 		return []finding{{"warning", path, "[libvirt] names no uri: nothing here says which hypervisor holds this fort, and every apply verb needs LIBVIRT_DEFAULT_URI in the environment. Add uri = \"qemu+ssh://<hypervisor>/system\""}}
 	}
-	out := []finding{{"ok", path, fmt.Sprintf("[libvirt] uri %s, pool %s", spec.URI, spec.PoolName())}}
+	out := []finding{{"info", "libvirt", fmt.Sprintf("%s · pool %s", spec.URI, spec.PoolName())}}
 	if u, err := url.Parse(spec.URI); err == nil && u.Query().Get("keyfile") != "" {
 		out = append(out, finding{"warning", path, "[libvirt] uri carries keyfile=: that path belongs to one operator machine, and a second machine with another home directory has no such file. Name the identity in ~/.ssh/config, or export the whole URI as LIBVIRT_DEFAULT_URI there"})
 	}
@@ -269,14 +287,16 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 // An estate on the ssh route that names none has no fort that evaluates
 // (the throw in modules/estate.nix), and the gate says so where a reader
 // is looking. The anonymous route (forts#167) pins nothing: an https
-// clone trusts the forge's certificate through the system roots, so a
-// key there is unread, and the gate says that instead.
+// clone trusts the forge's certificate through the system roots (and
+// the estate's CA under nixos/certs, where it carries one), so a key
+// there is unread — sourceFindings' route line covers the route, and
+// the one finding left here is a key named anyway.
 func knownHostsFindings(est estate.Estate) []finding {
 	if est.Anonymous() {
 		if est.Source.KnownHosts != "" {
 			return []finding{{"warning", estate.Path, "known_hosts is set, and the anonymous route reads no host key: flux and the rebuild loop clone " + est.Source.Repo + " over https, with TLS from the system roots. Drop the key, or name an ssh:// repo for the ssh route"}}
 		}
-		return []finding{{"ok", estate.Path, "anonymous route: no host key to pin, TLS from the system roots (and the estate's CA under nixos/certs, where it carries one)"}}
+		return nil
 	}
 	if est.Source.KnownHosts == "" {
 		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
@@ -290,32 +310,25 @@ func knownHostsFindings(est estate.Estate) []finding {
 // repo — and so which API fort mint and fort destroy speak and which
 // token they read, or that they speak none. An estate with no
 // [hubs.forge] on a forge the core knows only as a hosted one (github)
-// is tier one: the gate says where the deploy key goes, so an operator
-// reads the token's name before the first mint asks for it. On the
-// anonymous route the line says what the estate does without: no deploy
-// key, no token, no host key.
+// is tier one: the gate names the token before the first mint asks for
+// it. On the anonymous route the line says what the estate does
+// without: no deploy key, no token, no host key. Two facts, not checks
+// — the one failure here is a repo the estate cannot parse a forge from.
 func sourceFindings(est estate.Estate) []finding {
 	host, _, _, err := est.Forge()
 	if err != nil {
 		return []finding{{"error", estate.Path, err.Error()}}
 	}
 	kind := est.ForgeKind()
-	how := "derived from the host of repo"
-	if est.Source.Forge != "" {
-		how = "[source] forge"
-	}
-	route := "derived from the scheme of repo"
-	if est.Source.Auth != "" {
-		route = "[source] auth"
-	}
+	repo := finding{"info", "repo", est.RepoGit()}
 	if est.Anonymous() {
-		return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s), route none (%s): flux and the rebuild loop clone %s anonymously over https — a public repo; fort mint registers no deploy key, fort destroy revokes none, and no %s is read", kind, how, route, est.RepoGit(), forgeTokenKey(kind))}}
+		return []finding{repo, {"info", "forge", fmt.Sprintf("%s — anonymous https: no deploy key, no %s", kind, forgeTokenKey(kind))}}
 	}
 	api := "https://" + host + "/api/v1"
 	if kind == estate.ForgeGitHub {
 		api = "https://api.github.com"
 	}
-	return []finding{{"ok", estate.Path, fmt.Sprintf("forge %s (%s), route ssh (%s): fort mint registers the deploy key through %s with %s in provisioning/secrets.yaml, and fort destroy revokes it", kind, how, route, api, forgeTokenKey(kind))}}
+	return []finding{repo, {"info", "forge", fmt.Sprintf("%s — ssh: mint registers the deploy key via %s (%s)", kind, api, forgeTokenKey(kind))}}
 }
 
 type checkOpts struct {
@@ -324,20 +337,49 @@ type checkOpts struct {
 }
 
 type finding struct {
-	level string // "error" | "warning" | "ok"
-	dir   string
+	level string // "error" | "warning" | "ok" | "info"
+	dir   string // the path judged; for "info", the fact's short label
 	msg   string
 }
 
-// reportFindings prints one fort's findings and returns its error count.
-// With annotate, errors and warnings also go out as workflow commands.
-func reportFindings(w io.Writer, fort string, findings []finding, annotate bool) int {
-	fmt.Fprintf(w, "== ⛫ %s\n", fort)
+// count says "1 peer" or "2 peers" — the gate's lines read as prose,
+// and "%d peer(s)" reads as placeholder text.
+func count(n int, singular, plural string) string {
+	if n == 1 {
+		return "1 " + singular
+	}
+	return fmt.Sprintf("%d %s", n, plural)
+}
+
+// reportFindings prints one section's findings and returns its error
+// count. A section with nothing to say prints nothing, not even the
+// header. Info lines are the section's facts — the config touchpoints
+// an operator reads off the gate: addresses, routes, devices — and
+// print first, unmarked; ✓ marks a check that could have failed and
+// did not, so an ok message is self-contained (no path column). With
+// annotate, errors and warnings also go out as workflow commands.
+func reportFindings(w io.Writer, section string, findings []finding, annotate bool) int {
+	if len(findings) == 0 {
+		return 0
+	}
+	fmt.Fprintf(w, "== ⛫ %s\n", section)
+	width := 0
+	for _, f := range findings {
+		if f.level == "info" && len(f.dir) > width {
+			width = len(f.dir)
+		}
+	}
+	for _, f := range findings {
+		if f.level == "info" {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, f.dir, f.msg)
+		}
+	}
 	errors := 0
 	for _, f := range findings {
 		switch f.level {
+		case "info":
 		case "ok":
-			fmt.Fprintf(w, "  ✓ %-40s %s\n", strings.TrimPrefix(f.dir, "flux/apps/"+fort+"/"), f.msg)
+			fmt.Fprintf(w, "  ✓ %s\n", f.msg)
 		case "warning":
 			fmt.Fprintf(w, "  ! %s: %s\n", f.dir, f.msg)
 			if annotate {
@@ -399,7 +441,7 @@ func inventoryFindings(root, fort string) []finding {
 		out = append(out, checkSecrets(root, dir, inv)...)
 		out = append(out, checkVars(root, dir, inv)...)
 		if len(out) == before {
-			out = append(out, finding{"ok", dir, inventory.FileName + ": every declared key is seeded"})
+			out = append(out, finding{"ok", dir, strings.TrimPrefix(dir, apps+"/") + ": every inventory key seeded"})
 		}
 	}
 	return out

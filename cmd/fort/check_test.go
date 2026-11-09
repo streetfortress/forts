@@ -56,15 +56,15 @@ func TestOperatorFindings(t *testing.T) {
 	if len(fs) != 1 || fs[0].level != "error" || fs[0].dir != estate.Path || !strings.Contains(fs[0].msg, "no operator_keys") {
 		t.Errorf("no operator keys: %+v", fs)
 	}
-	// One device: an ok that names it.
+	// One device: an info line that names it.
 	fs = operatorFindings(root, est(laptop), hosts)
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "1 operator device(s) hold `ops` on every fort of this estate: macbook-air") {
+	if len(fs) != 1 || fs[0].level != "info" || fs[0].dir != "ops" || fs[0].msg != "macbook-air" {
 		t.Errorf("one device: %+v", fs)
 	}
-	// A key with no comment: a warning beside the ok, because vetting
-	// (#415) trims the list by device.
+	// A key with no comment: a warning beside the info line, because
+	// vetting (#415) trims the list by device.
 	fs = operatorFindings(root, est(laptop, bare), hosts)
-	if len(fs) != 2 || fs[0].level != "warning" || !strings.Contains(fs[0].msg, "operator_keys #2 carries no comment") || fs[1].level != "ok" || !strings.Contains(fs[1].msg, "macbook-air, #2 (no device named)") {
+	if len(fs) != 2 || fs[0].level != "warning" || !strings.Contains(fs[0].msg, "operator_keys #2 carries no comment") || fs[1].level != "info" || !strings.Contains(fs[1].msg, "macbook-air, #2 (no device named)") {
 		t.Errorf("a key with no device: %+v", fs)
 	}
 	// A host file that sets the option: one warning per line, named by
@@ -74,7 +74,7 @@ func TestOperatorFindings(t *testing.T) {
 	os.WriteFile(filepath.Join(root, hostNix),
 		[]byte("{\n  # sfi.ops.account.authorizedKeys is the estate's\n  sfi.ops.account.authorizedKeys = [ \"ssh-ed25519 AAAA other\" ];\n}\n"), 0o644)
 	fs = operatorFindings(root, est(laptop), hosts)
-	if len(fs) != 2 || fs[0].level != "warning" || fs[0].dir != hostNix || !strings.Contains(fs[0].msg, "line 3 sets the operator keys of this fort alone") || fs[1].level != "ok" {
+	if len(fs) != 2 || fs[0].level != "warning" || fs[0].dir != hostNix || !strings.Contains(fs[0].msg, "line 3 sets the operator keys of this fort alone") || fs[1].level != "info" {
 		t.Errorf("a host that overrides: %+v", fs)
 	}
 	// Every host of the estate overrides and the estate names none: a
@@ -87,14 +87,15 @@ func TestOperatorFindings(t *testing.T) {
 }
 
 // The forge kind (forts#1): derived from the host of repo, or declared;
-// the finding names the API and the token the two verbs use.
+// two info lines — the repo and the forge — and the forge line names
+// the API and the token the two verbs use.
 func TestSourceFindings(t *testing.T) {
 	fs := sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate"}})
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge github (derived from the host of repo)") || !strings.Contains(fs[0].msg, "https://api.github.com") || !strings.Contains(fs[0].msg, "github-token") {
+	if len(fs) != 2 || fs[0].level != "info" || fs[0].dir != "repo" || fs[1].level != "info" || fs[1].dir != "forge" || !strings.Contains(fs[1].msg, "github — ssh") || !strings.Contains(fs[1].msg, "https://api.github.com") || !strings.Contains(fs[1].msg, "github-token") {
 		t.Errorf("github: %+v", fs)
 	}
 	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@forge.example:30022/acme/estate", Forge: "gitea"}})
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge gitea ([source] forge)") || !strings.Contains(fs[0].msg, "https://forge.example/api/v1") || !strings.Contains(fs[0].msg, "gitea-token") {
+	if len(fs) != 2 || fs[1].level != "info" || !strings.Contains(fs[1].msg, "gitea — ssh") || !strings.Contains(fs[1].msg, "https://forge.example/api/v1") || !strings.Contains(fs[1].msg, "gitea-token") {
 		t.Errorf("gitea: %+v", fs)
 	}
 	if fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://forge.example/"}}); len(fs) != 1 || fs[0].level != "error" {
@@ -116,8 +117,8 @@ func TestKnownHostsFindings(t *testing.T) {
 		t.Errorf("ssh, pinned: %+v", fs)
 	}
 	anon := estate.Estate{Source: estate.Source{Repo: "https://github.com/acme/estate"}}
-	if fs := knownHostsFindings(anon); len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "anonymous route: no host key to pin, TLS from the system roots") {
-		t.Errorf("anonymous: %+v", fs)
+	if fs := knownHostsFindings(anon); len(fs) != 0 {
+		t.Errorf("anonymous: no key to pin, nothing to say: %+v", fs)
 	}
 	anon.Source.KnownHosts = "github.com ssh-ed25519 AAAA"
 	if fs := knownHostsFindings(anon); len(fs) != 1 || fs[0].level != "warning" || !strings.Contains(fs[0].msg, "reads no host key") {
@@ -130,15 +131,15 @@ func TestKnownHostsFindings(t *testing.T) {
 // registered and no token read.
 func TestSourceFindingsAnonymous(t *testing.T) {
 	fs := sourceFindings(estate.Estate{Source: estate.Source{Repo: "https://github.com/acme/estate"}})
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge github (derived from the host of repo), route none (derived from the scheme of repo)") || !strings.Contains(fs[0].msg, "https://github.com/acme/estate.git anonymously") || !strings.Contains(fs[0].msg, "no github-token is read") || strings.Contains(fs[0].msg, "api.github.com") {
+	if len(fs) != 2 || fs[0].level != "info" || fs[0].msg != "https://github.com/acme/estate.git" || !strings.Contains(fs[1].msg, "github — anonymous https") || !strings.Contains(fs[1].msg, "no github-token") || strings.Contains(fs[1].msg, "api.github.com") {
 		t.Errorf("anonymous github: %+v", fs)
 	}
 	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "https://forge.example/acme/estate", Auth: "none"}})
-	if len(fs) != 1 || fs[0].level != "ok" || !strings.Contains(fs[0].msg, "forge gitea (derived from the host of repo), route none ([source] auth)") || !strings.Contains(fs[0].msg, "no gitea-token is read") {
+	if len(fs) != 2 || !strings.Contains(fs[1].msg, "gitea — anonymous https") || !strings.Contains(fs[1].msg, "no gitea-token") {
 		t.Errorf("anonymous gitea, declared: %+v", fs)
 	}
 	fs = sourceFindings(estate.Estate{Source: estate.Source{Repo: "ssh://git@github.com/acme/estate", Auth: "ssh"}})
-	if len(fs) != 1 || !strings.Contains(fs[0].msg, "route ssh ([source] auth)") || !strings.Contains(fs[0].msg, "https://api.github.com") {
+	if len(fs) != 2 || !strings.Contains(fs[1].msg, "github — ssh") || !strings.Contains(fs[1].msg, "https://api.github.com") {
 		t.Errorf("ssh, declared: %+v", fs)
 	}
 }
@@ -149,13 +150,26 @@ func TestEvalHost(t *testing.T) {
 	saved := nixEval
 	defer func() { nixEval = saved }()
 
-	nixEval = func(root, host string) error { return nil }
+	nixEval = func(root, host string) (string, error) {
+		return "/nix/store/p8ci7rcb5qg61m8j4qvganhwb5927vdc-nixos-system-lab-fort.drv", nil
+	}
 	if got := evalHost("/estate", "lab-fort", false); got != 0 {
 		t.Fatalf("passing eval: want 0 errors, got %d", got)
 	}
 
-	nixEval = func(root, host string) error { return errors.New("evaluation aborted") }
+	nixEval = func(root, host string) (string, error) { return "", errors.New("evaluation aborted") }
 	if got := evalHost("/estate", "lab-fort", true); got != 1 {
 		t.Fatalf("failing eval: want 1 error, got %d", got)
+	}
+}
+
+// drvName trims the store hash: the derivation's name is the proof a
+// reader can check by eye, the hash is not.
+func TestDrvName(t *testing.T) {
+	if got := drvName("/nix/store/p8ci7rcb5qg61m8j4qvganhwb5927vdc-nixos-system-outpost-26.11.drv\n"); got != "nixos-system-outpost-26.11.drv" {
+		t.Errorf("drvName: %q", got)
+	}
+	if got := drvName("not-a-store-path"); got != "not-a-store-path" {
+		t.Errorf("drvName fallback: %q", got)
 	}
 }
