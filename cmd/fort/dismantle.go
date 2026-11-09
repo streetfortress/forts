@@ -23,9 +23,10 @@ import (
 // (`fort destroy`: pulumi, the deploy key) is only reachable once main
 // says the host is gone, so nothing here reaches outside the tree.
 //
-// Two edits are not mere deletions and are worth knowing: the shared
-// flux/infrastructure sops rule loses the host's recipient line(s), and
-// every file under that rule is re-encrypted (`sops updatekeys`) — until
+// Two edits are not mere deletions and are worth knowing: every
+// fort-managed sops rule (the shared flux/infrastructure rule, and any
+// marked rule a layer brought) loses the host's recipient line(s), and
+// every file those rules cover is re-encrypted (`sops updatekeys`) — until
 // then the retired host's key keeps decrypting them; and the wireguard
 // peer is removed from peers.json, which the other peers shed on their
 // next rebuild.
@@ -129,7 +130,7 @@ type dismantlePlan struct {
 	edits       []dEdit
 	sshConfig   string   // mesh/ssh_config re-rendered without the host ("" = nothing to do)
 	knownHosts  string   // mesh/known_hosts without the host's line ("" = nothing to do)
-	rekey       []string // sops files under the shared infrastructure rule
+	rekey       []string // sops files under the fort-managed rules
 	consolePass bool     // the fort has an entry in the console-password registry
 	stack       bool     // a pulumi stack exists: fort destroy deletes it after the merge
 	residue     []string // "path: N mention(s)"
@@ -167,7 +168,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	fleetSops, _ := os.ReadFile(filepath.Join(root, ".sops.yaml"))
 	recipients := strings.Count(string(fleetSops), "# cluster: "+host)
 	if markerBlock(string(fleetSops), host) != "" {
-		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the shared flux/infrastructure rule", host, recipients, host), func(s string) (string, error) {
+		p.edits = append(p.edits, dEdit{".sops.yaml", fmt.Sprintf("- BEGIN/END fort sops rule: %s; - %d `# cluster: %s` recipient line(s) in the fort-managed rule(s)", host, recipients, host), func(s string) (string, error) {
 			s, err := removeMarkerBlock(s, host)
 			if err != nil {
 				return "", err
@@ -177,8 +178,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 		}})
 	}
 	if recipients > 0 {
-		files, _ := sopsFilesUnder(root, "flux/infrastructure")
-		p.rekey = files
+		p.rekey, _ = fortManagedFiles(root)
 	}
 	for _, rel := range []string{filepath.Join("flux/clusters", host), filepath.Join("flux/apps", host)} {
 		if exists(root, rel) {
@@ -542,24 +542,4 @@ func residueTag(rel string) string {
 		return "   (central monitoring — anything here naming the host is hand-written and usually goes)"
 	}
 	return ""
-}
-
-func sopsFilesUnder(root, dir string) ([]string, error) {
-	var out []string
-	err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Ext(path) != ".yaml" {
-			return nil
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		if strings.Contains(string(raw), "\nsops:\n") {
-			rel, _ := filepath.Rel(root, path)
-			out = append(out, rel)
-		}
-		return nil
-	})
-	sort.Strings(out)
-	return out, err
 }

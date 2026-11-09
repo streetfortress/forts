@@ -148,6 +148,40 @@ and the estate's `ops-readonly.yaml` lacks the aggregated role: init
 never rewrites that file, so an estate rendered before the seam adds the
 two objects from the init template by hand.
 
+## 6. A layer's shared secret rides the fort-managed marker
+
+A secret one fort owns goes in that fort's tree
+(`flux/apps/<fort>/…`), under the fort's own sops rule, seeded by its
+[inventory](inventory.md) — nothing new. A secret the **whole fleet**
+must decrypt — one webhook URL every edge alertmanager reads — lives in
+the layer's own tree, and the layer's init adds a creation rule for it
+to the estate's `.sops.yaml`, carrying the marker the shared
+`flux/infrastructure` rule carries:
+
+```yaml
+  - path_regex: layers/monitoring/.*
+    encrypted_regex: ^(data|stringData)$
+    age:
+      - age1… # admin
+      # fort-managed: one recipient per cluster
+```
+
+The marker is the sixth thing the core knows, and it is the whole
+contract: `fort mint` adds the new cluster's recipient under every
+marker and runs `sops updatekeys` on every committed file the marked
+rules cover; `fort dismantle` removes the recipient lines and
+re-encrypts the same set. The layer never tracks the fleet.
+
+Two rules for the rule:
+
+- **Append it below every fort rule.** sops takes the first matching
+  `path_regex`, and so does the core when it picks the files to
+  re-encrypt. A marked rule above a fort's rule would shadow it.
+- **Copy the existing `# cluster:` lines when the estate already has
+  forts.** mint adds a recipient when it mints a fort; a rule born
+  after the fleet starts with the recipients the shared
+  `flux/infrastructure` rule holds, and the layer's init writes them.
+
 ## The ports
 
 A role a layer serves needs ports open on the link to each estate it

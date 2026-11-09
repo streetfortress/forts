@@ -3,11 +3,100 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 )
+
+// fortManagedMarker names the creation rules whose recipients the fort
+// owns: a rule of the estate's .sops.yaml that carries this comment
+// holds one recipient line per cluster, added by `fort mint` and
+// removed by `fort dismantle`. init renders one such rule — the shared
+// flux/infrastructure rule — and a layer that commits a sops file the
+// whole fleet must decrypt brings a marked rule for its own tree
+// (layers.md), below every fort rule so it shadows none of them.
+const fortManagedMarker = "# fort-managed: one recipient per cluster"
+
+// sopsRule is one creation rule of .sops.yaml as the line-based reads
+// of this package see it: its path_regex, and whether it is
+// fort-managed.
+type sopsRule struct {
+	regex   *regexp.Regexp
+	managed bool
+}
+
+// sopsRules reads the creation rules in order. The parse is line-based
+// like every .sops.yaml edit here — the file is fort-rendered. A
+// path_regex that does not compile becomes a rule that matches nothing;
+// sops itself refuses the file before that could matter.
+func sopsRules(text string) []sopsRule {
+	var rules []sopsRule
+	for _, l := range strings.Split(text, "\n") {
+		t := strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(t, "- path_regex:"):
+			re, _ := regexp.Compile(strings.TrimSpace(strings.TrimPrefix(t, "- path_regex:")))
+			rules = append(rules, sopsRule{regex: re})
+		case strings.Contains(t, fortManagedMarker) && len(rules) > 0:
+			rules[len(rules)-1].managed = true
+		}
+	}
+	return rules
+}
+
+// fortManagedFiles walks the estate for committed sops files whose
+// creation rule is fort-managed — the files that must re-encrypt
+// (`sops updatekeys`) when mint adds a cluster recipient or dismantle
+// removes one. The rule is found the way sops finds it: the first
+// path_regex that matches the file's path from the root wins, so a
+// file under a fort's own rule is never in this set. The walk skips
+// .git and nixos/ — host secrets answer to nixos/.sops.yaml, whose
+// recipients are per host, not per cluster — and reads everything
+// else, so a layer's tree is covered the day its marked rule is.
+func fortManagedFiles(root string) ([]string, error) {
+	cfg, err := os.ReadFile(filepath.Join(root, ".sops.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	rules := sopsRules(string(cfg))
+	var out []string
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" || (d.Name() == "nixos" && filepath.Dir(path) == root) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil || !strings.Contains(string(raw), "\nsops:\n") {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, path)
+		rel = filepath.ToSlash(rel)
+		for _, r := range rules {
+			if r.regex != nil && r.regex.MatchString(rel) {
+				if r.managed {
+					out = append(out, rel)
+				}
+				break
+			}
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out, err
+}
 
 // secretsTool is the seeder's only path to secret material: decrypt
 // into memory, encrypt a plaintext file in place, set one key in an

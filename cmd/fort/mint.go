@@ -128,7 +128,7 @@ type mintPlan struct {
 	sshConfig  string   // mesh/ssh_config re-rendered with this peer ("" = already current)
 	sshNote    string   // the fort's Host block, one line, for the report
 	knownHosts string   // mesh/known_hosts with this fort's host key ("" = already current)
-	rekey      []string // flux/infrastructure sops files that gain the cluster recipient
+	rekey      []string // sops files under the fort-managed rules — they gain the cluster recipient
 	canaryPath string   // "" = not a flux cluster or already there
 	admins     map[string][]string
 	forge      string // the forge's kind (estate.ForgeKind), for the report
@@ -359,10 +359,10 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 		fns = append(fns, func(s string) (string, error) { return addFleetRule(s, host, admins, p.cluster.recipient) })
 	}
 	infraLine := "      - " + p.cluster.recipient + " # cluster: " + host
-	if !strings.Contains(string(fleetSops), infraLine) {
-		notes = append(notes, "+ `# cluster: "+host+"` recipient in the shared flux/infrastructure rule")
+	if missingManagedRecipient(string(fleetSops), infraLine) {
+		notes = append(notes, "+ `# cluster: "+host+"` recipient in the fort-managed rule(s)")
 		fns = append(fns, func(s string) (string, error) { return addInfraRecipient(s, infraLine) })
-		p.rekey, _ = sopsFilesUnder(root, "flux/infrastructure")
+		p.rekey, _ = fortManagedFiles(root)
 	}
 	if len(fns) > 0 {
 		p.edits = append(p.edits, dEdit{".sops.yaml", strings.Join(notes, "; "), func(s string) (string, error) {
@@ -767,18 +767,58 @@ func addFleetRule(text, host string, admins []string, clusterRecipient string) (
 	return "", fmt.Errorf("anchor `%s` not found", strings.TrimSpace(anchor))
 }
 
-// addInfraRecipient adds the cluster's recipient line right under the
-// `# fort-managed: one recipient per cluster` marker.
+// addInfraRecipient adds the cluster's recipient line right under
+// every fort-managed marker whose rule lacks it — the shared
+// flux/infrastructure rule, and any marked rule a layer brought
+// (layers.md). A rule's lines end at the next `- path_regex:` or the
+// next marker.
 func addInfraRecipient(text, line string) (string, error) {
-	anchor := "# fort-managed: one recipient per cluster"
 	lines := strings.Split(text, "\n")
+	found := false
+	var out []string
 	for i, l := range lines {
-		if strings.Contains(l, anchor) {
-			out := append(append(append([]string{}, lines[:i+1]...), line), lines[i+1:]...)
-			return strings.Join(out, "\n"), nil
+		out = append(out, l)
+		if !strings.Contains(l, fortManagedMarker) {
+			continue
+		}
+		found = true
+		if !managedRuleHas(lines, i, line) {
+			out = append(out, line)
 		}
 	}
-	return "", fmt.Errorf("anchor `%s` not found", anchor)
+	if !found {
+		return "", fmt.Errorf("anchor `%s` not found", fortManagedMarker)
+	}
+	return strings.Join(out, "\n"), nil
+}
+
+// missingManagedRecipient reports whether any fort-managed rule lacks
+// the recipient line — the condition under which mint edits .sops.yaml
+// and re-encrypts the files the marked rules cover.
+func missingManagedRecipient(text, line string) bool {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if strings.Contains(l, fortManagedMarker) && !managedRuleHas(lines, i, line) {
+			return true
+		}
+	}
+	return false
+}
+
+// managedRuleHas reports whether the fort-managed rule whose marker
+// sits at lines[i] already carries the line.
+func managedRuleHas(lines []string, i int, line string) bool {
+	want := strings.TrimSpace(line)
+	for _, n := range lines[i+1:] {
+		t := strings.TrimSpace(n)
+		if strings.HasPrefix(t, "- path_regex:") || strings.Contains(n, fortManagedMarker) {
+			return false
+		}
+		if t == want {
+			return true
+		}
+	}
+	return false
 }
 
 func peerPublicKey(text, host string) (string, bool) {

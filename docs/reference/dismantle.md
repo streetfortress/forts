@@ -38,7 +38,7 @@ dismantle sfi-x   (cloud: linode)
 ✗ nixos/secrets/sfi-x.yaml
 ✗ forts/sfi-x.toml
 ○ nixos/.sops.yaml               - BEGIN/END fort sops rule: sfi-x
-○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the shared flux/infrastructure rule
+○ .sops.yaml                     - BEGIN/END fort sops rule: sfi-x; - 1 `# cluster: sfi-x` recipient line(s) in the fort-managed rule(s)
 ◆ flux/infrastructure/configs/monitoring/alertmanager-edge-config.sops.yaml   sops updatekeys (lost the sfi-x recipient)
 ○ mesh/peers.json           - .peers.sfi-x (the other peers shed it on their next rebuild)
 ◆ mesh/ssh_config           re-rendered without sfi-x
@@ -64,9 +64,11 @@ Three things deserve the explanation:
   fort's passphrase outlives the fort.
 - **`sops updatekeys` is load-bearing.** Removing a recipient from
   `.sops.yaml` changes nothing by itself: the departed cluster key keeps
-  decrypting every shared `flux/infrastructure` file until they are
-  re-encrypted. Dismantle does that right after the rule edit, so the
-  retired host loses access in the same PR.
+  decrypting every file the fort-managed rules cover — the shared
+  `flux/infrastructure` files, and a layer's tree under a marked rule
+  ([layers](layers.md)) — until they are re-encrypted. Dismantle does
+  that right after the rule edit, so the retired host loses access in
+  the same PR.
 - **The residue is a report, not an action.** Everything outside the
   generated surface that still names the host is listed with a triage
   hint — and nothing the retirement already settles is listed at all:
