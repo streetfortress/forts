@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
@@ -60,6 +61,9 @@ func linkFindings(root string, est estate.Estate, hosts map[string]manifest.Host
 				out = append(out, finding{"error", path, fmt.Sprintf("%s interface %s is this estate's own mesh interface (%s) — the other mesh needs a name of its own", at, l.InterfaceName(), estate.Path)})
 			case l.ZoneName() == est.ZoneName():
 				out = append(out, finding{"error", path, fmt.Sprintf("%s zone %s is this estate's own mesh zone — the other estate's names need a zone of their own", at, l.ZoneName())})
+			}
+			if l.KnownHosts == "" && strings.HasPrefix(l.Estate, "ssh://") && !estate.SameForge(l.Estate, est.Source.Repo) {
+				out = append(out, finding{"error", path, fmt.Sprintf("%s estate is on another forge (%s) and the table has no known_hosts — the clone and the flux-system secret pin this estate's forge instead; `fort link add %s %s` reads the line from that estate's estate.toml", at, l.Ref(), host, l.Estate)})
 			}
 			if nix != nil && !nixSetsAttr(string(nix), "sfi.links."+name) {
 				out = append(out, finding{"error", hostNix, fmt.Sprintf("no sfi.links.%s — the manifest declares %s and nix cannot read it; `fort scaffold %s` appends the block", name, at, host)})

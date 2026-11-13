@@ -720,6 +720,17 @@ func SameRepo(a, b string) bool {
 	return ah == bh && ao == bo && an == bn
 }
 
+// SameForge says whether two repo URLs name the same forge: the same
+// scheme, host and port. The host key pin is per host and port.
+func SameForge(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return ua.Scheme == ub.Scheme && ua.Host == ub.Host
+}
+
 // ValidRepoURL says whether s is an estate's git URL as estate.toml
 // spells one: ssh:// or https://, a forge host, an owner and a name.
 func ValidRepoURL(s string) bool {

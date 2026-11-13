@@ -213,6 +213,6 @@ Every change rolls out by itself: the forts pull main and rebuild
 | an address in any table outside the mesh; a manifest's `mesh_ip` outside it | error |
 | a `remotes` entry with no `wg_endpoint_ip` | error (the file does not parse) |
 | `✓ N links — tables, host files and keys agree` (or `keys unverified: no age key here`) | ok ([links.md](links.md)) |
-| a `[links.<name>]` whose estate is this one, or whose interface or zone is this mesh's; a host file with no `sfi.links.<name>` for a table; a `public_key` the sops secret does not derive, or a secret that is gone | error |
+| a `[links.<name>]` whose estate is this one, or whose interface or zone is this mesh's; a link to an estate on another forge with no `known_hosts`; a host file with no `sfi.links.<name>` for a table; a `public_key` the sops secret does not derive, or a secret that is gone | error |
 | a fort that serves an estate a role with no `[links.<estate>]` in its manifest | warning ([hub.md](hub.md)) |
 | `ssh_config` / `known_hosts` stale or missing | error ([ssh-config.md](ssh-config.md#what-fort-check---all-says)) |

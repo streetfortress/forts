@@ -21,8 +21,17 @@ address = "10.2.0.254"           # this host's address on staging's mesh — a c
 port = 51821                     # the link's UDP listen port; never 51820 (this host's own mesh)
 interface = "wg-staging"         # what staging's estate.toml names its mesh (checked by the reconciler)
 zone = "staging.mesh"            # its zone (checked the same way)
+known_hosts = "[forge.example]:30022 ssh-ed25519 AAAA…"   # staging's [source] known_hosts; only when its forge is not this estate's
 public_key = "…"                 # the public half of the sops secret wireguard-private-key-staging
 ```
+
+`known_hosts` is the host key of the forge the other estate's repo is on.
+`fort link add` reads it from the fetched `estate.toml` and refreshes it
+on a re-run. `fort scaffold` renders it as `sfi.links.<name>.knownHosts`.
+The reconciler's clone pins it. `modules/flux-bootstrap.nix` also adds it
+to the `flux-system` secret, after the estate's own line, so a layer's
+subscription needs no secret of its own. A link to an estate on this
+estate's forge, or on the anonymous route (https), has no line.
 
 `fort link add` writes it ([below](#establishing-a-link)); `fort scaffold`
 renders `sfi.links.<name>` in the host file from it (`modules/links.nix`),
@@ -232,7 +241,8 @@ stopped linking is a hand edit, and the report names the candidates
 
 **The gate.** `fort check --all` in the linking estate judges every
 table: the link's estate is not this one and its interface and zone are
-not this mesh's; the host file sets `sfi.links.<name>`; and `public_key`
+not this mesh's; a link to an estate on another forge (ssh) has a
+`known_hosts` line; the host file sets `sfi.links.<name>`; and `public_key`
 is what the sops secret derives — where the secrets file decrypts. CI
 holds no age key, so there the key is reported as not verified, a skip,
 never a failure. In the estate linked to, the subnet check covers the

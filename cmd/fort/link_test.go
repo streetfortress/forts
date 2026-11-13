@@ -367,3 +367,89 @@ func TestPickAddressEdges(t *testing.T) {
 		t.Errorf("/0: got %s, %v", ip, err)
 	}
 }
+
+// A served estate on another forge (forts#177): the table carries that
+// estate's [source] known_hosts, scaffold renders it as knownHosts, a
+// re-run refreshes it, and fort check names a link that lacks it. An
+// estate on the anonymous route has no line, and the report says so.
+func TestLinkAddKnownHosts(t *testing.T) {
+	const (
+		otherURL = "ssh://git@forge.example:30022/sfi/staging"
+		pin      = "[forge.example]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherForgeKey"
+	)
+	root, tool := linkEstate(t)
+	remote := t.TempDir()
+	for _, rel := range []string{"estate.toml", "mesh/peers.json", "forts/stage-b.toml"} {
+		copyFile(t, filepath.Join(stagingFix, rel), filepath.Join(remote, rel))
+	}
+	toml := strings.Replace(readFile(t, filepath.Join(remote, "estate.toml")), "ssh://git@gitea.zen.lofi:30022/sfi/staging\"", otherURL+"\"\nknown_hosts = \""+pin+"\"", 1)
+	os.WriteFile(filepath.Join(remote, "estate.toml"), []byte(toml), 0o644)
+
+	p, err := planLinkAdd(root, "hub", otherURL, linkAddOpts{}, tool, dirFetcher(remote))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.link.KnownHosts != pin {
+		t.Fatalf("known_hosts: %q", p.link.KnownHosts)
+	}
+	if err := p.apply(tool); err != nil {
+		t.Fatal(err)
+	}
+	if text := readFile(t, filepath.Join(root, manifest.Path("hub"))); !strings.Contains(text, "known_hosts = \""+pin+"\"\npublic_key") {
+		t.Errorf("manifest text:\n%s", text)
+	}
+	nix := readFile(t, filepath.Join(root, "nixos/hosts/hub/default.nix"))
+	if !strings.Contains(nix, "    knownHosts = \""+pin+"\";\n") {
+		t.Errorf("host file:\n%s", nix)
+	}
+
+	// a refresh: the other forge rotated its key
+	rotated := strings.Replace(pin, "OtherForgeKey", "RotatedKey", 1)
+	os.WriteFile(filepath.Join(remote, "estate.toml"), []byte(strings.Replace(toml, pin, rotated, 1)), 0o644)
+	secrets := filepath.Join(root, "nixos/secrets/hub.yaml")
+	tool2 := &fakeTool{plain: map[string]string{secrets: tool.plain[secrets] + "wireguard-private-key-staging: " + p.wg.private + "\n"}}
+	p2, err := planLinkAdd(root, "hub", otherURL, linkAddOpts{}, tool2, dirFetcher(remote))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p2.apply(tool2); err != nil {
+		t.Fatal(err)
+	}
+	if e, err := manifest.Load(root, "hub"); err != nil || e.Links["staging"].KnownHosts != rotated {
+		t.Errorf("refresh: %v %+v", err, e.Links)
+	}
+
+	// check: a table without the line is an error; with it, none
+	est, _ := estateLoadT(t, root)
+	hosts := loadHostsT(t, root)
+	for _, f := range linkFindings(root, est, hosts, tool2) {
+		if f.level == "error" {
+			t.Errorf("with the line: %+v", f)
+		}
+	}
+	bare := hosts["hub"]
+	l := bare.Links["staging"]
+	l.KnownHosts = ""
+	bare.Links = map[string]manifest.Link{"staging": l}
+	found := false
+	for _, f := range linkFindings(root, est, map[string]manifest.Host{"hub": bare}, tool2) {
+		found = found || (f.level == "error" && strings.Contains(f.msg, "no known_hosts"))
+	}
+	if !found {
+		t.Error("a link to another forge with no known_hosts is not reported")
+	}
+
+	// the anonymous route: no line, said so
+	anon := strings.Replace(toml, otherURL+"\"\nknown_hosts = \""+pin+"\"", "https://forge.example/sfi/staging\"", 1)
+	os.WriteFile(filepath.Join(remote, "estate.toml"), []byte(anon), 0o644)
+	root3, tool3 := linkEstate(t)
+	p3, err := planLinkAdd(root3, "hub", "https://forge.example/sfi/staging", linkAddOpts{}, tool3, dirFetcher(remote))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	p3.report(&sb, false)
+	if p3.link.KnownHosts != "" || !strings.Contains(sb.String(), "anonymous route") {
+		t.Errorf("anonymous: %q\n%s", p3.link.KnownHosts, sb.String())
+	}
+}

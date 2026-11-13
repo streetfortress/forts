@@ -17,5 +17,8 @@
 {{- if .Prefix }}
     prefixLength = {{ .Prefix }};
 {{- end }}
+{{- if .KnownHosts }}
+    knownHosts = {{ printf "%q" .KnownHosts }};
+{{- end }}
   };
 {{ end -}}

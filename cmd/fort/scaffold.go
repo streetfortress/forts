@@ -87,6 +87,10 @@ type linkView struct {
 	// Prefix: the other mesh's prefix length when not the default 24
 	// (manifest prefix, forts#161); 0 renders nothing.
 	Prefix int
+	// KnownHosts: the other estate's forge pin (manifest known_hosts),
+	// rendered as sfi.links.<name>.knownHosts; "" renders nothing and
+	// the module's default (this estate's own pin) stands.
+	KnownHosts string
 }
 
 // linkViews is the manifest's links in name order, for the templates.
@@ -94,7 +98,7 @@ func linkViews(entry manifest.Host) []linkView {
 	var out []linkView
 	for _, name := range entry.LinkNames() {
 		l := entry.Links[name]
-		out = append(out, linkView{Name: name, Ref: l.Ref(), Repo: estate.WithGit(l.Estate), Interface: l.InterfaceName(), Zone: l.ZoneName(), Address: l.Address, Port: l.Port, Prefix: l.Prefix})
+		out = append(out, linkView{Name: name, Ref: l.Ref(), Repo: estate.WithGit(l.Estate), Interface: l.InterfaceName(), Zone: l.ZoneName(), Address: l.Address, Port: l.Port, Prefix: l.Prefix, KnownHosts: l.KnownHosts})
 	}
 	return out
 }

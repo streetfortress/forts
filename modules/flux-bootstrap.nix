@@ -56,7 +56,19 @@ let
   fluxInstanceManifest =
     config.sfi.estate.root + "/flux/clusters/${cfg.cluster}/flux-system/flux-instance.yaml";
 
-  knownHostsFile = pkgs.writeText "flux-git-known-hosts" cfg.gitKnownHosts;
+  # One secret, one line per forge the host reads: this estate's pin,
+  # then the pin of every estate a link serves on another forge
+  # (sfi.links.<name>.knownHosts, links.nix). A link on this estate's
+  # forge, or on the anonymous https route, adds nothing. The links
+  # option exists only on a host that imports the links module.
+  links = config.sfi.links or { };
+  linkLines = lib.concatMap
+    (n: lib.optional (lib.hasPrefix "ssh://" links.${n}.repo) links.${n}.knownHosts)
+    (lib.attrNames links);
+  knownHosts = lib.concatStringsSep "\n"
+    (lib.unique (lib.filter (l: l != "") (map lib.strings.trim
+      (lib.concatMap (lib.splitString "\n") ([ cfg.gitKnownHosts ] ++ linkLines)))));
+  knownHostsFile = pkgs.writeText "flux-git-known-hosts" knownHosts;
 
   # The clone route (estate.nix, forts#167): the git-auth secret, the
   # deploy key it is made from and the host-key pin exist on the ssh
@@ -105,7 +117,7 @@ in
       type = lib.types.str;
       default = config.sfi.estate.knownHosts;
       defaultText = "estate.toml's `[source] known_hosts` (sfi.estate.knownHosts)";
-      description = "SSH known_hosts line(s) for the git host, baked into the flux-system git-auth secret on the ssh route. Unread on the anonymous route.";
+      description = "SSH known_hosts line(s) for the git host, baked into the flux-system git-auth secret on the ssh route. The secret also carries the knownHosts of every sfi.links.<name> on an ssh:// repo, after this line. Unread on the anonymous route.";
     };
   };
 

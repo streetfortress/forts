@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sort"
+	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/estate"
 )
@@ -22,6 +23,7 @@ import (
 //	port = 51821                     # the UDP port the link listens on; never 51820 (this host's own mesh)
 //	interface = "wg-staging"         # what that estate's estate.toml names its mesh
 //	zone = "staging.mesh"            # its zone
+//	known_hosts = "[forge.example:22] ssh-ed25519 AAAA…"   # the other forge's host key; only when it is not this estate's
 //	public_key = "…"                 # the public half of wireguard-private-key-staging
 //
 // `fort link add <fort> <estate url>` writes the table and mints the
@@ -52,6 +54,13 @@ type Link struct {
 	// estate.toml's [mesh] cidr, which `fort link add` writes when it is
 	// not the default (forts#161). Default 24, the fleet's convention.
 	Prefix int `toml:"prefix"`
+	// KnownHosts is the other estate's [source] known_hosts: the host
+	// key of the forge its repo is on. The reconciler's clone and the
+	// flux-system secret pin it when that forge is not this estate's
+	// own. `fort link add` reads it from the fetched estate.toml and
+	// refreshes it on a re-run. Empty when the other estate is on the
+	// anonymous route (https, no host key) or on this estate's forge.
+	KnownHosts string `toml:"known_hosts"`
 	// PublicKey is the public half of the link's WireGuard key.
 	PublicKey string `toml:"public_key"`
 
@@ -115,6 +124,9 @@ func (h Host) ValidateLinks() error {
 		}
 		if want := estate.ShortName(l.Estate); want != name {
 			return fmt.Errorf("%s names an estate whose last label is %s — a link is named after the estate it reaches (sfi.links.%s, modules/links.nix)", at, want, want)
+		}
+		if l.KnownHosts != "" && len(strings.Fields(l.KnownHosts)) < 3 {
+			return fmt.Errorf("%s known_hosts %q — want known_hosts line(s): <host> <key type> <key> (the other estate's [source] known_hosts)", at, l.KnownHosts)
 		}
 		if a, err := netip.ParseAddr(l.Address); err != nil || !a.Is4() {
 			return fmt.Errorf("%s address %q: want this host's IPv4 address on that mesh", at, l.Address)

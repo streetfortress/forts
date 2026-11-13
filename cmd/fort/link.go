@@ -113,6 +113,7 @@ type linkPlan struct {
 	portWhy          string
 	recorded         string // what the other estate's remotes entry says of this host, "" when none
 	roles            []string
+	noKnownHosts     bool    // the other estate is on another forge, ssh route, and pins no host key
 	edits            []dEdit // the manifest and the host file, "exists" ones filtered out
 }
 
@@ -208,6 +209,15 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 		// The other mesh is not a /24: the table carries its prefix, and
 		// links.nix renders it (the option's default stays 24).
 		p.link.Prefix = bits
+	}
+	// The other forge's host key: its [source] known_hosts, when that
+	// forge is not this estate's own and the estate is on the ssh route.
+	// An anonymous estate clones over https and has no line.
+	if !remote.est.Anonymous() && !estate.SameForge(repo, est.Source.Repo) {
+		p.link.KnownHosts = strings.TrimSpace(remote.est.Source.KnownHosts)
+		if p.link.KnownHosts == "" {
+			p.noKnownHosts = true
+		}
 	}
 	if p.had != nil {
 		p.link.Estate = p.had.Estate
@@ -471,6 +481,9 @@ func (p *linkPlan) changed() []string {
 	if p.had.PrefixBits() != p.link.PrefixBits() {
 		out = append(out, fmt.Sprintf("prefix %d → %d", p.had.PrefixBits(), p.link.PrefixBits()))
 	}
+	if p.had.KnownHosts != p.link.KnownHosts {
+		out = append(out, "known_hosts")
+	}
 	if p.had.PublicKey != p.link.PublicKey {
 		out = append(out, "public_key")
 	}
@@ -498,6 +511,9 @@ func (p *linkPlan) manifestText(text string) string {
 		if l.Prefix != 0 {
 			fmt.Fprintf(&b, "prefix = %d\n", l.Prefix)
 		}
+		if l.KnownHosts != "" {
+			fmt.Fprintf(&b, "known_hosts = %s\n", tomlString(l.KnownHosts))
+		}
 		fmt.Fprintf(&b, "public_key = %s   # the public half of %s\n", tomlString(l.PublicKey), linkSecretKey(p.name))
 		return appendBlock(text, b.String())
 	}
@@ -515,6 +531,7 @@ func (p *linkPlan) manifestText(text string) string {
 		{"interface", tomlString(l.Interface), had.Name != "" && had.InterfaceName() == l.Interface},
 		{"zone", tomlString(l.Zone), had.Name != "" && had.ZoneName() == l.Zone},
 		{"prefix", fmt.Sprint(l.PrefixBits()), had.PrefixBits() == l.PrefixBits()},
+		{"known_hosts", tomlString(l.KnownHosts), had.KnownHosts == l.KnownHosts},
 		{"public_key", tomlString(l.PublicKey), had.PublicKey == l.PublicKey},
 	} {
 		if !kv.stays {
@@ -595,6 +612,14 @@ func (p *linkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "· remotes.%s in %s: recorded (%s)\n", p.host, r.Ref(), p.recorded)
 	default:
 		fmt.Fprintf(w, "! remotes.%s in %s: recorded as %s — differs; `fort estate link` there follows this table after the merge\n", p.host, r.Ref(), p.recorded)
+	}
+	switch {
+	case p.noKnownHosts:
+		fmt.Fprintf(w, "! %s is on another forge and its %s has no [source] known_hosts — the clone cannot verify that forge; add the line there, then re-run\n", r.Ref(), estate.Path)
+	case p.link.KnownHosts != "":
+		fmt.Fprintf(w, "· known_hosts: the host key of %s's forge, from its %s\n", r.Ref(), estate.Path)
+	case r.Anonymous():
+		fmt.Fprintf(w, "· known_hosts: none — %s is on the anonymous route; the clone uses https\n", r.Ref())
 	}
 	fmt.Fprintln(w)
 	if !written {
