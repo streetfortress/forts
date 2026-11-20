@@ -1,11 +1,9 @@
 flux/apps/cloud-fort/   (chart 0.3.0)
-● gateway/
+○ gateway/
   ● certificate-sfi-website.yaml letsencrypt, sfi-website.cloud-fort.example.cloud
-  ● gateway.yaml                 http listener only
-  ● kustomization.yaml           patches: listener-sfi-website.yaml
+  ○ kustomization.yaml           + certificate-sfi-website.yaml; patches: + listener-sfi-website.yaml
   ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
-  ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sfi-website
+○ kustomization.yaml             + sfi-website
 ● sfi-website/
   ● ca-root.pem                  copy of nixos/certs/ca-root.pem
   ● forts.inventory.yaml         the inventory: 2 keys and their sources

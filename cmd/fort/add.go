@@ -33,9 +33,11 @@ var addTemplates embed.FS
 // for a PR and prints what to seed; --dry-run prints the marked tree.
 //
 // The core renders what its init templates install: the gateway stack
-// and the inventory. The platform services a contract `requires` (a
-// database, a cache, a bucket) are a layer's to render after this
-// (sfi/fort-layers, forts#250); add names them and renders none.
+// and the inventory. The Gateway itself is scaffold's — every cluster
+// fort carries the battery (oss/fort-layers#13) — and add only appends
+// to it. The platform services a contract `requires` (a database, a
+// cache, a bucket) are a layer's to render after this (sfi/fort-layers,
+// forts#250); add names them and renders none.
 func add(args []string) error {
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
 		return fmt.Errorf("usage: fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path] [--dry-run]")
@@ -138,10 +140,11 @@ type view struct {
 	ValuesYAML    string
 	Keys          []inventory.NamedSpec
 	// Required: the services the contract requires, "type.handle".
-	Required              []string
-	GatewayPatchesComment string
+	Required []string
 }
 
+// gatewayPatchesComment heads the patches: block of the gateway's
+// kustomization, written with the first listener the battery takes.
 const gatewayPatchesComment = `# One JSON6902 patch per service appends its https listener to the
 # Gateway (the design's one exception to "new files only": listeners
 # live in a single object, and a strategic-merge patch cannot append to
@@ -215,8 +218,6 @@ func planAdd(o addOpts) (*plan, error) {
 		Issuer:        "letsencrypt",
 		ACMEDirectory: est.ACMEDirectory(),
 		Required:      c.Required(),
-
-		GatewayPatchesComment: gatewayPatchesComment,
 	}
 	// The hostname's zone: the manifest's public zone where the fort has
 	// one, else the estate's mesh zone, where <app>.<fort>.<zone> is a
@@ -264,14 +265,6 @@ func planAdd(o addOpts) (*plan, error) {
 		}
 		return b.Bytes()
 	}
-	static := func(name string) []byte {
-		b, err := addTemplates.ReadFile("templates/add/" + name)
-		if err != nil {
-			panic(err)
-		}
-		return b
-	}
-
 	// --- the inventory: the chart's keys, as the fort seeds them.
 	keys, externals, unresolved, err := inventoryFromChart(c, &overlay{})
 	if err != nil {
@@ -292,27 +285,23 @@ func planAdd(o addOpts) (*plan, error) {
 		v.ValuesYAML = strings.TrimRight(indent(vb.String(), "    "), "\n")
 	}
 
-	// --- gateway: instance on first http need, listener + cert after.
-	var rootAdds []string // gateway, then the app
+	// --- gateway: the battery is scaffold's (every cluster fort has
+	// one); add appends a listener and a certificate to it.
 	if c.HTTP != nil {
 		gwDir := filepath.Join(apps, "gateway")
+		if !exists(o.root, filepath.Join(gwDir, "kustomization.yaml")) {
+			return nil, fmt.Errorf("%s has no gateway battery — fort scaffold %s renders it on every cluster fort (a fort scaffolded before the battery moved there gains it on a re-run)", o.fort, o.fort)
+		}
 		p.add(action{path: filepath.Join(gwDir, "certificate-"+app+".yaml"), mark: '●', note: v.Issuer + ", " + v.Hostname, content: render("gateway/certificate.yaml.gotpl")})
 		p.add(action{path: filepath.Join(gwDir, "listener-"+app+".yaml"), mark: '●', note: "JSON6902 add /spec/listeners/- (https-" + app + ")", content: render("gateway/listener.yaml.gotpl")})
-		if exists(o.root, gwDir) {
-			p.add(action{path: filepath.Join(gwDir, "kustomization.yaml"), mark: '○', note: "+ certificate-" + app + ".yaml; patches: + listener-" + app + ".yaml",
-				edit: func(s string) (string, error) {
-					s, err := appendListItem(s, "resources", "certificate-"+app+".yaml")
-					if err != nil {
-						return "", err
-					}
-					return appendPatch(s, gatewayPatchesComment, "listener-"+app+".yaml", "gateway.networking.k8s.io", "v1", "Gateway", "homelab", "traefik"), nil
-				}})
-		} else {
-			p.add(action{path: filepath.Join(gwDir, "gateway.yaml"), mark: '●', note: "http listener only", content: render("gateway/gateway.yaml.gotpl")})
-			p.add(action{path: filepath.Join(gwDir, "redirect-https.yaml"), mark: '●', note: "catch-all http→https 301", content: static("gateway/redirect-https.yaml")})
-			p.add(action{path: filepath.Join(gwDir, "kustomization.yaml"), mark: '●', note: "patches: listener-" + app + ".yaml", content: render("gateway/kustomization.yaml.gotpl")})
-			rootAdds = append(rootAdds, "gateway")
-		}
+		p.add(action{path: filepath.Join(gwDir, "kustomization.yaml"), mark: '○', note: "+ certificate-" + app + ".yaml; patches: + listener-" + app + ".yaml",
+			edit: func(s string) (string, error) {
+				s, err := appendListItem(s, "resources", "certificate-"+app+".yaml")
+				if err != nil {
+					return "", err
+				}
+				return appendPatch(s, gatewayPatchesComment, "listener-"+app+".yaml", "gateway.networking.k8s.io", "v1", "Gateway", "homelab", "traefik"), nil
+			}})
 	}
 
 	// --- the app dir
@@ -345,16 +334,9 @@ func planAdd(o addOpts) (*plan, error) {
 		p.add(action{path: filepath.Join(appDir, "secrets.sops.yaml"), mark: '◆', note: "seeded"})
 	}
 
-	rootAdds = append(rootAdds, app)
-	p.add(action{path: filepath.Join(apps, "kustomization.yaml"), mark: '○', note: "+ " + strings.Join(rootAdds, ", "),
+	p.add(action{path: filepath.Join(apps, "kustomization.yaml"), mark: '○', note: "+ " + app,
 		edit: func(s string) (string, error) {
-			for _, r := range rootAdds {
-				var err error
-				if s, err = appendListItem(s, "resources", r); err != nil {
-					return "", err
-				}
-			}
-			return s, nil
+			return appendListItem(s, "resources", app)
 		}})
 	return p, nil
 }

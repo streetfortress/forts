@@ -171,12 +171,22 @@ type scaffoldFile struct {
 // scaffold renders a host's generated surface from its manifest:
 // the nix host dir (default.nix in the lab or cloud shape, secrets.nix)
 // and, for a flux cluster, flux/clusters/<host>/ + the apps root
-// kustomization — the files the playbook-era cluster-init laid down for
-// lab VMs, one generator for lab and cloud now. Pure
-// generator with force-no semantics per file: the manifest seeds the host
-// once, hand refinements live in the files and are never clobbered; a
-// re-run fills gaps only. The identity half (keys, sops rules, deploy
-// key, canary) is `fort mint`, run after this.
+// kustomization and the gateway battery under it — the files the
+// playbook-era cluster-init laid down for lab VMs, one generator for lab
+// and cloud now. Pure generator with force-no semantics per file: the
+// manifest seeds the host once, hand refinements live in the files and
+// are never clobbered; a re-run fills gaps only. The identity half (keys,
+// sops rules, deploy key, canary) is `fort mint`, run after this.
+//
+// The gateway battery — the Gateway with its http listener, the
+// catch-all redirect, their kustomization — is every cluster fort's,
+// rendered here and not on the first `fort add` with an http need
+// (oss/fort-layers#13): a hub whose first hostname is a layer's stack
+// has no app to trigger it, and the two verbs that append to it (add,
+// a layer's scaffold) then find one shape, whichever came first. The
+// `gateway` entry of the apps root is the one list item scaffold appends
+// to an existing file, beside cluster-vars' ESTATE_NAME: a fort
+// scaffolded before the battery moved here gains it on a re-run.
 func scaffold(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
@@ -418,7 +428,10 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 		struct{ path, tpl, note string }{filepath.Join(clusters, "cluster-vars.yaml"), "cluster-vars.yaml.gotpl", "CLUSTER_NAME " + host + ", ESTATE_NAME " + view.Estate + ", MESH_IP " + view.MeshIP},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "infrastructure.yaml"), "infrastructure.yaml.gotpl", "infra-controllers + infrastructure (shared layer)"},
 		struct{ path, tpl, note string }{filepath.Join(clusters, "apps.yaml"), "apps.yaml.gotpl", "→ flux/apps/" + host},
-		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint)"},
+		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "kustomization.yaml"), "apps-kustomization.yaml.gotpl", "root list: sops-canary (listed, absent until fort mint), gateway"},
+		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "gateway/gateway.yaml"), "gateway.yaml.gotpl", "the Gateway, http listener only; fort add appends a listener per app"},
+		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "gateway/redirect-https.yaml"), "gateway-redirect-https.yaml.gotpl", "catch-all http→https 301"},
+		struct{ path, tpl, note string }{filepath.Join("flux/apps", host, "gateway/kustomization.yaml"), "gateway-kustomization.yaml.gotpl", "gateway.yaml, redirect-https.yaml; fort add appends the certificates and the listener patches"},
 	)
 	var out []scaffoldFile
 	for _, p := range plan {
@@ -438,6 +451,18 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 				return ensureClusterVar(s, "ESTATE_NAME", view.Estate)
 			}
 			f.editNote = "+ ESTATE_NAME " + view.Estate
+		}
+		if p.tpl == "apps-kustomization.yaml.gotpl" {
+			// An apps root from before the battery moved to scaffold
+			// gains its entry; one that lists it — whatever else it
+			// lists — is kept as it is.
+			f.edit = func(s string) (string, error) {
+				if listsItem(s, "gateway") {
+					return s, nil
+				}
+				return appendListItem(s, "resources", "gateway")
+			}
+			f.editNote = "+ gateway (the battery, rendered beside it)"
 		}
 		out = append(out, f)
 	}

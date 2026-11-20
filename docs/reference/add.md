@@ -17,7 +17,9 @@ contract in and writes an inventory out.**
 
 The core renders what its own init templates install: the gateway stack
 (traefik, cert-manager, the Gateway API CRDs) and the inventory that
-[`seed`](seed.md) executes. A platform service the contract
+[`seed`](seed.md) executes. The Gateway itself is
+[`scaffold`](scaffold.md)'s — every cluster fort carries the battery —
+and `add` appends to it. A platform service the contract
 `requires` — a database, a cache, a bucket — is not the core's: a layer
 renders it after `add`, in the same tree (sfi/fort-layers,
 [layers](layers.md)). `add` names what it leaves to the layer and
@@ -35,9 +37,12 @@ renders none of it.
 | the Service the fleet routes to | the contract's `http` block | `--http service:port`, for a chart that ships no contract; refused against a contract that declares `http` |
 | the registry's CA | `nixos/certs/ca-root.pem` when the estate carries one: copied beside the app and handed to the `OCIRepository` as `certSecretRef` | — (absent, the system roots serve) |
 
-`add` is refused on a fort without an apps root (scaffold first) and on
-an app dir that already exists — **`fort add` never overwrites**;
-remove the dir or refine in place. A chart is pulled with `helm` at
+`add` is refused on a fort without an apps root (scaffold first), on an
+http app when the fort has no gateway battery (an apps root from before
+the battery moved to scaffold: re-run `fort scaffold <fort>`, which
+renders it beside the root), and on an app dir that already exists —
+**`fort add` never overwrites**; remove the dir or refine in place. A
+chart is pulled with `helm` at
 the pin, so the registry must be reachable; `--chart-dir` reads a
 local chart instead.
 
@@ -48,13 +53,11 @@ fort whose estate carries a CA:
 
 ```
 flux/apps/cloud-fort/   (chart 0.3.0)
-● gateway/
+○ gateway/
   ● certificate-sfi-website.yaml letsencrypt, sfi-website.cloud-fort.example.cloud
-  ● gateway.yaml                 http listener only
-  ● kustomization.yaml           patches: listener-sfi-website.yaml
+  ○ kustomization.yaml           + certificate-sfi-website.yaml; patches: + listener-sfi-website.yaml
   ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
-  ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sfi-website
+○ kustomization.yaml             + sfi-website
 ● sfi-website/
   ● ca-root.pem                  copy of nixos/certs/ca-root.pem
   ● forts.inventory.yaml               the inventory: 2 keys and their sources
@@ -130,10 +133,13 @@ challenge routes match an exact path and take precedence), and per app
 a JSON6902 patch that appends an https listener with
 `tls.certificateRefs <app>-tls`, plus the `Certificate` that fills it.
 JSON6902 is the one place strategic merge cannot serve: kustomize has
-no merge key for a CRD's listener list. The first app with an http need
-renders the directory; the next appends to its kustomization — the
-certificate as a resource, the listener inside the `patches:` list,
-never at the end of the file. The certificate names the estate's
+no merge key for a CRD's listener list. The Gateway, the redirect and
+their kustomization are [`scaffold`](scaffold.md)'s battery, on every
+cluster fort; every `add` appends to its kustomization — the
+certificate as a resource, the listener inside the `patches:` list
+(the first listener opens the block), never at the end of the file. A
+layer whose stack serves a hostname appends the same two files the same
+way (oss/fort-layers#13). The certificate names the estate's
 `letsencrypt` ClusterIssuer, whatever directory it speaks to; an
 estate whose `estate.toml` names no `[acme]` email carries none, and
 the report says the certificate waits.

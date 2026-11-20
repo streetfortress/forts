@@ -1,11 +1,9 @@
 flux/apps/lab-fort/   (chart 0.3.0)
-● gateway/
+○ gateway/
   ● certificate-sfi-website.yaml letsencrypt, sfi-website.lab-fort.deployments.mesh
-  ● gateway.yaml                 http listener only
-  ● kustomization.yaml           patches: listener-sfi-website.yaml
+  ○ kustomization.yaml           + certificate-sfi-website.yaml; patches: + listener-sfi-website.yaml
   ● listener-sfi-website.yaml    JSON6902 add /spec/listeners/- (https-sfi-website)
-  ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, sfi-website
+○ kustomization.yaml             + sfi-website
 ● sfi-website/
   ● forts.inventory.yaml         the inventory: 2 keys and their sources
   ● kustomization.yaml           

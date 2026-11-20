@@ -7,13 +7,11 @@ flux/apps/lab-fort/   (chart 0.2.0)
   ● repository.yaml              OCIRepository oci://gitea.zen.lofi/sfi/gallery, tag 0.2.0
   ● route.yaml                   HTTPRoute gallery.lab-fort.deployments.mesh → gallery:8080
   ◆ secrets.sops.yaml            seeded
-● gateway/
+○ gateway/
   ● certificate-gallery.yaml     letsencrypt, gallery.lab-fort.deployments.mesh
-  ● gateway.yaml                 http listener only
-  ● kustomization.yaml           patches: listener-gallery.yaml
+  ○ kustomization.yaml           + certificate-gallery.yaml; patches: + listener-gallery.yaml
   ● listener-gallery.yaml        JSON6902 add /spec/listeners/- (https-gallery)
-  ● redirect-https.yaml          catch-all http→https 301
-○ kustomization.yaml             + gateway, gallery
+○ kustomization.yaml             + gallery
 
 note: the chart requires postgres.db — a platform service the core does not render.
       A layer renders it and wires it into release.yaml (sfi/fort-layers);

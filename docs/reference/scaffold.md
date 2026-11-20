@@ -49,12 +49,31 @@ flux/clusters/<host>/
 ● infrastructure.yaml                        infra-controllers + infrastructure (the shared layer)
 ● apps.yaml                                  → flux/apps/<host>
 flux/apps/<host>/
-● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint)
+● kustomization.yaml                         root list: sops-canary (listed, absent until fort mint), gateway
+● gateway/gateway.yaml                       the Gateway, http listener only; fort add appends a listener per app
+● gateway/redirect-https.yaml                catch-all http→https 301
+● gateway/kustomization.yaml                 gateway.yaml, redirect-https.yaml; fort add appends the certificates and the listener patches
 ```
 
 What a hub asks of the fort — a dead man's switch file, a datasource —
 is a layer's render into the layer's own directory ([layers](layers.md));
-the core's tree stops at the apps root.
+the core's tree stops at the apps root and the gateway battery under it.
+
+## The gateway battery
+
+Every cluster fort carries one `Gateway homelab` in `traefik`, with a
+single http listener, and the catch-all `http→https` redirect beside
+it. Scaffold renders them, not the first [`add`](add.md) with an http
+need (the shape until oss/fort-layers#13): a hub whose first hostname is
+a layer's stack — Grafana on the monitoring hub — has no app to trigger
+the render, and the layer's scaffold stopped on the missing directory.
+With the battery scaffold's, the two verbs that append to it — `add`,
+a layer's scaffold — find one shape, whichever comes first, and
+[`remove`](remove.md) leaves exactly this tree when the last listener
+goes. The shared layer already installs what the battery needs on every
+cluster: traefik with its Gateway provider, the GatewayClass, the
+Gateway API CRDs, cert-manager and the estate's ClusterIssuer, whose
+http01 solver names this Gateway.
 
 Manifest fields it reads: the provider table (`[libvirt]` or
 `[baremetal]` `ip` — the lab static IP — and its optional `lan_prefix`,
@@ -166,11 +185,14 @@ the line — the one key scaffold appends to an existing
 ## Force-no semantics
 
 The apply lays a file down only when it does not exist; an existing one is
-reported `○ exists — kept` and never touched. The one exception is the
-`ESTATE_NAME` line of an existing `cluster-vars.yaml`: a cluster-vars
-without it gains the line (a text-level append under `data:`, comments
-and order kept), and one that has it — whatever the value — is kept as it
-is. So:
+reported `○ exists — kept` and never touched. Two lines are the
+exceptions, both appends to an existing file with comments and order
+kept: the `ESTATE_NAME` line of an existing `cluster-vars.yaml` (a
+cluster-vars without it gains the line; one that has it — whatever the
+value — is kept as it is), and the `gateway` entry of an existing apps
+root kustomization (a fort scaffolded before the battery moved here
+gains the entry and the battery beside it on a re-run; one that lists
+it is kept). So:
 
 - the manifest seeds the host once; hand refinements live in the files and
   are never clobbered;

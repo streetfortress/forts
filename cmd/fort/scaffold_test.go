@@ -29,11 +29,12 @@ func TestRenderScaffold(t *testing.T) {
 	cloud := byPath(render(t, "cloud-fort", hosts["cloud-fort"]))
 	lab := byPath(render(t, "lab-fort", hosts["lab-fort"]))
 	c, l := cloud["nixos/hosts/cloud-fort/default.nix"], lab["nixos/hosts/lab-fort/default.nix"]
-	// nix host dir (2) + flux/clusters (fleet) + the apps root. What a
-	// hub asks of the fort is a layer's render (forts#143).
+	// nix host dir (2) + flux/clusters (fleet) + the apps root + the
+	// gateway battery (3). What a hub asks of the fort is a layer's
+	// render (forts#143).
 	for _, m := range []map[string]string{cloud, lab} {
-		if len(m) != 2+len(fleet)+1 {
-			t.Errorf("want %d files, got %d: %v", 2+len(fleet)+1, len(m), keys(m))
+		if len(m) != 2+len(fleet)+1+3 {
+			t.Errorf("want %d files, got %d: %v", 2+len(fleet)+1+3, len(m), keys(m))
 		}
 	}
 	for name, m := range map[string]map[string]string{"cloud-fort": cloud, "lab-fort": lab} {
@@ -67,8 +68,21 @@ func TestRenderScaffold(t *testing.T) {
 		if !strings.Contains(m["flux/clusters/"+name+"/apps.yaml"], "path: ./flux/apps/"+name) {
 			t.Errorf("%s apps.yaml path wrong", name)
 		}
-		if !strings.Contains(m["flux/apps/"+name+"/kustomization.yaml"], "- sops-canary.yaml") {
-			t.Errorf("%s apps root kustomization lacks the canary", name)
+		if !strings.Contains(m["flux/apps/"+name+"/kustomization.yaml"], "- sops-canary.yaml\n  - gateway\n") {
+			t.Errorf("%s apps root kustomization lacks the canary and the battery:\n%s", name, m["flux/apps/"+name+"/kustomization.yaml"])
+		}
+		// The battery (oss/fort-layers#13): the Gateway with its http
+		// listener only, the redirect, a kustomization that lists both
+		// and patches nothing yet — add's first listener opens the block.
+		gw := "flux/apps/" + name + "/gateway/"
+		if g := m[gw+"gateway.yaml"]; !strings.Contains(g, "kind: Gateway") || !strings.Contains(g, "name: homelab") || !strings.Contains(g, "protocol: HTTP\n") || strings.Contains(g, "protocol: HTTPS") {
+			t.Errorf("%s gateway.yaml:\n%s", name, g)
+		}
+		if r := m[gw+"redirect-https.yaml"]; !strings.Contains(r, "kind: HTTPRoute") || !strings.Contains(r, "statusCode: 301") {
+			t.Errorf("%s redirect-https.yaml:\n%s", name, r)
+		}
+		if k := m[gw+"kustomization.yaml"]; k != "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - gateway.yaml\n  - redirect-https.yaml\n" {
+			t.Errorf("%s gateway kustomization:\n%s", name, k)
 		}
 	}
 	if !strings.Contains(cloud["flux/clusters/cloud-fort/cluster-vars.yaml"], "MESH_IP: 10.1.0.98") {
@@ -400,8 +414,8 @@ func TestGitHubFixtureEstateIsScaffoldOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 9 {
-		t.Fatalf("a cluster fort: the host dir (2) and the flux tree (7), got %d", len(files))
+	if len(files) != 12 {
+		t.Fatalf("a cluster fort: the host dir (2), the flux tree (7) and the gateway battery (3), got %d", len(files))
 	}
 	for _, f := range files {
 		if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
@@ -482,8 +496,8 @@ func TestPublicFixtureEstateIsScaffoldOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 9 {
-		t.Fatalf("a cluster fort: the host dir (2) and the flux tree (7), got %d", len(files))
+	if len(files) != 12 {
+		t.Fatalf("a cluster fort: the host dir (2), the flux tree (7) and the gateway battery (3), got %d", len(files))
 	}
 	for _, f := range files {
 		got := readFile(t, filepath.Join(dir, f.path))

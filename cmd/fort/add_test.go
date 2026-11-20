@@ -135,7 +135,7 @@ func testAddFresh(t *testing.T, f addFixture) {
 	if f.ca {
 		copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, estateCA))
 	}
-	copyFile(t, "testdata/trees/fresh/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
+	freshAppsTree(t, tmp, fort)
 
 	p, err := planAdd(addOpts{
 		root: tmp, fort: fort,
@@ -222,7 +222,10 @@ func testAddFresh(t *testing.T, f addFixture) {
 }
 
 // add never overwrites: an app dir that exists is refused before any
-// file is planned, and a fort with no apps root (not scaffolded) too.
+// file is planned, a fort with no apps root (not scaffolded) too, and
+// an http app on a fort whose apps root predates the gateway battery
+// is sent to re-run scaffold — add appends to the battery, it does not
+// render one.
 func TestAddRefusals(t *testing.T) {
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, "lab-fort")
@@ -231,7 +234,11 @@ func TestAddRefusals(t *testing.T) {
 	if _, err := planAdd(o); err == nil || !strings.Contains(err.Error(), "no flux/apps tree") {
 		t.Errorf("no apps root: err = %v", err)
 	}
-	copyFile(t, "testdata/trees/fresh/kustomization.yaml", filepath.Join(tmp, "flux/apps/lab-fort/kustomization.yaml"))
+	writeFile(t, tmp, "flux/apps/lab-fort/kustomization.yaml", "resources:\n  - sops-canary.yaml\n")
+	if _, err := planAdd(o); err == nil || !strings.Contains(err.Error(), "no gateway battery — fort scaffold lab-fort renders it") {
+		t.Errorf("no battery: err = %v", err)
+	}
+	freshAppsTree(t, tmp, "lab-fort")
 	writeFile(t, tmp, "flux/apps/lab-fort/moment-tally-website/release.yaml", "x")
 	if _, err := planAdd(o); err == nil || !strings.Contains(err.Error(), "never overwrites") {
 		t.Errorf("existing app dir: err = %v", err)
@@ -258,7 +265,7 @@ func TestHTTPFlag(t *testing.T) {
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, "lab-fort")
 	copyEstate(t, tmp)
-	copyFile(t, "testdata/trees/fresh/kustomization.yaml", filepath.Join(tmp, "flux/apps/lab-fort/kustomization.yaml"))
+	freshAppsTree(t, tmp, "lab-fort")
 	_, err = planAdd(addOpts{
 		root: tmp, fort: "lab-fort",
 		ref:      "oci://gitea.zen.lofi/sfi/moment-tally-website",

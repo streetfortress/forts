@@ -56,9 +56,10 @@ gone) fails the dry run with the entry named, not the apply.
 
 - **The gateway.** When the last listener leaves, `gateway/` keeps the
   Gateway, the redirect and its kustomization (now without a
-  `patches:` block). They are the fort's: the next `add` with an
-  `http` block or `--http` appends to them, and renders exactly what
-  it would have on a fresh tree. The report says so.
+  `patches:` block) — exactly the battery [`scaffold`](scaffold.md)
+  renders on a fresh fort. They are the fort's: the next `add` with an
+  `http` block or `--http` appends to them as the first did. The report
+  says so.
 - **The ClusterIssuer, the sops rules.** Both are the estate's and the
   fort's; an app adds nothing to either, so remove edits neither.
 - **The Secret's history.** The encrypted file leaves the tree, not

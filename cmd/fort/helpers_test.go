@@ -13,6 +13,26 @@ import (
 // sops tool that records what a verb would do. They lived in the apps
 // layer's test files until forts#143 moved that layer out.
 
+// freshAppsTree lays down what fort scaffold renders under flux/apps/<fort>
+// — the apps root and the gateway battery — so add's and remove's
+// fixtures are scaffold's output, never a copy that drifts from it.
+func freshAppsTree(t *testing.T, root, fort string) {
+	t.Helper()
+	hosts, problems, err := manifest.LoadAll("testdata")
+	if err != nil || len(problems) > 0 {
+		t.Fatal(err, problems)
+	}
+	files, err := renderScaffold(fort, hosts[fort], testEstate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasPrefix(f.path, "flux/apps/") {
+			writeFile(t, root, f.path, string(f.content))
+		}
+	}
+}
+
 // estateRoot is the checkout this test mirrors against: a repo root that
 // holds the manifests (manifest.Dir). The mirror tests compare the CLI
 // with a committed estate — its manifests, host files, sops rules, the

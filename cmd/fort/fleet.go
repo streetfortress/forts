@@ -104,6 +104,50 @@ func orphanFindings(root string, hosts map[string]bool) []finding {
 	return out
 }
 
+// gatewayFindings judges the gateway battery under a cluster fort's apps
+// root: the Gateway and the redirect scaffold renders, listed; and each
+// app's half as add writes it — a certificate listed, a listener under
+// patches — so a hand edit that leaves a listener with no Gateway, or a
+// certificate the kustomization never applies, is named before kustomize
+// fails the layer on it. A layer's check judges its own entries only
+// (oss/fort-layers#13); the battery is the core's.
+func gatewayFindings(root, fort string) []finding {
+	gw := filepath.Join("flux/apps", fort, "gateway")
+	raw, err := os.ReadFile(filepath.Join(root, gw, "kustomization.yaml"))
+	if err != nil {
+		return []finding{{"error", gw, "no gateway battery — fort scaffold " + fort + " renders it (the Gateway, the redirect, their kustomization); add and the layers append to it"}}
+	}
+	s := string(raw)
+	var gaps []string
+	for _, f := range []string{"gateway.yaml", "redirect-https.yaml"} {
+		switch {
+		case !exists(root, filepath.Join(gw, f)):
+			gaps = append(gaps, f+" missing")
+		case !listsItem(s, f):
+			gaps = append(gaps, f+" unlisted")
+		}
+	}
+	certs, _ := filepath.Glob(filepath.Join(root, gw, "certificate-*.yaml"))
+	for _, c := range certs {
+		cert := filepath.Base(c)
+		app := strings.TrimSuffix(strings.TrimPrefix(cert, "certificate-"), ".yaml")
+		if !listsItem(s, cert) {
+			gaps = append(gaps, cert+" unlisted")
+		}
+		listener := "listener-" + app + ".yaml"
+		switch {
+		case !exists(root, filepath.Join(gw, listener)):
+			gaps = append(gaps, listener+" missing")
+		case !strings.Contains(s, "path: "+listener):
+			gaps = append(gaps, listener+" not under patches")
+		}
+	}
+	if len(gaps) > 0 {
+		return []finding{{"error", gw, strings.Join(gaps, ", ") + " — the shape fort scaffold and fort add write; fort remove takes an app's half out whole"}}
+	}
+	return []finding{{"ok", gw, "the Gateway, the redirect, " + count(len(certs), "listener", "listeners")}}
+}
+
 // checkFleetFort: one fort's tree exists, its two layers build, and every
 // ${VAR} in them (and in the shared layers) is a key of its cluster-vars.
 // A plain fort (no [cluster]) has a host dir and no fleet surface: the host
@@ -137,6 +181,7 @@ func checkFleetFort(root, fort string, entry manifest.Host, shared fleetShared) 
 		out = append(out, finding{"error", filepath.Join("flux/clusters", fort, "cluster-vars.yaml"), err.Error()})
 	}
 	out = append(out, clusterVarFindings(fort, values, shared.estate)...)
+	out = append(out, gatewayFindings(root, fort)...)
 	vars := map[string]bool{}
 	for k := range values {
 		vars[k] = true

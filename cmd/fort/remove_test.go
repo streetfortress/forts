@@ -10,8 +10,9 @@ import (
 // fort remove is add's inverse, so its tests are round trips against
 // add's own renders (forts#251): add two apps and remove the first, and
 // the tree equals the second app added alone; add one app and remove
-// it, and the tree is the fresh tree plus a listener-less gateway dir
-// that the next add appends to exactly as the template would.
+// it, and the tree is the fresh tree scaffold renders — the battery
+// with no listener — that the next add appends to exactly as the
+// first did.
 
 // addApp renders one chart onto a scratch fort tree.
 func addApp(t *testing.T, root, fort, chart, version, name string) *plan {
@@ -37,7 +38,7 @@ func freshFort(t *testing.T, fort string) string {
 	tmp := t.TempDir()
 	copyManifest(t, "testdata", tmp, fort)
 	copyEstate(t, tmp)
-	copyFile(t, "testdata/trees/fresh/kustomization.yaml", filepath.Join(tmp, "flux/apps", fort, "kustomization.yaml"))
+	freshAppsTree(t, tmp, fort)
 	return tmp
 }
 
@@ -124,11 +125,11 @@ staged. then: review, commit, PR — flux prunes the app on merge.
 	}
 }
 
-// The last app, removed by its OCI ref: the apps kustomization keeps
-// the gateway entry, the gateway dir keeps the Gateway and the
-// redirect with an empty-list-free kustomization, and the report says
-// no listener remains. Adding the app again then renders the same tree
-// as a first add — appendPatch's appendBlock path meets the template.
+// The last app, removed by its OCI ref: the tree is the fresh tree
+// scaffold renders — the apps root with its gateway entry, the battery
+// with no listener and no patches: block — and the report says no
+// listener remains. Adding the app again then renders the same tree as
+// a first add: appendPatch's appendBlock path meets the battery.
 func TestRemoveLastApp(t *testing.T) {
 	root := freshFort(t, "lab-fort")
 	addApp(t, root, "lab-fort", "moment-tally-website", "0.1.0", "")
@@ -141,11 +142,10 @@ func TestRemoveLastApp(t *testing.T) {
 		t.Errorf("report lacks the gateway note:\n%s", report)
 	}
 	got := appsTree(t, root, "lab-fort")
-	want := map[string]string{
-		"kustomization.yaml":          readFile(t, "testdata/trees/fresh/kustomization.yaml") + "  - gateway\n",
-		"gateway/gateway.yaml":        first["gateway/gateway.yaml"],
-		"gateway/redirect-https.yaml": first["gateway/redirect-https.yaml"],
-		"gateway/kustomization.yaml":  "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - gateway.yaml\n  - redirect-https.yaml\n",
+	fresh := freshFort(t, "lab-fort")
+	want := appsTree(t, fresh, "lab-fort")
+	if want["gateway/kustomization.yaml"] != "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - gateway.yaml\n  - redirect-https.yaml\n" {
+		t.Errorf("the fresh battery's kustomization:\n%s", want["gateway/kustomization.yaml"])
 	}
 	sameTree(t, got, want)
 

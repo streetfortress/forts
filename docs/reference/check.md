@@ -24,6 +24,13 @@ Per fort (every run):
 - the fort's tree matches its manifest — a `[cluster]` fort has its flux
   cluster and apps trees, a plain fort has a host dir and no fleet
   surface (a flux dir on a plain fort is its own finding)
+- the gateway battery under a cluster fort's apps root holds together:
+  the Gateway and the redirect [`scaffold`](scaffold.md) renders are
+  listed, and each app's half is the shape [`add`](add.md) writes — its
+  certificate listed, its listener under `patches:`. A missing battery
+  names `fort scaffold <fort>`. The battery is the core's to judge; a
+  layer's check judges the entries it appended and nothing else
+  (oss/fort-layers#13)
 - the fort's two flux layers `kustomize build`, as do the shared
   infrastructure layers (built once per run)
 - strict envsubst is satisfiable: every `${VAR}` the built layers

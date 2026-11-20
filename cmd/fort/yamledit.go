@@ -48,6 +48,17 @@ func insertIntoBlock(text, key, entry string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
+// listsItem says whether a kustomization's text lists an item — by
+// line, so a comment that mentions the name does not count.
+func listsItem(text, item string) bool {
+	for _, l := range strings.Split(text, "\n") {
+		if strings.TrimSpace(l) == "- "+item {
+			return true
+		}
+	}
+	return false
+}
+
 // appendListItem inserts `  - <item>` as the last entry of the top-level
 // block sequence under <key> (e.g. resources:).
 func appendListItem(text, key, item string) (string, error) {
