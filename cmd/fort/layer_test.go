@@ -33,10 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: The gate (fort check --all)
+      - name: The gate (fort check --all --eval)
         env:
           GITEA_ACTIONS: "true"
-        run: nix run ./nixos#fort -- check --all
+        run: nix run ./nixos#fort -- check --all --eval
 
       - name: Eval every host with a manifest
         run: echo eval
@@ -47,13 +47,19 @@ func TestParseLayerRef(t *testing.T) {
 		"git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring":      {url: "git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers", input: "fort-layers", role: "monitoring"},
 		"git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers.git?ref=v1#apps": {url: "git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers.git?ref=v1", input: "fort-layers", role: "apps"},
 		"path:../layers#backups": {url: "path:../layers", input: "layers", role: "backups"},
+		// The shorthands carry the ref as a path label (forts#279): the
+		// repo is the second label there, not the last.
+		"github:acme/fort-layers#monitoring":            {url: "github:acme/fort-layers", input: "fort-layers", role: "monitoring"},
+		"github:acme/fort-layers/v0.0.1#monitoring":     {url: "github:acme/fort-layers/v0.0.1", input: "fort-layers", role: "monitoring"},
+		"gitlab:acme/fort-layers/main#backups":          {url: "gitlab:acme/fort-layers/main", input: "fort-layers", role: "backups"},
+		"sourcehut:~acme/fort-layers/v0.0.1#monitoring": {url: "sourcehut:~acme/fort-layers/v0.0.1", input: "fort-layers", role: "monitoring"},
 	} {
 		got, err := parseLayerRef(in)
 		if err != nil || got != want {
 			t.Errorf("%s: got %+v, %v; want %+v", in, got, err, want)
 		}
 	}
-	for _, bad := range []string{"git+ssh://x/sfi/fort-layers", "#monitoring", "git+ssh://x/sfi/fort-layers#Monitoring", "git+ssh://x/sfi/fort-layers#-a"} {
+	for _, bad := range []string{"git+ssh://x/sfi/fort-layers", "#monitoring", "git+ssh://x/sfi/fort-layers#Monitoring", "git+ssh://x/sfi/fort-layers#-a", "path:../v0.0.1#monitoring"} {
 		if _, err := parseLayerRef(bad); err == nil {
 			t.Errorf("%s: want an error", bad)
 		}
@@ -91,6 +97,68 @@ func TestLayerAddFindsGithubGate(t *testing.T) {
 	}
 }
 
+// The gate the layer's step lands in is the one fort init renders, in
+// both forge kinds. The core's step name carries the flags the step
+// runs with, and those moved once (#193) while this verb still matched
+// the old name (#278) — no test read a rendered gate. This one does.
+func TestLayerAddOnTheRenderedEstate(t *testing.T) {
+	for _, kind := range []string{"gitea", "github"} {
+		v := testInitView
+		v.ForgeKind = kind
+		files, err := renderInit(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tree := map[string]string{}
+		for _, f := range files {
+			if f.path == flakePath || strings.HasSuffix(f.path, "workflows/checks.yaml") {
+				tree[f.path] = string(f.content)
+			}
+		}
+		if len(tree) != 2 {
+			t.Fatalf("%s: the render gave %d of the two files the verb edits", kind, len(tree))
+		}
+		root := t.TempDir()
+		writeTree(t, root, tree)
+		ref, err := parseLayerRef("github:acme/fort-layers/v0.0.1#monitoring")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := planLayerAdd(root, ref)
+		if err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		if err := p.apply(); err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		gate := readFile(t, filepath.Join(root, gatePathIn(root)))
+		if !strings.Contains(gate, "check --all --eval\n\n      - name: "+layerGateStepName("monitoring")+"\n") {
+			t.Errorf("%s: the layer's step is not after the core's:\n%s", kind, gate)
+		}
+		flake := readFile(t, filepath.Join(root, flakePath))
+		for _, want := range []string{
+			`fort-layers.url = "github:acme/fort-layers/v0.0.1";`,
+			"fort-monitoring = inputs.fort-layers.packages.${sys}.fort-monitoring;",
+		} {
+			if !strings.Contains(flake, want) {
+				t.Errorf("%s: the flake lacks %q:\n%s", kind, want, flake)
+			}
+		}
+	}
+}
+
+// A gate with no core step refuses, and the error names what it looked
+// for.
+func TestLayerAddRefusesAGateWithNoCoreStep(t *testing.T) {
+	root := layerEstate(t)
+	writeTree(t, root, map[string]string{gatePath: strings.Replace(gateFixture, "The gate (fort check --all --eval)", "Something else", 1)})
+	ref, _ := parseLayerRef("path:../layers#monitoring")
+	_, err := planLayerAdd(root, ref)
+	if err == nil || !strings.Contains(err.Error(), coreGateStepPrefix) {
+		t.Errorf("want the refusal that names the step, got %v", err)
+	}
+}
+
 func TestLayerAddAndRemove(t *testing.T) {
 	root := layerEstate(t)
 	ref, _ := parseLayerRef("git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring")
@@ -119,7 +187,7 @@ func TestLayerAddAndRemove(t *testing.T) {
 		}
 	}
 	gate := readFile(t, filepath.Join(root, gatePath))
-	if !strings.Contains(gate, "run: nix run ./nixos#fort -- check --all\n\n      - name: The gate of the monitoring layer (fort monitoring check --all)\n") ||
+	if !strings.Contains(gate, "run: nix run ./nixos#fort -- check --all --eval\n\n      - name: The gate of the monitoring layer (fort monitoring check --all)\n") ||
 		!strings.Contains(gate, "run: nix run ./nixos#fort-monitoring -- check --all\n\n      - name: Eval every host") {
 		t.Errorf("gate:\n%s", gate)
 	}
@@ -177,7 +245,7 @@ func TestLayerAddAndRemove(t *testing.T) {
 	if strings.Contains(flake, "fort-monitoring") || !strings.Contains(flake, "fort-layers.url") || !strings.Contains(flake, "fort-backups") {
 		t.Errorf("flake after remove:\n%s", flake)
 	}
-	if strings.Contains(gate, "monitoring layer") || !strings.Contains(gate, "run: nix run ./nixos#fort -- check --all\n\n      - name: The gate of the backups layer") {
+	if strings.Contains(gate, "monitoring layer") || !strings.Contains(gate, "run: nix run ./nixos#fort -- check --all --eval\n\n      - name: The gate of the backups layer") {
 		t.Errorf("gate after remove:\n%s", gate)
 	}
 	if _, err := os.Stat(filepath.Join(root, "layers/monitoring")); !os.IsNotExist(err) {

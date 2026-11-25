@@ -52,10 +52,12 @@ fort layer add git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring \
     -- --central central --write
 ```
 
-The argument is a flake URL and a role. The URL names the input, by its
-last path label (`fort-layers`); the role names the binary
-(`fort-monitoring`). The verb makes three edits in the core's files,
-prints them in the marked-tree shape every author verb uses, and with
+The argument is a flake URL and a role. The URL names the input after the
+repo — its last path label (`fort-layers`), or the second label under the
+registry shorthands `github:`, `gitlab:` and `sourcehut:`, where the last
+label is a ref (`github:acme/fort-layers/v0.0.1`); the role names the
+binary (`fort-monitoring`). The verb makes three edits in the core's
+files and prints them in the marked-tree shape every author verb uses.
 The default applies and stages them; `--dry-run` only plans:
 
 ```
@@ -70,7 +72,10 @@ The default applies and stages them; `--dry-run` only plans:
   the role's binary at the layer's pin, so `nix run ./nixos#fort-monitoring`
   is the same binary the gate runs. A flake rendered before layers has
   no such set; the verb refuses and says what to add.
-- **The gate step.** After the core's step in `.gitea/workflows/checks.yaml` (`.github/workflows/checks.yaml` in a github-forge estate):
+- **The gate step.** After the core's step in
+  `.gitea/workflows/checks.yaml` (`.github/workflows/checks.yaml` in a
+  github-forge estate) — the step whose name starts `The gate (fort
+  check`, whatever flags the rest of that name carries:
   `nix run ./nixos#fort-<role> -- check --all`. The layer's check is the
   layer's gate, and the estate's gate runs both.
 

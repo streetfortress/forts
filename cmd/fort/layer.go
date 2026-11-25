@@ -59,7 +59,7 @@ func layerCmd(args []string) error {
 const layerUsage = "usage: fort layer add <flake url>#<role> [--dry-run] [-- <the layer's init flags>]\n       fort layer remove <role> [--dry-run]"
 
 // layerRef is the one argument of fort layer add, split: the flake URL
-// (the input, named by its last path label) and the role (the binary).
+// (the input, named for the repo) and the role (the binary).
 type layerRef struct {
 	url, input, role string
 }
@@ -72,18 +72,52 @@ func parseLayerRef(s string) (layerRef, error) {
 	if !nameOK(role) {
 		return layerRef{}, fmt.Errorf("role %q — want lowercase labels and dashes: the binary is fort-%s", role, role)
 	}
-	// The input is the repo's name: the last path label, .git stripped,
-	// a query cut off (git+ssh://…/fort-layers.git?ref=v1 → fort-layers).
-	base := url
-	if i := strings.IndexAny(base, "?"); i >= 0 {
-		base = base[:i]
-	}
-	base = strings.TrimSuffix(strings.TrimSuffix(base, "/"), ".git")
-	input := base[strings.LastIndexAny(base, "/:")+1:]
-	if !nameOK(input) {
-		return layerRef{}, fmt.Errorf("the flake url %q ends in %q, which is not a flake input name", url, input)
+	input := flakeInputName(url)
+	if !inputNameOK(input) {
+		return layerRef{}, fmt.Errorf("the flake url %q reads as the input name %q, which is not a nix identifier — fort writes the input into nixos/flake.nix under that name; name the repo in the url and pin the ref in a query (…/fort-layers?ref=v0.0.1)", url, input)
 	}
 	return layerRef{url: url, input: input, role: role}, nil
+}
+
+// flakeInputName is the repo's name in a flake url: the last path
+// label, .git stripped, a query cut off
+// (git+ssh://…/fort-layers.git?ref=v1 → fort-layers). The registry
+// shorthands carry the ref as a path label instead of a query
+// (github:acme/fort-layers/v0.0.1, forts#279), so under those schemes
+// the repo is the second label, not the last.
+func flakeInputName(url string) string {
+	base := url
+	if i := strings.IndexByte(base, '?'); i >= 0 {
+		base = base[:i]
+	}
+	if scheme, path, ok := strings.Cut(base, ":"); ok {
+		switch scheme {
+		case "github", "gitlab", "sourcehut":
+			if labels := strings.Split(path, "/"); len(labels) > 1 {
+				base = labels[1]
+			}
+		}
+	}
+	base = strings.TrimSuffix(strings.TrimSuffix(base, "/"), ".git")
+	return base[strings.LastIndexAny(base, "/:")+1:]
+}
+
+// inputNameOK holds for a nix identifier: what an input can be called
+// unquoted in the flake's inputs set. A repo's name is one; a ref
+// label such as v0.0.1 is not.
+func inputNameOK(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '_':
+		case i > 0 && (r >= '0' && r <= '9' || r == '-' || r == '\''):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func nameOK(s string) bool {
@@ -208,7 +242,8 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	} else {
 		note := "+ " + exportLine
 		if t1 != text {
-			note = "+ " + inputLine + "; " + note
+			// inputLine ends in its own `;`: one separator, not two.
+			note = "+ " + inputLine + " " + note
 		}
 		p.actions = append(p.actions, action{path: flakePath, mark: '○', note: note, edit: func(s string) (string, error) {
 			s, err := nixEnsureInput(s, ref.input, inputLine)
@@ -219,7 +254,11 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 		}})
 	}
 	step := layerGateStep(ref.role)
-	g, err := yamlEnsureStepAfter(string(gate), coreGateStep, layerGateStepName(ref.role), step)
+	core, err := coreGateStepName(string(gate))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", gatePath, err)
+	}
+	g, err := yamlEnsureStepAfter(string(gate), core, layerGateStepName(ref.role), step)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", gatePath, err)
 	}
@@ -227,7 +266,11 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 		p.present = append(p.present, gatePath)
 	} else {
 		p.actions = append(p.actions, action{path: gatePath, mark: '○', note: "+ the step `" + layerGateStepName(ref.role) + "`", edit: func(s string) (string, error) {
-			return yamlEnsureStepAfter(s, coreGateStep, layerGateStepName(ref.role), step)
+			core, err := coreGateStepName(s)
+			if err != nil {
+				return "", err
+			}
+			return yamlEnsureStepAfter(s, core, layerGateStepName(ref.role), step)
 		}})
 	}
 	return p, nil
@@ -394,7 +437,24 @@ func stageLayerFiles(root string) {
 
 // --- the gate step ---
 
-const coreGateStep = "The gate (fort check --all)"
+// coreGateStepPrefix starts the name of the core's gate step, which the
+// init templates render. The rest of the name is the flags the step
+// runs with, and those move: the templates said `--all` and now say
+// `--all --eval` (#193), which left this verb matching a name no estate
+// carried (#278). A prefix is what both renderings share.
+const coreGateStepPrefix = "The gate (fort check"
+
+// coreGateStepName is the name the gate gives the core's step, read
+// from the file: the layer's step lands after that step.
+func coreGateStepName(gate string) (string, error) {
+	for _, l := range strings.Split(gate, "\n") {
+		name, ok := strings.CutPrefix(strings.TrimSpace(l), "- name: ")
+		if ok && strings.HasPrefix(name, coreGateStepPrefix) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no step whose name starts with %q — the gate workflow fort init renders", coreGateStepPrefix)
+}
 
 func layerGateStepName(role string) string {
 	return fmt.Sprintf("The gate of the %s layer (fort %s check --all)", role, role)
