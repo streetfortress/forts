@@ -1,7 +1,7 @@
 # fort remove — the inverse of add, one app
 
 ```
-fort remove <fort> <app | oci-ref> [--dry-run]
+fort remove <fort> <app | oci-ref>
 ```
 
 `remove` takes one app out of a fort's apps tree: exactly what
@@ -50,7 +50,7 @@ staged. then: review, commit, PR — flux prunes the app on merge.
 
 The edits remove lines only — never a rewrite — and they run at plan
 time, so a tree that is not the shape `add` wrote (an entry already
-gone) fails the dry run with the entry named, not the apply.
+gone) fails the plan with the entry named, not the apply.
 
 ## What stays
 
@@ -84,7 +84,7 @@ merge, and [`check`](check.md) on that fort reports it as the gate
 already does. And a file a layer rendered for this app *outside* the
 app dir: the core cannot know it is the app's, so it names it and
 leaves it. The residue is counted on the post-edit text of the files
-this plan edits, so a dry run shows what the reviewer will face.
+this plan edits, so the report shows what the reviewer will face.
 
 ## Why no layer cascade
 

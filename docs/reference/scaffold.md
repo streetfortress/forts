@@ -1,7 +1,7 @@
 # fort scaffold — the host's generated surface
 
 ```
-fort scaffold <host | forts/<host>.toml> [--dry-run]
+fort scaffold <host | forts/<host>.toml>
 ```
 
 The argument is the host or the path of its manifest: write
@@ -20,7 +20,7 @@ what is on main.
 The identity step ([`mint`](mint.md)) needs the scaffold's output (the
 canary's home, the flake's view of the host) and needs secrets and a
 gitea token; scaffold needs neither. Keeping them apart keeps scaffold
-deterministic, keeps its dry run honest (nothing leaves the tree), and
+deterministic, keeps its report honest (nothing leaves the tree), and
 lets a contributor without keys open the PR that a maintainer finishes.
 The one-command front door for both is a later `fort new`, composing
 the primitives rather than fattening one.

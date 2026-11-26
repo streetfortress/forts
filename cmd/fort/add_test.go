@@ -166,7 +166,7 @@ func testAddFresh(t *testing.T, f addFixture) {
 		}
 	}
 	var report strings.Builder
-	p.report(&report, true)
+	p.report(&report)
 
 	got := map[string]string{}
 	base := filepath.Join(tmp, "flux/apps", fort)

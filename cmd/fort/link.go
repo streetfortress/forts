@@ -18,8 +18,7 @@ import (
 // fort link add <fort> <estate url> — the local half of a link
 // (forts#55, #56; docs/links.md): declare that <fort> is on <estate>'s
 // mesh, and mint the key. An author verb in mint's shape: it reads the
-// other estate's repo, renders and stages the link; --dry-run plans it
-// down and stages it.
+// other estate's repo, renders and stages the link.
 //
 // What it writes, all in THIS estate: the private half into
 // nixos/secrets/<fort>.yaml as wireguard-private-key-<name> (sops set);
@@ -45,7 +44,7 @@ import (
 // so. Nothing is written in the other estate.
 func linkCmd(args []string) error {
 	if len(args) < 1 || args[0] != "add" {
-		return fmt.Errorf("usage: fort link add <fort> <estate url> [--address <ip>] [--port <udp>] [--dry-run]")
+		return fmt.Errorf("usage: fort link add <fort> <estate url> [--address <ip>] [--port <udp>]")
 	}
 	return linkAdd(args[1:])
 }
@@ -60,14 +59,11 @@ func linkAdd(args []string) error {
 	var o linkAddOpts
 	fs.StringVar(&o.address, "address", "", "this host's address on the other mesh (default: the highest free one)")
 	fs.IntVar(&o.port, "port", 0, "the link's UDP listen port (default: the lowest free one above 51820)")
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	write := !*dryRun
 	if len(pos) != 2 || fs.NArg() > 0 {
-		return fmt.Errorf("usage: fort link add <fort> <estate url> [--address <ip>] [--port <udp>] [--dry-run]")
+		return fmt.Errorf("usage: fort link add <fort> <estate url> [--address <ip>] [--port <udp>]")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -78,15 +74,13 @@ func linkAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if write {
-		if err := tools.EnsureAll("sops", "git"); err != nil {
-			return err
-		}
-		if err := p.apply(tool); err != nil {
-			return err
-		}
+	if err := tools.EnsureAll("sops", "git"); err != nil {
+		return err
 	}
-	p.report(os.Stdout, write)
+	if err := p.apply(tool); err != nil {
+		return err
+	}
+	p.report(os.Stdout)
 	return nil
 }
 
@@ -576,15 +570,13 @@ func (p *linkPlan) apply(tool secretsTool) error {
 	return nil
 }
 
-func (p *linkPlan) report(w io.Writer, written bool) {
+func (p *linkPlan) report(w io.Writer) {
 	r := p.remote.est
 	fmt.Fprintf(w, "link add ⛫ %s → %s   (mesh %s · %s · %s)\n", p.host, r.Ref(), orNone(r.Mesh.CIDR), p.link.Interface, p.link.Zone)
 	fmt.Fprintf(w, "  address    %-16s %s\n", p.link.Address, p.addressWhy)
 	fmt.Fprintf(w, "  port       %-16d %s\n", p.link.Port, p.portWhy)
 	fmt.Fprintf(w, "  public key %s\n", p.wg.public)
 	switch {
-	case p.keyMissing && !written:
-		fmt.Fprintf(w, "○ %-36s + %s (sops set)   (dry run: minted in memory and discarded)\n", p.secretsPath, linkSecretKey(p.name))
 	case p.keyMissing:
 		fmt.Fprintf(w, "○ %-36s + %s (sops set)\n", p.secretsPath, linkSecretKey(p.name))
 	default:
@@ -622,10 +614,6 @@ func (p *linkPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "· known_hosts: none — %s is on the anonymous route; the clone uses https\n", r.Ref())
 	}
 	fmt.Fprintln(w)
-	if !written {
-		fmt.Fprintln(w, "dry run — nothing written.")
-		return
-	}
 	fmt.Fprintf(w, "staged — commit the rendered files. next, in a checkout of %s: fort estate link %s\n", r.Ref(), p.est.Source.Repo)
 }
 

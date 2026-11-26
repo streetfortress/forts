@@ -191,7 +191,7 @@ func TestLinksMatchHostFile(t *testing.T) {
 		}
 		for _, name := range entry.LinkNames() {
 			if !nixSetsAttr(string(raw), "sfi.links."+name) {
-				t.Errorf("%s declares [links.%s], and %s does not set sfi.links.%s — `fort scaffold %s --write` appends the block", manifest.Path(host), name, file, name, host)
+				t.Errorf("%s declares [links.%s], and %s does not set sfi.links.%s — `fort scaffold %s` appends the block", manifest.Path(host), name, file, name, host)
 			}
 		}
 		for _, l := range strings.Split(string(raw), "\n") {

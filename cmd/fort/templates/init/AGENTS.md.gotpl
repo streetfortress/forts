@@ -44,12 +44,11 @@ Run a verb as `just fort <verb>` or `nix run ./nixos#fort -- <verb>`.
 ## To add a workload
 
 1. Write or edit `forts/<host>.toml`. The manifest is the declaration.
-2. Run `fort scaffold <host> --dry-run`. Read the preview.
-3. Run `fort scaffold <host>`.
-4. Run `fort add <host> <oci-ref> --version <tag> --dry-run`. Read the preview, then run it without `--dry-run`.
+2. Run `fort scaffold <host>`. Read the report.
+3. Run `fort add <host> <oci-ref> --version <tag>`. Read the report.
    A workload that is not a chart goes in `flux/apps/<host>/` by hand, or in the file that the layer names.
-5. Run `fort seed <host>`. It makes the Secrets that the report marks `◆`.
-6. Run `fort check --all --eval`. Fix every error.
+4. Run `fort seed <host>`. It makes the Secrets that the report marks `◆`.
+5. Run `fort check --all --eval`. Fix every error.
 
 ## Invariants
 
@@ -57,7 +56,7 @@ Run a verb as `just fort <verb>` or `nix run ./nixos#fort -- <verb>`.
 - Do not commit a decrypted secret. Encrypt a secret file with `sops` before `git add`.
 - `fort scaffold` never overwrites a file that exists. To change a rendered file, edit it by hand or delete it first.
 - Commit `provisioning/pulumi/` after every `fort provision` and every `fort destroy`.
-- A verb that writes files takes `--dry-run`. `--dry-run` previews and writes nothing.
+- A verb that writes files stages what it writes and stops. Review the staged diff with `git diff --cached` before you commit.
 - Do not read, print or edit a WireGuard private key.
 
 ## Done

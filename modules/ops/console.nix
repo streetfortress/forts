@@ -46,7 +46,7 @@
 # fort (#647 — #524 had left dev forts out and this module refused them
 # at evaluation; that assertion is gone with the reason for it). The
 # credential is minted per fort by `fort mint`, with the rest of the
-# identity, or by `fort console-password <host> --write` for a host that
+# identity, or by `fort console-password <host>` for a host that
 # opted in after the first provision; either writes the hash here and the
 # passphrase into provisioning/console-passwords.yaml — the registry an
 # operator reads with `console-password --show`, encrypted to the admin
@@ -75,7 +75,7 @@ in
   options.sfi.ops.console.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
-    description = "Give `ops` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `ops-password-hash` in the host's sops file (`fort console-password <host> --write`).";
+    description = "Give `ops` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `ops-password-hash` in the host's sops file (`fort console-password <host>`).";
   };
 
   config = lib.mkIf cfg.enable {

@@ -1,7 +1,7 @@
 # fort estate init — create an estate
 
 ```
-fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>] [--dry-run]
+fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>]
 ```
 
 `init` renders, into the root of a git checkout, the files every other

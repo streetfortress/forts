@@ -44,16 +44,13 @@ import (
 // the inverse.
 func mint(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort mint <host> [--dry-run]")
+		return fmt.Errorf("usage: fort mint <host>")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("mint", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: mint, encrypt, register, stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -72,26 +69,24 @@ func mint(args []string) error {
 			return err
 		}
 	}
-	p, err := planMint(root, host, tool, f, write)
+	p, err := planMint(root, host, tool, f)
 	if err != nil {
 		return err
 	}
-	if write {
-		// Every tool the apply execs, before the first write: a mint
-		// that dies mid-apply leaves the rule and the mesh staged with
-		// no secrets file behind them.
-		needs := []string{"sops", "jq", "git"}
-		if p.consoleMint {
-			needs = append(needs, "mkpasswd")
-		}
-		if err := tools.EnsureAll(needs...); err != nil {
-			return err
-		}
-		if err := p.apply(tool, f); err != nil {
-			return err
-		}
+	// Every tool the apply execs, before the first write: a mint
+	// that dies mid-apply leaves the rule and the mesh staged with
+	// no secrets file behind them.
+	needs := []string{"sops", "jq", "git"}
+	if p.consoleMint {
+		needs = append(needs, "mkpasswd")
 	}
-	p.report(os.Stdout, write)
+	if err := tools.EnsureAll(needs...); err != nil {
+		return err
+	}
+	if err := p.apply(tool, f); err != nil {
+		return err
+	}
+	p.report(os.Stdout)
 	return nil
 }
 
@@ -137,8 +132,6 @@ type mintPlan struct {
 	anonymous  bool   // the anonymous route (forts#167): no deploy key at all
 	staleKey   bool   // the secrets file carries a deploy key the anonymous route reads nowhere
 
-	write bool // the plan will be applied, so a missing credential is fatal now rather than later
-
 	// The console door (console.go, sfi/forts#24): minted with the
 	// identity when the host file enables sfi.ops.console. The hash is
 	// one more key of the secrets file; the passphrase goes to the
@@ -147,7 +140,7 @@ type mintPlan struct {
 	consoleMint   bool   // apply mints the passphrase and the hash
 	consoleOrphan bool   // a hash with no passphrase behind it: console-password --rotate is the repair
 	newRegistry   bool   // the registry does not exist yet
-	consoleHash   string // filled by apply, and only there — a dry run mints nothing
+	consoleHash   string // filled by apply, and only there
 
 }
 
@@ -155,7 +148,7 @@ type mintPlan struct {
 // with fort destroy. Every plan on the ssh route needs one — the deploy
 // key's standing is read before anything is written. On the anonymous
 // route f is nil and unused: there is no deploy key (forts#167).
-func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPlan, error) {
+func planMint(root, host string, tool secretsTool, f forge) (*mintPlan, error) {
 	entry, err := manifest.Load(root, host)
 	if err != nil {
 		return nil, err
@@ -167,7 +160,7 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 	if f == nil && !est.Anonymous() {
 		return nil, fmt.Errorf("host %q: the flux deploy key needs the forge client", host)
 	}
-	p := &mintPlan{root: root, host: host, entry: entry, est: est, forge: est.ForgeKind(), anonymous: est.Anonymous(), write: write, have: map[string]string{}, admins: map[string][]string{}}
+	p := &mintPlan{root: root, host: host, entry: entry, est: est, forge: est.ForgeKind(), anonymous: est.Anonymous(), have: map[string]string{}, admins: map[string][]string{}}
 	p.endpoint = entry.Endpoint()
 
 	// Gate: the scaffold ran. Without it the canary has no home and the
@@ -286,7 +279,7 @@ func planMint(root, host string, tool secretsTool, f forge, write bool) (*mintPl
 	// console-password --rotate is the repair, and the report says so. A
 	// host that does not enable the module gets nothing: a credential no
 	// getty reads is what `fort check` warns about. Nothing is hashed
-	// until apply, so a dry run needs no mkpasswd.
+	// until apply, so the plan needs no mkpasswd.
 	if p.console {
 		if _, ok := take(keyOpsPasswordHash); !ok {
 			p.consoleMint = true
@@ -539,7 +532,7 @@ func (p *mintPlan) value(key string) string {
 	return ""
 }
 
-func (p *mintPlan) report(w io.Writer, written bool) {
+func (p *mintPlan) report(w io.Writer) {
 	facts := []string{}
 	switch {
 	case p.entry.Cloud():
@@ -554,18 +547,9 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 	}
 	facts = append(facts, "mesh "+p.entry.MeshIP)
 	fmt.Fprintf(w, "mint ⛫ %s   (%s)\n", p.host, strings.Join(facts, " · "))
-	// A dry run mints in memory and discards: a recipient derived from a
-	// key that does not exist yet is a throwaway, and printing it bare
-	// invites copying it somewhere. Say so; the apply prints the real one.
-	throwaway := func(key string) string {
-		if !written && hasKey(p.missing, key) {
-			return "   (dry run: minted in memory and discarded)"
-		}
-		return ""
-	}
-	fmt.Fprintf(w, "  host age recipient %s%s\n", p.hostRecip, throwaway(keySSHHost))
+	fmt.Fprintf(w, "  host age recipient %s\n", p.hostRecip)
 	if p.entry.IsCluster() {
-		fmt.Fprintf(w, "  cluster recipient  %s%s\n", p.cluster.recipient, throwaway(keyAge))
+		fmt.Fprintf(w, "  cluster recipient  %s\n", p.cluster.recipient)
 	}
 	switch {
 	case p.newFile:
@@ -608,10 +592,6 @@ func (p *mintPlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "· %s deploy key flux-%s: %s\n", p.forge, p.host, p.deployKey)
 	}
 	fmt.Fprintln(w)
-	if !written {
-		fmt.Fprintln(w, "dry run — nothing minted.")
-		return
-	}
 	if p.consoleMint {
 		// Never the value: the registry is the one copy (console.go).
 		fmt.Fprintf(w, "console passphrase: in %s only (fort console-password %s --show)\n", consoleRegistry, p.host)

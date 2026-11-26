@@ -328,7 +328,7 @@ func TestRenderScaffoldPlain(t *testing.T) {
 		}
 	}
 	// The note `fort scaffold` prints names the provider, so the two
-	// decisions are both readable in the dry run.
+	// decisions are both readable in the report.
 	for name, want := range map[string]string{
 		"plain-fort":       "plain fort shape (qcow runtime, static LAN, the ops account + the ops verbs; no k3s/flux)",
 		"plain-cloud-fort": "plain fort shape (linode runtime, no LAN, the ops account + the ops verbs; no k3s/flux)",
@@ -387,7 +387,7 @@ func TestFixtureEstateIsScaffoldOutput(t *testing.T) {
 		}
 		for _, f := range files {
 			if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
-				t.Errorf("%s: the fixture differs from the render — re-run fort scaffold %s --write in tests/estate", f.path, host)
+				t.Errorf("%s: the fixture differs from the render — re-run fort scaffold %s in tests/estate", f.path, host)
 			}
 		}
 	}
@@ -419,7 +419,7 @@ func TestGitHubFixtureEstateIsScaffoldOutput(t *testing.T) {
 	}
 	for _, f := range files {
 		if got := readFile(t, filepath.Join(dir, f.path)); got != string(f.content) {
-			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold cloud-fort --write in tests/github-estate", f.path)
+			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold cloud-fort in tests/github-estate", f.path)
 		}
 		if strings.Contains(string(f.content), "gitea") {
 			t.Errorf("%s: a github.com estate renders no lab forge", f.path)
@@ -502,7 +502,7 @@ func TestPublicFixtureEstateIsScaffoldOutput(t *testing.T) {
 	for _, f := range files {
 		got := readFile(t, filepath.Join(dir, f.path))
 		if got != string(f.content) {
-			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold public-fort --write in tests/public-estate", f.path)
+			t.Errorf("%s: the fixture differs from the render — re-run fort scaffold public-fort in tests/public-estate", f.path)
 		}
 		if strings.Contains(got, "gitea") || strings.Contains(got, "pullSecret") || strings.Contains(got, "flux-git-deploy-key") {
 			t.Errorf("%s: the anonymous route renders no lab forge, no pullSecret and no deploy key", f.path)

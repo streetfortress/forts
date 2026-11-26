@@ -73,14 +73,14 @@ func TestLinkAdd(t *testing.T) {
 		t.Errorf("plan: missing=%v had=%v edits=%d recorded=%q roles=%v", p.keyMissing, p.had, len(p.edits), p.recorded, p.roles)
 	}
 	var sb strings.Builder
-	p.report(&sb, false)
-	dry := sb.String()
-	for _, want := range []string{"link add ⛫ hub → sfi/staging", "mesh 10.2.0.0/24 · wg-staging · staging.mesh", "10.2.0.252", "highest free address", "○ nixos/secrets/hub.yaml", "wireguard-private-key-staging", "○ forts/hub.toml", "+ [links.staging]", "○ nixos/hosts/hub/default.nix", "+ sfi.links.staging", "roles forge", "not recorded yet", "dry run"} {
-		if !strings.Contains(dry, want) {
-			t.Errorf("report lacks %q:\n%s", want, dry)
+	p.report(&sb)
+	report := sb.String()
+	for _, want := range []string{"link add ⛫ hub → sfi/staging", "mesh 10.2.0.0/24 · wg-staging · staging.mesh", "10.2.0.252", "highest free address", "○ nixos/secrets/hub.yaml", "wireguard-private-key-staging", "○ forts/hub.toml", "+ [links.staging]", "○ nixos/hosts/hub/default.nix", "+ sfi.links.staging", "roles forge", "not recorded yet"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report lacks %q:\n%s", want, report)
 		}
 	}
-	if strings.Contains(dry, p.wg.private) {
+	if strings.Contains(report, p.wg.private) {
 		t.Error("the report leaks the private half")
 	}
 	if err := p.apply(tool); err != nil {
@@ -161,7 +161,7 @@ func TestLinkAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	sb.Reset()
-	p4.report(&sb, true)
+	p4.report(&sb)
 	// The one edit is the note: the block still says .252 and does not
 	// follow the table by itself, so every run says so until a hand fixes it.
 	if len(p4.edits) != 1 || p4.edits[0].fn != nil || !strings.Contains(p4.edits[0].note, "by hand") || !strings.Contains(sb.String(), "recorded (10.2.0.251, endpoint 10.0.0.5:51821") {
@@ -448,7 +448,7 @@ func TestLinkAddKnownHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p3.report(&sb, false)
+	p3.report(&sb)
 	if p3.link.KnownHosts != "" || !strings.Contains(sb.String(), "anonymous route") {
 		t.Errorf("anonymous: %q\n%s", p3.link.KnownHosts, sb.String())
 	}

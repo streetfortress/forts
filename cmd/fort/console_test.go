@@ -83,7 +83,7 @@ func TestConsoleFindings(t *testing.T) {
 }
 
 // The verb: the refusals, the restore-not-rotate default, and the two
-// files one --write touches.
+// files one run touches.
 func TestConsolePassword(t *testing.T) {
 	tmp := t.TempDir()
 	for _, host := range []string{"lab-fort", "plain-fort"} {
@@ -127,12 +127,8 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatalf("first run: %+v", p)
 	}
 	var buf bytes.Buffer
-	p.report(&buf, false)
-	if !strings.Contains(buf.String(), "dry run") {
-		t.Fatalf("dry run: want the note, got %q", buf.String())
-	}
 
-	// The first --write creates the registry: one file written whole
+	// The first run creates the registry: one file written whole
 	// and encrypted once, as fort mint does with a new secrets file.
 	if err := p.apply(tool); err != nil {
 		t.Fatal(err)
@@ -153,15 +149,15 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatalf("apply: want both files staged, registry first, got %v", tool.added)
 	}
 
-	// --write prints no value. The registry is the one copy; a banner
+	// The report prints no value. The registry is the one copy; a banner
 	// would be a second one in scrollback and in any transcript.
 	buf.Reset()
-	p.report(&buf, true)
+	p.report(&buf)
 	if strings.Contains(buf.String(), p.passphrase) {
 		t.Fatalf("the report printed the passphrase: %q", buf.String())
 	}
 	if !strings.Contains(buf.String(), "--show") {
-		t.Fatalf("--write: want the read named, got %q", buf.String())
+		t.Fatalf("report: want the read named, got %q", buf.String())
 	}
 
 	// Second run: both halves are there, so nothing is minted.
@@ -176,7 +172,7 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatalf("re-run: %+v — a re-run must not rotate", p)
 	}
 	buf.Reset()
-	p.report(&buf, true)
+	p.report(&buf)
 	if !strings.Contains(buf.String(), "--rotate") || !strings.Contains(buf.String(), "--show") {
 		t.Fatalf("re-run: want the rotate and the read, got %q", buf.String())
 	}
@@ -207,7 +203,7 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatalf("--show on a missing entry: want the repair named, got %v", err)
 	}
 	buf.Reset()
-	p.report(&buf, true)
+	p.report(&buf)
 	if !strings.Contains(buf.String(), "cannot be read back") || !strings.Contains(buf.String(), "--rotate") {
 		t.Fatalf("orphaned hash: want the report to say so, got %q", buf.String())
 	}
@@ -233,7 +229,7 @@ func TestConsolePassword(t *testing.T) {
 		t.Fatal("the opt-in line was not read")
 	}
 	buf.Reset()
-	p.report(&buf, false)
+	p.report(&buf)
 	if !strings.Contains(buf.String(), "the getty reads the hash") || strings.Contains(buf.String(), "sfi.ops.console.enable = true in") {
 		t.Fatalf("opted in: want the ○ line and no opt-in pointer, got %q", buf.String())
 	}

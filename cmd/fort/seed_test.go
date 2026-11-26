@@ -49,7 +49,7 @@ secrets:
 		filepath.Join(apps, "forts/valkey/secrets.sops.yaml"):       "stringData:\n  default: x\n  app: cachepw\n",
 		filepath.Join(tmp, "legacy.env"):                            "# legacy\nMAIL_KEY=\"re_123\"\nOTHER=1\n",
 	}}
-	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true}
+	o := seedOpts{root: tmp, fort: fort, tool: tool}
 	plans, err := planSeed(o)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ secrets:
 	// report never carries a value
 	var sb strings.Builder
 	for _, p := range plans {
-		p.report(&sb, true)
+		p.report(&sb)
 	}
 	for _, leak := range []string{"dbpw", "cachepw", "re_123"} {
 		if strings.Contains(sb.String(), leak) {
@@ -116,7 +116,7 @@ secrets:
 	}
 
 	// --set on an external key of an existing file
-	o2 := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{"app"}, setKey: "STRIPE_KEY", setValue: "sk_test_x"}
+	o2 := seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"app"}, setKey: "STRIPE_KEY", setValue: "sk_test_x"}
 	plans, err = planSeed(o2)
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestSeedRefusesUnrewrittenTemplate(t *testing.T) {
 	copyManifest(t, "testdata", tmp, fort)
 	apps := filepath.Join(tmp, "flux/apps", fort)
 	writeFile(t, apps, "gallery/forts.inventory.yaml", "secrets:\n  secrets.sops.yaml:\n    metadata: {name: gallery-env, namespace: gallery}\n    keys:\n      DATABASE_URL: {template: \"postgresql://x:${postgres.db.password}@h/db\"}\n")
-	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}, write: true}
+	o := seedOpts{root: tmp, fort: fort, tool: &fakeTool{}}
 	plans, err := planSeed(o)
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestSeedEdgeCases(t *testing.T) {
 
 	// null source value → error, never "<nil>" in a URL
 	tool := &fakeTool{plain: map[string]string{filepath.Join(apps, "forts/postgres/secrets-a.sops.yaml"): "stringData:\n  password:\n"}}
-	o := seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{"app"}}
+	o := seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"app"}}
 	plans, err := planSeed(o)
 	if err != nil {
 		t.Fatal(err)
@@ -242,14 +242,14 @@ func TestSeedEdgeCases(t *testing.T) {
 	}
 
 	// --set with a typo'd key on a two-file dir → error, not exit 0
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{"forts/postgres"}, setKey: "pasword", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"forts/postgres"}, setKey: "pasword", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "not a key of any Secret") {
 		t.Errorf("--set typo: want an error, got %v", err)
 	}
 
 	// --set with a key two Secrets of the dir share → refused, naming
 	// the qualified form; FILE/KEY then lands in that one file only
-	o = seedOpts{root: tmp, fort: fort, tool: tool, write: true, dirs: []string{"forts/postgres"}, setKey: "password", setValue: "x"}
+	o = seedOpts{root: tmp, fort: fort, tool: tool, dirs: []string{"forts/postgres"}, setKey: "password", setValue: "x"}
 	if _, err := planSeed(o); err == nil || !strings.Contains(err.Error(), "--set secrets-a.sops.yaml/password") {
 		t.Errorf("--set shared key: want the ambiguity error, got %v", err)
 	}
@@ -405,7 +405,7 @@ func TestSecretlessAppNeedsNoSeed(t *testing.T) {
 		t.Fatalf("want one plan with no Secret file, got %+v", plans)
 	}
 	var report strings.Builder
-	plans[0].report(&report, false)
+	plans[0].report(&report)
 	if !strings.Contains(report.String(), "no Secret — the inventory declares no keys") {
 		t.Errorf("seed report:\n%s", report.String())
 	}

@@ -50,14 +50,14 @@ func TestMint(t *testing.T) {
 	tool := &fakeTool{}
 	st := &fakeForgeState{}
 	gitea, registered := newFakeForge(t, st, "gitea"), &st.deploy
-	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
+	if _, err := planMint(tmp, host, tool, gitea); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
 	write("flux/apps/"+host+"/kustomization.yaml", "resources: []\n")
 	write("flux/clusters/"+host+"/apps.yaml", "kind: Kustomization\n")
 
-	p, err := planMint(tmp, host, tool, gitea, false)
+	p, err := planMint(tmp, host, tool, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestMint(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	rep := sb.String()
 
 	// the secrets file: all six keys, restorable, never in the report
@@ -137,7 +137,7 @@ func TestMint(t *testing.T) {
 		after[rel] = readFile(t, filepath.Join(tmp, rel))
 	}
 	tool2 := &fakeTool{encrypted: tool.encrypted}
-	p2, err := planMint(tmp, host, tool2, gitea, false)
+	p2, err := planMint(tmp, host, tool2, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestMint(t *testing.T) {
 
 	// a stale key on gitea refuses before anything is written
 	(*registered)[0].Key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGx6GXsI2LCgCru4Jm5qAV4xKqMfWHKrmW2pVHvG6GGa stale"
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "differs") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "differs") {
 		t.Errorf("stale gitea key: want refusal, got %v", err)
 	}
 
@@ -174,35 +174,35 @@ func TestMint(t *testing.T) {
 	doc[keySSHHost], doc[keySSHHostPub] = other.private, other.public
 	out, _ := yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "host recipient is not the one") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "host recipient is not the one") {
 		t.Errorf("foreign host key: want refusal, got %v", err)
 	}
 	delete(doc, keySSHHost)
 	delete(doc, keySSHHostPub)
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "real ssh key is not in the secrets file") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "real ssh key is not in the secrets file") {
 		t.Errorf("missing host key under an existing rule: want refusal, got %v", err)
 	}
 	yaml.Unmarshal([]byte(keep), &doc)
 	doc[keyAge] = "AGE-SECRET-KEY-104U5P2EWFVZE2WA8X3AZLTY5YQKPD782FPYSLD0FEQFJFS6EJ7VS3FZH2S"
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "cluster recipient is not the one") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "cluster recipient is not the one") {
 		t.Errorf("foreign cluster key: want refusal, got %v", err)
 	}
 	yaml.Unmarshal([]byte(keep), &doc)
 	doc[keyWgPrivate] = "dwdtDXMYpX08FsFyUbJmRd9MLofrwJkqsXf7pR25LCo="
 	out, _ = yaml.Marshal(doc)
 	os.WriteFile(secrets, out, 0o600)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "peers.json already lists") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "peers.json already lists") {
 		t.Errorf("foreign wireguard key: want refusal, got %v", err)
 	}
 	os.WriteFile(secrets, []byte(keep), 0o600)
 	khPath := filepath.Join(tmp, knownHostsPath)
 	khKeep := readFile(t, khPath)
 	os.WriteFile(khPath, []byte(knownHostsSet(khKeep, host, "10.1.0.97", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGx6GXsI2LCgCru4Jm5qAV4xKqMfWHKrmW2pVHvG6GGa stale")), 0o644)
-	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false); err == nil || !strings.Contains(err.Error(), "known_hosts already lists") {
+	if _, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea); err == nil || !strings.Contains(err.Error(), "known_hosts already lists") {
 		t.Errorf("foreign host key line: want refusal, got %v", err)
 	}
 	os.WriteFile(khPath, []byte(khKeep), 0o644)
@@ -237,7 +237,7 @@ func TestMintNeedsGitea(t *testing.T) {
 	tmp := t.TempDir()
 	copyEstate(t, tmp)
 	copyManifest(t, repo, tmp, "sfi-prod-439bf72")
-	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil, false); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
+	if _, err := planMint(tmp, "sfi-prod-439bf72", &fakeTool{}, nil); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
 		t.Errorf("without a client: want refusal, got %v", err)
 	}
 }
@@ -309,12 +309,12 @@ func mintPlainFort(t *testing.T, provider, table, endpoint string) {
 	tool := &fakeTool{}
 	st := &fakeForgeState{}
 	gitea, registered := newFakeForge(t, st, "gitea"), &st.deploy
-	if _, err := planMint(tmp, host, tool, gitea, false); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
+	if _, err := planMint(tmp, host, tool, gitea); err == nil || !strings.Contains(err.Error(), "fort scaffold") {
 		t.Fatalf("without the scaffold: want the gate, got %v", err)
 	}
 	// the host dir alone satisfies the gate — no fleet files wanted
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
-	p, err := planMint(tmp, host, tool, gitea, false)
+	p, err := planMint(tmp, host, tool, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func mintPlainFort(t *testing.T, provider, table, endpoint string) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	rep := sb.String()
 	if strings.Contains(rep, "cluster recipient") || strings.Contains(rep, "sops-canary") || !strings.Contains(rep, "plain fort") || !strings.Contains(rep, "registered flux-"+host) {
 		t.Errorf("plain report:\n%s", rep)
@@ -364,7 +364,7 @@ func mintPlainFort(t *testing.T, provider, table, endpoint string) {
 		t.Errorf("gitea: %+v", *registered)
 	}
 	// re-run: nothing to do
-	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestMintConsole(t *testing.T) {
 
 	tool := &fakeTool{}
 	gitea, _ := fakeGitea(t, nil)
-	p, err := planMint(tmp, host, tool, gitea, false)
+	p, err := planMint(tmp, host, tool, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,14 +433,10 @@ func TestMintConsole(t *testing.T) {
 	if len(p.missing) != 5 || p.missing[4] != keyOpsPasswordHash {
 		t.Fatalf("missing: %v", p.missing)
 	}
-	var sb strings.Builder
-	p.report(&sb, false)
-	if !strings.Contains(sb.String(), "● "+consoleRegistry) || !strings.Contains(sb.String(), "dry run") {
-		t.Fatalf("dry run: want the registry planned, got:\n%s", sb.String())
-	}
 	if p.consoleHash != "" {
-		t.Fatal("a dry run must not hash")
+		t.Fatal("the plan must not hash — only the apply does")
 	}
+	var sb strings.Builder
 
 	if err := p.apply(tool, gitea); err != nil {
 		t.Fatal(err)
@@ -484,7 +480,7 @@ func TestMintConsole(t *testing.T) {
 		t.Fatalf("added: %v — the registry is not staged", tool.added)
 	}
 	sb.Reset()
-	p.report(&sb, true)
+	p.report(&sb)
 	rep := sb.String()
 	if strings.Contains(rep, pass) || strings.Contains(rep, "$y$j9T$fake$hash") {
 		t.Fatalf("the report printed a value:\n%s", rep)
@@ -494,7 +490,7 @@ func TestMintConsole(t *testing.T) {
 	}
 
 	// re-run: both halves there, nothing minted, nothing said
-	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	p2, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +498,7 @@ func TestMintConsole(t *testing.T) {
 		t.Fatalf("re-run: mint=%v orphan=%v missing=%v", p2.consoleMint, p2.consoleOrphan, p2.missing)
 	}
 	sb.Reset()
-	p2.report(&sb, true)
+	p2.report(&sb)
 	if strings.Contains(sb.String(), consoleRegistry) {
 		t.Fatalf("re-run must not mention the registry:\n%s", sb.String())
 	}
@@ -511,7 +507,7 @@ func TestMintConsole(t *testing.T) {
 	// keeps the hash — somebody may still hold the value — and names the
 	// deliberate repair.
 	write(consoleRegistry, "sops: {}\n")
-	p3, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	p3, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +515,7 @@ func TestMintConsole(t *testing.T) {
 		t.Fatalf("orphan: mint=%v orphan=%v missing=%v", p3.consoleMint, p3.consoleOrphan, p3.missing)
 	}
 	sb.Reset()
-	p3.report(&sb, false)
+	p3.report(&sb)
 	if !strings.Contains(sb.String(), "! "+consoleRegistry) || !strings.Contains(sb.String(), "console-password "+host+" --rotate") {
 		t.Fatalf("orphan: want the repair named, got:\n%s", sb.String())
 	}
@@ -531,7 +527,7 @@ func TestMintConsole(t *testing.T) {
 	write(manifest.Path(other), "mesh_ip = \"10.1.0.94\"\n[libvirt]\nip = \"10.0.0.94\"\n")
 	write("nixos/hosts/"+other+"/default.nix", "{\n  sfi.ops.console.enable = true;\n}\n")
 	tool4 := &fakeTool{}
-	p4, err := planMint(tmp, other, tool4, gitea, false)
+	p4, err := planMint(tmp, other, tool4, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +550,7 @@ func TestMintConsole(t *testing.T) {
 		t.Fatalf("sets: %v — want the second fort's entry set in the registry", tool4.sets)
 	}
 	sb.Reset()
-	p4.report(&sb, true)
+	p4.report(&sb)
 	if !strings.Contains(sb.String(), "○ "+consoleRegistry) {
 		t.Fatalf("second fort: want the appended registry, got:\n%s", sb.String())
 	}
@@ -563,7 +559,7 @@ func TestMintConsole(t *testing.T) {
 	// whatever the registry says — that is `fort check`'s warning
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
 	write(consoleRegistry, "sops: {}\n")
-	p5, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea, false)
+	p5, err := planMint(tmp, host, &fakeTool{encrypted: tool.encrypted}, gitea)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +588,7 @@ func TestMintAnonymousRoute(t *testing.T) {
 	write(manifest.Path(host), "mesh_ip = \"10.1.0.96\"\n[libvirt]\nip = \"10.0.0.96\"\n")
 	write("nixos/hosts/"+host+"/default.nix", "{ }\n")
 	tool := &fakeTool{}
-	p, err := planMint(tmp, host, tool, nil, false)
+	p, err := planMint(tmp, host, tool, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -603,7 +599,7 @@ func TestMintAnonymousRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	if rep := sb.String(); !strings.Contains(rep, "anonymous route: no deploy key") || strings.Contains(rep, "registered") || strings.Contains(rep, "carries "+keyDeploy) {
 		t.Errorf("anonymous report:\n%s", rep)
 	}
@@ -619,7 +615,7 @@ func TestMintAnonymousRoute(t *testing.T) {
 	// deploy key left from the ssh route is reported, not removed.
 	write(filepath.Join("nixos/secrets", host+".yaml"), readFile(t, filepath.Join(tmp, p.secretsPath))+keyDeploy+": stale\n")
 	tool.encrypted = append(tool.encrypted, filepath.Join(tmp, p.secretsPath))
-	p, err = planMint(tmp, host, tool, nil, false)
+	p, err = planMint(tmp, host, tool, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,14 +623,14 @@ func TestMintAnonymousRoute(t *testing.T) {
 		t.Fatalf("re-run: missing=%v stale=%v", p.missing, p.staleKey)
 	}
 	sb.Reset()
-	p.report(&sb, false)
+	p.report(&sb)
 	if rep := sb.String(); !strings.Contains(rep, "carries "+keyDeploy+", which this route reads nowhere") {
 		t.Errorf("stale-key report:\n%s", rep)
 	}
 
 	// The ssh route still wants the forge client.
 	write("estate.toml", "name = \"public\"\n[source]\nrepo = \"ssh://git@github.com/acme/public\"\n")
-	if _, err := planMint(tmp, host, tool, nil, false); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
+	if _, err := planMint(tmp, host, tool, nil); err == nil || !strings.Contains(err.Error(), "needs the forge client") {
 		t.Errorf("ssh route without a client: want refusal, got %v", err)
 	}
 }

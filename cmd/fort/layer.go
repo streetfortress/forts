@@ -28,12 +28,12 @@ import (
 //  2. A layer is one binary, fort-<layer>, with the verbs the order
 //     expects: init, scaffold, check, mint, dismantle. `fort <layer>
 //     <verb> …` execs it from PATH, git style (execLayer).
-//  3. `fort layer add <flake url>#<role> [--dry-run] [-- <the layer's init
+//  3. `fort layer add <flake url>#<role> [-- <the layer's init
 //     flags>]` installs one: the flake input, the binary re-exported at
 //     the layer's pin so the gate runs `nix run ./nixos#fort-<role>`,
 //     the gate step, then the layer's own init with every flag after
 //     `--`, passed through unread. `fort layer remove <role>` is the
-//     reversal. Both are author verbs: apply by default, --dry-run plans.
+//     reversal. Both are author verbs: they apply and stage.
 //  4. The ports a role needs are on core's link entry ([[serves.<role>]]
 //     ports, forts#105); the layer's check verifies them. A layer writes
 //     no core file, and core writes no layer file.
@@ -57,7 +57,7 @@ func layerCmd(args []string) error {
 	return errors.New(layerUsage)
 }
 
-const layerUsage = "usage: fort layer add <flake url>#<role> [--dry-run] [-- <the layer's init flags>]\n       fort layer remove <role> [--dry-run]"
+const layerUsage = "usage: fort layer add <flake url>#<role> [-- <the layer's init flags>]\n       fort layer remove <role>"
 
 // layerRef is the one argument of fort layer add, split: the flake URL
 // (the input, named for the repo) and the role (the binary).
@@ -144,8 +144,6 @@ func layerAdd(args []string) error {
 		}
 	}
 	fs := flag.NewFlagSet("layer", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: edit, stage, run the layer's init)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	var pos []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		pos = append(pos, args[0])
@@ -154,7 +152,6 @@ func layerAdd(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 {
 		return errors.New(layerUsage)
 	}
@@ -170,16 +167,11 @@ func layerAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if write {
-		if err := p.apply(); err != nil {
-			return err
-		}
-		stageLayerFiles(root)
+	if err := p.apply(); err != nil {
+		return err
 	}
-	p.report(os.Stdout, write, passthrough)
-	if !write {
-		return nil
-	}
+	stageLayerFiles(root)
+	p.report(os.Stdout, passthrough)
 	return runLayerInit(root, ref, passthrough)
 }
 
@@ -225,7 +217,7 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w — the gate workflow fort init rendered", gatePath, err)
 	}
-	// Dry-run every edit now, so a flake rendered before layers (no
+	// Run every edit now, in memory, so a flake rendered before layers (no
 	// `layers = sys: {` block) refuses before anything is written.
 	inputLine := fmt.Sprintf("%s.url = %q;", ref.input, ref.url)
 	exportLine := fmt.Sprintf("fort-%s = inputs.%s.packages.${sys}.fort-%s;", ref.role, ref.input, ref.role)
@@ -302,7 +294,7 @@ func (p *layerPlan) apply() error {
 	return nil
 }
 
-func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
+func (p *layerPlan) report(w io.Writer, passthrough []string) {
 	verb := "fort layer add"
 	if p.remove {
 		verb = "fort layer remove"
@@ -316,10 +308,6 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 	}
 	for _, f := range p.present {
 		fmt.Fprintf(w, "· %-30s unchanged\n", f)
-	}
-	if !written {
-		fmt.Fprintf(w, "\ndry run — nothing written.\n")
-		return
 	}
 	if p.remove {
 		fmt.Fprintln(w, "\nstaged — commit the edited files. next: nix flake lock ./nixos")
@@ -355,8 +343,6 @@ func runLayerInit(root string, ref layerRef, flags []string) error {
 
 func layerRemove(args []string) error {
 	fs := flag.NewFlagSet("layer", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: remove and stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	var pos []string
 	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		pos = append(pos, args[0])
@@ -365,7 +351,6 @@ func layerRemove(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 || !nameOK(pos[0]) {
 		return errors.New(layerUsage)
 	}
@@ -377,13 +362,11 @@ func layerRemove(args []string) error {
 	if err != nil {
 		return err
 	}
-	if write {
-		if err := p.apply(); err != nil {
-			return err
-		}
-		stageLayerFiles(root)
+	if err := p.apply(); err != nil {
+		return err
 	}
-	p.report(os.Stdout, write, nil)
+	stageLayerFiles(root)
+	p.report(os.Stdout, nil)
 	return nil
 }
 

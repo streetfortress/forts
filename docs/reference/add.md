@@ -2,7 +2,7 @@
 
 ```
 fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app]
-         [--hostname fqdn] [--http service:port] [--chart-dir path] [--dry-run]
+         [--hostname fqdn] [--http service:port] [--chart-dir path]
 ```
 
 `add` turns a chart into the directory a flux cluster needs to run it:

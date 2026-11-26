@@ -74,18 +74,15 @@ import (
 // cluster while #524 left that question open; it no longer does.
 func consolePassword(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort console-password <host> [--dry-run] [--rotate] [--show]")
+		return fmt.Errorf("usage: fort console-password <host> [--rotate] [--show]")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("console-password", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	rotate := fs.Bool("rotate", false, "replace a passphrase the fort already has — the old one stops working when the host activates the next generation")
 	show := fs.Bool("show", false, "decrypt and print this fort's passphrase from the registry; writes nothing")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -97,7 +94,7 @@ func consolePassword(args []string) error {
 	if *show {
 		return p.show(os.Stdout)
 	}
-	if write && p.mints() {
+	if p.mints() {
 		if err := tools.EnsureAll("sops", "mkpasswd", "git"); err != nil {
 			return err
 		}
@@ -105,7 +102,7 @@ func consolePassword(args []string) error {
 			return err
 		}
 	}
-	p.report(os.Stdout, write)
+	p.report(os.Stdout)
 	return nil
 }
 
@@ -136,9 +133,9 @@ type consolePlan struct {
 	enabled     bool   // the host's default.nix turns the module on
 	rotate      bool
 
-	// Filled by apply, and only there: a dry run mints nothing, so
-	// there is no value for a plan to hold or leak. report never prints
-	// the passphrase — `--show` is the read.
+	// Filled by apply, and only there, so a plan that refuses holds no
+	// value to leak. report never prints the passphrase — `--show` is
+	// the read.
 	passphrase string
 	hash       string
 }
@@ -152,7 +149,7 @@ func (p *consolePlan) mints() bool { return !p.haveHash || p.rotate }
 
 // planConsolePassword reads all three halves of the failsafe and no
 // secret value: the key names it looks for are plaintext in a sops
-// file, the same property `fort check` relies on. So a dry run needs no
+// file, the same property `fort check` relies on. So the plan needs no
 // age key. Only the apply and --show do.
 func planConsolePassword(root, host string, rotate bool) (*consolePlan, error) {
 	// A manifest is the gate — cluster or plain, both carry ops.
@@ -259,7 +256,7 @@ func (p *consolePlan) show(w io.Writer) error {
 	return nil
 }
 
-func (p *consolePlan) report(w io.Writer, written bool) {
+func (p *consolePlan) report(w io.Writer) {
 	fmt.Fprintf(w, "console-password ⛫ %s   (the getty door to `sudo nixos-rollback`; ssh never accepts it)\n", p.host)
 	switch {
 	case p.haveHash && !p.rotate:
@@ -291,10 +288,6 @@ func (p *consolePlan) report(w io.Writer, written bool) {
 			fmt.Fprintf(w, "\nnothing minted. mint a new passphrase: console-password %s --rotate\n", p.host)
 		}
 		p.tail(w)
-		return
-	}
-	if !written {
-		fmt.Fprintln(w, "\ndry run — nothing minted.")
 		return
 	}
 	fmt.Fprintf(w, "\nminted. passphrase in %s only (console-password %s --show)\n", consoleRegistry, p.host)

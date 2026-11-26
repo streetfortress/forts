@@ -63,7 +63,7 @@ type candidates func(cx *completeCx) []string
 type argKind int
 
 const (
-	noValue  argKind = iota // a boolean flag: --dry-run, --yes
+	noValue  argKind = iota // a boolean flag: --yes, --all
 	opaque                  // a value nothing can enumerate: a name, a URL, a number
 	paths                   // a path: the shell's own file completion
 	dirsOnly                // a directory: the shell's own, directories only
@@ -90,9 +90,8 @@ type verbSpec struct {
 	repeat bool
 }
 
-// write, yes and the other switches every verb spells the same way.
+// yes, chart-dir and the other switches every verb spells the same way.
 var (
-	writeFlag    = flagSpec{name: "dry-run"}
 	yesFlag      = flagSpec{name: "yes"}
 	chartDirFlag = flagSpec{name: "chart-dir", kind: dirsOnly}
 )
@@ -114,9 +113,8 @@ var completions = map[string]verbSpec{
 		{name: "acme-email", kind: opaque},
 		{name: "admin", kind: opaque},
 		{name: "operator-key", kind: opaque},
-		writeFlag,
 	}},
-	"scaffold": {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
+	"scaffold": {args: []candidates{manifests}},
 	"image": {flags: []flagSpec{
 		{name: "from", kind: paths},
 		{name: "out", kind: dirsOnly},
@@ -126,8 +124,8 @@ var completions = map[string]verbSpec{
 		yesFlag,
 	}, args: []candidates{realized}},
 	"preview":          {flags: []flagSpec{{name: "all"}, {name: "refresh"}, {name: "expect-no-changes"}}, args: []candidates{realized}},
-	"mint":             {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
-	"console-password": {flags: []flagSpec{writeFlag, {name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
+	"mint":             {args: []candidates{manifests}},
+	"console-password": {flags: []flagSpec{{name: "rotate"}, {name: "show"}}, args: []candidates{manifests}},
 	"check":            {flags: []flagSpec{{name: "all"}, {name: "eval"}}, args: []candidates{manifests}, repeat: true},
 	// The apps verbs (forts#250): add takes a cluster fort, then an OCI
 	// ref nothing in the tree can offer (a chart lives in a registry);
@@ -141,32 +139,29 @@ var completions = map[string]verbSpec{
 		{name: "hostname", kind: opaque},
 		{name: "http", kind: opaque},
 		chartDirFlag,
-		writeFlag,
 	}, args: []candidates{clusters, nil}},
 	"seed": {flags: []flagSpec{
 		{name: "set", kind: opaque},
 		chartDirFlag,
-		writeFlag,
 	}, args: []candidates{clusters, seedDirs}, repeat: true},
 	// remove takes a cluster fort, then one of the app dirs add rendered
 	// under its apps root (forts#251).
-	"remove":     {flags: []flagSpec{writeFlag}, args: []candidates{clusters, appNames}},
-	"ssh-config": {flags: []flagSpec{writeFlag}},
+	"remove":     {args: []candidates{clusters, appNames}},
+	"ssh-config": {},
 	"wg-conf":    {args: []candidates{meshMembers}},
 	"--version":  {}, // a flag in the verb position (forts#135): completes, takes nothing
-	"dismantle":  {flags: []flagSpec{writeFlag}, args: []candidates{manifests}},
+	"dismantle":  {args: []candidates{manifests}},
 	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},
 	// The link verbs (#55): a sub-verb word first, then the fort, then
 	// the other estate's git URL, which nothing in the tree can offer.
 	"link": {flags: []flagSpec{
 		{name: "address", kind: opaque},
 		{name: "port", kind: opaque},
-		writeFlag,
 	}, args: []candidates{words("add"), manifests, nil}},
-	"estate": {flags: []flagSpec{writeFlag}, args: []candidates{words("init", "link"), nil}},
+	"estate": {args: []candidates{words("init", "link"), nil}},
 	// The layer verbs (#144): add takes a flake url nothing in the tree
 	// can offer; remove takes an installed layer, which the tree can.
-	"layer": {flags: []flagSpec{writeFlag}, args: []candidates{words("add", "remove"), layerNames}},
+	"layer": {args: []candidates{words("add", "remove"), layerNames}},
 }
 
 // layerNames: the layers/<name>/ directories of the estate.
@@ -284,7 +279,7 @@ func completeWords(index int, words []string) ([]string, string) {
 	typed := words[1:index]
 
 	// A flag's value, when the word before the cursor is a flag that
-	// takes one. `--dry-run <TAB>` is a positional; `--out <TAB>` is not.
+	// takes one. `--all <TAB>` is a positional; `--out <TAB>` is not.
 	if len(typed) > 0 && !strings.HasPrefix(cur, "-") {
 		if f, ok := spec.flag(typed[len(typed)-1]); ok && f.kind != noValue && !strings.Contains(typed[len(typed)-1], "=") {
 			return flagValues(f, &completeCx{root: root})

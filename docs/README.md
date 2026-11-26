@@ -271,9 +271,8 @@ The [forts technical reference](reference/) is an AI generated docs repository t
 
 ### Reading a verb's report
 
-Every author verb prints the same report twice: with `--dry-run` it is a
-plan (nothing touched), and by default it is the record of what was laid
-down. One line per file, led by a mark:
+Every author verb prints one report: the record of what it laid down and
+staged. The staged diff is the preview. One line per file, led by a mark:
 
 | mark | meaning |
 | --- | --- |

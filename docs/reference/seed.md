@@ -1,7 +1,7 @@
 # fort seed — the inventory, executed into sops Secrets
 
 ```
-fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--dry-run]
+fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path]
 ```
 
 `seed` executes a fort's [inventories](inventory.md) — the ones
@@ -66,8 +66,7 @@ flux/apps/sfi-x/symbology/     (forts.inventory.yaml)
   read from stdin otherwise, so `fort seed sfi-x symbology --set
   STRIPE_SECRET_KEY < key.txt` still works in a script. The plan runs
   first: a key no Secret in `<dir>` declares is refused by name before
-  anything is pasted. With `--dry-run` it only reports what `--set`
-  would touch and asks for nothing. For an `external` key, or a
+  anything is pasted. For an `external` key, or a
   deliberate replacement of any other key. One value lands in one file:
   when two Secrets of the dir share the key name, a bare `KEY` is
   refused and **`--set FILE/KEY`** names the file — the same file/key a

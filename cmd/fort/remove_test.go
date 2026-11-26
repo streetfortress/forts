@@ -87,7 +87,7 @@ func removeApp(t *testing.T, root, fort, target string) (*removePlan, string) {
 		t.Fatal(err)
 	}
 	var report strings.Builder
-	p.report(&report, true)
+	p.report(&report)
 	return p, report.String()
 }
 

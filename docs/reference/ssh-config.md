@@ -9,7 +9,7 @@ dismantle left one behind (#183, #434). Two verbs render it instead:
 
 | verb | kind | renders | from |
 |---|---|---|---|
-| `fort ssh-config [--dry-run]` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
+| `fort ssh-config` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
 | `fort wg-conf <member>` | read | a member's own mesh interface on stdout | peers.json + estate.toml (the interface's name) |
 
 `fort mint` and `fort dismantle` keep the two files current as they add

@@ -189,7 +189,7 @@ type scaffoldFile struct {
 // scaffolded before the battery moved here gains it on a re-run.
 func scaffold(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
+		return fmt.Errorf("usage: fort scaffold <host>")
 	}
 	host := args[0]
 	if strings.HasSuffix(host, ".toml") {
@@ -200,15 +200,8 @@ func scaffold(args []string) error {
 		}
 		host = h
 	}
-	write := true
-	for _, a := range args[1:] {
-		switch a {
-		case "--write": // deprecated no-op: writing is the default
-		case "--dry-run":
-			write = false
-		default:
-			return fmt.Errorf("usage: fort scaffold <host> [--dry-run]")
-		}
+	if len(args) > 1 {
+		return fmt.Errorf("usage: fort scaffold <host>")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -246,7 +239,7 @@ func scaffold(args []string) error {
 			} else if f.editNote != "" {
 				status = f.editNote
 			}
-			if out != string(raw) && write {
+			if out != string(raw) {
 				if err := os.WriteFile(filepath.Join(root, f.path), []byte(out), 0o644); err != nil {
 					return err
 				}
@@ -254,7 +247,7 @@ func scaffold(args []string) error {
 			}
 		} else if exists(root, f.path) {
 			mark, status = '○', "exists — kept (scaffolding never overwrites)"
-		} else if write {
+		} else {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.path)), 0o755); err != nil {
 				return err
 			}
@@ -264,10 +257,6 @@ func scaffold(args []string) error {
 			written++
 		}
 		fmt.Printf("%c %-44s %s\n", mark, f.path, status)
-	}
-	if !write {
-		fmt.Println("\ndry run — nothing written.")
-		return nil
 	}
 	fmt.Printf("\n%d file(s) written. next: fort mint %s\n", written, host)
 	return nil

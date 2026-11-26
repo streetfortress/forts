@@ -1,7 +1,7 @@
 # fort mint — the host's identity
 
 ```
-fort mint <host> [--dry-run]
+fort mint <host>
 ```
 
 `mint` gives a host everything that makes it *itself*: the keys other
@@ -150,9 +150,7 @@ mint sfi-x   (cloud: linode · flux cluster · mesh 10.1.0.55)
 ○ .sops.yaml                           + rule flux/(clusters|apps)/sfi-x/ → 1 shared + cluster age1…; + `# cluster: sfi-x` recipient …
 ◆ layers/monitoring/webhook.sops.yaml  sops updatekeys (gains the sfi-x recipient) — one line per file the fort-managed rules cover; a bare estate has none
 ◆ flux/apps/sfi-x/sops-canary.yaml    encrypted under the new rule
-· gitea deploy key flux-sfi-x: would register (read-only)
-
-dry run — nothing minted.
+· gitea deploy key flux-sfi-x: registered flux-sfi-x (read-only)
 ```
 
 A complete host reports `complete — identity restored from it` and the

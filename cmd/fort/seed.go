@@ -37,7 +37,7 @@ import (
 // rendered it.
 func seed(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--dry-run]")
+		return fmt.Errorf("usage: fort seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path]")
 	}
 	o := seedOpts{fort: args[0]}
 	var dirs []string
@@ -49,13 +49,10 @@ func seed(args []string) error {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
 	fs.StringVar(&o.setKey, "set", "", "set this key from stdin (an external key, or a deliberate replace) — needs exactly one <dir>; FILE/KEY when two Secrets in it share the key name")
 	fs.StringVar(&o.chartDir, "chart-dir", "", "read the chart's contract from a local dir instead of pulling (tests, chart authors)")
-	dryRun := fs.Bool("dry-run", false, "print the plan and seed nothing (default: seed, encrypt, stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
-	o.write = !*dryRun
-	// flag stops at the first positional: `--dry-run <dir>` leaves the
+	// flag stops at the first positional: `--set KEY <dir>` leaves the
 	// dir in fs.Args(); dropping it would silently widen the scope to
 	// the whole fort.
 	for _, a := range fs.Args() {
@@ -80,21 +77,16 @@ func seed(args []string) error {
 	if err != nil {
 		return err
 	}
-	if o.setKey != "" && o.write {
+	if o.setKey != "" {
 		if o.setValue, err = readSetValue(o.setArg(), setTarget(plans)); err != nil {
 			return err
 		}
 	}
 	for _, p := range plans {
-		if o.write {
-			if err := p.execute(o); err != nil {
-				return err
-			}
+		if err := p.execute(o); err != nil {
+			return err
 		}
-		p.report(os.Stdout, o.write)
-	}
-	if !o.write {
-		fmt.Println("dry run — nothing seeded.")
+		p.report(os.Stdout)
 	}
 	return nil
 }
@@ -104,9 +96,8 @@ type seedOpts struct {
 	dirs                 []string // dirs relative to the fort's apps root; empty = every inventory dir of the fort
 	setKey, setValue     string
 	setFile              string // --set FILE/KEY: the one Secret file the key is set in
-	// setValue is filled after planning (see seed), and only for a
-	// write: a dry run reports what --set would touch without asking.
-	write  bool
+	// setValue is filled after planning (see seed): the prompt names
+	// the file the key lands in.
 	tool   secretsTool
 	charts map[string]pulledChart // optional pull cache; nil = pull + discard per dir
 }
@@ -612,7 +603,7 @@ func parseDotenv(s string) map[string]string {
 }
 
 // report prints the ◆ lines for one dir. Never a value.
-func (p *seedPlan) report(w io.Writer, written bool) {
+func (p *seedPlan) report(w io.Writer) {
 	fmt.Fprintf(w, "%s/   (%s)\n", p.dir, p.source)
 	if len(p.files) == 0 {
 		fmt.Fprintln(w, "  no Secret — the inventory declares no keys")
@@ -624,10 +615,8 @@ func (p *seedPlan) report(w io.Writer, written bool) {
 			note = "set " + f.set.Name
 		case f.created:
 			note = fmt.Sprintf("created (%d keys)", len(f.sf.Keys)-len(f.absent))
-		case f.exists && len(f.missing) > 0 && written:
-			note = "+ " + strings.Join(f.added, ", ")
 		case f.exists && len(f.missing) > 0:
-			note = "exists; missing " + strings.Join(names(f.missing), ", ") + " (seed adds them)"
+			note = "+ " + strings.Join(f.added, ", ")
 		case f.exists:
 			note = "exists, complete (rotation is deliberate: --set replaces one key)"
 		default:

@@ -25,11 +25,9 @@ import (
 // the workload on the merge (the apps Kustomization has prune: true).
 func remove(args []string) error {
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return fmt.Errorf("usage: fort remove <fort> <app | oci-ref> [--dry-run]")
+		return fmt.Errorf("usage: fort remove <fort> <app | oci-ref>")
 	}
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and remove nothing (default: remove and stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
@@ -41,15 +39,13 @@ func remove(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !*dryRun {
-		if err := p.apply(); err != nil {
-			return err
-		}
-		if err := (sopsCLI{root: root}).GitAdd(filepath.Join("flux/apps", p.fort)); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: git add flux/apps/%s: %v\n", p.fort, err)
-		}
+	if err := p.apply(); err != nil {
+		return err
 	}
-	p.report(os.Stdout, !*dryRun)
+	if err := (sopsCLI{root: root}).GitAdd(filepath.Join("flux/apps", p.fort)); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: git add flux/apps/%s: %v\n", p.fort, err)
+	}
+	p.report(os.Stdout)
 	return nil
 }
 
@@ -127,7 +123,7 @@ func planRemove(root, fort, target string) (*removePlan, error) {
 	}
 
 	// The edits run now, so a tree that is not the shape add wrote
-	// fails the plan (and the dry run) rather than the apply.
+	// fails the plan rather than the apply.
 	for _, e := range p.edits {
 		raw, err := os.ReadFile(filepath.Join(root, e.path))
 		if err != nil {
@@ -227,7 +223,7 @@ func (p *removePlan) apply() error {
 
 // report prints the marked tree in add's shape, then what else still
 // names the app, then what the human does next.
-func (p *removePlan) report(w io.Writer, written bool) {
+func (p *removePlan) report(w io.Writer) {
 	base := filepath.Join("flux/apps", p.fort)
 	fmt.Fprintf(w, "%s/   (remove %s: %s %s)\n", base, p.app, p.pin.url, pinNote(p.pin))
 	rel := func(path string) string { return strings.TrimPrefix(path, base+"/") }
@@ -279,10 +275,6 @@ func (p *removePlan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "  a sops: ref into the app's Secret from another inventory is now dangling —")
 		fmt.Fprintln(w, "  `fort check` on that fort reports it; a layer's file naming the app goes by hand.")
 		fmt.Fprintln(w)
-	}
-	if !written {
-		fmt.Fprintln(w, "dry run — nothing removed.")
-		return
 	}
 	fmt.Fprintln(w, "staged. then: review, commit, PR — flux prunes the app on merge.")
 }

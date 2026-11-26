@@ -106,15 +106,15 @@ func usage() {
   --version
 	  Display version information about the fort cli and associated flake
 
-  estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …] [--dry-run]
+  estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …]
       Create an estate: render the files and directory structure expected by forts.
       See docs/reference/init.md for more information.
 
-  scaffold <fort | forts/<fort>.toml> [--dry-run]
+  scaffold <fort | forts/<fort>.toml>
 	  Create a fort: render the files and directory structure for a single fort.
 	  See docs/reference/scaffold.md for more information.
 
-  mint <fort> [--dry-run]
+  mint <fort>
       Mint a fort's identity: Generate host, cluster, wireguard keys.
 	  See docs/reference/mint.md for more information.
 
@@ -126,7 +126,7 @@ func usage() {
 	  Deploy a fort. Wrapper around 'pulumi up'
 	  See docs/reference/provision.md for more information.
 
-  dismantle <fort> [--dry-run]
+  dismantle <fort>
 	  Remove a fort's files that were rendered by the fort cli. Used when preparing a fort for decomission.
 	  See docs/reference/provision.md for more information.
 
@@ -135,16 +135,16 @@ func usage() {
 	  Wrapper around 'pulumi destroy'
 	  See docs/reference/provision.md for more information.
 
-  add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path] [--dry-run]
+  add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path]
 	  Install a helm chart onto a fort. Writes to the flux/apps/<fort>/ directory tree
 	  See docs/reference/add.md for more information.
 
-  seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path] [--dry-run]
+  seed <fort> [<dir>...] [--set [FILE/]KEY] [--chart-dir path]
 	  Execute the fort's inventories into sops-encrypted Secrets. Never rewrites a file;
 	  never prints a value. --set takes one value from stdin for an external key.
 	  See docs/reference/seed.md for more information.
 
-  remove <fort> <app | oci-ref> [--dry-run]
+  remove <fort> <app | oci-ref>
 	  Remove the app directory tree content that was rendered by 'fort add'
 	  See docs/reference/remove.md for more information.
 
@@ -161,29 +161,29 @@ func usage() {
 	  Wrapper around 'pulumi preview'
 	  See docs/reference/provision.md for more information.
 
-  console-password <fort> [--dry-run] [--rotate] [--show]
+  console-password <fort> [--rotate] [--show]
 	  Manage the out-of-band console access password for a fort.
 	  See docs/ops.md for more information.
 
-  ssh-config [--dry-run]
+  ssh-config
 	  Helper function: render an SSH config for accessing the forts of this estate.
 
   wg-conf <member>
 	  Helper function: render a Wireguard configuration file for joining a client to the estate mesh.
 
-  link add <fort> <estate url> [--address <ip>] [--port <udp>] [--dry-run]
+  link add <fort> <estate url> [--address <ip>] [--port <udp>]
 	  Configure a link between <fort> and a remote estate.
 	  See docs/reference/links.md for more information.
 
-  estate link <estate url> [--dry-run]
+  estate link <estate url>
 	  Configure this estate to accept peers in a remote estate.
 	  See docs/reference/links.md for more information.
 
-  layer add <flake url>#<role> [--dry-run] [-- <the layer's init flags>]
+  layer add <flake url>#<role> [-- <the layer's init flags>]
 	  Add a layer configuration. Layers allow for arbitrary apps and configs to be applied in estates uniformly.
 	  See docs/reference/layers.md for more information.
 
-  layer remove <role> [--dry-run]
+  layer remove <role>
 	  Remove a layer configuration.
 	  See docs/reference/layers.md for more information.
   `)

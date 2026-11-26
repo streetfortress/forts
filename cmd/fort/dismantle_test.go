@@ -59,7 +59,7 @@ func TestDismantle(t *testing.T) {
 				t.Fatal(err)
 			}
 			var sb strings.Builder
-			p.report(&sb, true)
+			p.report(&sb)
 			rep := sb.String()
 
 			for _, rel := range []string{"nixos/hosts/" + tc.host, "nixos/secrets/" + tc.host + ".yaml", "flux/clusters/" + tc.host, "flux/apps/" + tc.host} {
@@ -171,7 +171,7 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 		t.Errorf("residue: want README.md alone, got %v", p.residue)
 	}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	rep := sb.String()
 	// the report names the settled secret, so the skip is not silence
 	for _, want := range []string{
@@ -191,7 +191,7 @@ func TestDismantleResidueSkipsWhatRetirementSettles(t *testing.T) {
 }
 
 // The cascade (#180): each installed layer's dismantle runs before the
-// core's, in name order, with --write passed through; a layer's failure
+// core's, in name order, with the host as the one argument; a layer's failure
 // stops the cascade, says the core did not proceed, and the layers
 // after it never run. No layers installed is a no-op.
 func TestDismantleCascade(t *testing.T) {
@@ -207,28 +207,19 @@ func TestDismantleCascade(t *testing.T) {
 		return nil
 	}
 	var out strings.Builder
-	if err := cascadeLayerDismantles(&out, root, "sfi-x", true, rec); err != nil {
-		t.Fatal(err)
-	}
-	if want := "ca: dismantle sfi-x --write,monitoring: dismantle sfi-x --write"; strings.Join(calls, ",") != want {
-		t.Errorf("calls: %v, want %s", calls, want)
-	}
-	if !strings.Contains(out.String(), "fort ca dismantle sfi-x --write") {
-		t.Errorf("the cascade does not name the layer's verb:\n%s", out.String())
-	}
-
-	// the dry run cascades the layers' dry runs
-	calls = nil
-	if err := cascadeLayerDismantles(&out, root, "sfi-x", false, rec); err != nil {
+	if err := cascadeLayerDismantles(&out, root, "sfi-x", rec); err != nil {
 		t.Fatal(err)
 	}
 	if want := "ca: dismantle sfi-x,monitoring: dismantle sfi-x"; strings.Join(calls, ",") != want {
-		t.Errorf("dry-run calls: %v, want %s", calls, want)
+		t.Errorf("calls: %v, want %s", calls, want)
+	}
+	if !strings.Contains(out.String(), "fort ca dismantle sfi-x   (") {
+		t.Errorf("the cascade does not name the layer's verb:\n%s", out.String())
 	}
 
 	// a layer's failure stops the cascade
 	calls = nil
-	err := cascadeLayerDismantles(&out, root, "sfi-x", true, func(layer string, args ...string) error {
+	err := cascadeLayerDismantles(&out, root, "sfi-x", func(layer string, args ...string) error {
 		calls = append(calls, layer)
 		return os.ErrPermission
 	})
@@ -240,7 +231,7 @@ func TestDismantleCascade(t *testing.T) {
 	}
 
 	// no layers installed: nothing runs
-	if err := cascadeLayerDismantles(&out, t.TempDir(), "sfi-x", true, func(string, ...string) error {
+	if err := cascadeLayerDismantles(&out, t.TempDir(), "sfi-x", func(string, ...string) error {
 		t.Fatal("a layer ran in an estate with none")
 		return nil
 	}); err != nil {
@@ -263,10 +254,10 @@ func TestRunLayerDismantle(t *testing.T) {
 	t.Setenv("PATH", bin)
 	root := t.TempDir()
 	run := runLayerDismantle(root)
-	if err := run("fake", "dismantle", "sfi-x", "--write"); err != nil {
+	if err := run("fake", "dismantle", "sfi-x"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(readFile(t, rec)); got != root+" dismantle sfi-x --write" {
+	if got := strings.TrimSpace(readFile(t, rec)); got != root+" dismantle sfi-x" {
 		t.Errorf("the layer saw: %q", got)
 	}
 	if err := run("gone", "dismantle", "sfi-x"); err == nil || !strings.Contains(err.Error(), "no fort-gone on PATH") {
@@ -277,18 +268,12 @@ func TestRunLayerDismantle(t *testing.T) {
 	}
 }
 
-// Without a stack the next step is the --no-stack destroy, and a dry run
-// never names a next step at all.
+// Without a stack the next step is the --no-stack destroy.
 func TestDismantleNextStep(t *testing.T) {
 	p := &dismantlePlan{host: "metal", entry: manifest.Host{Provider: "baremetal"}}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	if !strings.Contains(sb.String(), "Dismantle staged. Merge, then run `fort destroy metal --no-stack` to revoke the fort's identities.") {
 		t.Errorf("no stack:\n%s", sb.String())
-	}
-	sb.Reset()
-	p.report(&sb, false)
-	if !strings.Contains(sb.String(), "dry run — nothing changed") || strings.Contains(sb.String(), "Dismantle staged") {
-		t.Errorf("dry run:\n%s", sb.String())
 	}
 }

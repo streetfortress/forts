@@ -42,8 +42,8 @@ func TestEstateLink(t *testing.T) {
 		t.Errorf("claim: %+v", c)
 	}
 	var sb strings.Builder
-	p.report(&sb, false)
-	for _, s := range []string{"estate link ← sfi/infra", "2 manifest(s) read; 1 link(s) to sfi/staging", "hub", "10.2.0.252", "endpoint 10.0.0.5:51821", "+ remotes.hub", "○ mesh/peers.json", "dry run"} {
+	p.report(&sb)
+	for _, s := range []string{"estate link ← sfi/infra", "2 manifest(s) read; 1 link(s) to sfi/staging", "hub", "10.2.0.252", "endpoint 10.0.0.5:51821", "+ remotes.hub", "○ mesh/peers.json"} {
 		if !strings.Contains(sb.String(), s) {
 			t.Errorf("report lacks %q:\n%s", s, sb.String())
 		}
@@ -185,7 +185,7 @@ func TestEstateLinkRefusals(t *testing.T) {
 			t.Errorf("%s: apply wrote under a refusal: %v", name, err)
 		}
 		var sb strings.Builder
-		p.report(&sb, true)
+		p.report(&sb)
 		if !strings.Contains(sb.String(), "✗") || strings.Contains(sb.String(), "staged") {
 			t.Errorf("%s: report:\n%s", name, sb.String())
 		}
@@ -214,7 +214,7 @@ func TestEstateLinkRefusals(t *testing.T) {
 			continue
 		}
 		var sb strings.Builder
-		p.report(&sb, false)
+		p.report(&sb)
 		if len(p.claims) != 0 || p.other.problems["hub"] == nil || !strings.Contains(p.other.problems["hub"].Error(), tc.want) || !strings.Contains(sb.String(), "does not parse there") {
 			t.Errorf("%s: want no claim and a problem naming %q, got claims=%+v problems=%v\n%s", name, tc.want, p.claims, p.other.problems, sb.String())
 		}
@@ -229,7 +229,7 @@ func TestEstateLinkRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	var rb strings.Builder
-	pn.report(&rb, false)
+	pn.report(&rb)
 	if _, ok := pn.other.hosts[evil]; ok || pn.other.problems[evil] == nil || !strings.Contains(pn.other.problems[evil].Error(), "not a host name") || strings.Contains(rb.String(), "\nforge IN A") {
 		t.Errorf("a file name that is not a host name: hosts=%v problems=%v\n%s", sortedNames(pn.other.hosts), pn.other.problems, rb.String())
 	}
@@ -267,7 +267,7 @@ func TestEstateLinkRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p.report(&sb, false)
+	p.report(&sb)
 	if len(p.claims) != 0 || !strings.Contains(sb.String(), "no fort of sfi/infra links to this estate") {
 		t.Errorf("no link: %+v\n%s", p.claims, sb.String())
 	}

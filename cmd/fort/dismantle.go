@@ -38,16 +38,13 @@ import (
 // failure stops the verb: the core removes nothing after it.
 func dismantle(args []string) error {
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort dismantle <host> [--dry-run]")
+		return fmt.Errorf("usage: fort dismantle <host>")
 	}
 	host := args[0]
 	fs := flag.NewFlagSet("dismantle", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply and stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	write := !*dryRun
 	root, err := repoRoot()
 	if err != nil {
 		return err
@@ -57,44 +54,38 @@ func dismantle(args []string) error {
 	if _, err := manifest.Load(root, host); err != nil {
 		return err
 	}
-	if err := cascadeLayerDismantles(os.Stdout, root, host, write, runLayerDismantle(root)); err != nil {
+	if err := cascadeLayerDismantles(os.Stdout, root, host, runLayerDismantle(root)); err != nil {
 		return err
 	}
 	p, err := planDismantle(root, host)
 	if err != nil {
 		return err
 	}
-	if write {
-		if err := tools.EnsureAll("sops", "git"); err != nil {
-			return err
-		}
-		if err := p.apply(sopsCLI{root: root}); err != nil {
-			return err
-		}
+	if err := tools.EnsureAll("sops", "git"); err != nil {
+		return err
 	}
-	p.report(os.Stdout, write)
+	if err := p.apply(sopsCLI{root: root}); err != nil {
+		return err
+	}
+	p.report(os.Stdout)
 	return nil
 }
 
 // cascadeLayerDismantles runs `fort-<layer> dismantle <host>` for each
 // installed layer — the layers/ path listing, as `fort check --all`
-// reads it — before the core's own dismantle, with --write passed
-// through, so a dry run previews the whole cascade: the layers' plans,
-// then the core's. The first failure stops the cascade, and the error
+// reads it — before the core's own dismantle. The layer's verb takes
+// the host and nothing else: author verbs write and stage by default,
+// here and in the layers (fort-layers#15), and the git diff is the
+// preview. The first failure stops the cascade, and the error
 // says the core did not proceed — a fort must not lose its manifest
 // while a layer still declares it (#180).
-func cascadeLayerDismantles(w io.Writer, root, host string, write bool, run func(layer string, args ...string) error) error {
+func cascadeLayerDismantles(w io.Writer, root, host string, run func(layer string, args ...string) error) error {
 	layers, err := installedLayers(root)
 	if err != nil {
 		return err
 	}
 	for _, l := range layers {
 		args := []string{"dismantle", host}
-		if write {
-			// The layer binary's own flag convention: its pin may predate
-			// the --write default flip, and the flag stays accepted after it.
-			args = append(args, "--write")
-		}
 		fmt.Fprintf(w, "fort %s %s   (the layer goes first — docs/layers.md, 4)\n", l, strings.Join(args, " "))
 		if err := run(l, args...); err != nil {
 			return fmt.Errorf("fort-%s dismantle: %w — the layers go first (docs/layers.md, 4), so the core's dismantle did not run", l, err)
@@ -210,7 +201,7 @@ func planDismantle(root, host string) (*dismantlePlan, error) {
 	p.stack = exists(root, stackConfigPath(host)) || offlineBackend(root).hasStackOffline(host)
 
 	// 6. residue: everything else that still names the host — counted
-	// on the post-edit text for the files this plan edits, so a dry run
+	// on the post-edit text for the files this plan edits, so the report
 	// shows what the reviewer will actually face.
 	edited := map[string]string{}
 	for _, e := range p.edits {
@@ -308,7 +299,7 @@ func (p *dismantlePlan) apply(tool secretsTool) error {
 	return nil
 }
 
-func (p *dismantlePlan) report(w io.Writer, written bool) {
+func (p *dismantlePlan) report(w io.Writer) {
 	kind := "lab: libvirt backend (fort destroy)"
 	if !p.entry.Realized() {
 		kind = "lab hardware: no backend (the machine goes by hand)"
@@ -345,10 +336,6 @@ func (p *dismantlePlan) report(w io.Writer, written bool) {
 		fmt.Fprintf(w, "· %s\n", n)
 	}
 	fmt.Fprintln(w)
-	if !written {
-		fmt.Fprintln(w, "dry run — nothing changed.")
-		return
-	}
 	if p.stack {
 		fmt.Fprintf(w, "Dismantle staged. Merge, then run `fort destroy %s` to delete the pulumi stack.\n", p.host)
 		return

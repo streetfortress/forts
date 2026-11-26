@@ -51,7 +51,7 @@ pin the estate holds (below).
 
 ```
 fort layer add git+ssh://git@gitea.zen.lofi:30022/sfi/fort-layers#monitoring \
-    -- --central central --write
+    -- --central central
 ```
 
 The argument is a flake URL and a role. The URL names the input after the
@@ -59,8 +59,8 @@ repo — its last path label (`fort-layers`), or the second label under the
 registry shorthands `github:`, `gitlab:` and `sourcehut:`, where the last
 label is a ref (`github:acme/fort-layers/v0.0.1`); the role names the
 binary (`fort-monitoring`). The verb makes three edits in the core's
-files and prints them in the marked-tree shape every author verb uses.
-The default applies and stages them; `--dry-run` only plans:
+files, stages them and prints them in the marked-tree shape every
+author verb uses:
 
 ```
 ○ nixos/flake.nix                + fort-layers.url = "…"; + fort-monitoring = inputs.fort-layers.packages.${sys}.fort-monitoring;
@@ -86,7 +86,7 @@ through `nix run <url>#fort-monitoring` — with **every flag after `--`
 passed through unread**. The core does not parse them. The layer's init
 writes `layers/monitoring/` itself.
 
-`fort layer remove <role> [--dry-run]` is the reversal: the directory, the
+`fort layer remove <role>` is the reversal: the directory, the
 step, the re-export, and the input when no other role of that repo is
 installed. Run the layer's own `dismantle` first, per fort, so the
 layer withdraws what it declared in other estates and on hubs.
@@ -107,12 +107,13 @@ run first, and the core runs them itself:
 | retire a fort | `fort dismantle <fort>` (the cascade: each layer's dismantle, then the core's) | `fort destroy <fort>` |
 
 Retirement is the one step where the core calls the layers (#180).
-`fort dismantle <fort>` runs `fort-<layer> dismantle <fort>
---write` for each installed layer — the `layers/` listing, the same one
+`fort dismantle <fort>` runs `fort-<layer> dismantle <fort>` for each
+installed layer — the `layers/` listing, the same one
 `fort check --all` prints — through the lookup `fort <layer> <verb>`
 uses (PATH or the estate's flake, `FORT_ESTATE_ROOT`), as a child process, because the core's
-own dismantle follows. Under `--dry-run` the whole cascade is a
-preview, the layers' dry runs included. A layer's dismantle that fails
+own dismantle follows. The layer's verb takes the host and nothing
+else: author verbs write and stage by default, in the core and in the
+layers, and the staged diff is the preview of the whole cascade. A layer's dismantle that fails
 stops the verb: the core removes nothing after it, so a fort never
 loses its manifest while a layer still declares it — the half-done
 retirement that left a dead man's switch on a hub for a cluster already

@@ -459,7 +459,7 @@ func TestPlanSSHConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sb strings.Builder
-	p.report(&sb, true)
+	p.report(&sb)
 	rep := sb.String()
 	for _, want := range []string{"◆ mesh/ssh_config", "◆ mesh/known_hosts", "+ luxor", "key replaced: sfi-prod-1111111", "- retired-fort (no manifest)", "kept as committed: sfi-dev-abc1234", "! no host key line for sfi-prod-2222222", "staged — commit the rendered files."} {
 		if !strings.Contains(rep, want) {

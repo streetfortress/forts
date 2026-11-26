@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fort ssh-config [--dry-run] — render mesh/ssh_config and
+// fort ssh-config — render mesh/ssh_config and
 // mesh/known_hosts from the tree (mesh.go). mint and dismantle keep
 // them current as a side effect of their own edit; this verb is the
 // whole-fleet render: after a hand edit to peers.json, to backfill the
@@ -26,14 +26,11 @@ import (
 // truth in sops.
 func sshConfigCmd(args []string) error {
 	fs := flag.NewFlagSet("ssh-config", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: write and stage)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	write := !*dryRun
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: fort ssh-config [--dry-run]")
+		return fmt.Errorf("usage: fort ssh-config")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -44,12 +41,10 @@ func sshConfigCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	if write {
-		if err := p.apply(tool); err != nil {
-			return err
-		}
+	if err := p.apply(tool); err != nil {
+		return err
 	}
-	p.report(os.Stdout, write)
+	p.report(os.Stdout)
 	return nil
 }
 
@@ -161,7 +156,7 @@ func (p *sshConfigPlan) apply(tool secretsTool) error {
 	return writeRendered(p.root, tool, p.sshConfig, p.knownHosts)
 }
 
-func (p *sshConfigPlan) report(w io.Writer, written bool) {
+func (p *sshConfigPlan) report(w io.Writer) {
 	fmt.Fprintf(w, "ssh-config   (%d mesh peer(s): %d fort(s), %d hand-managed)\n", p.peers, p.forts, p.peers-p.forts)
 	if p.sshConfig != "" {
 		fmt.Fprintf(w, "◆ %-24s rendered from %s + forts/*.toml\n", sshConfigPath, peersPath)
@@ -199,8 +194,6 @@ func (p *sshConfigPlan) report(w io.Writer, written bool) {
 	}
 	fmt.Fprintln(w)
 	switch {
-	case !written:
-		fmt.Fprintln(w, "dry run — nothing written.")
 	case p.sshConfig == "" && p.knownHosts == "":
 		fmt.Fprintln(w, "nothing to write — both files are current.")
 	default:

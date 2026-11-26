@@ -20,7 +20,7 @@ func estateCmd(args []string) error {
 		return initCmd(args[1:])
 	}
 	if len(args) < 1 || args[0] != "link" {
-		return fmt.Errorf("usage: fort estate (init [estate.toml] … | link <estate url> [--dry-run])")
+		return fmt.Errorf("usage: fort estate (init [estate.toml] … | link <estate url>)")
 	}
 	return estateLink(args[1:])
 }
@@ -51,14 +51,11 @@ func estateLink(args []string) error {
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet("estate", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: apply)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	write := !*dryRun
 	if len(pos) != 1 || fs.NArg() > 0 {
-		return fmt.Errorf("usage: fort estate link <estate url> [--dry-run]")
+		return fmt.Errorf("usage: fort estate link <estate url>")
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -69,12 +66,12 @@ func estateLink(args []string) error {
 	if err != nil {
 		return err
 	}
-	if write && p.errors == 0 {
+	if p.errors == 0 {
 		if err := p.apply(tool); err != nil {
 			return err
 		}
 	}
-	p.report(os.Stdout, write)
+	p.report(os.Stdout)
 	if p.errors > 0 {
 		return fmt.Errorf("%d claim(s) refused — nothing written", p.errors)
 	}
@@ -277,7 +274,7 @@ func setRemote(text, host string, e meshPeer) (string, error) {
 	return string(out), nil
 }
 
-func (p *estateLinkPlan) report(w io.Writer, written bool) {
+func (p *estateLinkPlan) report(w io.Writer) {
 	o := p.other.est
 	fmt.Fprintf(w, "estate link ← %s   (%d manifest(s) read; %d link(s) to %s)\n", o.Ref(), len(p.other.hosts), len(p.claims), p.est.Ref())
 	for _, h := range sortedNames(p.other.problems) {
@@ -319,8 +316,6 @@ func (p *estateLinkPlan) report(w io.Writer, written bool) {
 	switch {
 	case p.errors > 0:
 		return
-	case !written:
-		fmt.Fprintln(w, "dry run — nothing written.")
 	case len(writes) == 0:
 		fmt.Fprintln(w, "nothing to write.")
 	default:

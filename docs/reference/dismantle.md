@@ -1,7 +1,7 @@
 # fort dismantle — the repo half of retirement
 
 ```
-fort dismantle <host> [--dry-run]
+fort dismantle <host>
 ```
 
 Retiring a fort is two steps with a reviewed merge between them:
@@ -18,15 +18,15 @@ same shape scoped to a chart.
 
 A fort a layer still declares must not retire by halves (#180): before
 its own plan, `dismantle` runs `fort-<layer> dismantle <host>` for every
-installed layer — the `layers/` listing, as `fort check --all` reads it —
-with `--write` passed through ([layers](layers.md), 4). One command
+installed layer — the `layers/` listing, as `fort check --all` reads it
+([layers](layers.md), 4). One command
 retires the fort on every surface that declares it: the layer's
 `forts/<host>.toml`, its rendered outputs on hubs (a dead man's switch
 for a cluster that no longer exists is what this gap paged on). A
 layer's dismantle that fails stops the verb: the core removes nothing
 after it, so the manifest never goes while a layer still declares the
-fort. The dry run previews the whole cascade, the layers' plans
-included.
+fort. The staged diff is the preview of the whole cascade, the
+layers' edits included.
 
 ## What goes
 
@@ -83,7 +83,7 @@ Three things deserve the explanation:
   hand-written — an s3-exporter target, a dashboard — and usually goes
   too.
 The residue is counted on the post-edit text of the files the plan
-edits, so the dry run shows what the reviewer will actually face.
+edits, so the report shows what the reviewer will actually face.
 
 A plain fort has no fleet dirs and no fleet sops rule to lose — the plan is the manifest, the host dir, the secrets
 file, the `nixos/.sops.yaml` rule and the peer. The `.sops.yaml` edit is

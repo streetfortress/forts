@@ -29,8 +29,8 @@ var addTemplates embed.FS
 // inventory of the Secret the chart consumes — and, when the contract
 // or --http names a Service, the gateway listener, the certificate and
 // the route. A pure generator — new files plus appended list entries,
-// never a rewrite; nothing is applied. The default lays the tree down
-// for a PR and prints what to seed; --dry-run prints the marked tree.
+// never a rewrite; nothing is applied. It lays the tree down for a PR,
+// stages it and prints what to seed.
 //
 // The core renders what its init templates install: the gateway stack
 // and the inventory. The Gateway itself is scaffold's — every cluster
@@ -40,7 +40,7 @@ var addTemplates embed.FS
 // forts#250); add names them and renders none.
 func add(args []string) error {
 	if len(args) < 2 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
-		return fmt.Errorf("usage: fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path] [--dry-run]")
+		return fmt.Errorf("usage: fort add <fort> <oci-ref> (--version X | --follow-pr N | --follow-main) [--name app] [--hostname fqdn] [--http service:port] [--chart-dir path]")
 	}
 	o := addOpts{fort: args[0], ref: args[1]}
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
@@ -51,12 +51,9 @@ func add(args []string) error {
 	fs.StringVar(&o.hostname, "hostname", "", "public hostname; default <app>.<fort>.<zone> — the manifest's [dns] zone, else the estate's mesh zone (estate.toml)")
 	fs.StringVar(&o.http, "http", "", "the Service the fleet routes to, <service>:<port> — for a chart that ships no contract")
 	fs.StringVar(&o.chartDir, "chart-dir", "", "read the chart from a local dir instead of pulling (chart authors, tests)")
-	dryRun := fs.Bool("dry-run", false, "print the plan and write nothing (default: write the tree and stage it)")
-	fs.Bool("write", true, "deprecated no-op: writing is the default")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
-	o.write = !*dryRun
 	pins := 0
 	for _, set := range []bool{o.version != "", o.followPR != "", o.followMain} {
 		if set {
@@ -75,24 +72,21 @@ func add(args []string) error {
 	if err != nil {
 		return err
 	}
-	if o.write {
-		if err := p.apply(); err != nil {
-			return err
-		}
-		// Author verbs stage what they generate (mint and seed do): the
-		// new dirs and the appended lists.
-		if err := (sopsCLI{root: o.root}).GitAdd(filepath.Join("flux/apps", o.fort)); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: git add flux/apps/%s: %v\n", o.fort, err)
-		}
+	if err := p.apply(); err != nil {
+		return err
 	}
-	p.report(os.Stdout, o.write)
+	// Author verbs stage what they generate (mint and seed do): the
+	// new dirs and the appended lists.
+	if err := (sopsCLI{root: o.root}).GitAdd(filepath.Join("flux/apps", o.fort)); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: git add flux/apps/%s: %v\n", o.fort, err)
+	}
+	p.report(os.Stdout)
 	return nil
 }
 
 type addOpts struct {
 	root, fort, ref, version, followPR, name, hostname, http, chartDir string
 	followMain                                                         bool
-	write                                                              bool
 }
 
 type plan struct {
@@ -405,7 +399,7 @@ func (p *plan) apply() error {
 
 // report prints the marked tree (the convention every author verb
 // prints in) grouped by directory, then what the human does next.
-func (p *plan) report(w io.Writer, written bool) {
+func (p *plan) report(w io.Writer) {
 	base := filepath.Join("flux/apps", p.fort)
 	fmt.Fprintf(w, "%s/   (chart %s)\n", base, p.resolved)
 	sort.SliceStable(p.actions, func(i, j int) bool { return p.actions[i].path < p.actions[j].path })
@@ -463,10 +457,6 @@ func (p *plan) report(w io.Writer, written bool) {
 		fmt.Fprintln(w, "      ClusterIssuer `letsencrypt`. The certificate waits until one exists;")
 		fmt.Fprintln(w, "      the listener serves its self-signed placeholder meanwhile.")
 		fmt.Fprintln(w)
-	}
-	if !written {
-		fmt.Fprintln(w, "dry run — nothing written.")
-		return
 	}
 	switch {
 	case p.seeds() && len(p.unresolved) > 0:

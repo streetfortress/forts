@@ -170,8 +170,8 @@ func TestLayerAddAndRemove(t *testing.T) {
 		t.Fatalf("plan: %d actions, %d present", len(p.actions), len(p.present))
 	}
 	var out bytes.Buffer
-	p.report(&out, false, []string{"--central", "central"})
-	if !strings.Contains(out.String(), "○ nixos/flake.nix") || !strings.Contains(out.String(), "dry run — nothing written") {
+	p.report(&out, []string{"--central", "central"})
+	if !strings.Contains(out.String(), "○ nixos/flake.nix") {
 		t.Errorf("report:\n%s", out.String())
 	}
 	if err := p.apply(); err != nil {
