@@ -105,17 +105,17 @@ func cascadeLayerDismantles(w io.Writer, root, host string, write bool, run func
 }
 
 // runLayerDismantle reaches a layer's binary the way `fort <layer>
-// <verb>` does (execLayer: fort-<layer> from PATH, FORT_ESTATE_ROOT set,
+// <verb>` does (execLayer: fort-<layer> from PATH or the estate's flake, FORT_ESTATE_ROOT set,
 // inherited stdio) — but as a child process, not an exec, because the
 // core's own dismantle still follows.
 func runLayerDismantle(root string) func(layer string, args ...string) error {
 	return func(layer string, args ...string) error {
 		bin := "fort-" + layer
-		path, err := exec.LookPath(bin)
-		if err != nil {
-			return fmt.Errorf("no %s on PATH — a layer's binary (docs/layers.md; fort layer add installs one)", bin)
+		argv, ok := layerBinary(root, layer)
+		if !ok {
+			return fmt.Errorf("no %s on PATH or exported by nixos/flake.nix — a layer's binary (docs/reference/layers.md; fort layer add installs one)", bin)
 		}
-		cmd := exec.Command(path, args...)
+		cmd := exec.Command(argv[0], append(argv[1:], args...)...)
 		cmd.Dir = root
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		cmd.Env = append(os.Environ(), "FORT_ESTATE_ROOT="+root)

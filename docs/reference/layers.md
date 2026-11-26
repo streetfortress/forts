@@ -32,8 +32,10 @@ from an estate.
 ## 2. A layer is one binary
 
 A layer ships `fort-<layer>`, with the verbs the order below expects.
-`fort <layer> <verb> [args]` execs it from PATH, git style, in the same
-process, with `FORT_ESTATE_ROOT` set to the estate root so the binary
+`fort <layer> <verb> [args]` execs it, git style, in the same
+process — from PATH, else through `nix run ./nixos#fort-<layer>` when the
+estate's `nixos/flake.nix` exports it (the pin `fort layer add` wrote), so
+the gate and the operator run the same binary — with `FORT_ESTATE_ROOT` set to the estate root so the binary
 need not find it again:
 
 ```
@@ -41,8 +43,8 @@ fort monitoring scaffold central      →  fort-monitoring scaffold central
 fort backups check --all              →  fort-backups check --all
 ```
 
-A first word that is neither a core verb nor a binary on PATH is one
-error that names both. The binary comes from the layer's flake, at the
+A first word that is neither a core verb nor a binary on PATH or in the
+estate's flake is one error that names both routes. The binary comes from the layer's flake, at the
 pin the estate holds (below).
 
 ## 3. `fort layer add` installs one
@@ -108,7 +110,7 @@ Retirement is the one step where the core calls the layers (#180).
 `fort dismantle <fort>` runs `fort-<layer> dismantle <fort>
 --write` for each installed layer — the `layers/` listing, the same one
 `fort check --all` prints — through the lookup `fort <layer> <verb>`
-uses (PATH, `FORT_ESTATE_ROOT`), as a child process, because the core's
+uses (PATH or the estate's flake, `FORT_ESTATE_ROOT`), as a child process, because the core's
 own dismantle follows. Under `--dry-run` the whole cascade is a
 preview, the layers' dry runs included. A layer's dismantle that fails
 stops the verb: the core removes nothing after it, so a fort never

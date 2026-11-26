@@ -289,6 +289,33 @@ func TestExecLayerNamesBoth(t *testing.T) {
 	}
 }
 
+func TestLayerBinaryFallsBackToTheEstateFlake(t *testing.T) {
+	root := layerEstate(t)
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	if _, ok := layerBinary(root, "monitoring"); ok {
+		t.Fatal("no binary, no nix, no export: want not ok")
+	}
+	if err := os.WriteFile(filepath.Join(bin, "nix"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	flake := strings.Replace(flakeFixture, "      layers = sys: {\n", "      layers = sys: {\n        fort-monitoring = inputs.m.packages.${sys}.default;\n", 1)
+	writeTree(t, root, map[string]string{flakePath: flake})
+	argv, ok := layerBinary(root, "monitoring")
+	if !ok || len(argv) != 4 || argv[1] != "run" || argv[2] != "./nixos#fort-monitoring" {
+		t.Errorf("want the nix route, got %v %v", argv, ok)
+	}
+	if _, ok := layerBinary(root, "backups"); ok {
+		t.Error("a layer the flake does not export has no route")
+	}
+	if err := os.WriteFile(filepath.Join(bin, "fort-monitoring"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if argv, _ := layerBinary(root, "monitoring"); len(argv) != 1 {
+		t.Errorf("PATH wins, got %v", argv)
+	}
+}
+
 func TestNixEnsureInputSkipsForeignBlock(t *testing.T) {
 	flake := `{
   inputs = {

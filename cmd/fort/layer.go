@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -673,11 +674,36 @@ func nixDropFromBlock(text, open, attr string) (string, error) {
 
 // --- the exec ---
 
+// layerBinary finds fort-<role> the one way every caller does: from
+// PATH when it is there, else through nix at the estate's own flake when
+// nixos/flake.nix exports it (the pin `fort layer add` wrote). The second
+// result is the argv to run with the verb's arguments appended; ok is
+// false when neither route reaches a binary.
+func layerBinary(root, role string) (argv []string, ok bool) {
+	bin := "fort-" + role
+	if path, err := exec.LookPath(bin); err == nil {
+		return []string{path}, true
+	}
+	if root == "" {
+		return nil, false
+	}
+	flake, err := os.ReadFile(filepath.Join(root, flakePath))
+	if err != nil || !regexp.MustCompile(`(?m)^\s*`+regexp.QuoteMeta(bin)+`\s*=`).Match(flake) {
+		return nil, false
+	}
+	nix, err := exec.LookPath("nix")
+	if err != nil {
+		return nil, false
+	}
+	return []string{nix, "run", "./nixos#" + bin, "--"}, true
+}
+
 // execLayer is main's fallthrough: a first argument core has no verb for
-// is a layer's name, and fort-<name> on PATH takes the rest, in this
-// process (git style). The estate root rides in the environment so the
-// layer need not find it again. A name with no binary is one error that
-// names both, and says where a layer comes from.
+// is a layer's name, and fort-<name> takes the rest, in this process (git
+// style) — from PATH, else through nix at the estate's flake (layerBinary).
+// The estate root rides in the environment so the layer need not find it
+// again. A name with no binary is one error that names both routes, and
+// says where a layer comes from.
 func execLayer(verb string, args []string) error {
 	if verb == "help" || strings.HasPrefix(verb, "-") {
 		usage()
@@ -687,15 +713,25 @@ func execLayer(verb string, args []string) error {
 		return fmt.Errorf("unknown verb %q", verb)
 	}
 	bin := "fort-" + verb
-	path, err := exec.LookPath(bin)
-	if err != nil {
-		return fmt.Errorf("unknown verb %q, and no %s on PATH — a layer's binary (docs/layers.md; fort layer add installs one)", verb, bin)
+	root, rootErr := repoRoot()
+	if rootErr != nil {
+		root = ""
+	}
+	argv, ok := layerBinary(root, verb)
+	if !ok {
+		return fmt.Errorf("unknown verb %q, and no %s on PATH or exported by nixos/flake.nix — a layer's binary (docs/reference/layers.md; fort layer add installs one)", verb, bin)
 	}
 	env := os.Environ()
-	if root, err := repoRoot(); err == nil {
+	if root != "" {
 		env = append(env, "FORT_ESTATE_ROOT="+root)
+		if len(argv) > 1 {
+			// nix resolves ./nixos against the working directory.
+			if err := os.Chdir(root); err != nil {
+				return err
+			}
+		}
 	}
-	return syscall.Exec(path, append([]string{bin}, args...), env)
+	return syscall.Exec(argv[0], append(append([]string{filepath.Base(argv[0])}, argv[1:]...), args...), env)
 }
 
 // --- what check says ---
