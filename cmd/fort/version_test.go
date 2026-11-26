@@ -39,6 +39,30 @@ const lockOnBranch = `{
   "version": 7
 }`
 
+// The lock for `forts.url = "github:streetfortress/forts/v0.0.11"`: the
+// github fetcher records the ref bare, with no refs/tags/ prefix.
+const lockOnGithubTag = `{
+  "nodes": {
+    "forts": {
+      "locked": { "owner": "streetfortress", "repo": "forts", "rev": "2454416000000000000000000000000000000000", "type": "github" },
+      "original": { "owner": "streetfortress", "ref": "v0.0.11", "repo": "forts", "type": "github" }
+    },
+    "root": { "inputs": { "forts": "forts" } }
+  },
+  "root": "root",
+  "version": 7
+}`
+
+func TestReadPinGithubTag(t *testing.T) {
+	p, err := readPin(writeLock(t, lockOnGithubTag))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.String(); got != "v0.0.11 at 2454416" {
+		t.Fatalf("String() = %q", got)
+	}
+}
+
 func writeLock(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "flake.lock")

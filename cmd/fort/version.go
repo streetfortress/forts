@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -53,6 +54,9 @@ func version(w io.Writer) error {
 	fmt.Fprintf(w, "⛫ fort %s\n", pin)
 	return nil
 }
+
+// releaseTag matches the name of a release tag.
+var releaseTag = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
 
 // pin is what the estate's lock says about its forts input.
 type pin struct {
@@ -119,8 +123,14 @@ func readPin(lockPath string) (pin, error) {
 		return pin{}, fmt.Errorf("no node %q for the forts input", name)
 	}
 	p := pin{ref: node.Original.Ref, rev: node.Locked.Rev}
-	if strings.HasPrefix(p.ref, "refs/tags/") {
+	switch {
+	case strings.HasPrefix(p.ref, "refs/tags/"):
 		p.tag = strings.TrimPrefix(p.ref, "refs/tags/")
+	case releaseTag.MatchString(p.ref):
+		// A github: url (github:owner/forts/v0.0.11) records the ref
+		// bare, with no refs/tags/ prefix, so a tag and a branch look
+		// alike. The release tags are vMAJOR.MINOR.PATCH (docs/release.md).
+		p.tag = p.ref
 	}
 	return p, nil
 }
