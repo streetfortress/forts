@@ -241,10 +241,9 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	if t2 == text {
 		p.present = append(p.present, flakePath)
 	} else {
-		note := "+ " + exportLine
+		note := "+ export fort-" + ref.role
 		if t1 != text {
-			// inputLine ends in its own `;`: one separator, not two.
-			note = "+ " + inputLine + " " + note
+			note = "+ input " + ref.input + ", " + note[2:]
 		}
 		p.actions = append(p.actions, action{path: flakePath, mark: '○', note: note, edit: func(s string) (string, error) {
 			s, err := nixEnsureInput(s, ref.input, inputLine)
@@ -266,7 +265,7 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	if g == string(gate) {
 		p.present = append(p.present, gatePath)
 	} else {
-		p.actions = append(p.actions, action{path: gatePath, mark: '○', note: "+ the step `" + layerGateStepName(ref.role) + "`", edit: func(s string) (string, error) {
+		p.actions = append(p.actions, action{path: gatePath, mark: '○', note: "+ gate step", edit: func(s string) (string, error) {
 			core, err := coreGateStepName(s)
 			if err != nil {
 				return "", err
@@ -308,7 +307,7 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 	if p.remove {
 		verb = "fort layer remove"
 	}
-	fmt.Fprintf(w, "%s %s   (the layer's binary: fort-%s)\n", verb, p.ref.role, p.ref.role)
+	fmt.Fprintf(w, "%s %s\n", verb, p.ref.role)
 	for _, a := range p.actions {
 		fmt.Fprintf(w, "%c %-30s %s\n", a.mark, a.path, a.note)
 	}
@@ -316,7 +315,7 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 		fmt.Fprintf(w, "✗ %-30s the layer's files; the layer's own dismantle ran before this, per fort\n", layersDir+"/"+p.ref.role+"/")
 	}
 	for _, f := range p.present {
-		fmt.Fprintf(w, "· %-30s already as planned\n", f)
+		fmt.Fprintf(w, "· %-30s unchanged\n", f)
 	}
 	if !written {
 		fmt.Fprintf(w, "\ndry run — nothing written.\n")
@@ -326,7 +325,7 @@ func (p *layerPlan) report(w io.Writer, written bool, passthrough []string) {
 		fmt.Fprintln(w, "\nstaged — commit the edited files. next: nix flake lock ./nixos")
 		return
 	}
-	fmt.Fprintf(w, "\nnext: fort-%s init %s\n", p.ref.role, strings.Join(passthrough, " "))
+	fmt.Fprintln(w)
 }
 
 // runLayerInit execs the layer's init with the operator's flags, after
