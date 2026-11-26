@@ -159,12 +159,21 @@ the verb joins the two:
 
 ```
 $ fort --version
-fort eef09bc
-pin  v0.0.1 (eef09bc)
+⛫ fort v0.0.1 at eef09bc
 ```
 
-and says when the binary is not the pin's build — a checkout, an
-`--override-input`, a profile installed from another estate's lock. On
+and, when the binary is not the pin's build, names the binary's rev and
+the pin on separate lines — a checkout, an
+`--override-input`, a profile installed from another estate's lock:
+
+```
+$ fort --version
+⛫ fort 3668784 (this binary)
+  the estate pins v0.0.10 at f5bc145
+  this binary is not the pin's build — …
+```
+
+On
 an estate whose `forts.url` names a branch it says so: a branch is not a
 release, and such an estate has no release note to read.
 

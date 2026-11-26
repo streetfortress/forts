@@ -58,7 +58,7 @@ func TestReadPin(t *testing.T) {
 	if p.tag != "v0.0.1" || !strings.HasPrefix(p.rev, "eef09bc") {
 		t.Fatalf("pin = %+v", p)
 	}
-	if got := p.String(); got != "v0.0.1 (eef09bc)" {
+	if got := p.String(); got != "v0.0.1 at eef09bc" {
 		t.Fatalf("String() = %q", got)
 	}
 
@@ -96,8 +96,8 @@ func TestVersionInEstate(t *testing.T) {
 
 	defer func(old string) { buildRev = old }(buildRev)
 	for _, tc := range []struct{ rev, want, absent string }{
-		{"eef09bc", "pin  v0.0.1 (eef09bc)", "not the pin's build"},
-		{"0123abc", "not the pin's build", ""},
+		{"eef09bc", "⛫ fort v0.0.1 at eef09bc", "not the pin's build"},
+		{"0123abc", "the estate pins v0.0.1 at eef09bc", ""},
 		{"dev", "fort dev", "not the pin's build"},
 	} {
 		buildRev = tc.rev

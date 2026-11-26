@@ -24,23 +24,33 @@ var buildRev = "dev"
 // or on an estate that pins a branch, there is no tag to print and the
 // line says which.
 func version(w io.Writer) error {
-	fmt.Fprintf(w, "⛫ fort %s\n", buildRev)
-
 	root, err := repoRoot()
 	if err != nil {
-		return nil // a checkout of nothing: the build line is the answer
+		fmt.Fprintf(w, "⛫ fort %s\n", buildRev) // a checkout of nothing: the build is the answer
+		return nil
 	}
 	pin, err := readPin(filepath.Join(root, "nixos", "flake.lock"))
 	if err != nil {
+		fmt.Fprintf(w, "⛫ fort %s\n", buildRev)
 		if os.IsNotExist(err) {
 			return nil // not an estate (or not yet locked)
 		}
 		return fmt.Errorf("nixos/flake.lock: %w", err)
 	}
-	fmt.Fprintf(w, "pin  %s\n", pin)
-	if buildRev != "dev" && !strings.HasPrefix(pin.rev, buildRev) {
-		fmt.Fprintf(w, "     this binary is not the pin's build — a checkout, --override-input, or a profile installed from another lock\n")
+	if buildRev == "dev" {
+		// An unstamped build cannot be compared with the lock.
+		fmt.Fprintf(w, "⛫ fort %s (this binary)\n  the estate pins %s\n", buildRev, pin)
+		return nil
 	}
+	if !strings.HasPrefix(pin.rev, buildRev) {
+		// The binary and the lock disagree: say both, and which is which.
+		fmt.Fprintf(w, "⛫ fort %s (this binary)\n", buildRev)
+		fmt.Fprintf(w, "  the estate pins %s\n", pin)
+		fmt.Fprintf(w, "  this binary is not the pin's build — a checkout, --override-input, or a profile installed from another lock\n")
+		return nil
+	}
+	// One line, as `go version` gives one: the tag and the commit it is.
+	fmt.Fprintf(w, "⛫ fort %s\n", pin)
 	return nil
 }
 
@@ -58,7 +68,7 @@ func (p pin) String() string {
 	}
 	switch {
 	case p.tag != "":
-		return fmt.Sprintf("%s (%s)", p.tag, short)
+		return fmt.Sprintf("%s at %s", p.tag, short)
 	case p.ref != "":
 		return fmt.Sprintf("%s at %s — a branch, not a release (docs/release.md)", p.ref, short)
 	default:
