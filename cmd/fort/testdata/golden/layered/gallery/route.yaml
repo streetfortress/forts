@@ -9,7 +9,7 @@ metadata:
   namespace: gallery
 spec:
   parentRefs:
-    - name: homelab
+    - name: edge
       namespace: traefik
       sectionName: https-gallery
   hostnames:

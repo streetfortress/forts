@@ -127,7 +127,7 @@ against a chart that declares `http` is refused, and the error names
 what the chart declares. A malformed contract is still an error too;
 absent and broken are different facts.
 
-**The gateway.** One `Gateway homelab` in `traefik` per fort with a
+**The gateway.** One `Gateway edge` in `traefik` per fort with a
 single http listener, a catch-all `http→https` 301 (cert-manager's
 challenge routes match an exact path and take precedence), and per app
 a JSON6902 patch that appends an https listener with

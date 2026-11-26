@@ -300,7 +300,7 @@ func planAdd(o addOpts) (*plan, error) {
 				if err != nil {
 					return "", err
 				}
-				return appendPatch(s, gatewayPatchesComment, "listener-"+app+".yaml", "gateway.networking.k8s.io", "v1", "Gateway", "homelab", "traefik"), nil
+				return appendPatch(s, gatewayPatchesComment, "listener-"+app+".yaml", "gateway.networking.k8s.io", "v1", "Gateway", "edge", "traefik"), nil
 			}})
 	}
 

@@ -9,7 +9,7 @@ metadata:
   namespace: moment-tally-website
 spec:
   parentRefs:
-    - name: homelab
+    - name: edge
       namespace: traefik
       sectionName: https-moment-tally-website
   hostnames:

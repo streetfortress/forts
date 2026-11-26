@@ -75,7 +75,7 @@ func TestRenderScaffold(t *testing.T) {
 		// listener only, the redirect, a kustomization that lists both
 		// and patches nothing yet — add's first listener opens the block.
 		gw := "flux/apps/" + name + "/gateway/"
-		if g := m[gw+"gateway.yaml"]; !strings.Contains(g, "kind: Gateway") || !strings.Contains(g, "name: homelab") || !strings.Contains(g, "protocol: HTTP\n") || strings.Contains(g, "protocol: HTTPS") {
+		if g := m[gw+"gateway.yaml"]; !strings.Contains(g, "kind: Gateway") || !strings.Contains(g, "name: edge") || !strings.Contains(g, "protocol: HTTP\n") || strings.Contains(g, "protocol: HTTPS") {
 			t.Errorf("%s gateway.yaml:\n%s", name, g)
 		}
 		if r := m[gw+"redirect-https.yaml"]; !strings.Contains(r, "kind: HTTPRoute") || !strings.Contains(r, "statusCode: 301") {

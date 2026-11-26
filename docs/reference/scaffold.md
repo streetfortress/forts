@@ -61,7 +61,7 @@ the core's tree stops at the apps root and the gateway battery under it.
 
 ## The gateway battery
 
-Every cluster fort carries one `Gateway homelab` in `traefik`, with a
+Every cluster fort carries one `Gateway edge` in `traefik`, with a
 single http listener, and the catch-all `http→https` redirect beside
 it. Scaffold renders them, not the first [`add`](add.md) with an http
 need (the shape until oss/fort-layers#13): a hub whose first hostname is

@@ -238,7 +238,7 @@ func TestRemoveListItemAndPatchEntry(t *testing.T) {
 		t.Error("removePatchEntry: absent block must fail")
 	}
 	// The round trip: appendPatch on the emptied text re-adds the block.
-	back := appendPatch(none, gatewayPatchesComment, "listener-b.yaml", "g", "v1", "Gateway", "homelab", "traefik")
+	back := appendPatch(none, gatewayPatchesComment, "listener-b.yaml", "g", "v1", "Gateway", "edge", "traefik")
 	if removed, err := removePatchEntry(back, "listener-b.yaml"); err != nil || removed != none {
 		t.Errorf("round trip: %q %v", removed, err)
 	}

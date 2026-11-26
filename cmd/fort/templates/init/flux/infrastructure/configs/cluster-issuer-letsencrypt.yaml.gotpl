@@ -22,6 +22,6 @@ spec:
       - http01:
           gatewayHTTPRoute:
             parentRefs:
-              - name: homelab
+              - name: edge
                 namespace: traefik
 {{- end }}

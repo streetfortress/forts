@@ -9,7 +9,7 @@ metadata:
   namespace: {{ .App }}
 spec:
   parentRefs:
-    - name: homelab
+    - name: edge
       namespace: traefik
       sectionName: https-{{ .App }}
   hostnames:

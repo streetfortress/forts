@@ -10,7 +10,7 @@ metadata:
   namespace: traefik
 spec:
   parentRefs:
-    - name: homelab
+    - name: edge
       namespace: traefik
       sectionName: http
   rules:
