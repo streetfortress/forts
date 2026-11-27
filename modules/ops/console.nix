@@ -78,6 +78,15 @@ in
     description = "Give `ops` a console-only password, so an operator on Lish or `virsh console` reaches `sudo nixos-rollback` when the mesh is gone. Needs `ops-password-hash` in the host's sops file (`fort console-password <host>`).";
   };
 
+  # A serial console has no way to tell the host its window size, so
+  # the tty stays at 80 columns and kubectl tables wrap (#295). An
+  # SSH session sends its own size and is left alone.
+  options.sfi.ops.console.columns = lib.mkOption {
+    type = lib.types.nullOr lib.types.ints.positive;
+    default = 140;
+    description = "Columns that a login on a serial console (`ttyS*`, `hvc*`) sets with `stty cols`. null leaves the tty size alone.";
+  };
+
   config = lib.mkIf cfg.enable {
     # neededForUsers is the supported path: sops-nix decrypts such a
     # secret to /run/secrets-for-users BEFORE it makes the users, so
@@ -104,6 +113,12 @@ in
     # the lockout the assertion warns about is what #524 is about, and
     # `ops` + the ops verbs is the way back in.
     users.allowNoPasswordLogin = true;
+
+    environment.loginShellInit = lib.mkIf (cfg.columns != null) ''
+      case "$(tty)" in
+        /dev/ttyS*|/dev/hvc*) stty cols ${toString cfg.columns} 2>/dev/null || true ;;
+      esac
+    '';
 
     users.users.ops.hashedPasswordFile =
       config.sops.secrets.ops-password-hash.path;
