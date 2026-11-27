@@ -29,6 +29,8 @@ place is a seed: init renders a new `estate.toml` from it.
 
 ## What it renders
 
+The report that init prints lists the paths only, to fit a narrow terminal. The notes below are for this page.
+
 ```
 ● estate.toml                     the estate: name and the operator keys (if given), then [source], [mesh] and
                                   [acme] (as given), then the hubs by role (if any)

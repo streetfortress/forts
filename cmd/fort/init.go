@@ -187,7 +187,12 @@ func initCmd(args []string) error {
 	var operatorKeys multiFlag
 	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `ops`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort estate init [estate.toml] [--name <estate>] [--repo <git url>] [--admin <age1…> …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>]")
+		fmt.Fprintln(os.Stderr, `usage: fort estate init [estate.toml] --forts <flake url>
+	[--name <estate>] [--repo <git url>]
+	[--admin <age1…> …] [--operator-key <ssh-ed25519 …> …]
+	[--mesh <cidr>] [--interface <name>] [--zone <name>]
+	[--hub <role>=<fort>@<estate git url> … [--forge-name <name>]]
+	[--known-hosts <line>] [--acme-email <mailbox>]`)
 		fl.PrintDefaults()
 	}
 	file, err := parseWithFile(fl, args)
@@ -311,9 +316,9 @@ func initCmd(args []string) error {
 		if strings.HasPrefix(f.path, "flux/infrastructure/") {
 			infra++
 		}
-		mark, status := '●', f.note
+		mark, status := '●', ""
 		if exists(root, f.path) {
-			mark, status = '○', "exists — kept (init never overwrites)"
+			mark, status = '○', "exists — kept"
 		} else {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.path)), 0o755); err != nil {
 				return err
@@ -326,24 +331,24 @@ func initCmd(args []string) error {
 		if strings.HasPrefix(f.path, "flux/infrastructure/") || filepath.Base(f.path) == ".gitkeep" {
 			continue // summarized below
 		}
-		fmt.Printf("%c %-44s %s\n", mark, f.path, status)
+		fmt.Println(strings.TrimRight(fmt.Sprintf("%c %-34s %s", mark, f.path, status), " "))
 	}
-	fmt.Printf("● %-44s the shared flux layer: %d files (controllers + configs)\n", "flux/infrastructure/", infra)
-	fmt.Printf("● %-44s forts, nixos/hosts, nixos/secrets, flux/apps, flux/clusters, provisioning/pulumi/state\n", "(the directories the verbs write into)")
+	fmt.Printf("● %-34s %d files\n", "flux/infrastructure/", infra)
+	fmt.Println("● the directories the verbs write into")
 	fmt.Println()
 	fmt.Println("yours to provide (init cannot write them):")
-	fmt.Printf("· %-44s the estate's CA root, when it runs a private CA (estate.nix trusts it where it exists)\n", "nixos/certs/ca-root.pem")
-	fmt.Printf("· %-44s the fleet secrets (provisioning/README.md lists the keys)\n", "provisioning/secrets.yaml")
+	fmt.Printf("· %-34s the CA root, if the estate runs a private CA\n", "nixos/certs/ca-root.pem")
+	fmt.Printf("· %-34s the fleet secrets (see provisioning/README.md)\n", "provisioning/secrets.yaml")
 	if len(est.OperatorKeys) == 0 {
 		// The framework ships no operator key (forts#81), so an estate
 		// that names none has an `ops` nobody can reach: the host
 		// asserts it at evaluation, and so does `fort check --all`.
-		fmt.Printf("· %-44s operator_keys — the devices that hold `ops` on every fort of this estate. No\n", estate.Path)
-		fmt.Printf("  %-44s fort evaluates until the estate names one (fort estate init --operator-key, or this file).\n", "")
+		fmt.Printf("· %s: operator_keys\n", estate.Path)
+		fmt.Println("  No fort evaluates until the estate names one (--operator-key, or this file).")
 	}
 	if est.Source.KnownHosts == "" && !est.Anonymous() {
-		fmt.Printf("· %-44s [source] known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
-		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort estate init --known-hosts, or this file).\n", "")
+		fmt.Printf("· %s: [source] known_hosts\n", estate.Path)
+		fmt.Println("  No fort evaluates until the estate names it (--known-hosts, or this file).")
 	}
 	fmt.Printf("\n%d file(s) written. next: git add -A, then nix flake lock ./nixos\n", written)
 	return nil
