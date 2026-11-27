@@ -87,6 +87,12 @@ version `25.11`, and a gateway of `.1` in the subnet that `ip` lies in.
 The DNS default is that gateway. On the lab subnet `10.0.0.0/24` the DNS
 default stays `10.0.0.2` + `8.8.8.8` (#265).
 
+`fort check` and `fort scaffold` print one `lan:` line for each lab
+fort. The line shows the effective block and marks each value as
+`derived` or `set`. A value is set when the manifest names it. The
+derivation of the gateway assumes `.1` of the subnet. When the router
+has another address, set `lan_gateway`.
+
 Scaffold seeds the LAN block once and never overwrites it. `fort check`
 fails when `lan_gateway` lies outside the subnet of `ip`. It also fails
 when the host file disagrees with the manifest. To repair a drifted

@@ -201,12 +201,21 @@ func TestLanFindings(t *testing.T) {
 	for _, c := range cases {
 		got := lanFindings(hostFile(c.gw, c.dns), "h", load(c.toml))
 		var all string
+		n := 0
 		for _, f := range got {
+			if f.level == "info" {
+				continue
+			}
+			n++
 			all += f.msg + "\n"
 		}
-		if c.want == "" && len(got) != 0 || c.want != "" && !strings.Contains(all, c.want) {
+		if c.want == "" && n != 0 || c.want != "" && !strings.Contains(all, c.want) {
 			t.Errorf("%s: findings %q, want %q", c.name, all, c.want)
 		}
+	}
+	got := lanFindings(t.TempDir(), "h", load("[libvirt]\nip = \"192.168.122.10\"\nlan_dns = [\"1.1.1.1\"]\n"))
+	if len(got) != 1 || got[0].level != "info" || got[0].msg != "192.168.122.10/24 gateway 192.168.122.1 (derived) dns 1.1.1.1 (set)" {
+		t.Errorf("lan line: %+v", got)
 	}
 	if got := lanFindings(t.TempDir(), "h", load("[cluster]\n[linode]\nregion = \"r\"\ntype = \"t\"\n")); len(got) != 0 {
 		t.Errorf("cloud fort: %+v", got)

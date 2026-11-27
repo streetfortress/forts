@@ -300,28 +300,20 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 // scaffold changes nothing in the image. The repair is to remove the
 // host file and scaffold again.
 func lanFindings(root, fort string, entry manifest.Host) []finding {
-	var ip string
-	var prefix int
-	var gw string
-	var dns []string
-	switch {
-	case entry.Libvirt() != nil:
-		l := entry.Libvirt()
-		ip, prefix, gw, dns = l.IP, l.LanPrefix, l.LanGateway, l.LanDNS
-	case entry.Baremetal() != nil:
-		b := entry.Baremetal()
-		ip, prefix, gw, dns = b.IP, b.LanPrefix, b.LanGateway, b.LanDNS
-	default:
+	ip, setPrefix, setGW, setDNS, ok := lanKeys(entry)
+	if !ok {
 		return nil
 	}
 	path := manifest.Path(fort)
-	var out []finding
-	prefix, gw, dns = lanBlock(ip, prefix, gw, dns)
+	prefix, gw, dns := lanBlock(ip, setPrefix, setGW, setDNS)
+	// The effective block, one line (#301): a derived value is silent
+	// otherwise, and the gateway of #265 hid in that silence.
+	out := []finding{{"info", "lan", lanSummary(ip, prefix, gw, dns, setGW != "", len(setDNS) > 0)}}
 	if a, err := netip.ParseAddr(ip); err == nil {
 		if g, err := netip.ParseAddr(gw); err != nil {
 			out = append(out, finding{"error", path, fmt.Sprintf("lan_gateway %q is not an IP address", gw)})
 		} else if p, err := a.Prefix(prefix); err == nil && !p.Contains(g) {
-			out = append(out, finding{"error", path, fmt.Sprintf("lan_gateway %s lies outside %s/%d, the subnet of ip %s: the image boots with no default route and k3s crash-loops", gw, p.Addr(), prefix, ip)})
+			out = append(out, finding{"error", path, fmt.Sprintf("lan_gateway %s lies outside %s/%d, the subnet of ip %s: the image boots with no default route and k3s crash-loops%s", gw, p.Addr(), prefix, ip, gwHint(setGW != "", ip))})
 		}
 	}
 	hostPath := filepath.Join("nixos/hosts", fort, "default.nix")
@@ -341,6 +333,38 @@ func lanFindings(root, fort string, entry manifest.Host) []finding {
 		out = append(out, finding{"error", hostPath, fmt.Sprintf("the DNS is [%s], and the manifest says [%s]. Scaffold seeds the LAN block once and never overwrites: %s", strings.Join(hostDNS, " "), strings.Join(dns, " "), rescaffold)})
 	}
 	return out
+}
+
+// lanKeys returns the lab LAN keys the manifest names, as written.
+func lanKeys(entry manifest.Host) (ip string, prefix int, gw string, dns []string, ok bool) {
+	if l := entry.Libvirt(); l != nil {
+		return l.IP, l.LanPrefix, l.LanGateway, l.LanDNS, true
+	}
+	if b := entry.Baremetal(); b != nil {
+		return b.IP, b.LanPrefix, b.LanGateway, b.LanDNS, true
+	}
+	return "", 0, "", nil, false
+}
+
+// lanSummary renders the effective LAN block and marks each value as
+// derived or set (#301). A value is set when the manifest names it.
+func lanSummary(ip string, prefix int, gw string, dns []string, gwSet, dnsSet bool) string {
+	mark := func(set bool) string {
+		if set {
+			return "set"
+		}
+		return "derived"
+	}
+	return fmt.Sprintf("%s/%d gateway %s (%s) dns %s (%s)", ip, prefix, gw, mark(gwSet), strings.Join(dns, " "), mark(dnsSet))
+}
+
+// gwHint tells an operator whose gateway is derived that the
+// derivation assumes .1, and what to write instead (#301).
+func gwHint(gwSet bool, ip string) string {
+	if gwSet {
+		return ""
+	}
+	return fmt.Sprintf(". The gateway is derived and assumes .1 of the subnet: set lan_gateway to the real router of %s", ip)
 }
 
 var (

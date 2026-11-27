@@ -222,6 +222,10 @@ func scaffold(args []string) error {
 	}
 
 	fmt.Printf("⛫ %s   (%s)\n", host, scaffoldShape(entry))
+	if ip, pf, gw, dns, ok := lanKeys(entry); ok {
+		p, g, d := lanBlock(ip, pf, gw, dns)
+		fmt.Printf("  lan: %s\n", lanSummary(ip, p, g, d, gw != "", len(dns) > 0))
+	}
 	written := 0
 	for _, f := range files {
 		mark, status := '●', f.note
