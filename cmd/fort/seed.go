@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"gitea.zen.lofi/sfi/forts/internal/contract"
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/inventory"
 	"gitea.zen.lofi/sfi/forts/internal/manifest"
 	"golang.org/x/term"
@@ -283,7 +284,11 @@ func effectiveInventory(o seedOpts, dir string) (*inventory.Inventory, string, e
 		if pc, ok := o.charts[key]; ok {
 			chartDir, version = pc.dir, pc.version
 		} else {
-			d, v, err := resolveChart(o.root, *pin)
+			est, err := estate.Load(o.root)
+			if err != nil {
+				return nil, "", err
+			}
+			d, v, err := resolveChart(o.root, usesEstateCA(o.root, est, pin.url), *pin)
 			if err != nil {
 				return nil, "", err
 			}

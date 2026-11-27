@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 	"gitea.zen.lofi/sfi/forts/internal/tools"
 	"gopkg.in/yaml.v3"
 )
@@ -17,6 +19,23 @@ import (
 // OCIRepository is handed as certSecretRef (source-controller pods do
 // not inherit the node's trust). Absent, the system roots serve.
 const estateCA = "nixos/certs/ca-root.pem"
+
+// usesEstateCA says whether a chart reference is served under the
+// estate's CA: the estate carries the file, and the registry host of the
+// reference is the estate's forge host (the registry is the forge's).
+// A chart on a public registry (ghcr.io) takes the system roots: helm's
+// --ca-file and Flux's certSecretRef both replace them, not add to them.
+func usesEstateCA(root string, est estate.Estate, ref string) bool {
+	if !exists(root, estateCA) {
+		return false
+	}
+	forge, _, _, err := est.Forge()
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(ref)
+	return err == nil && u.Hostname() != "" && strings.EqualFold(u.Hostname(), forge)
+}
 
 // chartMeta is what add needs from Chart.yaml.
 type chartMeta struct {
@@ -71,8 +90,8 @@ var mainBuild = regexp.MustCompile(`^0\.0\.0-main\.`)
 // (0.0.0-pr.<N>.<run>.g<sha> or 0.0.0-main.<run>.g<sha>, the chart
 // repo's chart-preview workflow). helm does the registry work — the
 // same binary every operator already has — with the estate's CA passed
-// explicitly when the estate carries one.
-func resolveChart(root string, pin chartPin) (dir, resolved string, err error) {
+// explicitly when the registry is the estate's own (ca).
+func resolveChart(root string, ca bool, pin chartPin) (dir, resolved string, err error) {
 	ref := pin.url
 	constraint, err := pin.constraint()
 	if err != nil {
@@ -83,7 +102,7 @@ func resolveChart(root string, pin chartPin) (dir, resolved string, err error) {
 		return "", "", err
 	}
 	var caArgs []string
-	if exists(root, estateCA) {
+	if ca {
 		caArgs = []string{"--ca-file", filepath.Join(root, estateCA)}
 	}
 	show, err := helm(append([]string{"show", "chart", ref, "--version", constraint}, caArgs...)...).Output()

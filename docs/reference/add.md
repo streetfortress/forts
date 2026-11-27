@@ -35,7 +35,7 @@ renders none of it.
 | issuer | `letsencrypt`, the ClusterIssuer the shared layer carries when `estate.toml` names an `[acme]` email ([init](init.md)) | — |
 | version | `--version X` pins a tag; `--follow-pr N` follows a PR's preview charts; `--follow-main` follows main's | `--chart-dir` reads a local chart (tests, chart authors) |
 | the Service the fleet routes to | the contract's `http` block | `--http service:port`, for a chart that ships no contract; refused against a contract that declares `http` |
-| the registry's CA | `nixos/certs/ca-root.pem` when the estate carries one: copied beside the app and handed to the `OCIRepository` as `certSecretRef` | — (absent, the system roots serve) |
+| the registry's CA | `nixos/certs/ca-root.pem` when the estate carries one and the chart's registry host is the estate's forge host: passed to `helm` as `--ca-file`, copied beside the app and handed to the `OCIRepository` as `certSecretRef` | — (a chart on another registry, such as ghcr.io, or an estate with no CA: the system roots serve) |
 
 `add` is refused on a fort without an apps root (scaffold first), on an
 http app when the fort has no gateway battery (an apps root from before

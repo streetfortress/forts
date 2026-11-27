@@ -120,7 +120,8 @@ type view struct {
 	// secrets.sops.yaml, no inventory, no `existingSecret`
 	// value the chart never reads.
 	HasSecret bool
-	// CA: the estate carries nixos/certs/ca-root.pem, so the
+	// CA: the estate carries nixos/certs/ca-root.pem and the chart's
+	// registry is the estate's forge, so the
 	// OCIRepository is handed it as certSecretRef (chart.go).
 	CA                               bool
 	ChartURL, ChartRepo, Version, PR string
@@ -160,7 +161,7 @@ func planAdd(o addOpts) (*plan, error) {
 
 	chartDir, resolved := o.chartDir, o.version
 	if chartDir == "" {
-		dir, v, err := resolveChart(o.root, chartPin{url: o.ref, version: o.version, followPR: o.followPR, followMain: o.followMain})
+		dir, v, err := resolveChart(o.root, usesEstateCA(o.root, est, o.ref), chartPin{url: o.ref, version: o.version, followPR: o.followPR, followMain: o.followMain})
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +205,7 @@ func planAdd(o addOpts) (*plan, error) {
 	v := view{
 		Fort: o.fort, App: app, SecretName: app + "-env",
 		NoContract: !c.Present,
-		CA:         exists(o.root, estateCA),
+		CA:         usesEstateCA(o.root, est, o.ref),
 		ChartURL:   "oci://" + repoPath,
 		ChartRepo:  strings.SplitN(repoPath, "/", 2)[len(strings.SplitN(repoPath, "/", 2))-1],
 		Version:    resolved, PR: o.followPR, Main: o.followMain,

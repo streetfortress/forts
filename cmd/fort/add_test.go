@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitea.zen.lofi/sfi/forts/internal/estate"
 )
 
 // The golden trees: what `fort add` renders for one chart on a fresh
@@ -339,5 +341,29 @@ func TestAppendPatch(t *testing.T) {
 	out3 := appendPatch(trailing, "# why\n", "q.yaml", "g", "v1", "K", "n", "ns")
 	if want := "patches:\n  - path: p.yaml\n    target:\n      kind: K\n  - path: q.yaml\n    target:\n      group: g\n      version: v1\n      kind: K\n      name: n\n      namespace: ns\n\n# the seed scripts\nconfigMapGenerator:\n  - name: g\n    files:\n      - s.sh\n"; out3 != want {
 		t.Errorf("appendPatch (list after patches:):\n%s", out3)
+	}
+}
+
+// The estate's CA belongs to the estate's own registry: a chart on a
+// public registry takes the system roots.
+func TestUsesEstateCA(t *testing.T) {
+	tmp := t.TempDir()
+	copyEstate(t, tmp)
+	est, err := estate.Load(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ref, withFile := range map[string]bool{
+		"oci://gitea.zen.lofi/sfi/sfi-website": true,
+		"oci://ghcr.io/sf1tzp/sfi-website":     false,
+	} {
+		if usesEstateCA(tmp, est, ref) {
+			t.Errorf("%s: no CA file, want false", ref)
+		}
+		copyFile(t, "testdata/step-ca-root.pem", filepath.Join(tmp, estateCA))
+		if got := usesEstateCA(tmp, est, ref); got != withFile {
+			t.Errorf("%s: with CA file got %v, want %v", ref, got, withFile)
+		}
+		os.Remove(filepath.Join(tmp, estateCA))
 	}
 }
