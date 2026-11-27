@@ -113,7 +113,7 @@ Because every secret's location is declared, secrets are a rotatable inventory �
 1. Workload secret values (seeded or hand-set): change the value (sops set / edit), PR, merge — flux applies the new Secret.
 2. Host-side secret values (sops-nix delivered): merge → pull loop → activation puts the new value on disk.
 3. The console passphrase: the one the fort CLI owns end-to-end — `fort console-password <host> --rotate`
-4. The recipient set (adding or removing an admin or other secret readers): `just updatekeys`. We've implemented this as a justfile recipe for now, it calls `sops updatekeys` on all sops-encrypted secrets in the estate.
+4. The recipient set (adding or removing an admin or other secret readers): `just updatekeys`. We've implemented this as a justfile recipe for now, it calls `sops updatekeys` on all sops-encrypted secrets in the estate. It skips a directory with a `.sops.yaml` of its own (the s3 hub identity requests encrypt to the hub cluster, so nobody in the estate can decrypt them), and says so.
 
 ---
 

@@ -49,6 +49,11 @@ fetch-kubeconfig host:
 # flux/infrastructure/). Each file is found by its `sops:` metadata
 # block, not by its name.
 #
+# A directory with a .sops.yaml of its own is skipped, with a note. Its
+# recipient is another cluster's (the identity requests of an s3 hub),
+# so nobody here can decrypt it, and updatekeys must fail on it by
+# design. The fort that owns the recipient mints the file again.
+#
 # Use a key that decrypts every file TODAY. Never use the key you add.
 #
 # Re-encrypt every sops file (both configs) after a recipient change.
@@ -60,6 +65,17 @@ updatekeys:
         sops --config nixos/.sops.yaml updatekeys -y "$f"
     done
     rest=$(git grep -l '^sops:' -- '*.yaml' ':!nixos/secrets' || true)
-    if [ -n "$rest" ]; then
-        printf '%s\n' "$rest" | xargs -n1 sops --config .sops.yaml updatekeys -y
-    fi
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        d=$(dirname "$f")
+        own=""
+        while [ "$d" != "." ]; do
+            if [ -f "$d/.sops.yaml" ]; then own="$d/.sops.yaml"; break; fi
+            d=$(dirname "$d")
+        done
+        if [ -n "$own" ]; then
+            echo "Skipping $f: it answers to $own, not the root rules" >&2
+            continue
+        fi
+        sops --config .sops.yaml updatekeys -y "$f"
+    done <<< "$rest"
