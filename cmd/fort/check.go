@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -116,6 +118,9 @@ func check(args []string) error {
 		findings = append(findings, consoleFindings(root, fort)...)
 		// Which hypervisor a lab fort lives on (forts#27).
 		findings = append(findings, hypervisorFindings(fort, entry)...)
+		// The LAN block: the gateway on the subnet, and the host file
+		// in step with the manifest (forts#265).
+		findings = append(findings, lanFindings(root, fort, entry)...)
 		// The inventories against their Secrets (forts#250, #88).
 		findings = append(findings, inventoryFindings(root, fort)...)
 		errors += reportFindings(os.Stdout, fort, findings, o.annotate)
@@ -280,6 +285,86 @@ func hypervisorFindings(fort string, entry manifest.Host) []finding {
 		out = append(out, finding{"warning", path, "[libvirt] uri carries keyfile=: that path belongs to one operator machine, and a second machine with another home directory has no such file. Name the identity in ~/.ssh/config, or export the whole URI as LIBVIRT_DEFAULT_URI there"})
 	}
 	return out
+}
+
+// lanFindings (forts#265): the lab LAN block bakes into the image, and
+// a wrong block boots a fort with no default route: k3s crash-loops
+// while the mesh still answers. Two ways to get there.
+//
+// The gateway lies outside ip/lan_prefix. Scaffold derives a gateway
+// on the subnet when the manifest names none, so this is a gateway the
+// operator wrote.
+//
+// The host file disagrees with the manifest. Scaffold seeds the LAN
+// block once and never overwrites, so an edit of lan_gateway after the
+// scaffold changes nothing in the image. The repair is to remove the
+// host file and scaffold again.
+func lanFindings(root, fort string, entry manifest.Host) []finding {
+	var ip string
+	var prefix int
+	var gw string
+	var dns []string
+	switch {
+	case entry.Libvirt() != nil:
+		l := entry.Libvirt()
+		ip, prefix, gw, dns = l.IP, l.LanPrefix, l.LanGateway, l.LanDNS
+	case entry.Baremetal() != nil:
+		b := entry.Baremetal()
+		ip, prefix, gw, dns = b.IP, b.LanPrefix, b.LanGateway, b.LanDNS
+	default:
+		return nil
+	}
+	path := manifest.Path(fort)
+	var out []finding
+	prefix, gw, dns = lanBlock(ip, prefix, gw, dns)
+	if a, err := netip.ParseAddr(ip); err == nil {
+		if g, err := netip.ParseAddr(gw); err != nil {
+			out = append(out, finding{"error", path, fmt.Sprintf("lan_gateway %q is not an IP address", gw)})
+		} else if p, err := a.Prefix(prefix); err == nil && !p.Contains(g) {
+			out = append(out, finding{"error", path, fmt.Sprintf("lan_gateway %s lies outside %s/%d, the subnet of ip %s: the image boots with no default route and k3s crash-loops", gw, p.Addr(), prefix, ip)})
+		}
+	}
+	hostPath := filepath.Join("nixos/hosts", fort, "default.nix")
+	raw, err := os.ReadFile(filepath.Join(root, hostPath))
+	if err != nil {
+		return out // scaffold has not run
+	}
+	hostGW, hostDNS, ok := hostLan(string(raw))
+	if !ok {
+		return out // a host file that carries no LAN block is not drift
+	}
+	rescaffold := fmt.Sprintf("remove %s and run `fort scaffold %s` again", hostPath, fort)
+	if hostGW != gw {
+		out = append(out, finding{"error", hostPath, fmt.Sprintf("the gateway is %s, and the manifest says %s. Scaffold seeds the LAN block once and never overwrites: %s", hostGW, gw, rescaffold)})
+	}
+	if strings.Join(hostDNS, " ") != strings.Join(dns, " ") {
+		out = append(out, finding{"error", hostPath, fmt.Sprintf("the DNS is [%s], and the manifest says [%s]. Scaffold seeds the LAN block once and never overwrites: %s", strings.Join(hostDNS, " "), strings.Join(dns, " "), rescaffold)})
+	}
+	return out
+}
+
+var (
+	hostGatewayRe = regexp.MustCompile(`(?m)^\s*gateway\s*=\s*\[([^\]]*)\]`)
+	hostDNSRe     = regexp.MustCompile(`(?m)^\s*dns\s*=\s*\[([^\]]*)\]`)
+	quotedRe      = regexp.MustCompile(`"([^"]*)"`)
+)
+
+// hostLan reads the gateway and the DNS list of the LAN block that
+// scaffold renders into a host file.
+func hostLan(src string) (gw string, dns []string, ok bool) {
+	g := hostGatewayRe.FindStringSubmatch(src)
+	if g == nil {
+		return "", nil, false
+	}
+	if q := quotedRe.FindStringSubmatch(g[1]); q != nil {
+		gw = q[1]
+	}
+	if d := hostDNSRe.FindStringSubmatch(src); d != nil {
+		for _, q := range quotedRe.FindAllStringSubmatch(d[1], -1) {
+			dns = append(dns, q[1])
+		}
+	}
+	return gw, dns, true
 }
 
 // knownHostsFindings (forts#139): the forge's SSH host key is an estate

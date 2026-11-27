@@ -173,3 +173,42 @@ func TestDrvName(t *testing.T) {
 		t.Errorf("drvName fallback: %q", got)
 	}
 }
+
+// The LAN block (forts#265): a gateway off the subnet, and a host file
+// that drifted from the manifest after the scaffold seeded it.
+func TestLanFindings(t *testing.T) {
+	load := func(toml string) manifest.Host {
+		h, err := manifest.Parse("h", []byte("mesh_ip = \"10.1.0.1\"\n"+toml))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	hostFile := func(gw, dns string) string {
+		root := t.TempDir()
+		os.MkdirAll(filepath.Join(root, "nixos/hosts/h"), 0o755)
+		os.WriteFile(filepath.Join(root, "nixos/hosts/h/default.nix"), []byte("    gateway = [ \""+gw+"\" ];\n    dns = [ "+dns+" ];\n"), 0o644)
+		return root
+	}
+	cases := []struct {
+		name, toml, gw, dns, want string
+	}{
+		{"lab defaults", "[libvirt]\nip = \"10.0.0.41\"\n", "10.0.0.1", `"10.0.0.2" "8.8.8.8"`, ""},
+		{"derived on another subnet", "[libvirt]\nip = \"192.168.122.10\"\n", "192.168.122.1", `"192.168.122.1"`, ""},
+		{"gateway off the subnet", "[libvirt]\nip = \"192.168.122.10\"\nlan_gateway = \"10.0.0.1\"\n", "10.0.0.1", `"192.168.122.1"`, "outside 192.168.122.0/24"},
+		{"host file drifted", "[libvirt]\nip = \"192.168.122.10\"\n", "10.0.0.1", `"192.168.122.1"`, "never overwrites"},
+	}
+	for _, c := range cases {
+		got := lanFindings(hostFile(c.gw, c.dns), "h", load(c.toml))
+		var all string
+		for _, f := range got {
+			all += f.msg + "\n"
+		}
+		if c.want == "" && len(got) != 0 || c.want != "" && !strings.Contains(all, c.want) {
+			t.Errorf("%s: findings %q, want %q", c.name, all, c.want)
+		}
+	}
+	if got := lanFindings(t.TempDir(), "h", load("[cluster]\n[linode]\nregion = \"r\"\ntype = \"t\"\n")); len(got) != 0 {
+		t.Errorf("cloud fort: %+v", got)
+	}
+}

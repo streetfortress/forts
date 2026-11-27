@@ -512,3 +512,26 @@ func TestPublicFixtureEstateIsScaffoldOutput(t *testing.T) {
 		t.Errorf("the fixture's secrets file carries the cluster key and no deploy key:\n%s", secrets)
 	}
 }
+
+// The lan_* defaults (forts#265): the gateway is .1 of the subnet that
+// ip lies in, and the lab keeps its own values.
+func TestLanBlockDefaults(t *testing.T) {
+	cases := []struct {
+		ip     string
+		prefix int
+		gw     string
+		wantGW string
+		wantNS string
+	}{
+		{"10.0.0.41", 0, "", "10.0.0.1", "10.0.0.2 8.8.8.8"},
+		{"192.168.122.10", 0, "", "192.168.122.1", "192.168.122.1"},
+		{"172.16.37.9", 16, "", "172.16.0.1", "172.16.0.1"},
+		{"192.168.122.10", 0, "192.168.122.254", "192.168.122.254", "192.168.122.254"},
+	}
+	for _, c := range cases {
+		_, gw, dns := lanBlock(c.ip, c.prefix, c.gw, nil)
+		if gw != c.wantGW || strings.Join(dns, " ") != c.wantNS {
+			t.Errorf("%s: gateway %s dns %v, want %s %s", c.ip, gw, dns, c.wantGW, c.wantNS)
+		}
+	}
+}

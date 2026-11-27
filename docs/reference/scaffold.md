@@ -82,9 +82,15 @@ block's `en*` name match into a MAC match; `[linode]` `region` + `type`
 for the header comment), `mesh_ip`, `[cluster] datastore` (rendered as
 the host's `sfi.k3s.datastore` line, `sqlite` when unset; #426),
 and the
-optional seed `nixos_state_version`. The lab defaults
-are `/24`, gateway `10.0.0.1`, DNS `10.0.0.2` + `8.8.8.8`, state version
-`25.11`.
+optional seed `nixos_state_version`. The defaults are `/24`, state
+version `25.11`, and a gateway of `.1` in the subnet that `ip` lies in.
+The DNS default is that gateway. On the lab subnet `10.0.0.0/24` the DNS
+default stays `10.0.0.2` + `8.8.8.8` (#265).
+
+Scaffold seeds the LAN block once and never overwrites it. `fort check`
+fails when `lan_gateway` lies outside the subnet of `ip`. It also fails
+when the host file disagrees with the manifest. To repair a drifted
+host file, remove it and run `fort scaffold` again.
 
 A manifest without `mesh_ip` is refused (by the loader, so every verb
 says so): every fort is a mesh member (`MESH_IP` is mandatory), and a

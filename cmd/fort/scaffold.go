@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -300,6 +301,41 @@ func scaffoldShape(e manifest.Host) string {
 	return s + ", k3s on " + e.Datastore()
 }
 
+// labGateway and labDNS are the lab LAN's own values: the gateway
+// that .1 of 10.0.0.0/24 derives, and the resolvers its fort has used
+// since before the block was derived (#265).
+const labGateway = "10.0.0.1"
+
+var labDNS = []string{"10.0.0.2", "8.8.8.8"}
+
+// lanBlock fills the optional lan_* keys. An unset lan_prefix is 24.
+// An unset lan_gateway is .1 of the network that ip lies in, so a
+// manifest that sets only ip on another subnet gets a gateway on that
+// subnet (#265). An unset lan_dns is the lab's pair on the lab network
+// and the gateway elsewhere. An ip that does not parse leaves the lab
+// values; the manifest loader refuses such an ip first.
+func lanBlock(ip string, prefix int, gw string, dns []string) (int, string, []string) {
+	if prefix == 0 {
+		prefix = 24
+	}
+	if gw == "" {
+		gw = labGateway
+		if a, err := netip.ParseAddr(ip); err == nil && a.Is4() {
+			if p, err := a.Prefix(prefix); err == nil {
+				gw = p.Addr().Next().String()
+			}
+		}
+	}
+	if len(dns) == 0 {
+		if gw == labGateway {
+			dns = labDNS
+		} else {
+			dns = []string{gw}
+		}
+	}
+	return prefix, gw, dns
+}
+
 // renderScaffold is the pure half: the manifests → files.
 func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaffoldFile, error) {
 	view := hostView{
@@ -310,9 +346,6 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 		Estate:        est.Name,
 		Hostname:      host,
 		MeshIP:        entry.MeshIP,
-		LanPrefix:     24,
-		LanGateway:    "10.0.0.1",
-		LanDNS:        []string{"10.0.0.2", "8.8.8.8"},
 		StateVersion:  "25.11",
 		Datastore:     entry.Datastore(),
 		Cloud:         entry.Cloud(),
@@ -321,18 +354,11 @@ func renderScaffold(host string, entry manifest.Host, est estate.Estate) ([]scaf
 		AuditLogging:  entry.AuditLogging(),
 		Links:         linkViews(entry),
 	}
+	view.LanPrefix, view.LanGateway, view.LanDNS = lanBlock("", 0, "", nil)
 	// The lab LAN block, from whichever lab table the host carries.
 	lan := func(ip string, prefix int, gw string, dns []string) {
 		view.IP = ip
-		if prefix != 0 {
-			view.LanPrefix = prefix
-		}
-		if gw != "" {
-			view.LanGateway = gw
-		}
-		if len(dns) > 0 {
-			view.LanDNS = dns
-		}
+		view.LanPrefix, view.LanGateway, view.LanDNS = lanBlock(ip, prefix, gw, dns)
 	}
 	if l := entry.Libvirt(); l != nil {
 		lan(l.IP, l.LanPrefix, l.LanGateway, l.LanDNS)
