@@ -168,7 +168,7 @@ func TestRenderWGConf(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a peer with an endpoint: dials the ones with endpoints, is dialed by the rest
-	conf, err := renderWGConf(m, "wg0", 24, "luxor")
+	conf, err := renderWGConf(m, "wg0", 24, "luxor", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,19 +187,24 @@ func TestRenderWGConf(t *testing.T) {
 	if !strings.HasPrefix(conf, "# wg0 for luxor") {
 		t.Errorf("luxor header:\n%s", conf)
 	}
-	if c, _ := renderWGConf(m, "wg-second", 24, "luxor"); !strings.HasPrefix(c, "# wg-second for luxor") {
+	if c, _ := renderWGConf(m, "wg-second", 24, "luxor", ""); !strings.HasPrefix(c, "# wg-second for luxor") {
 		t.Errorf("named interface header:\n%s", c)
 	}
 	if strings.Contains(conf, "PrivateKey =") || strings.Contains(conf, "PublicKey = LX=") {
 		t.Errorf("luxor: a PrivateKey line, or itself as a peer:\n%s", conf)
 	}
+	// --key-file: the key is loaded by a PostUp, and never rendered
+	conf, _ = renderWGConf(m, "wg0", 24, "luxor", "/etc/wireguard/mesh.key")
+	if !strings.Contains(conf, "ListenPort = 51820\nPostUp = wg set %i private-key /etc/wireguard/mesh.key\n") || strings.Contains(conf, "PrivateKey =") {
+		t.Errorf("luxor with a key file:\n%s", conf)
+	}
 	// a peer with no endpoint of its own facing another without one
-	conf, _ = renderWGConf(m, "wg0", 24, "devbox")
+	conf, _ = renderWGConf(m, "wg0", 24, "devbox", "")
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint on either side") {
 		t.Errorf("devbox↔soundship:\n%s", conf)
 	}
 	// a roaming client: no ListenPort, no clients, the DDNS note
-	conf, err = renderWGConf(m, "wg0", 24, "laptop")
+	conf, err = renderWGConf(m, "wg0", 24, "laptop", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +214,7 @@ func TestRenderWGConf(t *testing.T) {
 	if !strings.Contains(conf, "# soundship\nPublicKey = SS=\nAllowedIPs = 10.1.0.1/32\n# no fixed endpoint in peers.json: a roaming client") || !strings.Contains(conf, "Endpoint = 10.0.0.5:51820") {
 		t.Errorf("laptop peers:\n%s", conf)
 	}
-	if _, err := renderWGConf(m, "wg0", 24, "macmini"); err == nil || !strings.Contains(err.Error(), "register it first") {
+	if _, err := renderWGConf(m, "wg0", 24, "macmini", ""); err == nil || !strings.Contains(err.Error(), "register it first") {
 		t.Errorf("unknown member: %v", err)
 	}
 	// a roaming client dials the linked hosts too
@@ -503,7 +508,29 @@ func TestParseMeshRefusesUnknownField(t *testing.T) {
 
 func TestRenderWGConfRefusesEmptyEntry(t *testing.T) {
 	m := mesh{Peers: map[string]meshPeer{"a": {}}}
-	if _, err := renderWGConf(m, "wg0", 24, "a"); err == nil || !strings.Contains(err.Error(), "wg_vpn_ip and public_key") {
+	if _, err := renderWGConf(m, "wg0", 24, "a", ""); err == nil || !strings.Contains(err.Error(), "wg_vpn_ip and public_key") {
 		t.Fatalf("want a refusal naming the fields, got %v", err)
+	}
+}
+
+func TestWGKeyFileArg(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+		ok   bool
+	}{
+		{nil, "", true},
+		{[]string{"--key-file", "/etc/wireguard/mesh.key"}, "/etc/wireguard/mesh.key", true},
+		{[]string{"--key-file=/etc/wireguard/mesh.key"}, "/etc/wireguard/mesh.key", true},
+		{[]string{"--key-file", "mesh.key"}, "", false},
+		{[]string{"--key-file", "/a b"}, "", false},
+		{[]string{"--key-file", "/a;rm"}, "", false},
+		{[]string{"--key-file"}, "", false},
+		{[]string{"--other", "x"}, "", false},
+	} {
+		got, err := wgKeyFileArg(tc.args)
+		if (err == nil) != tc.ok || got != tc.want {
+			t.Errorf("%q: got %q, %v", tc.args, got, err)
+		}
 	}
 }

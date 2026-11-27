@@ -10,7 +10,7 @@ dismantle left one behind (#183, #434). Two verbs render it instead:
 | verb | kind | renders | from |
 |---|---|---|---|
 | `fort ssh-config` | author | `mesh/ssh_config`, `mesh/known_hosts` | peers.json + manifests (+ each fort's sops file, for its host key) |
-| `fort wg-conf <member>` | read | a member's own mesh interface on stdout | peers.json + estate.toml (the interface's name) |
+| `fort wg-conf <member> [--key-file <path>]` | read | a member's own mesh interface on stdout | peers.json + estate.toml (the interface's name) |
 
 `fort mint` and `fort dismantle` keep the two files current as they add
 or remove a peer, so `ssh-config` itself is the whole-fleet render: after
@@ -151,6 +151,17 @@ The join, for an always-on Mac on the lab LAN (macmini):
 5. Re-run `fort wg-conf macmini` after any peers.json change and paste
    again — the app has no other way to learn it. The forts' side of the
    same fact rolls out by itself.
+
+A Linux member with `wg-quick` has no app to hold the key. Pass
+`--key-file <absolute path>` and the `[Interface]` gains one line:
+
+```
+PostUp = wg set %i private-key /etc/wireguard/mesh.key
+```
+
+Save the output as `/etc/wireguard/<interface>.conf`. The key stays in its
+own file, and the rendered conf never holds it. The path must be absolute
+and free of shell characters.
 
 ## What `fort check --all` says
 

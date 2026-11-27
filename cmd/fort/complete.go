@@ -150,7 +150,7 @@ var completions = map[string]verbSpec{
 	// under its apps root (forts#251).
 	"remove":     {args: []candidates{clusters, appNames}},
 	"ssh-config": {},
-	"wg-conf":    {args: []candidates{meshMembers}},
+	"wg-conf":    {flags: []flagSpec{{name: "key-file", kind: opaque}}, args: []candidates{meshMembers}},
 	"--version":  {}, // a flag in the verb position (forts#135): completes, takes nothing
 	"dismantle":  {args: []candidates{manifests}},
 	"destroy":    {flags: []flagSpec{yesFlag, {name: "no-stack"}}, args: []candidates{destroyable}},

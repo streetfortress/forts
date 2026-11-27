@@ -166,7 +166,7 @@ func usage() {
   ssh-config
 	  Helper function: render an SSH config for accessing the forts of this estate.
 
-  wg-conf <member>
+  wg-conf <member> [--key-file <path>]
 	  Helper function: render a Wireguard configuration file for joining a client to the estate mesh.
 
   link add <fort> <estate url> [--address <ip>] [--port <udp>]

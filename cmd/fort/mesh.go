@@ -379,8 +379,10 @@ func readOrEmpty(root, rel string) (string, error) {
 // PrivateKey — the WireGuard app generated that key on the device and
 // registered its public half in peers.json; the line the app wrote is
 // the one to keep. A client (roaming) member has no ListenPort — nobody
-// dials it.
-func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, error) {
+// dials it. With keyFile set (wg-quick on Linux, no app to hold the key),
+// the [Interface] gains a PostUp that loads the key from that path, so the
+// key stays out of the rendered file too.
+func renderWGConf(m mesh, iface string, prefixBits int, member, keyFile string) (string, error) {
 	self, isPeer := m.Peers[member]
 	if !isPeer {
 		var ok bool
@@ -393,8 +395,13 @@ func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, 
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# %s for %s — rendered by `fort wg-conf %s` from %s.\n", iface, member, member, peersPath)
-	sb.WriteString("# Paste below the PrivateKey line the WireGuard app generated (Add Empty\n")
-	sb.WriteString("# Tunnel): that key never leaves the device, and its public half is the one\n")
+	if keyFile != "" {
+		fmt.Fprintf(&sb, "# The PostUp line loads the private key from %s: that key never leaves\n", keyFile)
+		sb.WriteString("# the device, and its public half is the one\n")
+	} else {
+		sb.WriteString("# Paste below the PrivateKey line the WireGuard app generated (Add Empty\n")
+		sb.WriteString("# Tunnel): that key never leaves the device, and its public half is the one\n")
+	}
 	fmt.Fprintf(&sb, "# peers.json carries for %s:\n#   %s\n", member, self.PublicKey)
 	sb.WriteString("# Re-render after any peers.json change; the app has no other way to learn it.\n")
 	sb.WriteString("\n[Interface]\n")
@@ -406,6 +413,10 @@ func renderWGConf(m mesh, iface string, prefixBits int, member string) (string, 
 		// by the ones that learn it from its keepalives; either way the
 		// port must hold still.
 		fmt.Fprintf(&sb, "ListenPort = %d\n", wgPort)
+	}
+	if keyFile != "" {
+		// wg-quick runs PostUp after the interface is up; %i is its name.
+		fmt.Fprintf(&sb, "PostUp = wg set %%i private-key %s\n", keyFile)
 	}
 	// No DNS line (forts#45): the names of the mesh are the forts' own
 	// (/etc/hosts from peers.json); a roaming client is not served them

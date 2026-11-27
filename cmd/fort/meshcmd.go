@@ -226,13 +226,44 @@ func writeRendered(root string, tool secretsTool, sshConfig, knownHosts string) 
 	return nil
 }
 
+// wgKeyFileArg reads the optional `--key-file <path>` (or `--key-file=<path>`)
+// after the member. The path lands in a PostUp shell line, so a character
+// the shell would read is refused.
+func wgKeyFileArg(args []string) (string, error) {
+	switch {
+	case len(args) == 0:
+		return "", nil
+	case len(args) == 2 && args[0] == "--key-file":
+		return checkKeyFile(args[1])
+	case len(args) == 1 && strings.HasPrefix(args[0], "--key-file="):
+		return checkKeyFile(strings.TrimPrefix(args[0], "--key-file="))
+	}
+	return "", fmt.Errorf("unexpected arguments %q", args)
+}
+
+func checkKeyFile(p string) (string, error) {
+	if p == "" || strings.ContainsAny(p, " \t\n'\"\\$`;&|<>()*?#~{}") {
+		return "", fmt.Errorf("--key-file %q: give a plain absolute path with no space or shell character", p)
+	}
+	if !strings.HasPrefix(p, "/") {
+		return "", fmt.Errorf("--key-file %q: the path must be absolute (wg-quick runs PostUp from any directory)", p)
+	}
+	return p, nil
+}
+
 // fort wg-conf <member> — print a member's mesh interface the way its WireGuard app
 // (or wg-quick) wants it, from peers.json. Read verb: nothing is
 // written, and no key is handled — the PrivateKey line is the device's
 // (mesh.go, renderWGConf).
 func wgConf(args []string) error {
-	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("usage: fort wg-conf <member>")
+	const usage = "usage: fort wg-conf <member> [--key-file <path>]"
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf(usage)
+	}
+	member := args[0]
+	keyFile, err := wgKeyFileArg(args[1:])
+	if err != nil {
+		return fmt.Errorf("%v\n%s", err, usage)
 	}
 	root, err := repoRoot()
 	if err != nil {
@@ -246,7 +277,7 @@ func wgConf(args []string) error {
 	if err != nil {
 		return err
 	}
-	conf, err := renderWGConf(m, est.InterfaceName(), est.MeshPrefixBits(), args[0])
+	conf, err := renderWGConf(m, est.InterfaceName(), est.MeshPrefixBits(), member, keyFile)
 	if err != nil {
 		return err
 	}
