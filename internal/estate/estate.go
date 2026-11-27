@@ -9,7 +9,7 @@
 // and there are few of them on purpose: an estate is plain NixOS and a
 // flux tree, and this file names only what a verb reads.
 //
-// `fort init` writes it. `fort scaffold` reads it for the flux source URL;
+// `fort estate init` writes it. `fort scaffold` reads it for the flux source URL;
 // `fort check` and the link verbs read the hubs and the serves tables. A checkout with no estate.toml is not an estate, and
 // every verb says so.
 package estate
@@ -113,7 +113,7 @@ type Source struct {
 	// ("[gitea.example:30022] ssh-ed25519 AAAA…"): what flux's git-auth
 	// and the rebuild loop pin the clone to, on the ssh route. The
 	// framework ships no default (forts#139): a host of an estate on
-	// the ssh route that names none does not evaluate. `fort init
+	// the ssh route that names none does not evaluate. `fort estate init
 	// --known-hosts` writes it; `ssh-keyscan -p <port> <forge>` prints
 	// it. The anonymous route reads no host key — an https clone
 	// trusts the forge's TLS certificate through the system roots (and
@@ -374,7 +374,7 @@ func Load(root string) (Estate, error) {
 	raw, err := os.ReadFile(filepath.Join(root, Path))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Estate{}, fmt.Errorf("no %s at %s — this checkout is not an estate; `fort init` renders one", Path, root)
+			return Estate{}, fmt.Errorf("no %s at %s — this checkout is not an estate; `fort estate init` renders one", Path, root)
 		}
 		return Estate{}, err
 	}

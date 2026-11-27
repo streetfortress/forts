@@ -50,7 +50,7 @@ func estateLink(args []string) error {
 		pos = append(pos, args[0])
 		args = args[1:]
 	}
-	fs := flag.NewFlagSet("estate", flag.ContinueOnError)
+	fs := flag.NewFlagSet("estate link", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

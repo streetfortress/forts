@@ -1,7 +1,7 @@
 # fort estate init — create an estate
 
 ```
-fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <"ssh-ed25519 … <device>"> …] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] [--forts <flake url>]
+fort estate init [estate.toml] --forts <flake url> [--name <estate>] [--repo <git url>] [--admin <age1…> …] [--operator-key <"ssh-ed25519 … <device>"> …] [--known-hosts <line>] [--acme-email <mailbox>] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]]
 ```
 
 `init` renders, into the root of a git checkout, the files every other
@@ -11,13 +11,21 @@ pure render: no secrets, no network, nothing overwritten — a re-run keeps
 every file that exists.
 
 **Write `estate.toml` first.** The file is an input. Write it, then run
-`fort estate init estate.toml --admin <age1…> --forts <flake url>`. The
+`fort estate init --forts <flake url>` in the checkout. With no file
+argument, init reads the `estate.toml` at the root of the checkout when
+it exists. The
 verb reads the name, `[source]`, `[mesh]`, `[acme]`, the hubs and the
 operator keys from the file. A flag beside the file overrides the value
-of the file. `--admin` and `--forts` are not keys of `estate.toml`, so
-they stay flags. When the file is the `estate.toml` at the root of the
-checkout, init keeps it as written and renders the rest around it. A file
-from another place is a seed: init renders a new `estate.toml` from it.
+of the file. `--forts` is not a key of `estate.toml`, so it stays a flag.
+
+**The admin recipient.** With no `--admin`, init reads the first age key
+of the file that sops reads: `$SOPS_AGE_KEY_FILE`, else
+`~/.config/sops/age/keys.txt`. It prints the recipient it took. `--admin`
+overrides the file. When there is no key file, `--admin` is required.
+
+When the file is the `estate.toml` at the root of the checkout, init
+keeps it as written and renders the rest around it. A file from another
+place is a seed: init renders a new `estate.toml` from it.
 
 ## What it renders
 

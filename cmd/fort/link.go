@@ -148,7 +148,7 @@ func planLinkAdd(root, host, repo string, o linkAddOpts, tool secretsTool, fetch
 	defer cleanup()
 	p.remote = remote
 	if remote.est.Mesh.CIDR == "" && o.address == "" {
-		return nil, fmt.Errorf("%s's %s declares no mesh — add a `[mesh]` table with `cidr = \"10.x.0.0/24\"` there (fort init --mesh), or pass --address", remote.est.Ref(), estate.Path)
+		return nil, fmt.Errorf("%s's %s declares no mesh — add a `[mesh]` table with `cidr = \"10.x.0.0/24\"` there (fort estate init --mesh), or pass --address", remote.est.Ref(), estate.Path)
 	}
 	taken := p.takenOn(remote)
 	for h, l := range p.otherClaims(root) {

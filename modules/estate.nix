@@ -66,7 +66,7 @@ in
     type = lib.types.strMatching "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
     default = meshToml.zone or (
       if estateToml ? name then "${estateToml.name}.mesh"
-      else throw "sfi.mesh.zone: ${toString tomlPath} names no estate (`name`) — fort init renders estate.toml; or set the zone in the host file"
+      else throw "sfi.mesh.zone: ${toString tomlPath} names no estate (`name`) — fort estate init renders estate.toml; or set the zone in the host file"
     );
     defaultText = "estate.toml's `[mesh] zone`, else <name>.mesh";
     description = "The DNS zone of this estate's mesh: every peer and remote of mesh/peers.json is <host>.<zone> at its mesh address.";
@@ -126,7 +126,7 @@ in
 
   # The forge's host key (forts#139): what flux's git-auth secret and the
   # rebuild loop pin their clones to, on the ssh route. estate.toml's
-  # `[source] known_hosts`, which `fort init --known-hosts` writes. The
+  # `[source] known_hosts`, which `fort estate init --known-hosts` writes. The
   # framework shipped its own forge's key as the default until the first
   # public release; it ships none now, and a host of an estate on the ssh
   # route that names none does not evaluate. The anonymous route pins no
@@ -136,7 +136,7 @@ in
     type = lib.types.str;
     default =
       if config.sfi.estate.authRoute != "ssh" then ""
-      else sourceToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `[source] known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort init --known-hosts writes it");
+      else sourceToml.known_hosts or (throw "sfi.estate.knownHosts: ${toString tomlPath} names no `[source] known_hosts` — the forge's SSH host key as one known_hosts line (ssh-keyscan -p <port> <forge>); fort estate init --known-hosts writes it");
     defaultText = "estate.toml's `[source] known_hosts` on the ssh route; empty on the anonymous route";
     description = "The forge's SSH host key, one known_hosts line, pinned by every clone a fort makes of the estate on the ssh route. Empty on the anonymous route.";
   };
@@ -146,7 +146,7 @@ in
     # (forts#60). An estate that runs a private CA issues the TLS of its
     # own services from it — the forge's certificate a clone fetches
     # over, an issuer a layer renders — so every host of that estate must
-    # trust it. The file is the estate's to provide (`fort init` says so
+    # trust it. The file is the estate's to provide (`fort estate init` says so
     # and cannot write it), and an estate with no CA has no file here and
     # carries no extra trust.
     security.pki.certificateFiles =

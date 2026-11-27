@@ -17,7 +17,7 @@ cluster.
 `mesh/peers.json` carries that host as `remotes.forge`. The pair is what
 `modules/lab-dns.nix` derives the forge pin from (forts#26), so the eval
 below proves the derivation. `tests/init-estate.sh` is the other half:
-the estate `fort init` renders names no forge host, and that fort gets
+the estate `fort estate init` renders names no forge host, and that fort gets
 no pin.
 
 `estate.toml` also names one operator device (`operator_keys`, a

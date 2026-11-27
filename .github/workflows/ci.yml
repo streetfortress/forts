@@ -56,7 +56,7 @@ jobs:
           nix eval --raw .#nixosConfigurations.public-fort.config.system.build.toplevel.drvPath
           nix build --no-link --print-out-paths .#fort
 
-      - name: An estate that fort init created evaluates against this checkout
+      - name: An estate that fort estate init created evaluates against this checkout
         run: tests/init-estate.sh
 
       - name: The github.com fixture estate passes the gate

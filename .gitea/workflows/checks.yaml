@@ -215,7 +215,7 @@ jobs:
             = '["challenge","nixos-pull","nixos-revision","nixos-rollback"]'
           nix eval --json .#nixosModules --apply builtins.attrNames | grep -qv 'ops-flux\|ops-logs\|ops-workloads\|ops-systemd'
 
-      - name: An estate that fort init created evaluates against this checkout
+      - name: An estate that fort estate init created evaluates against this checkout
         run: tests/init-estate.sh
 
       - name: The github.com fixture estate passes the gate

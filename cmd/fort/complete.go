@@ -100,7 +100,9 @@ var (
 // main's switch and usage(). complete_test.go asserts it equals the
 // first; a verb added to one and not the other fails the build's tests.
 var completions = map[string]verbSpec{
-	"init": {flags: []flagSpec{
+	// estate's flags are init's; link takes none (a `fort estate link`
+	// FlagSet is named for it, not for the verb).
+	"estate": {flags: []flagSpec{
 		{name: "name", kind: opaque},
 		{name: "repo", kind: opaque},
 		{name: "hub", kind: opaque},
@@ -113,7 +115,7 @@ var completions = map[string]verbSpec{
 		{name: "acme-email", kind: opaque},
 		{name: "admin", kind: opaque},
 		{name: "operator-key", kind: opaque},
-	}},
+	}, args: []candidates{words("init", "link"), nil}},
 	"scaffold": {args: []candidates{manifests}},
 	"image": {flags: []flagSpec{
 		{name: "from", kind: paths},
@@ -158,7 +160,6 @@ var completions = map[string]verbSpec{
 		{name: "address", kind: opaque},
 		{name: "port", kind: opaque},
 	}, args: []candidates{words("add"), manifests, nil}},
-	"estate": {args: []candidates{words("init", "link"), nil}},
 	// The layer verbs (#144): add takes a flake url nothing in the tree
 	// can offer; remove takes an installed layer, which the tree can.
 	"layer": {args: []candidates{words("add", "remove"), layerNames}},

@@ -1,7 +1,7 @@
 # {{ .Name }}
 
 An estate: the forts declared here, built on sfi/forts
-as a flake input. Rendered by `fort init`. The CLI handbook is sfi/forts'
+as a flake input. Rendered by `fort estate init`. The CLI handbook is sfi/forts'
 `docs/`; this file is yours.
 
 ```

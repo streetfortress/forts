@@ -299,7 +299,7 @@ func knownHostsFindings(est estate.Estate) []finding {
 		return nil
 	}
 	if est.Source.KnownHosts == "" {
-		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort init --known-hosts, or this file)"}}
+		return []finding{{"error", estate.Path, "no known_hosts: the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>) — flux's clone and the rebuild loop pin it, and no fort evaluates until the estate names it (fort estate init --known-hosts, or this file)"}}
 	}
 	return []finding{{"ok", estate.Path, "known_hosts pins the forge's host key (" + strings.Fields(est.Source.KnownHosts)[0] + ")"}}
 }

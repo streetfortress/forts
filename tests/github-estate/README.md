@@ -24,7 +24,7 @@ the ssh route and github.com's host key.
 cloud-fort` renders into this tree; the test
 `TestGitHubFixtureEstateIsScaffoldOutput` keeps them so.
 `flux/infrastructure/` and the two `.sops.yaml` rule files are what
-`fort init` renders. The sops files — the host's secrets, the canary,
+`fort estate init` renders. The sops files — the host's secrets, the canary,
 the console registry, the Alertmanager webhook — carry the key names
 and opaque values, the shape sops leaves. `mesh/ssh_config` and
 `mesh/known_hosts` are `fort ssh-config` with no age key.

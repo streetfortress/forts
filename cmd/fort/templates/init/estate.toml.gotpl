@@ -1,5 +1,5 @@
 # {{ .Name }} — an estate: the forts declared here, built on sfi/forts.
-# Rendered by `fort init`; every verb reads it (docs/init.md in sfi/forts).
+# Rendered by `fort estate init`; every verb reads it (docs/init.md in sfi/forts).
 # TOML reads a loose key after a [table] header as that table's, so the
 # loose keys (name, operator_keys) stay above the first table.
 name = "{{ .Name }}"

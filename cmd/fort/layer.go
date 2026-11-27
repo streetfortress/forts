@@ -191,7 +191,7 @@ const (
 	flakePath = "nixos/flake.nix"
 )
 
-// The gate's two homes: fort init renders it for the estate's forge, and
+// The gate's two homes: fort estate init renders it for the estate's forge, and
 // each runner reads its own directory (forts#191).
 var gatePaths = []string{".gitea/workflows/checks.yaml", ".github/workflows/checks.yaml"}
 
@@ -210,12 +210,12 @@ func planLayerAdd(root string, ref layerRef) (*layerPlan, error) {
 	p := &layerPlan{root: root, ref: ref}
 	flake, err := os.ReadFile(filepath.Join(root, flakePath))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w — fort layer add runs in an estate fort init rendered", flakePath, err)
+		return nil, fmt.Errorf("%s: %w — fort layer add runs in an estate fort estate init rendered", flakePath, err)
 	}
 	gatePath := gatePathIn(root)
 	gate, err := os.ReadFile(filepath.Join(root, gatePath))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w — the gate workflow fort init rendered", gatePath, err)
+		return nil, fmt.Errorf("%s: %w — the gate workflow fort estate init rendered", gatePath, err)
 	}
 	// Run every edit now, in memory, so a flake rendered before layers (no
 	// `layers = sys: {` block) refuses before anything is written.
@@ -436,7 +436,7 @@ func coreGateStepName(gate string) (string, error) {
 			return name, nil
 		}
 	}
-	return "", fmt.Errorf("no step whose name starts with %q — the gate workflow fort init renders", coreGateStepPrefix)
+	return "", fmt.Errorf("no step whose name starts with %q — the gate workflow fort estate init renders", coreGateStepPrefix)
 }
 
 func layerGateStepName(role string) string {
@@ -463,7 +463,7 @@ func yamlEnsureStepAfter(text, after, name, block string) (string, error) {
 	}
 	b := yamlStepBounds(text, after)
 	if b == nil {
-		return "", fmt.Errorf("no step named %q — the gate workflow fort init renders", after)
+		return "", fmt.Errorf("no step named %q — the gate workflow fort estate init renders", after)
 	}
 	lines := strings.Split(text, "\n")
 	out := append([]string{}, lines[:b[1]]...)

@@ -26,7 +26,7 @@ public-fort` renders into this tree; the test
 `TestPublicFixtureEstateIsScaffoldOutput` keeps them so, and reads off
 them that the FluxInstance names no `pullSecret`.
 `flux/infrastructure/` and the two `.sops.yaml` rule files are what
-`fort init` renders. The sops files — the host's secrets (no
+`fort estate init` renders. The sops files — the host's secrets (no
 `flux-git-deploy-key`), the canary, the console registry, the
 Alertmanager webhook — carry the key names and opaque values, the shape
 sops leaves. `mesh/ssh_config` and `mesh/known_hosts` are `fort

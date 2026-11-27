@@ -2,7 +2,7 @@
 
 This repository is an estate. It declares forts and renders their files with
 the `fort` CLI from the forts framework. This file tells an agent the rules of the
-estate. `fort init` rendered it. The estate owns it now, so edit it freely.
+estate. `fort estate init` rendered it. The estate owns it now, so edit it freely.
 
 ## The framework
 

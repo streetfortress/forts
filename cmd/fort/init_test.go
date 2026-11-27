@@ -517,3 +517,29 @@ func TestHostFromManifestPath(t *testing.T) {
 		t.Error("a toml outside forts/ is not a manifest")
 	}
 }
+
+// The estate.toml written first is the input with no path given
+// (forts#293), and the admin comes from the operator's age key file.
+func TestInitCmdReadsEstateTomlAndAgeKey(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	toml := "name = \"demo\"\n\n[source]\nrepo = \"https://example.invalid/acme/demo\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "estate.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	keys := filepath.Join(t.TempDir(), "keys.txt")
+	if err := os.WriteFile(keys, []byte("# created: x\n# public key: age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\nAGE-SECRET-KEY-X\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SOPS_AGE_KEY_FILE", keys)
+	t.Chdir(dir)
+	if err := initCmd([]string{"--forts", "git+https://example.invalid/forts"}); err != nil {
+		t.Fatal(err)
+	}
+	sops, err := os.ReadFile(filepath.Join(dir, ".sops.yaml"))
+	if err != nil || !strings.Contains(string(sops), "age1qqqq") {
+		t.Fatalf(".sops.yaml lacks the admin from the key file: %v\n%s", err, sops)
+	}
+}

@@ -97,7 +97,7 @@ func TestLayerAddFindsGithubGate(t *testing.T) {
 	}
 }
 
-// The gate the layer's step lands in is the one fort init renders, in
+// The gate the layer's step lands in is the one fort estate init renders, in
 // both forge kinds. The core's step name carries the flags the step
 // runs with, and those moved once (#193) while this verb still matched
 // the old name (#278) — no test read a rendered gate. This one does.

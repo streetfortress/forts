@@ -144,12 +144,6 @@ type multiFlag []string
 func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
 func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 
-// initCmd is `fort estate init [estate.toml] [flags]` (forts#197;
-// `fort init` is the old spelling, kept as an alias):
-// the estate's name, repo, hubs and the rest can be written first, in
-// the file, and handed to init. A flag given beside the file overrides
-// the file's value. --admin and --forts are not estate.toml keys, so they
-// stay flags.
 // parseWithFile parses flags that may come before or after one positional
 // path (estate.toml, forts/<fort>.toml), which the flag package alone
 // would stop at.
@@ -168,8 +162,15 @@ func parseWithFile(fl *flag.FlagSet, args []string) (file string, err error) {
 	}
 }
 
+// initCmd is `fort estate init [estate.toml] [flags]` (forts#197): the
+// estate's name, repo, hubs and the rest can be written first, in the
+// file. With no file argument, the estate.toml at the root of the
+// checkout is the file when it exists (forts#293). A flag given beside
+// the file overrides the file's value. --forts is not an estate.toml
+// key, so it stays a flag. --admin stays one too; when none is given,
+// init reads the operator's own age key (localAdmin).
 func initCmd(args []string) error {
-	fl := flag.NewFlagSet("init", flag.ContinueOnError)
+	fl := flag.NewFlagSet("estate", flag.ContinueOnError)
 	name := fl.String("name", "", "the estate's name (the repo's)")
 	repo := fl.String("repo", "", "the estate's git URL as flux and auto-rebuild clone it: ssh://git@<forge>:<port>/<owner>/<name> (the deploy-key route), or https://<forge>/<owner>/<name> (a public repo, cloned anonymously)")
 	var hubs multiFlag
@@ -186,7 +187,7 @@ func initCmd(args []string) error {
 	var operatorKeys multiFlag
 	fl.Var(&operatorKeys, "operator-key", "an SSH public key that holds `ops`, the operator account of every fort of this estate, with the device as its comment (\"ssh-ed25519 AAAA… macbook-air\"); repeat per device. No fort evaluates until the estate names one.")
 	fl.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: fort estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--admin …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>]")
+		fmt.Fprintln(os.Stderr, "usage: fort estate init [estate.toml] [--name <estate>] [--repo <git url>] [--admin <age1…> …] [--operator-key <ssh-ed25519 …> …] [--mesh <cidr>] [--interface <name>] [--zone <name>] [--hub <role>=<fort>@<estate git url> … [--forge-name <name>]] --forts <flake url> [--known-hosts <line>] [--acme-email <mailbox>]")
 		fl.PrintDefaults()
 	}
 	file, err := parseWithFile(fl, args)
@@ -195,6 +196,17 @@ func initCmd(args []string) error {
 	}
 	set := map[string]bool{}
 	fl.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if file == "" {
+		// The estate.toml written first, in the checkout's root: the
+		// file is the input, so init needs no path for it (forts#293).
+		if root, err := repoRoot(); err == nil && exists(root, estate.Path) {
+			// An estate that already has its flake is not fresh: that
+			// re-run is refused below, as it was before.
+			if !exists(root, "nixos/flake.nix") {
+				file = filepath.Join(root, estate.Path)
+			}
+		}
+	}
 	var fromFile *estate.Estate
 	if file != "" {
 		raw, err := os.ReadFile(file)
@@ -222,9 +234,15 @@ func initCmd(args []string) error {
 			operatorKeys = e.OperatorKeys
 		}
 	}
+	if len(admins) == 0 {
+		if a, from, err := localAdmin(); err == nil {
+			admins = multiFlag{a}
+			fmt.Printf("admin: %s (from %s; --admin overrides)\n", a, from)
+		}
+	}
 	if *name == "" || *repo == "" || len(admins) == 0 || *forts == "" {
 		fl.Usage()
-		return fmt.Errorf("--name, --repo, --forts and at least one --admin are required")
+		return fmt.Errorf("--name, --repo and --forts are required (or an estate.toml that names the first two), and an --admin when no age key file is present (%s)", ageKeyFileHint)
 	}
 	for _, a := range admins {
 		if !strings.HasPrefix(a, "age1") {
@@ -268,7 +286,7 @@ func initCmd(args []string) error {
 	}
 	root, err := repoRoot()
 	if err != nil {
-		return fmt.Errorf("fort init renders into the root of a git checkout — git init first (%w)", err)
+		return fmt.Errorf("fort estate init renders into the root of a git checkout — git init first (%w)", err)
 	}
 	// The file handed in may be this checkout's own estate.toml, written
 	// first: init keeps it as authored and renders the rest around it.
@@ -321,11 +339,11 @@ func initCmd(args []string) error {
 		// that names none has an `ops` nobody can reach: the host
 		// asserts it at evaluation, and so does `fort check --all`.
 		fmt.Printf("· %-44s operator_keys — the devices that hold `ops` on every fort of this estate. No\n", estate.Path)
-		fmt.Printf("  %-44s fort evaluates until the estate names one (fort init --operator-key, or this file).\n", "")
+		fmt.Printf("  %-44s fort evaluates until the estate names one (fort estate init --operator-key, or this file).\n", "")
 	}
 	if est.Source.KnownHosts == "" && !est.Anonymous() {
 		fmt.Printf("· %-44s [source] known_hosts — the forge's SSH host key, one known_hosts line (ssh-keyscan -p <port> <forge>).\n", estate.Path)
-		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort init --known-hosts, or this file).\n", "")
+		fmt.Printf("  %-44s No fort evaluates until the estate names it (fort estate init --known-hosts, or this file).\n", "")
 	}
 	fmt.Printf("\n%d file(s) written. next: git add -A, then nix flake lock ./nixos\n", written)
 	return nil
@@ -389,4 +407,54 @@ func renderInit(v initView) ([]scaffoldFile, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
 	return out, nil
+}
+
+// ageKeyFileHint names where localAdmin looks, for the error that
+// asks for an --admin.
+const ageKeyFileHint = "$SOPS_AGE_KEY_FILE or ~/.config/sops/age/keys.txt"
+
+// localAdmin is the admin recipient init uses when no --admin is given:
+// the first age key of the operator's own key file, the one sops reads
+// ($SOPS_AGE_KEY_FILE, else <user config dir>/sops/age/keys.txt). The
+// recipient is the "# public key:" comment age-keygen writes, or derived
+// from the AGE-SECRET-KEY line when the comment is missing. The secret is
+// read to derive the recipient and never printed.
+func localAdmin() (recipient, from string, err error) {
+	path := os.Getenv("SOPS_AGE_KEY_FILE")
+	if path == "" {
+		dir, err := os.UserConfigDir()
+		if err != nil {
+			return "", "", err
+		}
+		path = filepath.Join(dir, "sops", "age", "keys.txt")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", err
+	}
+	recipient, err = firstAgeRecipient(string(raw))
+	if err != nil {
+		return "", "", fmt.Errorf("%s: %w", path, err)
+	}
+	return recipient, path, nil
+}
+
+// firstAgeRecipient reads the first recipient of an age key file.
+func firstAgeRecipient(text string) (string, error) {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if pub, ok := strings.CutPrefix(line, "# public key:"); ok {
+			if pub = strings.TrimSpace(pub); strings.HasPrefix(pub, "age1") {
+				return pub, nil
+			}
+		}
+		if strings.HasPrefix(line, "AGE-SECRET-KEY-") {
+			k, err := ageKeyFrom(line)
+			if err != nil {
+				return "", err
+			}
+			return k.recipient, nil
+		}
+	}
+	return "", fmt.Errorf("no age key")
 }

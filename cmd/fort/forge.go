@@ -30,7 +30,7 @@ import (
 // The token is the forge's, not the estate's (sfi/deployments#673): two
 // estates on one forge share it. It lives in provisioning/secrets.yaml
 // under `<kind>-token` — `gitea-token`, `github-token` — the file the
-// provisioning tokens already live in, so fort init renders no new
+// provisioning tokens already live in, so fort estate init renders no new
 // secret and an estate on gitea keeps the key it has. On GitHub it is a
 // token that administers the repo (a fine-grained token with
 // "Administration: read and write" on that repository, or a classic

@@ -41,9 +41,6 @@ func main() {
 	switch os.Args[1] {
 	case "--version":
 		err = version(os.Stdout)
-	case "init":
-		// The old spelling of `fort estate init` (forts#197).
-		err = initCmd(os.Args[2:])
 	case "scaffold":
 		err = scaffold(os.Args[2:])
 	case "image":
@@ -106,8 +103,9 @@ func usage() {
   --version
 	  Display version information about the fort cli and associated flake
 
-  estate init [estate.toml] --name <estate> --repo <git url> --admin <age1…> [--hub <role>=<fort>@<estate git url> …]
+  estate init [estate.toml] --forts <flake url> [--name <estate>] [--repo <git url>] [--admin <age1…>] [--hub <role>=<fort>@<estate git url> …]
       Create an estate: render the files and directory structure expected by forts.
+      Reads ./estate.toml when it exists, and the admin from your sops age key file.
       See docs/reference/init.md for more information.
 
   scaffold <fort | forts/<fort>.toml>

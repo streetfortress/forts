@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The exit test of fort init (deployments#385, step 5): the estate it
+# The exit test of fort estate init (deployments#385, step 5): the estate it
 # creates, with one plain fort scaffolded in, evaluates against THIS
 # checkout as its framework input. No build: the eval of the host's
 # toplevel derivation is the proof the pieces compose.
@@ -25,7 +25,7 @@ init_and_eval() {
   # --operator-key: the framework ships no operator key (forts#81), so the
   # estate names the devices that hold `ops`. A fort of an estate that
   # names none does not evaluate, which is what the eval below would show.
-  "$fort" init --name test-estate "$@" \
+  "$fort" estate init --name test-estate "$@" \
     --admin age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq0d5e6m \
     --operator-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL test-operator" \
     --forts git+https://example.invalid/forts
@@ -50,4 +50,4 @@ init_and_eval ssh --repo ssh://git@gitea.zen.lofi:30022/sfi/test-estate \
   --known-hosts "[gitea.zen.lofi]:30022 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJDZXdVYO58sXRAwLieovSB3fHDAhMF96rjyfCx+vLuL"
 # The anonymous route: no --known-hosts, and no fort waits for one.
 init_and_eval anonymous --repo https://github.com/acme/test-estate
-echo "ok: an estate that fort init created evaluates against this checkout, on both routes"
+echo "ok: an estate that fort estate init created evaluates against this checkout, on both routes"
